@@ -1,120 +1,83 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+import gspread
+from google.oauth2.service_account import Credentials
+import plotly.express as px
+import plotly.graph_objects as go
+from datetime import datetime, timedelta
+import json
 
-# Page configuration
+# Page config
 st.set_page_config(
-    page_title="Aussie Grocery Price Tracker",
+    page_title="🛒 Aussie Grocery Price Tracker",
     page_icon="🛒",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
+# Custom CSS for better styling
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 2.5rem;
+        color: #2E8B57;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .metric-container {
+        background-color: #f0f8f0;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin: 0.5rem 0;
+    }
+    .price-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin: 0.5rem 0;
+    }
+    .savings-positive {
+        color: #28a745;
+        font-weight: bold;
+    }
+    .savings-negative {
+        color: #dc3545;
+        font-weight: bold;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+@st.cache_data(ttl=300)
 def get_google_sheets_connection():
-    """Create Google Sheets connection from Streamlit secrets"""
+    """Establish connection to Google Sheets using service account"""
     try:
-        import gspread
-        from google.oauth2.service_account import Credentials
+        # Get credentials from Streamlit secrets
+        credentials_dict = dict(st.secrets["gcp_service_account"])
         
-        # Define the scope
-        scope = [
-            'https://spreadsheets.google.com/feeds',
-            'https://www.googleapis.com/auth/drive'
-        ]
+        # Create credentials object
+        credentials = Credentials.from_service_account_info(
+            credentials_dict,
+            scopes=[
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/drive"
+            ]
+        )
         
-        # Load credentials from Streamlit secrets
-        credentials_dict = {
-            "type": st.secrets["gcp_service_account"]["type"],
-            "project_id": st.secrets["gcp_service_account"]["project_id"],
-            "private_key_id": st.secrets["gcp_service_account"]["private_key_id"],
-            "private_key": st.secrets["gcp_service_account"]["private_key"],
-            "client_email": st.secrets["gcp_service_account"]["client_email"],
-            "client_id": st.secrets["gcp_service_account"]["client_id"],
-            "auth_uri": st.secrets["gcp_service_account"]["auth_uri"],
-            "token_uri": st.secrets["gcp_service_account"]["token_uri"],
-            "auth_provider_x509_cert_url": st.secrets["gcp_service_account"]["auth_provider_x509_cert_url"]
-        }
+        # Create gspread client
+        gc = gspread.authorize(credentials)
         
-        # Create credentials
-        creds = Credentials.from_service_account_info(credentials_dict, scopes=scope)
-        
-        # Connect to Google Sheets
-        gc = gspread.authorize(creds)
-        
-        return gc, credentials_dict["client_email"]
+        return gc, credentials_dict.get('client_email', 'Unknown')
         
     except Exception as e:
-        st.error(f"Failed to create connection: {str(e)}")
+        st.error(f"Failed to connect to Google Sheets: {str(e)}")
         return None, None
 
-def test_connection():
-    """Test Google Sheets connection and show detailed info"""
-    st.subheader("🔧 Connection Diagnostics")
-    
-    try:
-        # Test credentials loading
-        with st.spinner("Loading credentials..."):
-            gc, client_email = get_google_sheets_connection()
-        
-        if gc is None:
-            st.error("❌ Failed to load credentials")
-            return False
-            
-        st.success(f"✅ Credentials loaded successfully")
-        st.info(f"📧 Service Account: {client_email}")
-        
-        # Test sheet access
-        with st.spinner("Testing sheet access..."):
-            try:
-                sheet = gc.open('AusGrocery_PriceDB')
-                st.success("✅ Sheet 'AusGrocery_PriceDB' found and accessible")
-                
-                # Test data reading
-                worksheet = sheet.sheet1
-                data = worksheet.get_all_values()
-                
-                st.success(f"✅ Data loaded successfully: {len(data)} rows")
-                
-                if len(data) > 0:
-                    st.write("**Sheet Headers:**", data[0])
-                    
-                    if len(data) > 1:
-                        st.write("**Sample Data (first row):**", data[1])
-                else:
-                    st.warning("⚠️ Sheet is empty")
-                
-                return True
-                
-            except Exception as sheet_error:
-                st.error(f"❌ Cannot access sheet: {str(sheet_error)}")
-                st.error("**Possible issues:**")
-                st.error("- Sheet name 'AusGrocery_PriceDB' doesn't exist")
-                st.error("- Service account doesn't have access to the sheet")
-                st.error("- Sheet is not shared with the service account")
-                
-                return False
-                
-    except Exception as e:
-        st.error(f"❌ Connection test failed: {str(e)}")
-        
-        if "Invalid control character" in str(e):
-            st.error("**Private Key Formatting Issue:**")
-            st.code("""
-The private key in your secrets has formatting problems.
-
-In your Streamlit Secrets, make sure the private_key line looks exactly like this:
-private_key = "-----BEGIN PRIVATE KEY-----\\nMIIEv...YOUR_KEY...\\n-----END PRIVATE KEY-----\\n"
-
-Keep the \\n characters as-is from your JSON file.
-            """)
-        
-        return False
-
-@st.cache_data(ttl=3600)  # Cache for 1 hour
+@st.cache_data(ttl=300)
 def load_grocery_data():
     """Load grocery price data from Google Sheets"""
     try:
         gc, client_email = get_google_sheets_connection()
-        
         if gc is None:
             return pd.DataFrame()
         
@@ -134,11 +97,14 @@ def load_grocery_data():
             price_columns = ['Woolworths_Price', 'Coles_Price', 'Aldi_Price']
             for col in price_columns:
                 if col in df.columns:
-                    # Remove $ and convert to float
                     df[col] = pd.to_numeric(
                         df[col].astype(str).str.replace('$', '').str.replace(',', ''), 
                         errors='coerce'
                     )
+            
+            # Convert Last_Updated to datetime
+            if 'Last_Updated' in df.columns:
+                df['Last_Updated'] = pd.to_datetime(df['Last_Updated'], errors='coerce')
             
             return df
         else:
@@ -148,128 +114,317 @@ def load_grocery_data():
         st.error(f"Failed to load data: {str(e)}")
         return pd.DataFrame()
 
-def update_prices(product_name, retailer, new_price):
-    """Update price for a specific product and retailer"""
+def load_shopping_lists():
+    """Load shopping lists from Google Sheets"""
     try:
-        gc, client_email = get_google_sheets_connection()
-        
+        gc, _ = get_google_sheets_connection()
         if gc is None:
-            return False
+            return pd.DataFrame()
         
-        # Open sheet
         sheet = gc.open('AusGrocery_PriceDB')
-        worksheet = sheet.sheet1
         
-        # Get all data
-        all_values = worksheet.get_all_values()
-        headers = all_values[0]
-        
-        # Find column indices
-        if 'Product_Name' not in headers:
-            st.error("'Product_Name' column not found in sheet")
-            return False
+        # Try to get shopping lists worksheet
+        try:
+            worksheet = sheet.worksheet('User_Shopping_Lists')
+            data = worksheet.get_all_values()
             
-        product_col_idx = headers.index('Product_Name')
-        
-        price_col_name = f'{retailer}_Price'
-        if price_col_name not in headers:
-            st.error(f"'{price_col_name}' column not found in sheet")
-            return False
+            if len(data) > 1:
+                headers = data[0]
+                rows = data[1:]
+                df = pd.DataFrame(rows, columns=headers)
+                
+                # Convert quantity to numeric
+                if 'Quantity' in df.columns:
+                    df['Quantity'] = pd.to_numeric(df['Quantity'], errors='coerce')
+                
+                # Convert date
+                if 'Created_Date' in df.columns:
+                    df['Created_Date'] = pd.to_datetime(df['Created_Date'], errors='coerce')
+                
+                return df
+            else:
+                return pd.DataFrame()
+                
+        except gspread.WorksheetNotFound:
+            # Create the worksheet if it doesn't exist
+            worksheet = sheet.add_worksheet(
+                title='User_Shopping_Lists',
+                rows=100,
+                cols=4
+            )
+            # Add headers
+            worksheet.update('A1:D1', [['List_Name', 'Product_Name', 'Quantity', 'Created_Date']])
+            return pd.DataFrame()
             
-        price_col_idx = headers.index(price_col_name)
-        
-        # Find date column if exists
-        date_col_idx = None
-        if 'Last_Updated' in headers:
-            date_col_idx = headers.index('Last_Updated')
-        
-        # Find product row
-        for i, row in enumerate(all_values[1:], start=2):
-            if row[product_col_idx] == product_name:
-                # Update price (column indices are 1-based in gspread)
-                worksheet.update_cell(i, price_col_idx + 1, f"${new_price:.2f}")
-                
-                # Update date if column exists
-                if date_col_idx is not None:
-                    worksheet.update_cell(i, date_col_idx + 1, datetime.now().strftime('%Y-%m-%d'))
-                
-                return True
-                
-        st.error(f"Product '{product_name}' not found in sheet")
-        return False
-        
     except Exception as e:
-        st.error(f"Failed to update price: {str(e)}")
-        return False
+        st.error(f"Failed to load shopping lists: {str(e)}")
+        return pd.DataFrame()
 
-def main():
-    st.title("🛒 **Aussie Grocery Price Tracker**")
-    st.markdown("*Compare prices across Woolworths, Coles & ALDI*")
+def load_price_history():
+    """Load price history from Google Sheets"""
+    try:
+        gc, _ = get_google_sheets_connection()
+        if gc is None:
+            return pd.DataFrame()
+        
+        sheet = gc.open('AusGrocery_PriceDB')
+        
+        # Try to get price history worksheet
+        try:
+            worksheet = sheet.worksheet('Price_History')
+            data = worksheet.get_all_values()
+            
+            if len(data) > 1:
+                headers = data[0]
+                rows = data[1:]
+                df = pd.DataFrame(rows, columns=headers)
+                
+                # Convert price to numeric
+                if 'Price' in df.columns:
+                    df['Price'] = pd.to_numeric(
+                        df['Price'].astype(str).str.replace('$', '').str.replace(',', ''), 
+                        errors='coerce'
+                    )
+                
+                # Convert date
+                if 'Date' in df.columns:
+                    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+                
+                return df
+            else:
+                return pd.DataFrame()
+                
+        except gspread.WorksheetNotFound:
+            # Create the worksheet if it doesn't exist
+            worksheet = sheet.add_worksheet(
+                title='Price_History',
+                rows=1000,
+                cols=4
+            )
+            # Add headers
+            worksheet.update('A1:D1', [['Product_Name', 'Store', 'Price', 'Date']])
+            return pd.DataFrame()
+            
+    except Exception as e:
+        st.error(f"Failed to load price history: {str(e)}")
+        return pd.DataFrame()
+
+def calculate_savings(row):
+    """Calculate savings and best deals for a product"""
+    prices = {}
+    stores = ['Woolworths', 'Coles', 'Aldi']
     
-    # Add connection test section
-    with st.expander("🔧 Connection Test & Diagnostics", expanded=False):
-        if st.button("Test Google Sheets Connection", type="primary"):
-            test_connection()
+    for store in stores:
+        price_col = f"{store}_Price"
+        if price_col in row.index and pd.notna(row[price_col]) and row[price_col] > 0:
+            prices[store] = float(row[price_col])
     
-    # Load data
-    with st.spinner("Loading grocery data..."):
-        df = load_grocery_data()
+    if not prices:
+        return None, None, None
     
+    min_price = min(prices.values())
+    max_price = max(prices.values())
+    best_store = min(prices, key=prices.get)
+    
+    savings = max_price - min_price
+    savings_percent = (savings / max_price) * 100 if max_price > 0 else 0
+    
+    return best_store, savings, savings_percent
+
+def display_product_comparison(df):
+    """Display product comparison with savings analysis"""
     if df.empty:
-        st.warning("📋 No data loaded from Google Sheets")
-        st.info("👆 Use the Connection Test above to diagnose issues")
-        
-        st.markdown("---")
-        st.subheader("📝 Setup Checklist")
-        st.markdown("""
-        **Make sure you have:**
-        1. ✅ Created a service account in Google Cloud Console
-        2. ✅ Downloaded the JSON credentials file
-        3. ✅ Added credentials to Streamlit Secrets (proper TOML format)
-        4. ✅ Created a Google Sheet named **'AusGrocery_PriceDB'**
-        5. ✅ Shared the sheet with your service account email
-        6. ✅ Added proper column headers (Product_Name, Woolworths_Price, etc.)
-        """)
-        
+        st.warning("No product data available")
         return
     
-    st.success(f"✅ Loaded {len(df)} products from Google Sheets")
+    # Add search and filter options
+    col1, col2 = st.columns([2, 1])
     
-    # Show data structure info
-    if st.checkbox("📊 Show data info"):
-        st.write("**Columns in your sheet:**", list(df.columns))
-        st.write("**First few rows:**")
-        st.dataframe(df.head())
+    with col1:
+        search_term = st.text_input("🔍 Search products:", placeholder="Enter product name...")
     
-    # Main functionality (same as before but simplified for now)
-    st.subheader("🏪 Price Comparison")
+    with col2:
+        categories = ['All'] + sorted(df['Category'].dropna().unique().tolist()) if 'Category' in df.columns else ['All']
+        selected_category = st.selectbox("🏷️ Filter by category:", categories)
     
-    price_cols = [col for col in ['Woolworths_Price', 'Coles_Price', 'Aldi_Price'] if col in df.columns]
+    # Filter data
+    filtered_df = df.copy()
     
-    if price_cols:
-        for idx, row in df.iterrows():
-            st.write(f"**{row.get('Product_Name', 'Unknown Product')}**")
+    if search_term:
+        filtered_df = filtered_df[
+            filtered_df['Product_Name'].str.contains(search_term, case=False, na=False)
+        ]
+    
+    if selected_category != 'All':
+        filtered_df = filtered_df[filtered_df['Category'] == selected_category]
+    
+    if filtered_df.empty:
+        st.warning("No products match your search criteria")
+        return
+    
+    # Display products
+    st.subheader("🛒 Price Comparison")
+    
+    for idx, row in filtered_df.iterrows():
+        with st.expander(f"🏷️ {row['Product_Name']}", expanded=True):
+            col1, col2, col3, col4 = st.columns(4)
             
-            cols = st.columns(len(price_cols))
+            # Price display
+            stores = [
+                ('Woolworths', 'Woolworths_Price', '#0066CC'),
+                ('Coles', 'Coles_Price', '#FF0000'), 
+                ('Aldi', 'Aldi_Price', '#FF6600')
+            ]
             
-            for i, price_col in enumerate(price_cols):
-                store_name = price_col.replace('_Price', '')
+            prices = {}
+            for store_name, price_col, color in stores:
                 price = row.get(price_col, 0)
-                
-                with cols[i]:
-                    if pd.notna(price) and price > 0:
-                        st.metric(store_name, f"${price:.2f}")
-                    else:
-                        st.metric(store_name, "N/A")
+                if pd.notna(price) and price > 0:
+                    prices[store_name] = float(price)
             
-            st.divider()
+            if prices:
+                best_store, savings, savings_percent = calculate_savings(row)
+                
+                # Display prices
+                for i, (store_name, price_col, color) in enumerate(stores):
+                    with [col1, col2, col3][i]:
+                        price = row.get(price_col, 0)
+                        if pd.notna(price) and price > 0:
+                            price_float = float(price)
+                            is_best = store_name == best_store
+                            
+                            st.markdown(f"""
+                            <div style="background-color: {'#e8f5e8' if is_best else '#f8f9fa'}; 
+                                        border: {'3px solid #28a745' if is_best else '1px solid #dee2e6'};
+                                        padding: 1rem; border-radius: 0.5rem; text-align: center;">
+                                <h4 style="color: {color}; margin: 0;">{store_name}</h4>
+                                <h2 style="margin: 0.5rem 0;">${price_float:.2f}</h2>
+                                {'<span style="color: #28a745; font-weight: bold;">✅ BEST DEAL</span>' if is_best else ''}
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"""
+                            <div style="background-color: #f8f9fa; border: 1px solid #dee2e6;
+                                        padding: 1rem; border-radius: 0.5rem; text-align: center;">
+                                <h4 style="color: {color}; margin: 0;">{store_name}</h4>
+                                <h2 style="margin: 0.5rem 0; color: #6c757d;">N/A</h2>
+                            </div>
+                            """, unsafe_allow_html=True)
+                
+                # Savings information
+                with col4:
+                    if savings > 0:
+                        st.markdown(f"""
+                        <div style="background-color: #d4edda; border: 1px solid #c3e6cb;
+                                    padding: 1rem; border-radius: 0.5rem; text-align: center;">
+                            <h4 style="color: #155724; margin: 0;">💰 Potential Savings</h4>
+                            <h3 style="margin: 0.5rem 0; color: #28a745;">${savings:.2f}</h3>
+                            <p style="margin: 0; color: #155724;">({savings_percent:.1f}% off)</p>
+                            <small>Choose {best_store} instead</small>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"""
+                        <div style="background-color: #f8f9fa; border: 1px solid #dee2e6;
+                                    padding: 1rem; border-radius: 0.5rem; text-align: center;">
+                            <h4 style="color: #6c757d; margin: 0;">📊 Same Price</h4>
+                            <p style="margin: 0;">All stores match</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+            
+            # Additional info
+            if 'Category' in row.index and pd.notna(row['Category']):
+                st.caption(f"📂 Category: {row['Category']}")
+            
+            if 'Last_Updated' in row.index and pd.notna(row['Last_Updated']):
+                st.caption(f"🕒 Last updated: {row['Last_Updated']}")
+
+def main():
+    """Main application"""
+    st.markdown('<h1 class="main-header">🛒 Aussie Grocery Price Tracker</h1>', unsafe_allow_html=True)
+    
+    # Sidebar
+    with st.sidebar:
+        st.header("🎛️ Controls")
+        
+        # Data refresh
+        if st.button("🔄 Refresh Data", type="primary"):
+            st.cache_data.clear()
+            st.rerun()
+        
+        # Connection test
+        if st.button("🧪 Test Connection"):
+            gc, client_email = get_google_sheets_connection()
+            if gc:
+                st.success(f"✅ Connected as: {client_email}")
+                try:
+                    sheet = gc.open('AusGrocery_PriceDB')
+                    st.success(f"✅ Sheet '{sheet.title}' found and accessible")
+                    
+                    data = sheet.sheet1.get_all_values()
+                    st.success(f"✅ Data loaded successfully: {len(data)-1} rows")
+                except Exception as e:
+                    st.error(f"❌ Sheet access failed: {str(e)}")
+            else:
+                st.error("❌ Connection failed")
+    
+    # Main content
+    df = load_grocery_data()
+    
+    if not df.empty:
+        st.success(f"📊 Successfully loaded {len(df)} products!")
+        
+        # Summary metrics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            total_products = len(df)
+            st.metric("🏷️ Total Products", total_products)
+        
+        with col2:
+            if 'Category' in df.columns:
+                categories = df['Category'].nunique()
+                st.metric("📂 Categories", categories)
+        
+        with col3:
+            # Calculate average price
+            price_cols = ['Woolworths_Price', 'Coles_Price', 'Aldi_Price']
+            all_prices = []
+            for col in price_cols:
+                if col in df.columns:
+                    prices = pd.to_numeric(df[col], errors='coerce').dropna()
+                    all_prices.extend(prices.tolist())
+            
+            if all_prices:
+                avg_price = sum(all_prices) / len(all_prices)
+                st.metric("💰 Avg Price", f"${avg_price:.2f}")
+        
+        with col4:
+            # Calculate total potential savings
+            total_savings = 0
+            for _, row in df.iterrows():
+                _, savings, _ = calculate_savings(row)
+                if savings:
+                    total_savings += savings
+            
+            st.metric("💸 Total Savings Available", f"${total_savings:.2f}")
+        
+        # Display product comparison
+        display_product_comparison(df)
+        
     else:
-        st.info("No price columns found. Expected: Woolworths_Price, Coles_Price, Aldi_Price")
+        st.warning("📭 No product data found. Please check your Google Sheets connection and data.")
+        
+        st.info("""
+        **Expected sheet structure:**
+        - Product_Name
+        - Category  
+        - Size  
+        - Woolworths_Price
+        - Coles_Price
+        - Aldi_Price
+        - Last_Updated
+        """)
 
 if __name__ == "__main__":
     main()
-
-# Add this button temporarily to clear cache
-if st.button("🔄 Clear Cache & Reload"):
-    st.cache_data.clear()
-    st.rerun()
