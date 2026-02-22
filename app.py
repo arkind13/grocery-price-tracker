@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import json
 
 # Page configuration
 st.set_page_config(
@@ -9,7 +10,7 @@ st.set_page_config(
 )
 
 def test_google_sheets_connection():
-    """Test if we can connect to Google Sheets using Streamlit Secrets"""
+    """Test if we can connect to Google Sheets using JSON credentials"""
     try:
         import gspread
         from google.oauth2.service_account import Credentials
@@ -20,21 +21,20 @@ def test_google_sheets_connection():
             'https://www.googleapis.com/auth/drive'
         ]
         
-        # Load credentials from Streamlit secrets
-        credentials_dict = {
-            "type": st.secrets["connections"]["gsheets"]["type"],
-            "project_id": st.secrets["connections"]["gsheets"]["project_id"],
-            "private_key_id": st.secrets["connections"]["gsheets"]["private_key_id"],
-            "private_key": st.secrets["connections"]["gsheets"]["private_key"],
-            "client_email": st.secrets["connections"]["gsheets"]["client_email"],
-            "client_id": st.secrets["connections"]["gsheets"]["client_id"],
-            "auth_uri": st.secrets["connections"]["gsheets"]["auth_uri"],
-            "token_uri": st.secrets["connections"]["gsheets"]["token_uri"],
-            "auth_provider_x509_cert_url": st.secrets["connections"]["gsheets"]["auth_provider_x509_cert_url"]
-        }
-        
-        # Create credentials object
-        creds = Credentials.from_service_account_info(credentials_dict, scopes=scope)
+        # Try to load credentials from Streamlit secrets as JSON string
+        try:
+            # Get the JSON string from secrets
+            json_string = st.secrets["google_sheets_json"]
+            credentials_dict = json.loads(json_string)
+            
+            # Create credentials object
+            creds = Credentials.from_service_account_info(credentials_dict, scopes=scope)
+            
+            st.info("🔐 Using Streamlit Secrets (JSON format)")
+            
+        except Exception as secret_error:
+            st.error(f"Failed to load from secrets: {secret_error}")
+            return False
         
         # Authorize and connect
         client = gspread.authorize(creds)
@@ -46,28 +46,25 @@ def test_google_sheets_connection():
         # Try to read data
         all_values = worksheet.get_all_values()
         
-        st.success("✅ SUCCESS! Connected to Google Sheets securely using Streamlit Secrets")
+        st.success("✅ SUCCESS! Connected to Google Sheets")
         st.info(f"📊 Found {len(all_values)} rows in your spreadsheet")
-        
-        # Show service account being used
         st.info(f"🔐 Service Account: {credentials_dict['client_email']}")
         
         # Show first few rows
         if len(all_values) > 0:
             st.write("**First few rows of your data:**")
-            df = pd.DataFrame(all_values[1:], columns=all_values[0])  # First row as headers
+            df = pd.DataFrame(all_values[1:], columns=all_values[0])
             st.dataframe(df.head())
         
         return True
         
     except Exception as e:
         st.error(f"❌ Connection failed: {str(e)}")
-        st.info("Please check your Streamlit Secrets configuration")
         return False
 
 def main():
     st.title("🛒 Grocery Price Tracker")
-    st.markdown("*Testing Secure Google Sheets Connection*")
+    st.markdown("*Testing Google Sheets Connection with JSON Format*")
     
     st.header("🔧 Connection Test")
     
@@ -76,7 +73,7 @@ def main():
             test_google_sheets_connection()
     
     st.markdown("---")
-    st.success("🔐 **Security Note:** Your API credentials are now stored securely in Streamlit Secrets, not in your public GitHub repository!")
+    st.info("🔐 **Security Note:** Credentials stored securely in Streamlit Secrets")
 
 if __name__ == "__main__":
     main()
