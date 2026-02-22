@@ -9,7 +9,7 @@ st.set_page_config(
 )
 
 def test_google_sheets_connection():
-    """Test if we can connect to Google Sheets"""
+    """Test if we can connect to Google Sheets using Streamlit Secrets"""
     try:
         import gspread
         from google.oauth2.service_account import Credentials
@@ -20,8 +20,23 @@ def test_google_sheets_connection():
             'https://www.googleapis.com/auth/drive'
         ]
         
-        # Load credentials
-        creds = Credentials.from_service_account_file('credentials.json', scopes=scope)
+        # Load credentials from Streamlit secrets
+        credentials_dict = {
+            "type": st.secrets["connections"]["gsheets"]["type"],
+            "project_id": st.secrets["connections"]["gsheets"]["project_id"],
+            "private_key_id": st.secrets["connections"]["gsheets"]["private_key_id"],
+            "private_key": st.secrets["connections"]["gsheets"]["private_key"],
+            "client_email": st.secrets["connections"]["gsheets"]["client_email"],
+            "client_id": st.secrets["connections"]["gsheets"]["client_id"],
+            "auth_uri": st.secrets["connections"]["gsheets"]["auth_uri"],
+            "token_uri": st.secrets["connections"]["gsheets"]["token_uri"],
+            "auth_provider_x509_cert_url": st.secrets["connections"]["gsheets"]["auth_provider_x509_cert_url"]
+        }
+        
+        # Create credentials object
+        creds = Credentials.from_service_account_info(credentials_dict, scopes=scope)
+        
+        # Authorize and connect
         client = gspread.authorize(creds)
         
         # Try to open the spreadsheet
@@ -31,8 +46,11 @@ def test_google_sheets_connection():
         # Try to read data
         all_values = worksheet.get_all_values()
         
-        st.success("✅ SUCCESS! Connected to Google Sheets")
+        st.success("✅ SUCCESS! Connected to Google Sheets securely using Streamlit Secrets")
         st.info(f"📊 Found {len(all_values)} rows in your spreadsheet")
+        
+        # Show service account being used
+        st.info(f"🔐 Service Account: {credentials_dict['client_email']}")
         
         # Show first few rows
         if len(all_values) > 0:
@@ -42,19 +60,14 @@ def test_google_sheets_connection():
         
         return True
         
-    except FileNotFoundError:
-        st.error("❌ credentials.json file not found")
-        st.info("Make sure you uploaded the credentials file to your GitHub repository")
-        return False
-        
     except Exception as e:
         st.error(f"❌ Connection failed: {str(e)}")
-        st.info("Check that you've shared your Google Sheet with the service account email")
+        st.info("Please check your Streamlit Secrets configuration")
         return False
 
 def main():
     st.title("🛒 Grocery Price Tracker")
-    st.markdown("*Testing Google Sheets Connection*")
+    st.markdown("*Testing Secure Google Sheets Connection*")
     
     st.header("🔧 Connection Test")
     
@@ -63,7 +76,7 @@ def main():
             test_google_sheets_connection()
     
     st.markdown("---")
-    st.info("👆 Click the button above to test if your Google Sheets API is working correctly!")
+    st.success("🔐 **Security Note:** Your API credentials are now stored securely in Streamlit Secrets, not in your public GitHub repository!")
 
 if __name__ == "__main__":
     main()
