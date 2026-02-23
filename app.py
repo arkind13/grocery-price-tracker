@@ -49,8 +49,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-@st.cache_data(ttl=300)
-def get_sheets_manager(): return SheetsManager()
+@st.cache_data(ttl=300) def get_sheets_manager(): return SheetsManager()
     """Establish connection to Google Sheets using service account"""
     try:
         # Get credentials from Streamlit secrets
