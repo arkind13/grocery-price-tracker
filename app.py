@@ -51,14 +51,14 @@ st.markdown("""
 
 @st.cache_data(ttl=300)
 def get_sheets_manager():
-    """Return cached SheetsManager instance"""
     try:
-        # Check if we have the spreadsheet ID in secrets
-        if 'google_sheets' in st.secrets and 'spreadsheet_id' in st.secrets['google_sheets']:
-            spreadsheet_id = st.secrets['google_sheets']['spreadsheet_id']
-        else:
-            st.error("❌ Missing spreadsheet_id in secrets. Please set st.secrets['google_sheets']['spreadsheet_id']")
-            return None
+        # Pull the ID from your [google_sheets] section in Streamlit secrets
+        spreadsheet_id = st.secrets["google_sheets"]["spreadsheet_id"]
+        return SheetsManager(spreadsheet_id=spreadsheet_id)
+    except Exception as e:
+        st.error(f"❌ Failed to initialize: {e}")
+        return None
+
             
         # Initialize SheetsManager with the spreadsheet ID
         manager = SheetsManager(spreadsheet_id)
