@@ -6,6 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import json
+from data.sheets_manager import SheetsManager
 
 # Page config
 st.set_page_config(
@@ -49,7 +50,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 @st.cache_data(ttl=300)
-def get_google_sheets_connection():
+def get_sheets_manager(): return SheetsManager()
     """Establish connection to Google Sheets using service account"""
     try:
         # Get credentials from Streamlit secrets
@@ -77,8 +78,8 @@ def get_google_sheets_connection():
 def load_grocery_data():
     """Load grocery price data from Google Sheets"""
     try:
-        gc, client_email = get_google_sheets_connection()
-        if gc is None:
+        manager = get_sheets_manager()
+        if manager is None:
             return pd.DataFrame()
         
         # Open the spreadsheet
@@ -117,8 +118,8 @@ def load_grocery_data():
 def load_shopping_lists():
     """Load shopping lists from Google Sheets"""
     try:
-        gc, _ = get_google_sheets_connection()
-        if gc is None:
+        manager = get_sheets_manager()
+        if manager is None:
             return pd.DataFrame()
         
         sheet = gc.open('AusGrocery_PriceDB')
@@ -162,9 +163,8 @@ def load_shopping_lists():
 
 def load_price_history():
     """Load price history from Google Sheets"""
-    try:
-        gc, _ = get_google_sheets_connection()
-        if gc is None:
+    try: manager = get_sheets_manager()
+        if manager is None:
             return pd.DataFrame()
         
         sheet = gc.open('AusGrocery_PriceDB')
@@ -353,18 +353,15 @@ def main():
             st.rerun()
         
         # Connection test
-        if st.button("🧪 Test Connection"):
-            gc, client_email = get_google_sheets_connection()
-            if gc:
-                st.success(f"✅ Connected as: {client_email}")
-                try:
-                    sheet = gc.open('AusGrocery_PriceDB')
-                    st.success(f"✅ Sheet '{sheet.title}' found and accessible")
-                    
-                    data = sheet.sheet1.get_all_values()
-                    st.success(f"✅ Data loaded successfully: {len(data)-1} rows")
-                except Exception as e:
-                    st.error(f"❌ Sheet access failed: {str(e)}")
+    if st.button("🧪 Test Connection"):
+        manager = get_sheets_manager()
+        try:
+            # test read of products sheet
+            df_test = manager.get_products_master()
+            st.success("✅ Connected and Products_Master loaded")
+            st.success(f"✅ Data loaded successfully: {len(df_test)} rows")
+        except Exception as e:
+            st.error(f"❌ Sheet access failed: {str(e)}")
             else:
                 st.error("❌ Connection failed")
     
