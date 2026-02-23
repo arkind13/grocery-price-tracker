@@ -374,8 +374,9 @@ def main():
 
         # Data refresh
         if st.button("🔄 Refresh Data", type="primary"):
-            st.cache_data.clear()
-            st.experimental_rerun()
+    st.cache_data.clear()
+    st.rerun() # This is the updated, working command
+
 
 # Connection test button
 if st.button("🧪 Test Connection"):
