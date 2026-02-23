@@ -1,119 +1,56 @@
 from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
-
 import pandas as pd
 import streamlit as st
-
 import gspread
 from gspread.exceptions import APIError, WorksheetNotFound
 from google.oauth2.service_account import Credentials
-
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
 ]
 
-
 @dataclass(frozen=True)
 class SheetsConfig:
     spreadsheet_id: str
     worksheet_name: str = "Products_Master"
 
-
 class SheetsManager:
-    """
-    Uses:
-      - st.secrets["gcp_service_account"]  (TOML dict)
-      - st.secrets["spreadsheet_id"]       (Google Sheet ID)
-    """
-
     def __init__(self, spreadsheet_id: Optional[str] = None, worksheet_name: str = "Products_Master"):
-        # Look inside the [google_sheets] block for the ID
+        # 1. Resolve ID from secrets
         if not spreadsheet_id:
             try:
-                spreadsheet_id = st.secrets["google_sheets"]["spreadsheet_id"]
+                if "google_sheets" in st.secrets:
+                    spreadsheet_id = st.secrets["google_sheets"]["spreadsheet_id"]
+                else:
+                    spreadsheet_id = st.secrets.get("spreadsheet_id")
             except (KeyError, TypeError):
                 spreadsheet_id = None
 
         if not spreadsheet_id:
-            raise ValueError("Missing spreadsheet_id in secrets. Please set st.secrets['google_sheets']['spreadsheet_id']")
+            raise ValueError("Missing spreadsheet_id. Set st.secrets['google_sheets']['spreadsheet_id']")
 
         self.config = SheetsConfig(spreadsheet_id=spreadsheet_id, worksheet_name=worksheet_name)
 
-
-    # -------------------------
-    # Auth / Client / Worksheet
-    # -------------------------
+    # --- INTERNAL HELPERS ---
     def _get_credentials(self) -> Credentials:
         try:
             sa_info: Dict[str, Any] = dict(st.secrets["gcp_service_account"])
             return Credentials.from_service_account_info(sa_info, scopes=SCOPES)
-        except KeyError as e:
-            raise RuntimeError("Missing st.secrets['gcp_service_account'] in Streamlit secrets.") from e
         except Exception as e:
-            raise RuntimeError(f"Failed to build Google credentials: {e}") from e
+            raise RuntimeError(f"Failed to build Google credentials: {e}")
 
     def _get_client(self) -> gspread.Client:
-        try:
-            return gspread.authorize(self._get_credentials())
-        except Exception as e:
-            raise RuntimeError(f"Failed to authorize gspread client: {e}") from e
+        return gspread.authorize(self._get_credentials())
 
     def _get_worksheet(self) -> gspread.Worksheet:
-        try:
-            client = self._get_client()
-            sh = client.open_by_key(self.config.spreadsheet_id)
-            return sh.worksheet(self.config.worksheet_name)
-        except WorksheetNotFound as e:
-            raise RuntimeError(f"Worksheet '{self.config.worksheet_name}' not found.") from e
-        except (APIError, OSError) as e:
-            raise RuntimeError(f"Google Sheets API/connection error: {e}") from e
-        except Exception as e:
-            raise RuntimeError(f"Unexpected error opening worksheet: {e}") from e
+        client = self._get_client()
+        sh = client.open_by_key(self.config.spreadsheet_id)
+        return sh.worksheet(self.config.worksheet_name)
 
-    # -------------------------
-    # Read (R) - cached
-    # -------------------------
-    @staticmethod
-    @st.cache_data(ttl=600)
-    def get_data(spreadsheet_id: str, worksheet_name: str = "Products_Master") -> pd.DataFrame:
-        try:
-            sa_info: Dict[str, Any] = dict(st.secrets["gcp_service_account"])
-            creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
-            client = gspread.authorize(creds)
-            ws = client.open_by_key(spreadsheet_id).worksheet(worksheet_name)
-
-            records = ws.get_all_records()
-            return pd.DataFrame(records)
-
-        except (APIError, OSError) as e:
-            raise RuntimeError(f"Google Sheets API/connection error while reading: {e}") from e
-        except Exception as e:
-            raise RuntimeError(f"Unexpected error while reading sheet: {e}") from e
-
-    def get_products_master(self) -> pd.DataFrame:
-        return SheetsManager.get_data(self.config.spreadsheet_id, self.config.worksheet_name)
-
-        def get_spreadsheet(self, name_or_id: Optional[str] = None) -> gspread.Spreadsheet:
-        """
-        FIXED: Accepts an extra argument (name_or_id) to prevent the '2 were given' error.
-        FIXED: Returns the actual Google Sheet connection so app.py can find specific tabs.
-        """
-        try:
-            client = self._get_client()
-            # We use the ID from your secrets regardless of what name app.py sends
-            return client.open_by_key(self.config.spreadsheet_id)
-        except Exception as e:
-            raise RuntimeError(f"Failed to open spreadsheet: {e}")
-
-
-    # -------------------------
-    # Helpers
-    # -------------------------
     @staticmethod
     def _norm(s: str) -> str:
         return str(s).strip().lower()
@@ -123,129 +60,72 @@ class SheetsManager:
         return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     def _get_header_map(self, ws: gspread.Worksheet) -> Dict[str, int]:
-        """
-        Returns: normalized_header -> 1-based column index
-        """
         headers = ws.row_values(1)
         if not headers:
             raise RuntimeError("Header row (row 1) is empty.")
         return {self._norm(h): i + 1 for i, h in enumerate(headers)}
 
-    # -------------------------
-    # Update (U)
-    # -------------------------
+    # --- PUBLIC METHODS (CRUD) ---
+    
+    def get_spreadsheet(self, name_or_id: Optional[str] = None) -> gspread.Spreadsheet:
+        """FIXED: Accepts arg to match app.py. Returns live connection."""
+        client = self._get_client()
+        return client.open_by_key(self.config.spreadsheet_id)
+
+    @staticmethod
+    @st.cache_data(ttl=600)
+    def get_data(spreadsheet_id: str, worksheet_name: str = "Products_Master") -> pd.DataFrame:
+        sa_info: Dict[str, Any] = dict(st.secrets["gcp_service_account"])
+        creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
+        client = gspread.authorize(creds)
+        ws = client.open_by_key(spreadsheet_id).worksheet(worksheet_name)
+        return pd.DataFrame(ws.get_all_records())
+
+    def get_products_master(self) -> pd.DataFrame:
+        return SheetsManager.get_data(self.config.spreadsheet_id, self.config.worksheet_name)
+
     def update_price(self, product_name: str, store_name: str, new_price: Any) -> None:
-        """
-        Updates one of:
-          - Woolworths_Price
-          - Coles_Price
-          - Aldi_Price
-        and also updates Last_Updated.
+        """Updates Price and Last_Updated timestamp."""
+        ws = self._get_worksheet()
+        header_map = self._get_header_map(ws)
+        
+        product_col = header_map.get(self._norm("Product_Name"))
+        last_updated_col = header_map.get(self._norm("Last_Updated"))
+        
+        store_key = self._norm(store_name)
+        store_to_colname = {"woolworths": "Woolworths_Price", "coles": "Coles_Price", "aldi": "Aldi_Price"}
+        price_col = header_map.get(self._norm(store_to_colname.get(store_key, "")))
 
-        store_name accepted (case-insensitive): woolworths, coles, aldi
-        """
-        try:
-            ws = self._get_worksheet()
-            header_map = self._get_header_map(ws)
+        if not all([product_col, last_updated_col, price_col]):
+            raise ValueError("Required columns missing in sheet.")
 
-            # Required columns by your sheet
-            product_col = header_map.get(self._norm("Product_Name"))
-            last_updated_col = header_map.get(self._norm("Last_Updated"))
+        col_values = ws.col_values(product_col)
+        target_row = next((idx for idx, val in enumerate(col_values[1:], start=2) if self._norm(val) == self._norm(product_name)), None)
 
-            if not product_col:
-                raise ValueError("Column 'Product_Name' not found.")
-            if not last_updated_col:
-                raise ValueError("Column 'Last_Updated' not found.")
-
-            store_key = self._norm(store_name)
-            store_to_colname = {
-                "woolworths": "Woolworths_Price",
-                "coles": "Coles_Price",
-                "aldi": "Aldi_Price",
-            }
-            if store_key not in store_to_colname:
-                raise ValueError("store_name must be one of: woolworths, coles, aldi")
-
-            price_colname = store_to_colname[store_key]
-            price_col = header_map.get(self._norm(price_colname))
-            if not price_col:
-                raise ValueError(f"Column '{price_colname}' not found.")
-
-            # Find product row by scanning Product_Name column
-            col_values = ws.col_values(product_col)
-            target_row = None
-            for idx, val in enumerate(col_values[1:], start=2):  # skip header
-                if self._norm(val) == self._norm(product_name):
-                    target_row = idx
-                    break
-
-            if target_row is None:
-                raise ValueError(f"Product '{product_name}' not found in 'Product_Name' column.")
-
-            # Update price + timestamp (batch update)
+        if target_row:
             ws.update(
-                [
-                    gspread.utils.rowcol_to_a1(target_row, price_col),
-                    gspread.utils.rowcol_to_a1(target_row, last_updated_col),
-                ],
+                [gspread.utils.rowcol_to_a1(target_row, price_col), gspread.utils.rowcol_to_a1(target_row, last_updated_col)],
                 [[new_price], [self._now_iso_utc()]],
-                value_input_option="USER_ENTERED",
+                value_input_option="USER_ENTERED"
             )
 
-        except (APIError, OSError) as e:
-            raise RuntimeError(f"Google Sheets API/connection error while updating: {e}") from e
-        except Exception:
-            raise
-
-    # -------------------------
-    # Create (C)
-    # -------------------------
     def add_product(self, product_name: str, category: str = "", size: str = "") -> None:
-        """
-        Appends a new row respecting your headers.
-        Prices are left blank; Last_Updated is set to now (UTC).
-        """
-        try:
-            ws = self._get_worksheet()
-            header_map = self._get_header_map(ws)
+        """Appends a new product row."""
+        ws = self._get_worksheet()
+        header_map = self._get_header_map(ws)
+        headers = ws.row_values(1)
+        row = [""] * len(headers)
 
-            # Build an empty row in header order
-            headers = ws.row_values(1)
-            row = [""] * len(headers)
+        for col_name, val in [("Product_Name", product_name), ("Category", category), ("Size", size), ("Last_Updated", self._now_iso_utc())]:
+            col_idx = header_map.get(self._norm(col_name))
+            if col_idx: row[col_idx - 1] = val
+        
+        ws.append_row(row, value_input_option="USER_ENTERED")
 
-            def set_if_exists(col_name: str, value: Any):
-                col = header_map.get(self._norm(col_name))
-                if col:
-                    row[col - 1] = value
-
-            set_if_exists("Product_Name", product_name)
-            set_if_exists("Category", category)
-            set_if_exists("Size", size)
-            set_if_exists("Last_Updated", self._now_iso_utc())
-
-            ws.append_row(row, value_input_option="USER_ENTERED")
-
-        except (APIError, OSError) as e:
-            raise RuntimeError(f"Google Sheets API/connection error while appending: {e}") from e
-        except Exception:
-            raise
-
-
-# -------------------------
-# Connection Testing
-# -------------------------
+# --- TEST BLOCK ---
 if __name__ == "__main__":
-    """
-    Run this via Streamlit so st.secrets loads:
-      streamlit run data/sheets_manager.py
-    """
     try:
         sm = SheetsManager()
-        df = sm.get_products_master()
-        print("✅ Connection OK.")
-        print("Rows:", len(df))
-        print(df.head(5).to_string(index=False))
+        print(f"✅ Connection OK. Found {len(sm.get_products_master())} products.")
     except Exception as e:
-        print("❌ Connection test failed:")
-        print(e)
-
+        print(f"❌ Test failed: {e}")
