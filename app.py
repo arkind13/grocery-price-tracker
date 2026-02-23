@@ -368,29 +368,18 @@ def main():
     """Main application"""
     st.markdown('<h1 class="main-header">🛒 Aussie Grocery Price Tracker</h1>', unsafe_allow_html=True)
 
-    # Sidebar
+    # Sidebar Controls
     with st.sidebar:
         st.header("🎛️ Controls")
-
-        # Data refresh
+        
         if st.button("🔄 Refresh Data", type="primary"):
-    st.cache_data.clear()
-    st.rerun() # This is the updated, working command
-
-
-# Connection test button
-if st.button("🧪 Test Connection"):
-    try:
-        manager = get_sheets_manager()
-        # Attempt to load a small dataset to validate connection
-        df_test = load_grocery_data()
-        if df_test is not None:
-            st.success("✅ Connected and data loaded successfully!")
-            st.success(f"✅ Products loaded: {len(df_test)} rows")
-        else:
-            st.error("❌ Connection returned no data.")
-    except Exception as e:
-        st.error(f"❌ Connection failed: {str(e)}")
+            st.cache_data.clear()
+            st.rerun()
+        
+        if st.button("🧪 Test Connection"):
+            manager = get_sheets_manager()
+            if manager:
+                st.success("✅ Connected to Google Sheets!")
 
 
     # Main content
