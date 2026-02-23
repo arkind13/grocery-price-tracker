@@ -425,3 +425,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Add this button temporarily to clear cache
+if st.button("🔄 Clear Cache & Reload"):
+    st.cache_data.clear()
+    st.rerun()
