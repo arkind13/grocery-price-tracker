@@ -377,19 +377,20 @@ def main():
             st.cache_data.clear()
             st.experimental_rerun()
 
-        # Connection test button
-        if st.button("🧪 Test Connection"):
-            try:
-                manager = get_sheets_manager()
-                # Attempt to load a small dataset to validate connection
-                df_test = load_grocery_data()
-                if df_test is not None:
-                    st.success("✅ Connected and data loaded successfully!")
-                    st.success(f"✅ Products loaded: {len(df_test)} rows")
-                else:
-                    st.error("❌ Connection returned no data.")
-            except Exception as e:
-                st.error(f"❌ Connection failed: {str(e)}")
+# Connection test button
+if st.button("🧪 Test Connection"):
+    try:
+        manager = get_sheets_manager()
+        # Attempt to load a small dataset to validate connection
+        df_test = load_grocery_data()
+        if df_test is not None:
+            st.success("✅ Connected and data loaded successfully!")
+            st.success(f"✅ Products loaded: {len(df_test)} rows")
+        else:
+            st.error("❌ Connection returned no data.")
+    except Exception as e:
+        st.error(f"❌ Connection failed: {str(e)}")
+
 
     # Main content
     df = load_grocery_data()
@@ -456,4 +457,5 @@ if __name__ == "__main__":
 if st.button("🔄 Clear Cache & Reload"):
     st.cache_data.clear()
     st.rerun()
+
 
