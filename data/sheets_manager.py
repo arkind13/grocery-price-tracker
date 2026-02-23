@@ -98,6 +98,13 @@ class SheetsManager:
     def get_products_master(self) -> pd.DataFrame:
         return SheetsManager.get_data(self.config.spreadsheet_id, self.config.worksheet_name)
 
+    def get_spreadsheet(self) -> pd.DataFrame:
+        """
+        Alias to match the call in your app.py
+        """
+        return self.get_products_master()
+
+
     # -------------------------
     # Helpers
     # -------------------------
