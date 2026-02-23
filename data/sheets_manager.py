@@ -98,11 +98,17 @@ class SheetsManager:
     def get_products_master(self) -> pd.DataFrame:
         return SheetsManager.get_data(self.config.spreadsheet_id, self.config.worksheet_name)
 
-    def get_spreadsheet(self) -> pd.DataFrame:
+        def get_spreadsheet(self, name_or_id: Optional[str] = None) -> gspread.Spreadsheet:
         """
-        Alias to match the call in your app.py
+        FIXED: Accepts an extra argument (name_or_id) to prevent the '2 were given' error.
+        FIXED: Returns the actual Google Sheet connection so app.py can find specific tabs.
         """
-        return self.get_products_master()
+        try:
+            client = self._get_client()
+            # We use the ID from your secrets regardless of what name app.py sends
+            return client.open_by_key(self.config.spreadsheet_id)
+        except Exception as e:
+            raise RuntimeError(f"Failed to open spreadsheet: {e}")
 
 
     # -------------------------
