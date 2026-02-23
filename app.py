@@ -51,8 +51,22 @@ st.markdown("""
 
 @st.cache_data(ttl=300)
 def get_sheets_manager():
-    """Return cached SheetsManager instance (expected to behave like a gspread client)."""
-    return SheetsManager()
+    """Return cached SheetsManager instance"""
+    try:
+        # Try to get spreadsheet ID from secrets
+        if 'spreadsheet_id' in st.secrets['google_sheets']:
+            spreadsheet_id = st.secrets['google_sheets']['spreadsheet_id']
+        else:
+            st.error("Missing spreadsheet_id in secrets")
+            return None
+            
+        # Initialize SheetsManager with the spreadsheet ID
+        manager = SheetsManager(spreadsheet_id)
+        return manager
+    except Exception as e:
+        st.error(f"Failed to initialize SheetsManager: {str(e)}")
+        return None
+
 
 @st.cache_data(ttl=300)
 def load_grocery_data():
@@ -62,11 +76,8 @@ def load_grocery_data():
         if manager is None:
             return pd.DataFrame()
 
-        # If SheetsManager returns a gspread client directly:
-        gc = manager
-
-        # Open the spreadsheet
-        sheet = gc.open('AusGrocery_PriceDB')
+        # Use the manager to get the spreadsheet
+        sheet = manager.get_spreadsheet('AusGrocery_PriceDB')
         worksheet = sheet.sheet1
 
         # Get all data
@@ -104,9 +115,8 @@ def load_shopping_lists():
         manager = get_sheets_manager()
         if manager is None:
             return pd.DataFrame()
-        gc = manager
-
-        sheet = gc.open('AusGrocery_PriceDB')
+        
+        sheet = manager.get_spreadsheet('AusGrocery_PriceDB')
 
         # Try to get shopping lists worksheet
         try:
@@ -151,9 +161,8 @@ def load_price_history():
         manager = get_sheets_manager()
         if manager is None:
             return pd.DataFrame()
-        gc = manager
-
-        sheet = gc.open('AusGrocery_PriceDB')
+        
+        sheet = manager.get_spreadsheet('AusGrocery_PriceDB')
 
         # Try to get price history worksheet
         try:
@@ -180,6 +189,20 @@ def load_price_history():
             else:
                 return pd.DataFrame()
 
+        except gspread.WorksheetNotFound:
+            # Create the worksheet if it doesn't exist
+            worksheet = sheet.add_worksheet(
+                title='Price_History',
+                rows=1000,
+                cols=4
+            )
+            # Add headers
+            worksheet.update('A1:D1', [['Product_Name', 'Store', 'Price', 'Date']])
+            return pd.DataFrame()
+
+    except Exception as e:
+        st.error(f"Failed to load price history: {str(e)}")
+        return pd.DataFrame()
         except gspread.WorksheetNotFound:
             # Create the worksheet if it doesn't exist
             worksheet = sheet.add_worksheet(
