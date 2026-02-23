@@ -51,7 +51,6 @@ st.markdown("""
 
 @st.cache_data(ttl=300)
 def get_sheets_manager(): return SheetsManager()
-    """Establish connection to Google Sheets using service account"""
     try:
         # Get credentials from Streamlit secrets
         credentials_dict = dict(st.secrets["gcp_service_account"])
