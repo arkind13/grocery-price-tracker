@@ -32,11 +32,18 @@ class SheetsManager:
     """
 
     def __init__(self, spreadsheet_id: Optional[str] = None, worksheet_name: str = "Products_Master"):
-        spreadsheet_id = spreadsheet_id or st.secrets.get("spreadsheet_id")
+        # Look inside the [google_sheets] block for the ID
         if not spreadsheet_id:
-            raise ValueError("Missing spreadsheet id. Set st.secrets['spreadsheet_id'] or pass spreadsheet_id=...")
+            try:
+                spreadsheet_id = st.secrets["google_sheets"]["spreadsheet_id"]
+            except (KeyError, TypeError):
+                spreadsheet_id = None
+
+        if not spreadsheet_id:
+            raise ValueError("Missing spreadsheet_id in secrets. Please set st.secrets['google_sheets']['spreadsheet_id']")
 
         self.config = SheetsConfig(spreadsheet_id=spreadsheet_id, worksheet_name=worksheet_name)
+
 
     # -------------------------
     # Auth / Client / Worksheet
