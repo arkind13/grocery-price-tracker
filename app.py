@@ -115,12 +115,12 @@ def load_grocery_data():
         st.error(f"❌ Failed to load data: {str(e)}")
         return pd.DataFrame()
            
-            # Define your "Ignore List"
-            COLUMNS_TO_IGNORE = ['Search_Keyword_Aldi', 'Brand_Type', 'Aldi_URL']
+    # Define your "Ignore List"
+    COLUMNS_TO_IGNORE = ['Search_Keyword_Aldi', 'Brand_Type', 'Aldi_URL']
         
-            # THE VITAL STEP: Actually drop them
-            # 'errors=ignore' ensures the app doesn't crash if a column is missing
-            display_df = df.drop(columns=COLUMNS_TO_IGNORE, errors='ignore')
+    # THE VITAL STEP: Actually drop them
+    # 'errors=ignore' ensures the app doesn't crash if a column is missing
+    display_df = df.drop(columns=COLUMNS_TO_IGNORE, errors='ignore')
 
 def load_shopping_lists():
     """Load shopping lists from Google Sheets"""
