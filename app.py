@@ -8,6 +8,13 @@ from datetime import datetime, timedelta
 import json
 from data.sheets_manager import SheetsManager
 
+# --- 1. CONFIGURATION / CONSTANTS ---
+##In Google Sheets add other brand names which are not highlighted##
+ALDI_HOME_BRANDS = [
+    "choceur", "westacre", "blackstone", "mamia", "bakers life", 
+    "farmdale", "remano", "dairy fine", "logix", "trimat"
+]
+
 # Page config
 st.set_page_config(
     page_title="🛒 Aussie Grocery Price Tracker",
@@ -107,7 +114,13 @@ def load_grocery_data():
     except Exception as e:
         st.error(f"❌ Failed to load data: {str(e)}")
         return pd.DataFrame()
-
+           
+            # Define your "Ignore List"
+            COLUMNS_TO_IGNORE = ['Search_Keyword_Aldi', 'Brand_Type', 'Aldi_URL']
+        
+            # THE VITAL STEP: Actually drop them
+            # 'errors=ignore' ensures the app doesn't crash if a column is missing
+            display_df = df.drop(columns=COLUMNS_TO_IGNORE, errors='ignore')
 
 def load_shopping_lists():
     """Load shopping lists from Google Sheets"""
