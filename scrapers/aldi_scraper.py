@@ -5,7 +5,6 @@ import re
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from playwright.sync_api import sync_playwright
 from typing import List, Dict, Optional
-from data.sheets_manager import manager
 
 # Define home brands used by Aldi Australia
 ALDI_HOME_BRANDS = [
@@ -107,7 +106,7 @@ def scrape_aldi_search(page, keyword: str) -> List[Dict]:
             
     return products
 
-def run_aldi_scraper():
+def run_aldi_scraper(manager):
     """
     Main scraper function that fetches products, searches Aldi, finds best matches,
     and updates the spreadsheet with new prices.
