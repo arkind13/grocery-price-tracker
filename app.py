@@ -474,7 +474,14 @@ if st.button("🔄 Clear Cache & Reload"):
 
 if st.sidebar.button("🚀 Run Aldi Scraper"):
     with st.spinner("Scraping Aldi..."):
-        run_aldi_scraper()
+        try:
+            from scrapers.aldi_scraper import run_aldi_scraper
+            run_aldi_scraper()
+        except Exception as e:
+            st.error(f"Error running aldi scraper: {str(e)}")
+            print(f"Full error: {e}")
+            import traceback
+            traceback.print_exc()
     st.success("Aldi scraper completed!")
     st.rerun()
 
