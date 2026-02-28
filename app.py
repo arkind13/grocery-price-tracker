@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import json
 from data.sheets_manager import SheetsManager
-from aldi_scraper import run_aldi_scraper
+from scrapers.aldi_scraper import run_aldi_scraper
 
 # --- 1. CONFIGURATION / CONSTANTS ---
 ##In Google Sheets add other brand names which are not highlighted##
