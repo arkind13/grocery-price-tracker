@@ -14,7 +14,7 @@ ALDI_HOME_BRANDS = [
     "choceur", "westacre", "blackstone", "mamia", "bakers life", 
     "farmdale", "remano", "dairy fine", "logix", "trimat", "cowbelle", "emporium selection", "brooklea", "yoguri", "bramwells",
     "goldenvale", "imperial grain", "asia green garden", "sprinters", "belmont", "knoppers", "nutoka",
-    "broad oak frams", "berg", "ironbark", "ocean rise", "tandil", "di-san", "power force", "confidence, "just organic"
+    "broad oak frams", "berg", "ironbark", "ocean rise", "tandil", "di-san", "power force", "confidence, "just organic",
 ]
 
 # Page config
