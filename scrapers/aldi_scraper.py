@@ -66,6 +66,7 @@ def scrape_aldi_search(page, keyword: str) -> List[Dict]:
     try:
         # 1. Navigate and wait for the new 2026 container class
         page.goto(url, timeout=30000)
+        page.screenshot(path="debug.png")
         # Aldi often uses 'product-item' or 'mod-product-tile' now
         page.wait_for_selector('.mod-product-tile, .product-item', timeout=10000)
     except Exception as e:
