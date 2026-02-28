@@ -6,9 +6,10 @@ from manager import manager  # Assuming this is your sheets manager instance
 
 # Define home brands used by Aldi Australia
 ALDI_HOME_BRANDS = [
-    'Farmdale', 'Choceur', 'Westacre', "Baker's Life",
-    'Dairy Farmers', 'Nature Valley', 'Simplicity',
-    'Simply Nature', 'Aldi Select', 'Aldi Premium'
+    "choceur", "westacre", "blackstone", "mamia", "bakers life", 
+    "farmdale", "remano", "dairy fine", "logix", "trimat", "cowbelle", "emporium selection", "brooklea", "yoguri", "bramwells",
+    "goldenvale", "imperial grain", "asia green garden", "sprinters", "belmont", "knoppers", "nutoka",
+    "broad oak frams", "berg", "ironbark", "ocean rise", "tandil", "di-san", "power force", "confidence", "just organic"
 ]
 
 def find_best_aldi_match(results: List[Dict], target_size: float, brand_type: str) -> Optional[Dict]:
