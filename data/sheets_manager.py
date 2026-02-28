@@ -153,3 +153,6 @@ if __name__ == "__main__":
         print(f"✅ Connection OK. Found {len(sm.get_products_master())} products.")
     except Exception as e:
         print(f"❌ Test failed: {e}")
+
+# This creates a global instance that other files can import
+manager = SheetsManager()
