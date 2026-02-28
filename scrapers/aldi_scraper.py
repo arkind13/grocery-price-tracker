@@ -2,7 +2,26 @@
 import re
 from playwright.sync_api import sync_playwright
 from typing import List, Dict, Optional
-from ..data.sheets_manager import manager
+# Replace with proper imports:
+import sys
+import os
+from playwright.sync_api import sync_playwright
+from typing import List, Dict, Optional
+# Fix the import path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+try:
+    from data.sheets_manager import manager
+    print("✓ Successfully imported manager")
+except ImportError as e:
+    print(f"✗ Failed to import manager: {e}")
+    # Create mock for debugging
+    class MockManager:
+        def get_products_master(self):
+            return []
+        def update_price(self, product_name, retailer, price):
+            pass
+    manager = MockManager()
 
 
 
