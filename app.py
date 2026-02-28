@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import json
 from data.sheets_manager import SheetsManager
+from aldi_scraper import run_aldi_scraper
 
 # --- 1. CONFIGURATION / CONSTANTS ---
 ##In Google Sheets add other brand names which are not highlighted##
@@ -461,6 +462,12 @@ if __name__ == "__main__":
 # Add this button temporarily to clear cache
 if st.button("🔄 Clear Cache & Reload"):
     st.cache_data.clear()
+    st.rerun()
+
+if st.sidebar.button("🚀 Run Aldi Scraper"):
+    with st.spinner("Scraping Aldi..."):
+        run_aldi_scraper()
+    st.success("Aldi scraper completed!")
     st.rerun()
 
 
