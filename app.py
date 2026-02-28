@@ -7,7 +7,15 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import json
 from data.sheets_manager import SheetsManager
-from scrapers.aldi_scraper import run_aldi_scraper
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from scrapers.aldi_scraper import run_aldi_scraper
+    print("✓ Successfully imported aldi_scraper")
+except ImportError as e:
+    print(f"✗ Import failed: {e}")
+    # Handle gracefully or create mock
 
 # --- 1. CONFIGURATION / CONSTANTS ---
 ##In Google Sheets add other brand names which are not highlighted##
