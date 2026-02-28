@@ -81,33 +81,57 @@ class SheetsManager:
         ws = client.open_by_key(spreadsheet_id).worksheet(worksheet_name)
         return pd.DataFrame(ws.get_all_records())
 
-    def get_products_master(self) -> pd.DataFrame:
-        return SheetsManager.get_data(self.config.spreadsheet_id, self.config.worksheet_name)
-
-    def update_price(self, product_name: str, store_name: str, new_price: Any) -> None:
-        """Updates Price and Last_Updated timestamp."""
-        ws = self._get_worksheet()
-        header_map = self._get_header_map(ws)
+    def get_products_master(self) -> List[Dict]:
+        """
+        Fetch all products from the master sheet and return as list of dictionaries.
         
-        product_col = header_map.get(self._norm("Product_Name"))
-        last_updated_col = header_map.get(self._norm("Last_Updated"))
+        Returns:
+            List of dictionaries representing each product row
+        """
+        try:
+            df = SheetsManager.get_data(self.config.spreadsheet_id, self.config.worksheet_name)
+            # Convert DataFrame to list of dictionaries
+            return df.to_dict('records')
+        except Exception as e:
+            print(f"Error fetching products master: {e}")
+            return []
+
+
+    def update_price(self, product_name: str, retailer: str, price: float):
+        """
+        Update price for a given product in the master sheet.
         
-        store_key = self._norm(store_name)
-        store_to_colname = {"woolworths": "Woolworths_Price", "coles": "Coles_Price", "aldi": "Aldi_Price"}
-        price_col = header_map.get(self._norm(store_to_colname.get(store_key, "")))
+        Args:
+            product_name: Name of the product
+            retailer: 'Woolworths', 'Coles', or 'Aldi'
+            price: New price value
+        """
+        try:
+            sheet = self.get_spreadsheet()
+            worksheet = sheet.worksheet("Products_Master")
+            
+            # Find the row index
+            all_data = worksheet.get_all_values()
+            header = all_data[0]
+            product_index = None
+            
+            for i, row in enumerate(all_data[1:], start=1):  # Skip header row
+                if row[header.index('Product_Name')] == product_name:
+                    product_index = i
+                    break
+                    
+            if product_index:
+                # Update the appropriate column
+                col_index = header.index(f'{retailer}_Price') + 1  # Convert to 1-based index
+                worksheet.update_cell(product_index, col_index, price)
+                
+                # Update Last_Updated
+                last_updated_col = header.index('Last_Updated') + 1
+                worksheet.update_cell(product_index, last_updated_col, datetime.now().strftime('%Y-%m-%d'))
+                
+        except Exception as e:
+            print(f"Error updating price for {product_name}: {e}")
 
-        if not all([product_col, last_updated_col, price_col]):
-            raise ValueError("Required columns missing in sheet.")
-
-        col_values = ws.col_values(product_col)
-        target_row = next((idx for idx, val in enumerate(col_values[1:], start=2) if self._norm(val) == self._norm(product_name)), None)
-
-        if target_row:
-            ws.update(
-                [gspread.utils.rowcol_to_a1(target_row, price_col), gspread.utils.rowcol_to_a1(target_row, last_updated_col)],
-                [[new_price], [self._now_iso_utc()]],
-                value_input_option="USER_ENTERED"
-            )
 
     def add_product(self, product_name: str, category: str = "", size: str = "") -> None:
         """Appends a new product row."""
