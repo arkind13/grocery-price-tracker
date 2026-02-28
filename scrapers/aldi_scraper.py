@@ -4,6 +4,10 @@ from playwright.sync_api import sync_playwright
 from typing import List, Dict, Optional
 from sheets_manager import manager
 
+# Debug: Print current working directory and Python path
+print("Current working directory:", os.getcwd())
+print("Python path:", sys.path)
+
 # Define home brands used by Aldi Australia
 ALDI_HOME_BRANDS = [
     "choceur", "westacre", "blackstone", "mamia", "bakers life", 
