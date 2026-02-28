@@ -473,16 +473,18 @@ if st.button("🔄 Clear Cache & Reload"):
     st.rerun()
 
 if st.sidebar.button("🚀 Run Aldi Scraper"):
-    with st.spinner("Scraping Aldi..."):
-        try:
-            from scrapers.aldi_scraper import run_aldi_scraper
-            run_aldi_scraper()
-        except Exception as e:
-            st.error(f"Error running aldi scraper: {str(e)}")
-            print(f"Full error: {e}")
-            import traceback
-            traceback.print_exc()
-    st.success("Aldi scraper completed!")
-    st.rerun()
+    manager = get_sheets_manager()
+    if manager:
+        # We use st.status so you can see the progress!
+        with st.status("🕷️ Aldi Scraper Running...", expanded=True) as status:
+            try:
+                # We pass the manager we just created into the scraper
+                updated_count = run_aldi_scraper(manager)
+                status.update(label=f"✅ Updated {updated_count} products!", state="complete")
+                st.cache_data.clear() # Clear cache so new prices show up
+                st.toast("Aldi Prices Updated!") 
+            except Exception as e:
+                status.update(label="❌ Scraper Failed", state="error")
+                st.error(f"Error: {e}")
 
 
