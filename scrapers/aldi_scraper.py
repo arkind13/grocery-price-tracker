@@ -2,7 +2,7 @@
 import re
 from playwright.sync_api import sync_playwright
 from typing import List, Dict, Optional
-from data.sheets_manager import manager
+from data.sheets_manager import manager  # If sheets_manager.py
 
 # Define home brands used by Aldi Australia
 ALDI_HOME_BRANDS = [
