@@ -61,47 +61,46 @@ def find_best_aldi_match(results: List[Dict], target_size: float, brand_type: st
     return best_match
 
 def scrape_aldi_search(page, keyword: str) -> List[Dict]:
-    """
-    Perform a search on Aldi Australia website and extract product info.
-    
-    Args:
-        page: Playwright Page object
-        keyword: Search term (e.g., 'milk')
-        
-    Returns:
-        List of product dictionaries with 'title' and 'price'
-    """
     url = f"https://www.aldi.com.au/en/search-results/?q={keyword}"
     
     try:
+        # 1. Navigate and wait for the new 2026 container class
         page.goto(url, timeout=30000)
-        page.wait_for_selector('.product-tile', timeout=10000)
+        # Aldi often uses 'product-item' or 'mod-product-tile' now
+        page.wait_for_selector('.mod-product-tile, .product-item', timeout=10000)
     except Exception as e:
-        print(f"[ERROR] Failed to load search page for '{keyword}': {e}")
+        print(f"[ERROR] Failed to find products for '{keyword}': {e}")
         return []
     
     products = []
-    elems = page.query_selector_all('.product-tile')
+    # 2. Use a broader selector to catch different tile types
+    elems = page.query_selector_all('.mod-product-tile, .product-item')
     
-    # Process top 5 results (adjustable)
     for elem in elems[:5]:
         try:
-            title_elem = elem.query_selector('.product-name')
-            title = title_elem.inner_text() if title_elem else ""
+            # 3. Updated selectors for 2026
+            # Title is often inside h2 or a specific brand-title class
+            title_elem = elem.query_selector('.box--title, .product-name, h2')
+            title = title_elem.inner_text().strip() if title_elem else ""
             
-            price_elem = elem.query_selector('.price')
-            price_str = price_elem.inner_text() if price_elem else ""
+            # Price is now split into integer and decimal boxes in 2026
+            int_elem = elem.query_selector('.box--price--integer')
+            dec_elem = elem.query_selector('.box--price--decimal')
             
-            # Clean and convert price to float
-            price_clean = price_str.strip('$').replace(',', '')
-            price = float(price_clean) if price_clean.replace('.', '').isdigit() else 0.0
+            if int_elem:
+                price_str = int_elem.inner_text().strip()
+                if dec_elem:
+                    price_str += f".{dec_elem.inner_text().strip()}"
+                price = float(price_str.replace('$', '').replace(',', ''))
+            else:
+                # Fallback for standard price tags
+                price_elem = elem.query_selector('.box--price, .price')
+                price_text = price_elem.inner_text().strip() if price_elem else "0"
+                price = float(price_text.replace('$', '').replace(',', ''))
             
-            products.append({
-                'title': title,
-                'price': price
-            })
+            if price > 0:
+                products.append({'title': title, 'price': price})
         except Exception as e:
-            print(f"[WARNING] Could not parse product from element: {e}")
             continue
             
     return products
