@@ -112,6 +112,8 @@ def run_aldi_scraper():
     Main scraper function that fetches products, searches Aldi, finds best matches,
     and updates the spreadsheet with new prices.
     """
+    print("🚀 Starting ALDI scraper...")
+    
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(
@@ -119,23 +121,74 @@ def run_aldi_scraper():
         )
         page = context.new_page()
         
+        print("📋 Getting products from Google Sheets...")
         products_master = manager.get_products_master()
+        print(f"✅ Found {len(products_master)} products to process")
         
-        for prod in products_master:
+        processed_count = 0
+        updated_count = 0
+        
+        for i, prod in enumerate(products_master):
             product_name = prod['Product_Name']
             keyword = prod['Search_Keyword_Aldi']
             target_size = prod['Size']
             brand_type = prod['Brand_Type']
             
+            print(f"\n🔍 Processing product {i+1}/{len(products_master)}:")
+            print(f"   Name: {product_name}")
+            print(f"   Keyword: {keyword}")
+            print(f"   Size: {target_size}")
+            print(f"   Brand: {brand_type}")
+            
             # Skip empty keywords
             if not keyword:
+                print("   ❌ Skipping - empty keyword")
                 continue
                 
-            results = scrape_aldi_search(page, keyword)
-            best = find_best_aldi_match(results, target_size, brand_type)
-            
-            if best:
-                manager.update_price(product_name, 'Aldi', best['price'])
+            try:
+                print("   🕷️ Searching ALDI...")
+                results = scrape_aldi_search(page, keyword)
+                print(f"   ✅ Found {len(results)} search results")
                 
+                if results:
+                    print("   🎯 Finding best match...")
+                    best = find_best_aldi_match(results, target_size, brand_type)
+                    
+                    if best:
+                        print(f"   💰 Found best price: ${best['price']}")
+                        print(f"   📦 Matched size: {best.get('size', 'Unknown')}")
+                        
+                        # Update the price
+                        print("   📝 Updating Google Sheet...")
+                        manager.update_price(product_name, 'Aldi', best['price'])
+                        updated_count += 1
+                        print("   ✅ Updated successfully!")
+                    else:
+                        print("   ❌ No suitable match found")
+                else:
+                    print("   ❌ No search results found")
+                    
+            except Exception as e:
+                print(f"   ⚠️ Error processing {product_name}: {e}")
+                import traceback
+                traceback.print_exc()
+            
+            processed_count += 1
+            
         browser.close()
+        
+        print(f"\n🎉 Scraper finished!")
+        print(f"📊 Processed: {processed_count} products")
+        print(f"📈 Updated: {updated_count} products")
+        
+        return updated_count
+
+# At the end of your function
+print("\n🔍 Verifying updates...")
+try:
+    # Get updated data to verify
+    latest_products = manager.get_products_master()
+    print("✅ Data refreshed from Google Sheets")
+except Exception as e:
+    print(f"⚠️ Could not verify: {e}")
 
