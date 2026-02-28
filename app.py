@@ -1,3 +1,22 @@
+import subprocess
+import os
+import sys
+
+# --- Playwright Cloud Setup ---
+def install_playwright():
+    try:
+        # Check if chromium is already installed in the cache
+        # If this fails, we run the install command
+        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
+        # Install dependencies for the browser (vital for Linux/Streamlit Cloud)
+        subprocess.run(["playwright", "install-deps", "chromium"], check=True)
+    except Exception as e:
+        print(f"Playwright installation failed: {e}")
+
+# Run the installation at startup
+if os.environ.get("STREAMLIT_RUNTIME_ENV") == "cloud" or not os.path.exists(os.path.expanduser("~/.cache/ms-playwright")):
+    install_playwright()
+
 import streamlit as st
 import pandas as pd
 import gspread
