@@ -1,0 +1,3 @@
+libnss3
+libatk-bridge2.0-0
+libgbm1
