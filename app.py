@@ -482,7 +482,6 @@ if st.sidebar.button("🚀 Run Aldi Scraper"):
             print(f"Full error: {e}")
             import traceback
             traceback.print_exc()
-    updated_count = run_aldi_scraper()
     st.success("Aldi scraper completed!")
     st.rerun()
 
