@@ -7,7 +7,6 @@ import streamlit as st
 import gspread
 from gspread.exceptions import APIError, WorksheetNotFound
 from google.oauth2.service_account import Credentials
-from scrapers.aldi_scraper import batch_update_aldi_products
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
