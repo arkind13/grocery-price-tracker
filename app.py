@@ -1,22 +1,3 @@
-import subprocess
-import os
-import sys
-
-# --- Playwright Cloud Setup ---
-def install_playwright():
-    try:
-        # Check if chromium is already installed in the cache
-        # If this fails, we run the install command
-        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
-        # Install dependencies for the browser (vital for Linux/Streamlit Cloud)
-        subprocess.run(["playwright", "install-deps", "chromium"], check=True)
-    except Exception as e:
-        print(f"Playwright installation failed: {e}")
-
-# Run the installation at startup
-if os.environ.get("STREAMLIT_RUNTIME_ENV") == "cloud" or not os.path.exists(os.path.expanduser("~/.cache/ms-playwright")):
-    install_playwright()
-
 import streamlit as st
 import pandas as pd
 import gspread
@@ -26,23 +7,12 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import json
 from data.sheets_manager import SheetsManager
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-try:
-    from scrapers.aldi_scraper import run_aldi_scraper
-    print("✓ Successfully imported aldi_scraper")
-except ImportError as e:
-    print(f"✗ Import failed: {e}")
-    # Handle gracefully or create mock
 
 # --- 1. CONFIGURATION / CONSTANTS ---
 ##In Google Sheets add other brand names which are not highlighted##
 ALDI_HOME_BRANDS = [
     "choceur", "westacre", "blackstone", "mamia", "bakers life", 
-    "farmdale", "remano", "dairy fine", "logix", "trimat", "cowbelle", "emporium selection", "brooklea", "yoguri", "bramwells",
-    "goldenvale", "imperial grain", "asia green garden", "sprinters", "belmont", "knoppers", "nutoka",
-    "broad oak frams", "berg", "ironbark", "ocean rise", "tandil", "di-san", "power force", "confidence", "just organic"
+    "farmdale", "remano", "dairy fine", "logix", "trimat"
 ]
 
 # Page config
@@ -490,20 +460,3 @@ if __name__ == "__main__":
 if st.button("🔄 Clear Cache & Reload"):
     st.cache_data.clear()
     st.rerun()
-
-if st.sidebar.button("🚀 Run Aldi Scraper"):
-    manager = get_sheets_manager()
-    if manager:
-        # We use st.status so you can see the progress!
-        with st.status("🕷️ Aldi Scraper Running...", expanded=True) as status:
-            try:
-                # We pass the manager we just created into the scraper
-                updated_count = run_aldi_scraper(manager)
-                status.update(label=f"✅ Updated {updated_count} products!", state="complete")
-                st.cache_data.clear() # Clear cache so new prices show up
-                st.toast("Aldi Prices Updated!") 
-            except Exception as e:
-                status.update(label="❌ Scraper Failed", state="error")
-                st.error(f"Error: {e}")
-
-
