@@ -121,16 +121,32 @@ def display_product_comparison(df, sort_mode=None):
         price_col2 = f"{store2}_Price"
 
         if price_col1 in df.columns and price_col2 in df.columns:
+            # Convert to numeric, keeping NaN for missing
             p1 = pd.to_numeric(df[price_col1].astype(str).str.replace('$', '').str.replace(',', ''), errors='coerce')
             p2 = pd.to_numeric(df[price_col2].astype(str).str.replace('$', '').str.replace(',', ''), errors='coerce')
 
             df = df.copy()
-            df['_sort_diff'] = p1.fillna(0) - p2.fillna(0)
-            df = df.sort_values('_sort_diff', ascending=False)
-            df = df.drop(columns=['_sort_diff'])
-            st.info(f"📊 Sorted by savings when buying at **{store1}** instead of **{store2}** (largest savings first)")
+            # Boolean: True if both prices exist
+            both_exist = p1.notna() & p2.notna()
+            # Savings difference: first store minus second (positive = first cheaper)
+            diff = p1 - p2
 
-    # Search and filter
+            # Sort: first by both_exist descending (True first), then by diff descending (largest savings first)
+            # Use temporary columns
+            df['_both'] = both_exist
+            df['_diff'] = diff
+            df = df.sort_values(
+                by=['_both', '_diff'],
+                ascending=[False, False]   # True first, then highest diff first
+            )
+            df = df.drop(columns=['_both', '_diff'])
+
+            st.info(
+                f"📊 Sorted by savings when buying at **{store1}** instead of **{store2}** "
+                f"(largest savings first; products with missing prices appear last)"
+            )
+
+    # Search and filter (unchanged)
     col1, col2 = st.columns([2, 1])
     with col1:
         search_term = st.text_input("🔍 Search products:", placeholder="Enter product name...")
@@ -150,7 +166,7 @@ def display_product_comparison(df, sort_mode=None):
 
     st.subheader("🛒 Price Comparison")
 
-    # --- Original product display loop (restored) ---
+    # --- Product display loop (unchanged from original) ---
     for idx, row in filtered_df.iterrows():
         product_name = row.get('Product_Name', 'Unnamed Product')
         with st.expander(f"🏷️ {product_name}", expanded=True):
@@ -162,7 +178,6 @@ def display_product_comparison(df, sort_mode=None):
                 ('Aldi', 'Aldi_Price', '#FF6600')
             ]
 
-            prices = {}
             best_store, savings, savings_percent = calculate_savings(row)
 
             # Display price cards
