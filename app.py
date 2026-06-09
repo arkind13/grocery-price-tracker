@@ -149,11 +149,84 @@ def display_product_comparison(df, sort_mode=None):
         return
 
     st.subheader("🛒 Price Comparison")
-    # (The rest of the display code remains exactly as you had it in your original snippet)
-    # I'll omit it here for brevity, but you should include the expander loop and price cards.
-    # For full code, see your original `display_product_comparison` after line ~150.
-    # I will keep a placeholder.
-    st.write("Displaying products... (add your original expander logic here)")
+
+    # --- Original product display loop (restored) ---
+    for idx, row in filtered_df.iterrows():
+        product_name = row.get('Product_Name', 'Unnamed Product')
+        with st.expander(f"🏷️ {product_name}", expanded=True):
+            col1, col2, col3, col4 = st.columns(4)
+
+            stores = [
+                ('Woolworths', 'Woolworths_Price', '#0066CC'),
+                ('Coles', 'Coles_Price', '#FF0000'),
+                ('Aldi', 'Aldi_Price', '#FF6600')
+            ]
+
+            prices = {}
+            best_store, savings, savings_percent = calculate_savings(row)
+
+            # Display price cards
+            for i, (store_name, price_col, color) in enumerate(stores):
+                target_col = [col1, col2, col3][i]
+                price = row.get(price_col, None)
+                if pd.notna(price) and price != '':
+                    try:
+                        price_float = float(price)
+                    except:
+                        try:
+                            price_float = float(str(price).replace('$', '').replace(',', ''))
+                        except:
+                            price_float = None
+                else:
+                    price_float = None
+
+                if price_float is not None and price_float > 0:
+                    is_best = (store_name == best_store)
+                    target_col.markdown(f"""
+                    <div style="background-color: {'#e8f5e8' if is_best else '#f8f9fa'}; 
+                                border: {'3px solid #28a745' if is_best else '1px solid #dee2e6'};
+                                padding: 1rem; border-radius: 0.5rem; text-align: center;">
+                        <h4 style="color: {color}; margin: 0;">{store_name}</h4>
+                        <h2 style="margin: 0.5rem 0;">${price_float:.2f}</h2>
+                        {'<span style="color: #28a745; font-weight: bold;">✅ BEST DEAL</span>' if is_best else ''}
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    target_col.markdown(f"""
+                    <div style="background-color: #f8f9fa; border: 1px solid #dee2e6;
+                                padding: 1rem; border-radius: 0.5rem; text-align: center;">
+                        <h4 style="color: {color}; margin: 0;">{store_name}</h4>
+                        <h2 style="margin: 0.5rem 0; color: #6c757d;">N/A</h2>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # Savings information
+            if savings and savings > 0:
+                col4.markdown(f"""
+                <div style="background-color: #d4edda; border: 1px solid #c3e6cb;
+                            padding: 1rem; border-radius: 0.5rem; text-align: center;">
+                    <h4 style="color: #155724; margin: 0;">💰 Potential Savings</h4>
+                    <h3 style="margin: 0.5rem 0; color: #28a745;">${savings:.2f}</h3>
+                    <p style="margin: 0; color: #155724;">({savings_percent:.1f}% off)</p>
+                    <small>Choose {best_store} instead</small>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                col4.markdown(f"""
+                <div style="background-color: #f8f9fa; border: 1px solid #dee2e6;
+                            padding: 1rem; border-radius: 0.5rem; text-align: center;">
+                    <h4 style="color: #6c757d; margin: 0;">📊 Same Price</h4>
+                    <p style="margin: 0;">All stores match</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # Additional info
+            cat = row.get('Category', None)
+            if pd.notna(cat) and cat != '':
+                st.caption(f"📂 Category: {cat}")
+            lu = row.get('Last_Updated', None)
+            if pd.notna(lu) and lu != '':
+                st.caption(f"🕒 Last updated: {lu}")
 
 def load_shopping_lists():
     # ... unchanged (your existing function) ...
