@@ -22,7 +22,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS (unchanged)
+# Custom CSS
 st.markdown("""
 <style>
     .main-header { font-size: 2.5rem; color: #2E8B57; text-align: center; margin-bottom: 2rem; }
@@ -128,11 +128,12 @@ def display_product_comparison(df, sort_mode=None):
             df = df.copy()
             # Boolean: True if both prices exist
             both_exist = p1.notna() & p2.notna()
-            # Savings difference: first store minus second (positive = first cheaper)
-            diff = p1 - p2
+            
+            # --- FIXED LOGIC ---
+            # Savings calculated as Store 2 (expensive) minus Store 1 (cheaper target)
+            diff = p2 - p1
 
             # Sort: first by both_exist descending (True first), then by diff descending (largest savings first)
-            # Use temporary columns
             df['_both'] = both_exist
             df['_diff'] = diff
             df = df.sort_values(
@@ -146,7 +147,7 @@ def display_product_comparison(df, sort_mode=None):
                 f"(largest savings first; products with missing prices appear last)"
             )
 
-    # Search and filter (unchanged)
+    # Search and filter
     col1, col2 = st.columns([2, 1])
     with col1:
         search_term = st.text_input("🔍 Search products:", placeholder="Enter product name...")
@@ -166,7 +167,7 @@ def display_product_comparison(df, sort_mode=None):
 
     st.subheader("🛒 Price Comparison")
 
-    # --- Product display loop (unchanged from original) ---
+    # --- Product display loop ---
     for idx, row in filtered_df.iterrows():
         product_name = row.get('Product_Name', 'Unnamed Product')
         with st.expander(f"🏷️ {product_name}", expanded=True):
@@ -244,11 +245,9 @@ def display_product_comparison(df, sort_mode=None):
                 st.caption(f"🕒 Last updated: {lu}")
 
 def load_shopping_lists():
-    # ... unchanged (your existing function) ...
     pass
 
 def load_price_history():
-    # ... unchanged ...
     pass
 
 def main():
@@ -269,7 +268,7 @@ def main():
     if not df.empty:
         st.success(f"📊 Successfully loaded {len(df)} products!")
 
-        # Summary metrics (your existing code)
+        # Summary metrics
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("🏷️ Total Products", len(df))
