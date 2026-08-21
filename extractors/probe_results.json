@@ -1,0 +1,119 @@
+[
+  {
+    "store": "Woolworths",
+    "endpoint": "https://www.woolworths.com.au/apis/ui/browse/category",
+    "method": "GET",
+    "label": "Browse API (category)",
+    "timestamp": "2026-08-21T21:30:50+00:00",
+    "status": 400,
+    "elapsed_ms": 1102,
+    "content_type": "application/json; charset=utf-8",
+    "content_length": 269,
+    "error": null,
+    "js_render_required": null,
+    "auth_required": null,
+    "notes": [
+      "Unexpected HTTP 400"
+    ]
+  },
+  {
+    "store": "Woolworths",
+    "endpoint": "https://www.woolworths.com.au/apis/ui/Search/products",
+    "method": "POST",
+    "label": "Search API (keyword)",
+    "timestamp": "2026-08-21T21:30:51+00:00",
+    "status": null,
+    "elapsed_ms": null,
+    "content_type": null,
+    "content_length": null,
+    "error": "Timeout (20s)",
+    "js_render_required": true,
+    "auth_required": null,
+    "notes": []
+  },
+  {
+    "store": "Woolworths",
+    "endpoint": "https://www.woolworths.com.au/apis/ui/lists",
+    "method": "GET",
+    "label": "Saved Lists API (auth required)",
+    "timestamp": "2026-08-21T21:31:12+00:00",
+    "status": 404,
+    "elapsed_ms": 567,
+    "content_type": "text/plain; charset=utf-8",
+    "content_length": 3,
+    "error": null,
+    "js_render_required": null,
+    "auth_required": null,
+    "notes": [
+      "Unexpected HTTP 404"
+    ]
+  },
+  {
+    "store": "Coles",
+    "endpoint": "https://www.coles.com.au/api/search/v2/search",
+    "method": "POST",
+    "label": "Search API (keyword)",
+    "timestamp": "2026-08-21T21:31:13+00:00",
+    "status": 404,
+    "elapsed_ms": 796,
+    "content_type": "text/html; charset=utf-8",
+    "content_length": 138454,
+    "error": null,
+    "js_render_required": null,
+    "auth_required": null,
+    "notes": [
+      "Unexpected HTTP 404"
+    ]
+  },
+  {
+    "store": "Coles",
+    "endpoint": "https://www.coles.com.au/browse/dairy",
+    "method": "GET",
+    "label": "Browse page (HTML)",
+    "timestamp": "2026-08-21T21:31:13+00:00",
+    "status": 404,
+    "elapsed_ms": 726,
+    "content_type": "text/html; charset=utf-8",
+    "content_length": 413861,
+    "error": null,
+    "js_render_required": null,
+    "auth_required": null,
+    "notes": [
+      "Unexpected HTTP 404"
+    ]
+  },
+  {
+    "store": "Woolworths",
+    "endpoint": "https://www.woolworths.com.au/shop/list",
+    "method": "GET",
+    "label": "Via scraping_api (Woolworths)",
+    "timestamp": "2026-08-21T21:31:14+00:00",
+    "status": 200,
+    "elapsed_ms": 2695,
+    "content_type": "text/html",
+    "content_length": 539663,
+    "error": null,
+    "js_render_required": false,
+    "auth_required": null,
+    "notes": [
+      "ZenRows direct fetch succeeded (no JS render needed)"
+    ]
+  },
+  {
+    "store": "Coles",
+    "endpoint": "https://www.coles.com.au/browse/dairy",
+    "method": "GET",
+    "label": "Via scraping_api (Coles)",
+    "timestamp": "2026-08-21T21:31:17+00:00",
+    "status": null,
+    "elapsed_ms": null,
+    "content_type": null,
+    "content_length": null,
+    "error": "ScrapeError: ZenRows failed: HTTP 404. Scrape.do failed: HTTP 404.",
+    "js_render_required": null,
+    "auth_required": null,
+    "notes": [
+      "Scraping API probe failed"
+    ]
+  }
+]

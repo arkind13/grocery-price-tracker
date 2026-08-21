@@ -1,0 +1,1 @@
+keep the same logic of running through local_sync.py. Do not change anything else. Just add 6 buttons sorting the items as per woolworths vs coles max savings in $$$ woolworths vs aldi and so on. next change the format into a table with the same overall filters such as category and item name

@@ -1,0 +1,714 @@
+[
+  {
+    "Id": 880412719,
+    "ArticleId": 6026068,
+    "Quantity": 1.0,
+    "Timestamp": 1786841626274,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 863486600,
+    "ArticleId": 119226,
+    "Quantity": 2.0,
+    "Timestamp": 1785023059670,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 873777351,
+    "ArticleId": 237256,
+    "Quantity": 1.0,
+    "Timestamp": 1785023053412,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 872209102,
+    "ArticleId": 167374,
+    "Quantity": 1.0,
+    "Timestamp": 1784552080154,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 872209103,
+    "ArticleId": 385292,
+    "Quantity": 1.0,
+    "Timestamp": 1784552080154,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 872209104,
+    "ArticleId": 43760,
+    "Quantity": 1.0,
+    "Timestamp": 1784552080154,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 872209105,
+    "ArticleId": 6035154,
+    "Quantity": 1.0,
+    "Timestamp": 1784552080154,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 872209106,
+    "ArticleId": 6062203,
+    "Quantity": 1.0,
+    "Timestamp": 1784552080154,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 829836888,
+    "ArticleId": 888140,
+    "Quantity": 2.0,
+    "Timestamp": 1783333666504,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 867634083,
+    "ArticleId": 180592,
+    "Quantity": 1.0,
+    "Timestamp": 1783333666504,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 867952985,
+    "ArticleId": 197388,
+    "Quantity": 1.0,
+    "Timestamp": 1783333666504,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 867634082,
+    "ArticleId": 167430,
+    "Quantity": 1.0,
+    "Timestamp": 1783236767602,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 865909679,
+    "ArticleId": 159626,
+    "Quantity": 1.0,
+    "Timestamp": 1782728702585,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 865909680,
+    "ArticleId": 294742,
+    "Quantity": 1.0,
+    "Timestamp": 1782728702585,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 865657794,
+    "ArticleId": 140957,
+    "Quantity": 1.0,
+    "Timestamp": 1782648583021,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 863486601,
+    "ArticleId": 6049842,
+    "Quantity": 1.0,
+    "Timestamp": 1782013072382,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 863159639,
+    "ArticleId": 925093,
+    "Quantity": 1.0,
+    "Timestamp": 1781925977545,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 860396149,
+    "ArticleId": 94921,
+    "Quantity": 1.0,
+    "Timestamp": 1781100241824,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 860069449,
+    "ArticleId": 511539,
+    "Quantity": 1.0,
+    "Timestamp": 1781035271512,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 858468276,
+    "ArticleId": 227590,
+    "Quantity": 1.0,
+    "Timestamp": 1780538850040,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 858468138,
+    "ArticleId": 264490,
+    "Quantity": 1.0,
+    "Timestamp": 1780538837065,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 857012906,
+    "ArticleId": 819760,
+    "Quantity": 1.0,
+    "Timestamp": 1780121785879,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 857012637,
+    "ArticleId": 143324,
+    "Quantity": 1.0,
+    "Timestamp": 1780121726502,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 857012523,
+    "ArticleId": 335216,
+    "Quantity": 1.0,
+    "Timestamp": 1780121708835,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 857012452,
+    "ArticleId": 335219,
+    "Quantity": 1.0,
+    "Timestamp": 1780121689825,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 857004395,
+    "ArticleId": 105598,
+    "Quantity": 1.0,
+    "Timestamp": 1780120178573,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 857004222,
+    "ArticleId": 252787,
+    "Quantity": 1.0,
+    "Timestamp": 1780120138022,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 856988826,
+    "ArticleId": 517111,
+    "Quantity": 1.0,
+    "Timestamp": 1780117332235,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 856986375,
+    "ArticleId": 187132,
+    "Quantity": 1.0,
+    "Timestamp": 1780116930426,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 856985561,
+    "ArticleId": 172660,
+    "Quantity": 1.0,
+    "Timestamp": 1780116759026,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842787498,
+    "ArticleId": 6039231,
+    "Quantity": 1.0,
+    "Timestamp": 1775976882518,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842787108,
+    "ArticleId": 263669,
+    "Quantity": 1.0,
+    "Timestamp": 1775976830914,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842786941,
+    "ArticleId": 908693,
+    "Quantity": 1.0,
+    "Timestamp": 1775976814887,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842786909,
+    "ArticleId": 195827,
+    "Quantity": 1.0,
+    "Timestamp": 1775976805073,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842786840,
+    "ArticleId": 142976,
+    "Quantity": 1.0,
+    "Timestamp": 1775976794587,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842786812,
+    "ArticleId": 479925,
+    "Quantity": 1.0,
+    "Timestamp": 1775976791283,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842786777,
+    "ArticleId": 23088,
+    "Quantity": 1.0,
+    "Timestamp": 1775976786094,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842786738,
+    "ArticleId": 180309,
+    "Quantity": 1.0,
+    "Timestamp": 1775976776334,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842786697,
+    "ArticleId": 886904,
+    "Quantity": 1.0,
+    "Timestamp": 1775976767794,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842786617,
+    "ArticleId": 77170,
+    "Quantity": 1.0,
+    "Timestamp": 1775976756722,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842786580,
+    "ArticleId": 6030588,
+    "Quantity": 1.0,
+    "Timestamp": 1775976748630,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842786519,
+    "ArticleId": 6033929,
+    "Quantity": 1.0,
+    "Timestamp": 1775976733970,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842786501,
+    "ArticleId": 276856,
+    "Quantity": 1.0,
+    "Timestamp": 1775976728828,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842786445,
+    "ArticleId": 6031053,
+    "Quantity": 1.0,
+    "Timestamp": 1775976720481,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842786367,
+    "ArticleId": 6021802,
+    "Quantity": 1.0,
+    "Timestamp": 1775976705335,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842786350,
+    "ArticleId": 192401,
+    "Quantity": 1.0,
+    "Timestamp": 1775976697582,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842786327,
+    "ArticleId": 6029496,
+    "Quantity": 1.0,
+    "Timestamp": 1775976693421,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842786301,
+    "ArticleId": 869235,
+    "Quantity": 1.0,
+    "Timestamp": 1775976687180,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842785979,
+    "ArticleId": 814598,
+    "Quantity": 1.0,
+    "Timestamp": 1775976635331,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842785959,
+    "ArticleId": 323544,
+    "Quantity": 1.0,
+    "Timestamp": 1775976630116,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842785928,
+    "ArticleId": 109915,
+    "Quantity": 1.0,
+    "Timestamp": 1775976620732,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842785910,
+    "ArticleId": 45533,
+    "Quantity": 1.0,
+    "Timestamp": 1775976617066,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842785871,
+    "ArticleId": 760280,
+    "Quantity": 1.0,
+    "Timestamp": 1775976606328,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842785853,
+    "ArticleId": 909758,
+    "Quantity": 1.0,
+    "Timestamp": 1775976600681,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842785829,
+    "ArticleId": 265955,
+    "Quantity": 1.0,
+    "Timestamp": 1775976592449,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842785750,
+    "ArticleId": 234560,
+    "Quantity": 1.0,
+    "Timestamp": 1775976574311,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842785689,
+    "ArticleId": 79619,
+    "Quantity": 1.0,
+    "Timestamp": 1775976565139,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842785671,
+    "ArticleId": 747615,
+    "Quantity": 1.0,
+    "Timestamp": 1775976558287,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842785637,
+    "ArticleId": 340561,
+    "Quantity": 1.0,
+    "Timestamp": 1775976549296,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842785546,
+    "ArticleId": 314012,
+    "Quantity": 1.0,
+    "Timestamp": 1775976535441,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842785448,
+    "ArticleId": 144336,
+    "Quantity": 1.0,
+    "Timestamp": 1775976505586,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842785404,
+    "ArticleId": 453300,
+    "Quantity": 1.0,
+    "Timestamp": 1775976495976,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842785179,
+    "ArticleId": 6050549,
+    "Quantity": 1.0,
+    "Timestamp": 1775976477266,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842785134,
+    "ArticleId": 137091,
+    "Quantity": 1.0,
+    "Timestamp": 1775976462856,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842785060,
+    "ArticleId": 830212,
+    "Quantity": 1.0,
+    "Timestamp": 1775976452051,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842785005,
+    "ArticleId": 186274,
+    "Quantity": 1.0,
+    "Timestamp": 1775976439376,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842784918,
+    "ArticleId": 670560,
+    "Quantity": 1.0,
+    "Timestamp": 1775976430090,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842784838,
+    "ArticleId": 205222,
+    "Quantity": 1.0,
+    "Timestamp": 1775976415053,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842784817,
+    "ArticleId": 144607,
+    "Quantity": 1.0,
+    "Timestamp": 1775976405942,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842784791,
+    "ArticleId": 147603,
+    "Quantity": 1.0,
+    "Timestamp": 1775976397083,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842784718,
+    "ArticleId": 453364,
+    "Quantity": 1.0,
+    "Timestamp": 1775976387273,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842784664,
+    "ArticleId": 134034,
+    "Quantity": 1.0,
+    "Timestamp": 1775976378796,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842784616,
+    "ArticleId": 4897,
+    "Quantity": 1.0,
+    "Timestamp": 1775976374035,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842784561,
+    "ArticleId": 135156,
+    "Quantity": 1.0,
+    "Timestamp": 1775976361592,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842784459,
+    "ArticleId": 169792,
+    "Quantity": 1.0,
+    "Timestamp": 1775976343388,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842784424,
+    "ArticleId": 106218,
+    "Quantity": 1.0,
+    "Timestamp": 1775976332430,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842784356,
+    "ArticleId": 558548,
+    "Quantity": 1.0,
+    "Timestamp": 1775976319340,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842784060,
+    "ArticleId": 57420,
+    "Quantity": 1.0,
+    "Timestamp": 1775976295687,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842783976,
+    "ArticleId": 31547,
+    "Quantity": 1.0,
+    "Timestamp": 1775976282304,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842783961,
+    "ArticleId": 5180,
+    "Quantity": 1.0,
+    "Timestamp": 1775976275399,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842783828,
+    "ArticleId": 827950,
+    "Quantity": 1.0,
+    "Timestamp": 1775976255891,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842783736,
+    "ArticleId": 815856,
+    "Quantity": 1.0,
+    "Timestamp": 1775976242568,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842783620,
+    "ArticleId": 239524,
+    "Quantity": 1.0,
+    "Timestamp": 1775976231466,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842783573,
+    "ArticleId": 711847,
+    "Quantity": 1.0,
+    "Timestamp": 1775976218051,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842783520,
+    "ArticleId": 6055209,
+    "Quantity": 1.0,
+    "Timestamp": 1775976202462,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842783485,
+    "ArticleId": 662097,
+    "Quantity": 1.0,
+    "Timestamp": 1775976194697,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 842476380,
+    "ArticleId": 140588,
+    "Quantity": 1.0,
+    "Timestamp": 1775888746304,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 832038712,
+    "ArticleId": 581176,
+    "Quantity": 1.0,
+    "Timestamp": 1772951504661,
+    "Checked": false,
+    "ReferenceId": null
+  },
+  {
+    "Id": 831642368,
+    "ArticleId": 581172,
+    "Quantity": 1.0,
+    "Timestamp": 1772854003611,
+    "Checked": false,
+    "ReferenceId": null
+  }
+]
