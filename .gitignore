@@ -209,3 +209,8 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Runtime data — unmapped product queue (auto-created, should not be committed)
+data/unmapped_queue.json
+# Runtime data — monthly discount tracker (auto-created, runtime state)
+data/woolworths_discount_usage.json

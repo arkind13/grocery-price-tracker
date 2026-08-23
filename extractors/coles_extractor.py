@@ -56,6 +56,7 @@ _load_env()
 
 SCRAPEDO_API_KEY = os.getenv("SCRAPEDO_API_KEY", "")
 COLES_API_KEY = os.getenv("COLES_API_KEY", "eae83861d1cd4de6bb9cd8a2cd6f041e")
+COLES_LIST_URL = os.getenv("COLES_LIST_URL", "")
 
 DEFAULT_TIMEOUT = 60  # Scrape.do can be slow with JS render
 
@@ -204,6 +205,135 @@ def _parse_search_result(item: dict) -> Optional[ProductItem]:
 
 
 # ---------------------------------------------------------------------------
+# Scrape.do list fetch (Subtask 4.0)
+# ---------------------------------------------------------------------------
+def _fetch_coles_list_via_scrapedo(
+    list_url: str = "",
+    page_size: int = 200,
+) -> Optional[list[dict]]:
+    """Fetch a Coles saved-list page via Scrape.do and extract products.
+
+    Mirrors _search_via_scrapedo() in mechanics: GET api.scrape.do with
+    render=true, super=true, country=au, session=\"coles_extractor\",
+    wait=5000. Extracts __NEXT_DATA__ JSON.
+
+    The saved-list page's product path differs from search — probe pageProps
+    for a list container. Candidates (priority order):
+        1. pageProps.list.products
+        2. pageProps.products
+        3. pageProps.savedList.items
+
+    Args:
+        list_url: the saved-list URL. Defaults to COLES_LIST_URL env var.
+        page_size: max products to return.
+
+    Returns:
+        list[dict] of raw product dicts, or None on failure.
+    """
+    if not SCRAPEDO_API_KEY:
+        print(
+            "[coles_extractor] SCRAPEDO_API_KEY not set — "
+            "skipping Scrape.do list fetch",
+            file=sys.stderr,
+        )
+        return None
+
+    url = list_url or COLES_LIST_URL
+    if not url:
+        print(
+            "[coles_extractor] COLES_LIST_URL not set — "
+            "skipping Scrape.do list fetch",
+            file=sys.stderr,
+        )
+        return None
+
+    params = {
+        "token": SCRAPEDO_API_KEY,
+        "url": url,
+        "render": "true",
+        "super": "true",
+        "country": "au",
+        "session": "coles_extractor",
+        "wait": "5000",
+    }
+
+    try:
+        resp = requests.get(
+            "https://api.scrape.do",
+            params=params,
+            timeout=90,
+        )
+        if resp.status_code != 200:
+            print(
+                "[coles_extractor] Scrape.do list fetch returned "
+                f"HTTP {resp.status_code}",
+                file=sys.stderr,
+            )
+            return None
+
+        html = resp.text
+
+        # Extract __NEXT_DATA__ from HTML (same regex as search path)
+        next_match = re.search(
+            r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>',
+            html,
+            re.DOTALL,
+        )
+        if not next_match:
+            print(
+                "[coles_extractor] No __NEXT_DATA__ found in list page",
+                file=sys.stderr,
+            )
+            return None
+
+        next_data = json.loads(next_match.group(1))
+        page_props = next_data.get("props", {}).get("pageProps", {})
+
+        # Probe candidate list paths (priority order documented above)
+        # Path 1: pageProps.list.products
+        products = page_props.get("list", {}).get("products", [])
+        if not products:
+            # Path 2: pageProps.products
+            products = page_props.get("products", [])
+        if not products:
+            # Path 3: pageProps.savedList.items
+            products = page_props.get("savedList", {}).get("items", [])
+
+        if not products:
+            print(
+                "[coles_extractor] No product list found in "
+                "__NEXT_DATA__ pageProps",
+                file=sys.stderr,
+            )
+            return None
+
+        # Validate product shape — each should have name/pricing
+        valid = []
+        for p in products:
+            if isinstance(p, dict) and p.get("name") and p.get("pricing"):
+                valid.append(p)
+
+        if not valid:
+            print(
+                "[coles_extractor] __NEXT_DATA__ products lack "
+                "name/pricing shape",
+                file=sys.stderr,
+            )
+            return None
+
+        # Use _parse_search_result for each (same field shape)
+        return valid[:page_size]
+
+    except (requests.RequestException, json.JSONDecodeError,
+            ValueError, KeyError) as exc:
+        print(
+            f"[coles_extractor] Scrape.do list fetch failed: {exc}",
+            file=sys.stderr,
+        )
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Public API: search
 # ---------------------------------------------------------------------------
 def fetch_coles_search(
@@ -266,13 +396,43 @@ def fetch_coles_list(
     Returns:
         list of ``ProductItem`` instances.
     """
-    items = parse_docx_cache("coles")
-    if items:
+    items = []
+    if not force_fallback and COLES_LIST_URL:
+        try:
+            raw = _fetch_coles_list_via_scrapedo(COLES_LIST_URL)
+            if raw:
+                for product in raw:
+                    parsed = _parse_search_result(product)
+                    if parsed:
+                        items.append(parsed)
+            if items:
+                print(
+                    f"[coles_extractor] Scrape.do list: fetched {len(items)} items",
+                    file=sys.stderr,
+                )
+                return items
+        except Exception as exc:
+            print(
+                f"[coles_extractor] Scrape.do list fetch failed: {exc}",
+                file=sys.stderr,
+            )
+
+    # Fallback to docx
+    try:
+        from extractors.doc_parser import parse_docx_cache
+
+        items = parse_docx_cache("coles")
+        if items:
+            print(
+                f"[coles_extractor] Docx fallback: parsed {len(items)} items",
+                file=sys.stderr,
+            )
+            return items
+    except Exception as exc:
         print(
-            f"[coles_extractor] Docx fallback: parsed {len(items)} items",
+            f"[coles_extractor] docx fallback also failed: {exc}",
             file=sys.stderr,
         )
-        return items
 
     print("[coles_extractor] No data source available for Coles list", file=sys.stderr)
     return []
