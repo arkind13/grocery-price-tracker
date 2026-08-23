@@ -29,9 +29,11 @@ from typing import Optional
 # Path setup
 # ---------------------------------------------------------------------------
 _HERE = os.path.dirname(os.path.abspath(__file__))
+_TRACKER_DIR = os.path.abspath(os.path.join(_HERE, ".."))
 _REPO_ROOT = os.path.abspath(os.path.join(_HERE, "..", ".."))
-if _REPO_ROOT not in sys.path:
-    sys.path.insert(0, _REPO_ROOT)
+for p in (_TRACKER_DIR, _REPO_ROOT):
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
 from extractors.models import ProductItem
 
@@ -295,7 +297,7 @@ def parse_docx_cache(store: str = "") -> list[ProductItem]:
         return []
 
     # Search in grocery-price-tracker/ directory
-    tracker_dir = _REPO_ROOT
+    tracker_dir = _TRACKER_DIR
     file_path = os.path.join(tracker_dir, filename)
 
     # Also search in current working directory

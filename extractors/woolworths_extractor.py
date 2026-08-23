@@ -441,6 +441,67 @@ def fetch_woolworths_search(
 
 
 # ---------------------------------------------------------------------------
+# Public API: browse specials (site-wide deep discounts)
+# ---------------------------------------------------------------------------
+
+def fetch_woolworths_specials_browse(
+    min_savings_pct: int = 50,
+    page_size: int = 48,
+) -> list[ProductItem]:
+    """Best-effort fetch of site-wide Woolworths specials (deep discounts).
+
+    Probes the Woolworths browse/specials category endpoint. If the endpoint
+    is blocked (403) or returns no specials, returns [] (caller degrades to
+    saved-list scan). Never raises.
+
+    Args:
+        min_savings_pct: minimum savings percentage filter (0-100).
+        page_size: max products to return.
+
+    Returns:
+        list[ProductItem] (empty on failure).
+    """
+    import requests
+
+    cookie = os.getenv("WOOLWORTHS_COOKIE", "")
+    if not cookie:
+        return []
+
+    session = requests.Session()
+    headers = _build_headers(session)
+    headers.setdefault("Cookie", cookie)
+
+    # Primary endpoint candidate: browse specials category
+    url = "https://www.woolworths.com.au/apis/ui/browse/specials"
+
+    try:
+        resp = session.get(url, headers=headers, timeout=30)
+        if resp.status_code != 200:
+            return []
+        data = resp.json()
+    except Exception:
+        return []
+
+    items = []
+    try:
+        # Probe known response shapes
+        products = (
+            data.get("SeoMetaTags", {}).get("Products")
+            or data.get("Bundles")
+            or data.get("Products")
+            or []
+        )
+        for raw in products[:page_size]:
+            parsed = _parse_product_detail(raw)
+            if parsed is not None and parsed.price is not None:
+                items.append(parsed)
+    except Exception:
+        pass
+
+    return items
+
+
+# ---------------------------------------------------------------------------
 # Self-test
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":

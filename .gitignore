@@ -214,3 +214,46 @@ __marimo__/
 data/unmapped_queue.json
 # Runtime data — monthly discount tracker (auto-created, runtime state)
 data/woolworths_discount_usage.json
+# Runtime data — missing-items queues (auto-created, runtime state)
+data/woolworths_missing_items.json
+data/coles_missing_items.json
+
+# Parent repo files (not part of this repo)
+.kilo/
+.kilocodeignore
+.pre-commit-config.yaml
+.gitmodules
+Battery monitor/
+Credit_Card_Tracking/
+DIRECTORY_TREE.md
+Development Workflow/
+Image Generator Code/
+Images/
+Kilo costs/
+Kilocode/
+Last Access Folders/
+New Laptop/
+Openrouter Session Costs/
+PL27/
+Sketchnotes_ytube_video/
+T2M Copier/
+Trading/
+TradingView Indicator/
+ai-studio/
+claw-skills/
+create_env.py
+daily-models-digest/
+directory_tree.txt
+discounts_cli.py
+env.template
+grocery_price_cli.py
+my-budget-tracker/
+openrouter model costs/
+openrouter_usage/
+pre.md
+scraping_api/
+telegram_gateway/
+uncensored chat/
+*.png
+*.jpg
+*.docx
