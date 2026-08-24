@@ -307,11 +307,12 @@ def update_single_price(
     dry_run: bool = False,
     worksheet=None,
 ) -> dict:
-    """Update ONE price cell by generic name (Col A) + store.
+    """Update ONE price cell by generic name (Col A) or store keyword (Col I/J/K).
 
     Args:
         product_name: generic name to find in Col A (exact, case-insensitive,
-            whitespace-normalized via KeywordIndex._normalize).
+            whitespace-normalized via KeywordIndex._normalize), falling back
+            to the store's keyword col (Col I/J/K via STORE_KEYWORD_COL).
         store: "woolworths"|"coles"|"aldi".
         price: new price (float). Must be > 0.
         dry_run: if True, report old/new without writing.
@@ -326,7 +327,8 @@ def update_single_price(
         1. Validate store in PRICE_COL; validate price > 0 (fail fast).
         2. Connect worksheet if None.
         3. all_values = worksheet.get_all_values() (ONE read).
-        4. Find first data row whose Col A (idx 0) normalizes equal.
+        4. Find first data row whose Col A (idx 0) OR the store's keyword
+           col (Col I/J/K via STORE_KEYWORD_COL) normalizes equal; Col A wins.
         5. If not found: return {found: False, error: "product not found", ...}.
         6. Parse old_price from row[PRICE_COL[store]].
         7. If dry_run: return found/old/new, wrote=False.
@@ -369,11 +371,27 @@ def update_single_price(
     rows = all_values[1:]  # skip header
 
     target_normalized = KeywordIndex._normalize(product_name)
+    # Per-store keyword col (Col I/J/K) — fallback match target.
+    kw_col = STORE_KEYWORD_COL.get(store_lower)
 
     found_idx: Optional[int] = None
     row_data: Optional[list] = None
     for i, row in enumerate(rows):
+        # Step 1: exact match on Col A (generic name) — takes priority.
         if len(row) > 0 and KeywordIndex._normalize(row[0]) == target_normalized:
+            found_idx = i
+            row_data = row
+            break
+        # Step 2: match on this store's keyword col (Col I/J/K) via the
+        # per-store keyword map (woolworths=8/coles=9/aldi=10). Fixes
+        # DEFECT-1: rows whose Col A differs from the Word-doc name but
+        # whose store keyword matches now resolve correctly.
+        if (
+            kw_col is not None
+            and len(row) > kw_col
+            and row[kw_col]
+            and KeywordIndex._normalize(row[kw_col]) == target_normalized
+        ):
             found_idx = i
             row_data = row
             break
@@ -433,6 +451,119 @@ def update_single_price(
         "store": store_lower,
         "old_price": old_price,
         "new_price": price,
+        "wrote": True,
+        "range_written": range_name,
+        "error": "",
+    }
+
+
+def mark_not_available(
+    product_name: str,
+    store: str,
+    worksheet=None,
+    dry_run: bool = False,
+) -> dict:
+    """Mark a product as not available at a store (Phase 9.6 `na` action).
+
+    Writes the literal "NA" to BOTH the store's keyword column (Col I/J/K)
+    and the store's price column (Col D/E/F) for the matched row. The
+    keyword col becoming non-empty ("NA") permanently excludes the row from
+    the wool/coles missing lists (which key on keyword-col asymmetry); the
+    price col "NA" makes the unavailability visible in the sheet.
+
+    Row matching reuses the same two-step strategy as update_single_price:
+    exact Col A match first, then the store's keyword col (Col I/J/K).
+
+    Args:
+        product_name (str): Generic name (Col A) or store keyword to match.
+        store (str): "woolworths" | "coles" | "aldi".
+        worksheet: Open gspread worksheet; connected if None.
+        dry_run (bool): If True, return the planned write without mutating.
+
+    Returns:
+        dict: {found, row_index, store, wrote, range_written, error}.
+    """
+    store_lower = (store or "").strip().lower()
+    if store_lower not in PRICE_COL:
+        return {
+            "found": False,
+            "row_index": None,
+            "store": store_lower,
+            "wrote": False,
+            "range_written": "",
+            "error": f"unknown store: {store}",
+        }
+
+    if worksheet is None:
+        worksheet = connect_worksheet()
+
+    all_values = worksheet.get_all_values()
+    rows = all_values[1:]  # skip header
+
+    target_normalized = KeywordIndex._normalize(product_name)
+    kw_col = STORE_KEYWORD_COL.get(store_lower)
+    price_col = PRICE_COL[store_lower]
+
+    found_idx: Optional[int] = None
+    row_data: Optional[list] = None
+    for i, row in enumerate(rows):
+        # Step 1: exact match on Col A (generic name).
+        if len(row) > 0 and KeywordIndex._normalize(row[0]) == target_normalized:
+            found_idx = i
+            row_data = row
+            break
+        # Step 2: match on this store's keyword col (Col I/J/K).
+        if (
+            kw_col is not None
+            and len(row) > kw_col
+            and row[kw_col]
+            and KeywordIndex._normalize(row[kw_col]) == target_normalized
+        ):
+            found_idx = i
+            row_data = row
+            break
+
+    if found_idx is None:
+        return {
+            "found": False,
+            "row_index": None,
+            "store": store_lower,
+            "wrote": False,
+            "range_written": "",
+            "error": "product not found",
+        }
+
+    sheet_row = found_idx + 2  # 1-based
+
+    if dry_run:
+        return {
+            "found": True,
+            "row_index": sheet_row,
+            "store": store_lower,
+            "wrote": False,
+            "range_written": "",
+            "error": "",
+        }
+
+    # Live write: "NA" into both the keyword col and the price col.
+    full_row = list(row_data)  # make mutable copy
+    target_width = max(price_col + 1, LAST_UPDATED_COL + 1)
+    if kw_col is not None:
+        target_width = max(target_width, kw_col + 1)
+    while len(full_row) < target_width:
+        full_row.append("")
+    full_row[price_col] = "NA"
+    if kw_col is not None:
+        full_row[kw_col] = "NA"
+    full_row[LAST_UPDATED_COL] = _sydney_now_str()
+
+    range_name = f"A{sheet_row}:{_col_letter(target_width - 1)}{sheet_row}"
+    _update_with_backoff(worksheet, [full_row], range_name)
+
+    return {
+        "found": True,
+        "row_index": sheet_row,
+        "store": store_lower,
         "wrote": True,
         "range_written": range_name,
         "error": "",
