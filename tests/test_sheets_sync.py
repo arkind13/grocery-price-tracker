@@ -598,7 +598,7 @@ class TestSheetsSync(unittest.TestCase):
         # Verify columns were added
         audit = audit_schema(worksheet=ws)
         self.assertEqual(audit["existing_new"], NEW_COLUMNS)
-        self.assertEqual(audit["col_count"], 15)
+        self.assertEqual(audit["col_count"], 12 + len(NEW_COLUMNS))
 
     # ------------------------------------------------------------------ #
     # Test 18: Normalize consistency between modules

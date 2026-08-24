@@ -1,0 +1,12 @@
+# Unmatched items (parsed from .docx but no keyword hit) — 10 total
+
+Anything At All [woolworths]
+Totally Unknown Product 999g [aldi]
+Woolworths Beef Mince 500g [coles]
+Some Random New Product 200g [woolworths]
+Ends 7 Jul. [woolworths]
+Add to cart [woolworths]
+Freezer [woolworths]
+Personal Care [woolworths]
+Coles Simply White Sandwich Loaf | 650g [coles]
+Explore our brands [coles]

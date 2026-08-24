@@ -8,3 +8,4 @@ plotly
 playwright
 playwright-stealth
 RapidFuzz
+curl_cffi>=0.5.0

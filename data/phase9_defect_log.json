@@ -1,0 +1,79 @@
+{
+  "phase": "9",
+  "created": "2026-08-24",
+  "total_defects": 9,
+  "defects": [
+    {
+      "id": "DEFECT-1",
+      "symptom": "update says 'product not found'",
+      "root_cause": "sheets_sync.py:375-379 matches Col A only, not keyword cols",
+      "status": "open",
+      "verified_by_scenario": null,
+      "fix_subtask": "9.1.k + 9.2.d"
+    },
+    {
+      "id": "DEFECT-2",
+      "symptom": "specials cols M/N/O never added to live sheet",
+      "root_cause": "Phase 3.1 only dry-ran schema_upgrade.py",
+      "status": "open",
+      "verified_by_scenario": null,
+      "fix_subtask": "9.2.a + 9.2.b"
+    },
+    {
+      "id": "DEFECT-3",
+      "symptom": "compare --mode sheet reads empty D/E/F",
+      "root_cause": "sync never populated price columns",
+      "status": "open",
+      "verified_by_scenario": null,
+      "fix_subtask": "9.4.a"
+    },
+    {
+      "id": "DEFECT-4",
+      "symptom": "search needs live cookie, AuthManager round-trip deferred",
+      "root_cause": "cookie never proven live",
+      "status": "open",
+      "verified_by_scenario": null,
+      "fix_subtask": "9.3.b-9.3.g"
+    },
+    {
+      "id": "DEFECT-5",
+      "symptom": "'milk' returns 'no products found' (no alias resolution)",
+      "root_cause": "no user-query alias column / lookup",
+      "status": "code_fixed",
+      "verified_by_scenario": null,
+      "fix_subtask": "9.2.b (Col P two-pass lookup) + 9.2.e (live search fallback)"
+    },
+    {
+      "id": "DEFECT-6",
+      "symptom": "no interactive candidate selection / persistence",
+      "root_cause": "'not found' instead of offer candidates",
+      "status": "code_fixed",
+      "verified_by_scenario": null,
+      "fix_subtask": "9.2.c (partial candidates + interactive) + 9.2.d (persist alias)"
+    },
+    {
+      "id": "DEFECT-7",
+      "symptom": "items not in sheet return 'not found' instead of live-search + auto-add",
+      "root_cause": "no Step 5 terminal state",
+      "status": "code_fixed",
+      "verified_by_scenario": null,
+      "fix_subtask": "9.2.e (live search + auto-add) + 9.2.f (add_product_row)"
+    },
+    {
+      "id": "DEFECT-8",
+      "symptom": "alias collision on shared keywords crashes / arbitrary first-match",
+      "root_cause": "no brand-disambiguation / cheapest-default",
+      "status": "open",
+      "verified_by_scenario": null,
+      "fix_subtask": "9.1.c"
+    },
+    {
+      "id": "DEFECT-9",
+      "symptom": "alias matching semantics undefined (exact vs substring over-matching)",
+      "root_cause": "no two-pass exact/token rule",
+      "status": "code_fixed",
+      "verified_by_scenario": null,
+      "fix_subtask": "9.2.b (Col P two-pass: exact alias then token subset)"
+    }
+  ]
+}

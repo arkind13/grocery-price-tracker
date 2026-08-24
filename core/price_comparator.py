@@ -143,28 +143,9 @@ def compare_basket(
     elif mode == "live":
         items = _gather_live_prices(names)
     elif mode == "auto":
-        items = _gather_sheet_prices(names, worksheet)
-        # For items with NO sheet price at any store, try live
-        for i, item in enumerate(items):
-            if not item.prices:
-                live_item = _gather_live_prices([item.name])[0]
-                if live_item.prices:
-                    # Merge live prices into the sheet item
-                    merged_prices = dict(live_item.prices)
-                    merged_sources = {
-                        store: "live" for store in live_item.prices
-                    }
-                    merged_specials = dict(live_item.specials)
-                    items[i] = BasketItem(
-                        name=item.name,
-                        prices=merged_prices,
-                        sources=merged_sources,
-                        specials=merged_specials,
-                        brand=live_item.brand,
-                        is_woolworths_home_brand=(
-                            live_item.is_woolworths_home_brand
-                        ),
-                    )
+        # Rewired (Phase 9.2.h): use the lookup engine chain
+        # Steps 1 -> 2 -> 3 (auto-pick) -> 5 (live search) -> 6.
+        items = _gather_lookup_prices(names, worksheet)
     else:
         raise ValueError(
             f"Unknown mode '{mode}'. Use 'sheet', 'live', or 'auto'."
@@ -402,6 +383,78 @@ def _gather_live_prices(names: list[str]) -> list[BasketItem]:
                 f"for '{name}': {exc}",
                 file=sys.stderr,
             )
+
+        items.append(BasketItem(
+            name=name,
+            prices=prices,
+            sources=sources,
+            specials=specials,
+            brand=brand,
+        ))
+    return items
+
+
+# ============================================================================
+# Section F2: _gather_lookup_prices() — Phase 9.2.h lookup engine chain
+# ============================================================================
+
+
+def _gather_lookup_prices(
+    names: list[str],
+    worksheet=None,
+) -> list[BasketItem]:
+    """Build BasketItems via the lookup engine chain (Steps 1->2->3->5->6).
+
+    Uses LookupEngine.find_product(interactive=False) which:
+      - Step 1: exact Col A / Col I/J/K match  -> sheet prices
+      - Step 2: Col P alias two-pass match      -> sheet prices
+      - Step 3: auto-pick top partial candidate -> sheet prices
+      - Step 5: live search Woolworths + Coles  -> live prices
+      - Step 6: not found                       -> no prices
+
+    Sources are tagged "sheet" or "live" accordingly.
+
+    Args:
+        names: list of product query strings.
+        worksheet: optional pre-connected gspread Worksheet.
+
+    Returns:
+        list[BasketItem] one per name, in order.
+    """
+    from core.lookup import LookupEngine, LookupStatus
+
+    engine = LookupEngine(worksheet=worksheet)
+    items: list[BasketItem] = []
+    for name in names:
+        prices: dict = {}
+        sources: dict = {}
+        specials: dict = {}
+        brand = ""
+
+        try:
+            result = engine.find_product(name, interactive=False)
+        except Exception as exc:
+            print(
+                f"[price_comparator] lookup failed for '{name}': {exc}",
+                file=sys.stderr,
+            )
+            result = None
+
+        if result is not None:
+            if result.status in (
+                LookupStatus.EXACT_SHEET, LookupStatus.KEYWORD_ALIAS
+            ):
+                # Sheet prices from matched row (Step 1, 2, or auto-pick 3)
+                prices = dict(result.prices)
+                sources = {store: "sheet" for store in prices}
+                specials = dict(result.specials)
+                brand = result.brand
+            elif result.status == LookupStatus.LIVE_SEARCH:
+                # Live prices from store APIs (Step 5)
+                prices = dict(result.prices)
+                sources = {store: "live" for store in prices}
+                specials = dict(result.specials)
+                brand = result.brand
 
         items.append(BasketItem(
             name=name,

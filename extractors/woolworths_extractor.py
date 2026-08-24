@@ -441,6 +441,111 @@ def fetch_woolworths_search(
 
 
 # ---------------------------------------------------------------------------
+# Public API: search products WITHOUT login (curl_cffi, Chrome 131)
+# ---------------------------------------------------------------------------
+
+def fetch_woolworths_search_noauth(
+    search_term: str, page_size: int = 10
+) -> list[ProductItem]:
+    """Search Woolworths products by keyword WITHOUT a login cookie.
+
+    Uses ``curl_cffi`` Chrome 131 TLS fingerprint impersonation to bypass
+    Akamai bot detection at the TLS layer. Verified working 2026-08-24
+    (see Development Workflow/COOKIE_INVESTIGATION.md). The search endpoint
+    accepts a GET request with ``searchTerm`` / ``pageSize`` query params.
+
+    Args:
+        search_term: Keyword to search for.
+        page_size: Max results to return (capped at 48).
+
+    Returns:
+        list of ``ProductItem`` instances. Empty on failure.
+    """
+    try:
+        from curl_cffi import requests as cffi_requests
+    except ImportError:
+        print(
+            "[woolworths_extractor] curl_cffi not installed — "
+            "noauth search unavailable",
+            file=sys.stderr,
+        )
+        return []
+
+    try:
+        resp = cffi_requests.get(
+            SEARCH_API,
+            params={
+                "searchTerm": search_term,
+                "pageSize": min(page_size, 48),
+            },
+            impersonate="chrome131",
+            headers={
+                "Accept": "application/json",
+                "Referer": "https://www.woolworths.com.au/",
+            },
+            timeout=DEFAULT_TIMEOUT,
+        )
+    except Exception as exc:
+        print(
+            f"[woolworths_extractor] noauth search request failed: {exc}",
+            file=sys.stderr,
+        )
+        return []
+
+    if resp.status_code != 200:
+        return []
+
+    try:
+        data = resp.json()
+    except (ValueError, TypeError):
+        return []
+
+    # The search API returns a list of product groups, each with a nested
+    # "Products" list. Flatten all groups to get the actual products.
+    raw_groups = data.get("Products", [])
+    raw_products: list[dict] = []
+    for group in raw_groups:
+        if isinstance(group, dict) and isinstance(group.get("Products"), list):
+            raw_products.extend(group["Products"])
+        elif isinstance(group, dict):
+            raw_products.append(group)
+
+    products: list[ProductItem] = []
+    seen: set[str] = set()
+    for actual in raw_products[:page_size]:
+        name = actual.get("DisplayName") or actual.get("Name", "")
+        if not name or name.lower() in seen:
+            continue
+        seen.add(name.lower())
+
+        price = actual.get("Price", 0.0)
+        try:
+            price = float(price) if price else 0.0
+        except (ValueError, TypeError):
+            price = 0.0
+
+        is_special = bool(actual.get("IsOnSpecial", False))
+        was_price = actual.get("WasPrice", 0.0)
+        special_desc = ""
+        if is_special and float(was_price or 0) > 0:
+            special_desc = f"Was ${float(was_price):.2f}"
+
+        products.append(
+            ProductItem(
+                store="woolworths",
+                raw_name=name,
+                price=price,
+                is_special=is_special,
+                special_desc=special_desc,
+                unit_price=str(actual.get("CupString", "")),
+                brand=str(actual.get("Brand", "")),
+                size=str(actual.get("PackageSize", "")),
+            )
+        )
+    return products
+
+
+# ---------------------------------------------------------------------------
 # Public API: browse specials (site-wide deep discounts)
 # ---------------------------------------------------------------------------
 

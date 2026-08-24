@@ -30,7 +30,12 @@ EXPECTED_BASE_HEADERS = [
     "Search_Keyword_Coles", "Search_Keyword_Aldi", "Aldi_Refresh",
 ]
 
-NEW_COLUMNS = ["Woolworths_Specials", "Coles_Specials", "Rewards_Points"]
+NEW_COLUMNS = [
+    "Woolworths_Specials",  # Col M
+    "Coles_Specials",       # Col N
+    "Rewards_Points",       # Col O
+    "Keywords",             # Col P — user-side aliases (Phase 9.2)
+]
 
 
 def _normalize_header(s: str) -> str:

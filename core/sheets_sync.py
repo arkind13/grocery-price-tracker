@@ -440,6 +440,124 @@ def update_single_price(
 
 
 # ============================================================================
+# Section E2: Add new product row (auto-add from live search)
+# ============================================================================
+
+# Store keyword column map (Col I/J/K) for add_product_row
+STORE_KEYWORD_COL = {"woolworths": 8, "coles": 9, "aldi": 10}
+
+# Keywords header for Col P (user-side aliases)
+KEYWORDS_HEADER = "Keywords"
+
+
+def add_product_row(
+    generic_name: str,
+    store: str,
+    price: float,
+    *,
+    brand: str = "",
+    size: str = "",
+    category: str = "",
+    store_keyword: str = "",
+    alias: str = "",
+    dry_run: bool = False,
+    worksheet=None,
+) -> dict:
+    """Append a new product row to the bottom of Products_Master.
+
+    Used by the lookup engine Step 5 auto-add: when a live search result
+    is confirmed by the user, a new row is written with the generic name,
+    the store's price (Col D/E/F), brand (Col G), timestamp (Col H), the
+    store keyword (Col I/J/K), and optionally the user query as a Col P
+    alias.
+
+    Args:
+        generic_name: the product name for Col A.
+        store: "woolworths"|"coles"|"aldi" — which price column to fill.
+        price: numeric price (must be > 0).
+        brand: brand string for Col G (default "").
+        size: size string for Col C (default "").
+        category: category string for Col B (default "").
+        store_keyword: the store's exact product name for Col I/J/K
+            (default "" — leave the keyword cell empty).
+        alias: the user's original query to persist as a Col P alias
+            (default "" — no alias written).
+        dry_run: if True, report the planned row without writing.
+        worksheet: optional pre-connected worksheet.
+
+    Returns:
+        dict with keys: wrote, row_index, range_written, error.
+    """
+    store_lower = store.lower()
+
+    # --- fail-fast validation ---
+    if store_lower not in PRICE_COL:
+        return {
+            "wrote": False, "row_index": None, "range_written": "",
+            "error": f"unknown store: {store}",
+        }
+    if not generic_name or not generic_name.strip():
+        return {
+            "wrote": False, "row_index": None, "range_written": "",
+            "error": "generic_name is required",
+        }
+    if price <= 0:
+        return {
+            "wrote": False, "row_index": None, "range_written": "",
+            "error": "price must be > 0",
+        }
+
+    # --- connect & read ---
+    if worksheet is None:
+        worksheet = connect_worksheet()
+
+    all_values = worksheet.get_all_values()
+    header = all_values[0] if all_values else []
+    data_rows = all_values[1:] if len(all_values) > 1 else []
+
+    new_row_index = len(data_rows) + 2  # 1-based (row 1 = header)
+    price_col = PRICE_COL[store_lower]
+    kw_col = STORE_KEYWORD_COL.get(store_lower)
+    keywords_col = _find_col(header, KEYWORDS_HEADER)
+
+    # Build the new row
+    target_width = max(
+        price_col + 1,
+        LAST_UPDATED_COL + 1,
+        (kw_col + 1) if kw_col is not None else 0,
+        (keywords_col + 1) if keywords_col is not None else 0,
+        len(header),
+    )
+    new_row: list = [""] * target_width
+    new_row[0] = generic_name.strip()             # Col A
+    if category:
+        new_row[1] = category                      # Col B
+    if size:
+        new_row[2] = size                          # Col C
+    new_row[price_col] = price                     # Col D/E/F
+    new_row[6] = brand                             # Col G
+    new_row[LAST_UPDATED_COL] = _sydney_now_str()  # Col H
+    if kw_col is not None and store_keyword:
+        new_row[kw_col] = store_keyword            # Col I/J/K
+    if keywords_col is not None and alias:
+        new_row[keywords_col] = alias              # Col P
+
+    if dry_run:
+        return {
+            "wrote": False, "row_index": new_row_index,
+            "range_written": "", "error": "",
+        }
+
+    range_name = f"A{new_row_index}:{_col_letter(target_width - 1)}{new_row_index}"
+    _update_with_backoff(worksheet, [new_row], range_name)
+
+    return {
+        "wrote": True, "row_index": new_row_index,
+        "range_written": range_name, "error": "",
+    }
+
+
+# ============================================================================
 # Section F: CLI (__main__)
 # ============================================================================
 

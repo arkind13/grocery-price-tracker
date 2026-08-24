@@ -53,6 +53,7 @@ IGNORE_TERMS = [
     "unit price", "each", "per kg", "per l", "per 1",
     "you pay", "you save", "was ", "save ", "bonus ",
     "everyday rewards", "flybuys", "subtotal",
+    "ends ", "add to cart", "personal care", "explore our brands",
 ]
 
 DOCX_SEARCH_PATHS = {
