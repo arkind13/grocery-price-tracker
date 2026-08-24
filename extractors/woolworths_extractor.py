@@ -502,7 +502,9 @@ def fetch_woolworths_search_noauth(
 
     # The search API returns a list of product groups, each with a nested
     # "Products" list. Flatten all groups to get the actual products.
-    raw_groups = data.get("Products", [])
+    # Guard None: the API sometimes returns {"Products": null} (not absent),
+    # which .get("Products", []) does NOT default to [] for — it returns None.
+    raw_groups = data.get("Products") or []
     raw_products: list[dict] = []
     for group in raw_groups:
         if isinstance(group, dict) and isinstance(group.get("Products"), list):
