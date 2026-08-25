@@ -574,6 +574,75 @@ def mark_not_available(
     }
 
 
+def set_store_keyword(product_name, store, keyword, worksheet=None, dry_run=False):
+    """Write a store keyword (Col I/J/K) for an existing sheet row.
+
+    The user manually provides the exact store product name when live search
+    returns nothing. This writes that name to the store's keyword column
+    (Col I for woolworths, J for coles, K for aldi) so the row is matched on
+    next sync.
+
+    Args:
+        product_name: Generic name (Col A) or existing keyword to match.
+        store: "woolworths" | "coles" | "aldi".
+        keyword: The store's product name to save.
+        worksheet: Open gspread worksheet; connected if None.
+        dry_run: If True, return planned write without mutating.
+
+    Returns:
+        dict: {found, row_index, store, wrote, range_written, error}
+    """
+    store_lower = (store or "").strip().lower()
+    if store_lower not in PRICE_COL:
+        return {"found": False, "error": f"unknown store: {store}"}
+
+    if worksheet is None:
+        worksheet = connect_worksheet()
+
+    all_values = worksheet.get_all_values()
+    rows = all_values[1:]
+
+    target_normalized = KeywordIndex._normalize(product_name)
+    kw_col = STORE_KEYWORD_COL.get(store_lower)
+    price_col = PRICE_COL[store_lower]
+
+    found_idx = None
+    row_data = None
+    for i, row in enumerate(rows):
+        if len(row) > 0 and KeywordIndex._normalize(row[0]) == target_normalized:
+            found_idx = i
+            row_data = row
+            break
+        if (kw_col is not None and len(row) > kw_col and row[kw_col]
+                and KeywordIndex._normalize(row[kw_col]) == target_normalized):
+            found_idx = i
+            row_data = row
+            break
+
+    if found_idx is None:
+        return {"found": False, "error": "product not found"}
+
+    sheet_row = found_idx + 2
+
+    if dry_run:
+        return {"found": True, "row_index": sheet_row, "store": store_lower,
+                "wrote": False, "range_written": "", "error": ""}
+
+    full_row = list(row_data)
+    target_width = max(kw_col + 1, LAST_UPDATED_COL + 1)
+    while len(full_row) < target_width:
+        full_row.append("")
+    full_row[kw_col] = keyword
+    full_row[LAST_UPDATED_COL] = _sydney_now_str()
+    full_row = full_row[:target_width]
+
+    range_name = f"A{sheet_row}:{_col_letter(target_width - 1)}{sheet_row}"
+    _update_with_backoff(worksheet, [full_row], range_name)
+
+    return {"found": True, "row_index": sheet_row, "store": store_lower,
+            "wrote": True, "range_written": range_name, "error": ""}
+
+
 # ============================================================================
 # Section E2: Add new product row (auto-add from live search)
 # ============================================================================
