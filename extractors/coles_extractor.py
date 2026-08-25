@@ -192,6 +192,14 @@ def _parse_search_result(item: dict) -> Optional[ProductItem]:
     if description and description != name:
         display_name = description
 
+    # Category — best-effort from Coles search-result category/department fields.
+    category = ""
+    for cat_key in ("category", "department", "categoryName"):
+        cat_val = item.get(cat_key)
+        if cat_val and isinstance(cat_val, str) and cat_val.strip():
+            category = cat_val.strip()
+            break
+
     return ProductItem(
         store="coles",
         raw_name=display_name,
@@ -201,6 +209,7 @@ def _parse_search_result(item: dict) -> Optional[ProductItem]:
         unit_price=str(unit_price) if unit_price else "",
         brand=str(brand) if brand else "",
         size=str(size) if size else "",
+        category=category,
     )
 
 

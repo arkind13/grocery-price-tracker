@@ -183,6 +183,34 @@ def _get_product_detail(article_id: int, headers: dict) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 # Step 4: Parse product detail into ProductItem
 # ---------------------------------------------------------------------------
+def _extract_woolworths_category(product: dict) -> str:
+    """Best-effort extraction of a category string from a Woolworths product dict.
+
+    Checks common API category keys (Departments list, Department/Aisle/Category
+    strings). Returns the first non-empty value, else "".
+
+    Args:
+        product: Raw product dict from the Woolworths API.
+
+    Returns:
+        Category string (e.g. "Dairy"), or "" if none found.
+    """
+    # Departments is a list of {"Name": ...} dicts in product detail responses
+    departments = product.get("Departments")
+    if isinstance(departments, list) and departments:
+        first = departments[0]
+        if isinstance(first, dict) and first.get("Name"):
+            return str(first["Name"]).strip()
+        if isinstance(first, str) and first.strip():
+            return first.strip()
+    # Fallback to scalar category-ish keys
+    for key in ("Department", "Aisle", "Category"):
+        val = product.get(key)
+        if val and isinstance(val, str) and val.strip():
+            return val.strip()
+    return ""
+
+
 def _parse_product_detail(product: dict, quantity: float = 1.0) -> Optional[ProductItem]:
     """Parse a Woolworths product detail dict into a ``ProductItem``.
 
@@ -231,6 +259,10 @@ def _parse_product_detail(product: dict, quantity: float = 1.0) -> Optional[Prod
     # Size
     size = product.get("PackageSize", "")
 
+    # Category — best-effort from Woolworths API category breadcrumbs.
+    # Tries common keys (Departments list, Department/Aisle/Category string).
+    category = _extract_woolworths_category(product)
+
     # Rewards points (not directly in product detail)
     rewards_points = ""
 
@@ -247,6 +279,7 @@ def _parse_product_detail(product: dict, quantity: float = 1.0) -> Optional[Prod
         unit_price=str(unit_price) if unit_price else "",
         brand=str(brand) if brand else "",
         size=str(size) if size else "",
+        category=category,
     )
 
 
@@ -432,6 +465,7 @@ def fetch_woolworths_search(
                     unit_price=str(actual_product.get("CupString", "")),
                     brand=str(actual_product.get("Brand", "")),
                     size=str(actual_product.get("PackageSize", "")),
+                    category=_extract_woolworths_category(actual_product),
                 )
             )
         return products
@@ -542,6 +576,7 @@ def fetch_woolworths_search_noauth(
                 unit_price=str(actual.get("CupString", "")),
                 brand=str(actual.get("Brand", "")),
                 size=str(actual.get("PackageSize", "")),
+                category=_extract_woolworths_category(actual),
             )
         )
     return products
