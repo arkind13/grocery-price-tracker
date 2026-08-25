@@ -39,7 +39,7 @@ class SheetProductRow:
         category: Col B value.
         size: Col C value.
         prices: store -> float price (only stores with a parseable price).
-            Keys are lowercase store ids: "woolworths", "coles", "aldi".
+            Keys are lowercase store ids: "woolworths", "coles".
         specials: store -> special_desc string (only stores whose specials
             column M/N exists and is non-empty).
         rewards: rewards string from col O ("" if absent/empty).

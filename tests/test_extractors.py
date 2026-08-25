@@ -351,7 +351,7 @@ class TestHub(unittest.TestCase):
         """get_store_products returns a list for known stores."""
         from extractors.hub import get_store_products
 
-        for store in ("woolworths", "coles", "aldi"):
+        for store in ("woolworths", "coles"):
             with self.subTest(store=store):
                 items = get_store_products(store, force_fallback=True)
                 self.assertIsInstance(items, list)
@@ -370,7 +370,6 @@ class TestHub(unittest.TestCase):
         result = get_all_store_products(force_fallback=True)
         self.assertIn("woolworths", result)
         self.assertIn("coles", result)
-        self.assertIn("aldi", result)
 
     def test_get_store_info(self):
         """get_store_info returns metadata for all stores."""
@@ -379,7 +378,6 @@ class TestHub(unittest.TestCase):
         info = get_store_info()
         self.assertIn("woolworths", info)
         self.assertIn("coles", info)
-        self.assertIn("aldi", info)
         self.assertEqual(info["woolworths"]["label"], "Woolworths")
 
 

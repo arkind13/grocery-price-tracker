@@ -25,6 +25,8 @@ import re
 import sys
 from typing import Optional
 
+from extractors.specials_parser import SAVE_RE, FOR_RE
+
 # ---------------------------------------------------------------------------
 # Path setup
 # ---------------------------------------------------------------------------
@@ -59,13 +61,11 @@ IGNORE_TERMS = [
 DOCX_SEARCH_PATHS = {
     "woolworths": "Woolworths.docx",
     "coles": "Coles.docx",
-    "aldi": "Aldi.docx",
 }
 
 STORE_ALIASES = {
     "woolworths": ("woolworths", "ww", "woolies"),
     "coles": ("coles"),
-    "aldi": ("aldi"),
 }
 
 
@@ -216,7 +216,7 @@ def parse_docx(
 
     Args:
         file_path: Path to the ``.docx`` file.
-        store: Store identifier (``"woolworths"``, ``"coles"``, ``"aldi"``).
+        store: Store identifier (``"woolworths"``, ``"coles"``).
 
     Returns:
         list of ``ProductItem`` instances.
@@ -261,6 +261,34 @@ def parse_docx(
                 continue
             seen.add(name_lower)
 
+            # Specials detection: check the line directly below the price
+            # for a SAVE $X.XX or N FOR $XXX marker (3-line layout:
+            # name, price, detail). Uses the shared regexes from
+            # specials_parser so the sheet-sync path and the Telegram
+            # specials-report path stay in lockstep.
+            is_special = False
+            special_desc = ""
+            if i + 2 < len(lines):
+                detail_line = lines[i + 2]
+                save_m = SAVE_RE.search(detail_line)
+                for_m = FOR_RE.search(detail_line)
+                if save_m:
+                    save_amt = float(save_m.group(1))
+                    original = price + save_amt
+                    discount_pct = (
+                        (save_amt / original * 100.0)
+                        if original > 0 else 0.0
+                    )
+                    is_special = True
+                    special_desc = (
+                        f"save ${save_amt:.2f} ({discount_pct:.0f}% off)"
+                    )
+                elif for_m:
+                    qty = int(for_m.group(1))
+                    bundle = float(for_m.group(2))
+                    is_special = True
+                    special_desc = f"{qty} for ${bundle:.2f}"
+
             items.append(
                 ProductItem(
                     store=store,
@@ -269,6 +297,8 @@ def parse_docx(
                     category=_detect_category(name),
                     size=_extract_size(name),
                     brand=_detect_brand(name),
+                    is_special=is_special,
+                    special_desc=special_desc,
                 )
             )
 
@@ -278,11 +308,11 @@ def parse_docx(
 def parse_docx_cache(store: str = "") -> list[ProductItem]:
     """Parse the cached docx file for a given store from the project directory.
 
-    Looks for ``Woolworths.docx``, ``Coles.docx``, or ``Aldi.docx`` in
+    Looks for ``Woolworths.docx`` or ``Coles.docx`` in
     the ``grocery-price-tracker/`` directory.
 
     Args:
-        store: Store identifier (``"woolworths"``, ``"coles"``, ``"aldi"``).
+        store: Store identifier (``"woolworths"``, ``"coles"``).
 
     Returns:
         list of ``ProductItem`` instances. Empty if file not found.

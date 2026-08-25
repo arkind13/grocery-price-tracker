@@ -2,14 +2,14 @@
 """Unified extractor hub: single entrypoint for all supermarket extractors.
 
 Provides ``get_store_products(store_name)`` returning a list of
-standardised ``ProductItem`` dataclasses. Combines Woolworths, Coles,
-and Aldi extractors under one interface.
+standardised ``ProductItem`` dataclasses. Combines Woolworths and Coles
+extractors under one interface.
 
 Usage:
     from extractors.hub import get_store_products, ProductItem
 
     # Fetch from all stores
-    for store in ("woolworths", "coles", "aldi"):
+    for store in ("woolworths", "coles"):
         items = get_store_products(store)
         print(f"{store}: {len(items)} products")
 """
@@ -22,7 +22,7 @@ from extractors.woolworths_extractor import fetch_woolworths_list
 from extractors.coles_extractor import fetch_coles_list
 
 # ---------------------------------------------------------------------------
-# Aldi: no dedicated extractor yet, uses doc parser fallback
+# Docx parser fallback (used by stores that support_docx)
 # ---------------------------------------------------------------------------
 try:
     from extractors.doc_parser import parse_docx_cache
@@ -45,12 +45,6 @@ STORE_REGISTRY = {
         "supports_live_api": True,
         "supports_docx": True,
     },
-    "aldi": {
-        "label": "Aldi",
-        "fetcher": None,  # No dedicated extractor yet
-        "supports_live_api": False,
-        "supports_docx": True,
-    },
 }
 
 ALL_STORES = tuple(STORE_REGISTRY.keys())
@@ -67,8 +61,7 @@ def get_store_products(
     """Fetch product items from a single supermarket.
 
     Args:
-        store: Store identifier. One of: ``"woolworths"``, ``"coles"``,
-            ``"aldi"``.
+        store: Store identifier. One of: ``"woolworths"``, ``"coles"``.
         list_name: Name of the saved list (default: ``"Price Comparison"``).
             Only used by Woolworths and Coles extractors.
         force_fallback: If True, skip live API and scraping API, use

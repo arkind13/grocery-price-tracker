@@ -159,13 +159,11 @@ class TestComparator(unittest.TestCase):
         )
         self.assertEqual(report.raw_totals["woolworths"], 10.50)
         self.assertEqual(report.raw_totals["coles"], 5.80)
-        self.assertEqual(report.raw_totals["aldi"], 7.70)
         self.assertEqual(report.store_coverage["woolworths"], 3)
         self.assertEqual(report.store_coverage["coles"], 2)
-        self.assertEqual(report.store_coverage["aldi"], 2)
 
     def test_compare_missing_price_flagged_not_available(self):
-        """Item present at woolworths only — coles/aldi flagged."""
+        """Item present at woolworths only — coles flagged."""
         from core.price_comparator import compare_basket
         header = _make_header()
         rows = [
@@ -176,7 +174,6 @@ class TestComparator(unittest.TestCase):
         ws = FakeWorksheet(rows)
         report = compare_basket("milk", mode="sheet", worksheet=ws)
         self.assertIn("coles", report.not_available)
-        self.assertIn("aldi", report.not_available)
         self.assertIn("milk", report.not_available["coles"])
         self.assertNotIn("coles", report.raw_totals)
 
@@ -509,7 +506,7 @@ class TestComparator(unittest.TestCase):
             return []
 
         with patch(
-            "extractors.woolworths_extractor.fetch_woolworths_search",
+            "extractors.woolworths_extractor.fetch_woolworths_search_noauth",
             side_effect=stub_search,
         ), patch(
             "extractors.coles_extractor.fetch_coles_search",
@@ -527,6 +524,135 @@ class TestComparator(unittest.TestCase):
         self.assertEqual(
             report.items[1].sources.get("woolworths", ""), "live"
         )
+
+    # ========================================================================
+    # Live search (noauth curl_cffi + Scrape.do) tests — Phase 9.7.c
+    # ========================================================================
+
+    def test_compare_auto_noauth_woolworths_live(self):
+        """auto mode uses fetch_woolworths_search_noauth for live fallback."""
+        from core.price_comparator import compare_basket
+        from extractors.models import ProductItem
+
+        header = _make_header()
+        rows = [header]
+        ws = FakeWorksheet(rows)
+
+        def stub_noauth(term, page_size=5):
+            return [ProductItem("woolworths", "Fresh Milk 2L", 3.50,
+                                is_special=True, special_desc="Half Price")]
+
+        with patch(
+            "extractors.woolworths_extractor.fetch_woolworths_search_noauth",
+            side_effect=stub_noauth,
+        ), patch(
+            "extractors.coles_extractor.fetch_coles_search",
+            side_effect=lambda t, **kw: [],
+        ):
+            report = compare_basket("milk", mode="auto", worksheet=ws)
+        self.assertEqual(len(report.items), 1)
+        self.assertEqual(report.items[0].sources["woolworths"], "live")
+        self.assertEqual(report.items[0].prices["woolworths"], 3.50)
+
+    def test_compare_auto_scrapedo_coles_live(self):
+        """auto mode uses Scrape.do for Coles live search fallback."""
+        from core.price_comparator import compare_basket
+        from extractors.models import ProductItem
+
+        header = _make_header()
+        rows = [header]
+        ws = FakeWorksheet(rows)
+
+        def stub_coles(term, page_size=5):
+            return [ProductItem("coles", "Coles Bread 650g", 2.80)]
+
+        with patch(
+            "extractors.woolworths_extractor.fetch_woolworths_search_noauth",
+            side_effect=lambda t, **kw: [],
+        ), patch(
+            "extractors.coles_extractor.fetch_coles_search",
+            side_effect=stub_coles,
+        ):
+            report = compare_basket("bread", mode="auto", worksheet=ws)
+        self.assertEqual(len(report.items), 1)
+        self.assertEqual(report.items[0].sources["coles"], "live")
+        self.assertEqual(report.items[0].prices["coles"], 2.80)
+
+    def test_compare_auto_both_stores_live(self):
+        """Both stores return live results, cheapest is computed."""
+        from core.price_comparator import compare_basket
+        from extractors.models import ProductItem
+
+        header = _make_header()
+        rows = [header]
+        ws = FakeWorksheet(rows)
+
+        def stub_ww(term, page_size=5):
+            return [ProductItem("woolworths", "WW Milk 2L", 3.50)]
+
+        def stub_coles(term, page_size=5):
+            return [ProductItem("coles", "Coles Milk 2L", 3.20)]
+
+        with patch(
+            "extractors.woolworths_extractor.fetch_woolworths_search_noauth",
+            side_effect=stub_ww,
+        ), patch(
+            "extractors.coles_extractor.fetch_coles_search",
+            side_effect=stub_coles,
+        ):
+            report = compare_basket("milk", mode="auto", worksheet=ws)
+        self.assertEqual(len(report.items), 1)
+        self.assertEqual(report.raw_totals["woolworths"], 3.50)
+        self.assertEqual(report.raw_totals["coles"], 3.20)
+        self.assertEqual(report.cheapest_store, "coles")
+
+    def test_compare_auto_both_stores_empty_not_found(self):
+        """Both stores return empty — item not found, flagged."""
+        from core.price_comparator import compare_basket
+
+        header = _make_header()
+        rows = [header]
+        ws = FakeWorksheet(rows)
+
+        with patch(
+            "extractors.woolworths_extractor.fetch_woolworths_search_noauth",
+            side_effect=lambda t, **kw: [],
+        ), patch(
+            "extractors.coles_extractor.fetch_coles_search",
+            side_effect=lambda t, **kw: [],
+        ):
+            report = compare_basket("xyzunknown", mode="auto", worksheet=ws)
+        # Item should be flagged as not available at both stores
+        na = report.not_available
+        self.assertIn("woolworths", na)
+        self.assertIn("coles", na)
+
+    def test_compare_auto_woolworths_exception_fallback(self):
+        """Woolworths noauth raises -> caught, Coles still works."""
+        from core.price_comparator import compare_basket
+        from extractors.models import ProductItem
+
+        header = _make_header()
+        rows = [header]
+        ws = FakeWorksheet(rows)
+
+        def stub_ww_fail(term, page_size=5):
+            raise RuntimeError("curl_cffi unavailable")
+
+        def stub_coles(term, page_size=5):
+            return [ProductItem("coles", "Coles Milk 2L", 3.20)]
+
+        with patch(
+            "extractors.woolworths_extractor.fetch_woolworths_search_noauth",
+            side_effect=stub_ww_fail,
+        ), patch(
+            "extractors.coles_extractor.fetch_coles_search",
+            side_effect=stub_coles,
+        ):
+            report = compare_basket("milk", mode="auto", worksheet=ws)
+        # Coles should still have a result
+        self.assertIn("coles", report.raw_totals)
+        self.assertEqual(report.raw_totals["coles"], 3.20)
 
 
 if __name__ == "__main__":

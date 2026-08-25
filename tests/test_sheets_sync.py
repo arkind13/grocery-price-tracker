@@ -26,7 +26,10 @@ from core.schema_upgrade import (
     audit_schema,
     upgrade_schema,
 )
-from core.sheets_sync import sync_prices, update_single_price, _update_with_backoff, _find_col
+from core.sheets_sync import (
+    sync_prices, update_single_price, _update_with_backoff, _find_col,
+    add_product_row, mark_not_available, set_store_keyword,
+)
 from core.name_matcher import KeywordIndex, MatchResult
 from extractors.models import ProductItem
 
@@ -570,20 +573,20 @@ class TestSheetsSync(unittest.TestCase):
     # Test 16: Schema audit detects missing new columns
     # ------------------------------------------------------------------ #
     def test_audit_schema_detects_missing_new_columns(self):
-        header = EXPECTED_BASE_HEADERS[:]  # only base 12 columns
-        ws = FakeWorksheet([header, ["row1"] * 12])
+        header = EXPECTED_BASE_HEADERS[:]  # only base 9 columns
+        ws = FakeWorksheet([header, ["row1"] * 9])
 
         report = audit_schema(worksheet=ws)
         self.assertEqual(report["missing_new"], NEW_COLUMNS)
         self.assertTrue(report["needs_upgrade"])
-        self.assertEqual(report["col_count"], 12)
+        self.assertEqual(report["col_count"], 9)
 
     # ------------------------------------------------------------------ #
     # Test 17: Schema upgrade idempotent
     # ------------------------------------------------------------------ #
     def test_upgrade_schema_idempotent(self):
         header = EXPECTED_BASE_HEADERS[:]
-        ws = FakeWorksheet([header, ["row1"] * 12])
+        ws = FakeWorksheet([header, ["row1"] * 9])
 
         # First run: should add columns
         report1 = upgrade_schema(worksheet=ws)
@@ -598,7 +601,7 @@ class TestSheetsSync(unittest.TestCase):
         # Verify columns were added
         audit = audit_schema(worksheet=ws)
         self.assertEqual(audit["existing_new"], NEW_COLUMNS)
-        self.assertEqual(audit["col_count"], 12 + len(NEW_COLUMNS))
+        self.assertEqual(audit["col_count"], 9 + len(NEW_COLUMNS))
 
     # ------------------------------------------------------------------ #
     # Test 18: Normalize consistency between modules
@@ -612,6 +615,208 @@ class TestSheetsSync(unittest.TestCase):
         header = ["Product_Name", "  Coles_Specials  "]
         idx = _find_col(header, "coles specials")
         self.assertEqual(idx, 1)
+
+    # ------------------------------------------------------------------ #
+    # Test 19: update_single_price matches via Col I keyword (DEFECT-1)
+    # ------------------------------------------------------------------ #
+    def test_update_single_price_matches_via_store_keyword(self):
+        """Col A differs but Col I (Woolworths keyword) matches -> found."""
+        header = [
+            "Product_Name", "Category", "Size", "Woolworths_Price",
+            "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+            "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+            "Search_Keyword_Aldi", "Aldi_Refresh",
+        ]
+        rows = [
+            header,
+            ["Generic Milk", "Dairy", "2L", "", "", "", "", "",
+             "Woolworths Full Cream 2L", "", "", ""],
+        ]
+        ws = FakeWorksheet(rows)
+
+        result = update_single_price(
+            "Woolworths Full Cream 2L", "woolworths", 3.50, worksheet=ws,
+        )
+        self.assertTrue(result["found"])
+        self.assertEqual(result["row_index"], 2)
+        self.assertEqual(result["new_price"], 3.50)
+
+    # ------------------------------------------------------------------ #
+    # Test 20: update_single_price Col A wins over keyword
+    # ------------------------------------------------------------------ #
+    def test_update_single_price_col_a_wins_over_keyword(self):
+        """Col A match takes priority even when keyword also matches."""
+        header = [
+            "Product_Name", "Category", "Size", "Woolworths_Price",
+            "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+            "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+            "Search_Keyword_Aldi", "Aldi_Refresh",
+        ]
+        rows = [
+            header,
+            ["Full Cream Milk", "Dairy", "2L", "4.00", "", "", "", "",
+             "", "", "", ""],
+            ["Generic Milk", "Dairy", "1L", "2.00", "", "", "", "",
+             "Full Cream Milk", "", "", ""],
+        ]
+        ws = FakeWorksheet(rows)
+
+        result = update_single_price(
+            "Full Cream Milk", "woolworths", 3.50, worksheet=ws,
+        )
+        self.assertTrue(result["found"])
+        self.assertEqual(result["row_index"], 2)  # Col A match wins
+        self.assertEqual(result["old_price"], 4.00)
+
+    # ------------------------------------------------------------------ #
+    # Test 21: add_product_row appends correctly
+    # ------------------------------------------------------------------ #
+    def test_add_product_row_appends_correctly(self):
+        header = [
+            "Product_Name", "Category", "Size", "Woolworths_Price",
+            "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+            "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+            "Search_Keyword_Aldi", "Aldi_Refresh",
+            "Woolworths_Specials", "Coles_Specials", "Rewards_Points",
+            "Keywords",
+        ]
+        rows = [header]
+        ws = FakeWorksheet(rows)
+
+        result = add_product_row(
+            generic_name="Test Milk 2L",
+            store="woolworths",
+            price=3.50,
+            brand="TestBrand",
+            size="2L",
+            category="Dairy",
+            store_keyword="Woolworths Test Milk 2L",
+            alias="test milk",
+            worksheet=ws,
+        )
+        self.assertTrue(result["wrote"])
+        self.assertEqual(result["row_index"], 2)  # first data row
+
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][0], "Test Milk 2L")     # Col A
+        self.assertEqual(updated[1][1], "Dairy")             # Col B
+        self.assertEqual(updated[1][2], "2L")                # Col C
+        self.assertEqual(updated[1][3], 3.50)                # Col D
+        self.assertEqual(updated[1][6], "TestBrand")         # Col G
+        self.assertTrue(updated[1][7])                        # Col H
+        self.assertEqual(updated[1][8], "Woolworths Test Milk 2L")  # Col I
+        self.assertEqual(updated[1][15], "test milk")         # Col P
+
+    # ------------------------------------------------------------------ #
+    # Test 22: add_product_row dry run
+    # ------------------------------------------------------------------ #
+    def test_add_product_row_dry_run(self):
+        header = [
+            "Product_Name", "Category", "Size", "Woolworths_Price",
+            "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+            "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+            "Search_Keyword_Aldi", "Aldi_Refresh",
+        ]
+        rows = [header, ["Milk", "", "", "3.00", "", "", "", "", "", "", "", ""]]
+        ws = FakeWorksheet(rows)
+
+        result = add_product_row(
+            generic_name="New Item", store="coles", price=5.00,
+            dry_run=True, worksheet=ws,
+        )
+        self.assertFalse(result["wrote"])
+        self.assertEqual(result["row_index"], 3)  # would be row 3
+        self.assertEqual(len(ws.updates), 0)
+
+    # ------------------------------------------------------------------ #
+    # Test 23: add_product_row validation failures
+    # ------------------------------------------------------------------ #
+    def test_add_product_row_validation_failures(self):
+        ws = FakeWorksheet([["H1"]])
+
+        # Unknown store
+        r1 = add_product_row("Milk", "iga", 4.00, worksheet=ws)
+        self.assertFalse(r1["wrote"])
+        self.assertIn("unknown store", r1["error"])
+
+        # Empty name
+        r2 = add_product_row("", "woolworths", 4.00, worksheet=ws)
+        self.assertFalse(r2["wrote"])
+        self.assertIn("generic_name", r2["error"])
+
+        # Price <= 0
+        r3 = add_product_row("Milk", "woolworths", 0, worksheet=ws)
+        self.assertFalse(r3["wrote"])
+        self.assertIn("price", r3["error"])
+
+    # ------------------------------------------------------------------ #
+    # Test 24: mark_not_available writes NA to keyword + price
+    # ------------------------------------------------------------------ #
+    def test_mark_not_available_writes_na(self):
+        header = [
+            "Product_Name", "Category", "Size", "Woolworths_Price",
+            "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+            "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+            "Search_Keyword_Aldi", "Aldi_Refresh",
+        ]
+        rows = [
+            header,
+            ["Oat Milk", "Dairy", "1L", "", "", "", "", "", "", "", "", ""],
+        ]
+        ws = FakeWorksheet(rows)
+
+        result = mark_not_available("Oat Milk", "woolworths", worksheet=ws)
+        self.assertTrue(result["found"])
+        self.assertTrue(result["wrote"])
+
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][3], "NA")   # Col D = "NA"
+        self.assertEqual(updated[1][8], "NA")   # Col I = "NA"
+
+    # ------------------------------------------------------------------ #
+    # Test 25: mark_not_available product not found
+    # ------------------------------------------------------------------ #
+    def test_mark_not_available_not_found(self):
+        ws = FakeWorksheet([["H1"]])
+        result = mark_not_available("Nonexistent", "coles", worksheet=ws)
+        self.assertFalse(result["found"])
+        self.assertIn("product not found", result["error"])
+
+    # ------------------------------------------------------------------ #
+    # Test 26: set_store_keyword writes keyword to Col I
+    # ------------------------------------------------------------------ #
+    def test_set_store_keyword_writes_to_col_i(self):
+        header = [
+            "Product_Name", "Category", "Size", "Woolworths_Price",
+            "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+            "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+            "Search_Keyword_Aldi", "Aldi_Refresh",
+        ]
+        rows = [
+            header,
+            ["Oat Milk", "Dairy", "1L", "", "", "", "", "", "", "", "", ""],
+        ]
+        ws = FakeWorksheet(rows)
+
+        result = set_store_keyword(
+            "Oat Milk", "woolworths", "WW Oat Milk 1L", worksheet=ws,
+        )
+        self.assertTrue(result["found"])
+        self.assertTrue(result["wrote"])
+
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][8], "WW Oat Milk 1L")  # Col I
+
+    # ------------------------------------------------------------------ #
+    # Test 27: set_store_keyword not found
+    # ------------------------------------------------------------------ #
+    def test_set_store_keyword_not_found(self):
+        ws = FakeWorksheet([["H1"]])
+        result = set_store_keyword(
+            "Nonexistent", "coles", "Coles Item", worksheet=ws,
+        )
+        self.assertFalse(result["found"])
+        self.assertIn("product not found", result["error"])
 
 
 if __name__ == "__main__":

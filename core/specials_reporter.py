@@ -22,8 +22,7 @@ def get_active_specials(store=None, worksheet=None) -> list:
     """Return products currently on special from the synced sheet.
 
     Args:
-        store: "woolworths"|"coles"|None. If None, both stores. Aldi has
-            no specials column -> always returns [] for store="aldi".
+        store: "woolworths"|"coles"|None. If None, both stores.
         worksheet: optional pre-connected worksheet for tests.
 
     Returns:
@@ -32,9 +31,6 @@ def get_active_specials(store=None, worksheet=None) -> list:
         woolworths, N for coles) is non-empty.
     """
     store_lower = store.lower() if store else None
-
-    if store_lower == "aldi":
-        return []
 
     # Connect if needed
     if worksheet is None:

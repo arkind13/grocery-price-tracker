@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dual-mode basket comparator across Woolworths, Coles, Aldi.
+"""Dual-mode basket comparator across Woolworths and Coles.
 
 Modes: "sheet" (stored prices), "live" (API search), "auto" (sheet + live
 fallback). Integrates Woolworths Team + Extra discounts.
@@ -13,8 +13,8 @@ from typing import Optional
 
 from core.sheets_sync import PRICE_COL, _find_col
 
-STORES = ("woolworths", "coles", "aldi")
-LIVE_STORES = ("woolworths", "coles")  # aldi: sheet-only (no live extractor)
+STORES = ("woolworths", "coles")
+LIVE_STORES = ("woolworths", "coles")
 
 
 # ============================================================================
@@ -99,7 +99,7 @@ def compare_basket(
     extra_discount_pct: float = 0.0,
     worksheet=None,           # optional pre-connected gspread Worksheet
 ) -> ComparisonReport:
-    """Compare a basket of products across Woolworths, Coles, Aldi.
+    """Compare a basket of products across Woolworths and Coles.
 
     Args:
         product_names: ingredient/product list (string or list).
@@ -258,12 +258,6 @@ def compare_basket(
                 2,
             )
 
-    # Aldi note
-    if not_available.get("aldi") and any(n for n in not_available["aldi"]):
-        warnings.append(
-            "Aldi has no live extractor — Aldi prices are sheet-only"
-        )
-
     return ComparisonReport(
         items=items,
         raw_totals=raw_totals,
@@ -335,8 +329,8 @@ def _gather_live_prices(names: list[str]) -> list[BasketItem]:
     """Build BasketItems from live search only (Woolworths + Coles).
 
     For each name: call fetch_woolworths_search + fetch_coles_search, take
-    the FIRST result per store as the price. Aldi is never populated.
-    Swallow network errors (store simply absent from prices).
+    the FIRST result per store as the price. Swallow network errors
+    (store simply absent from prices).
     """
     from extractors.woolworths_extractor import fetch_woolworths_search
     from extractors.coles_extractor import fetch_coles_search
@@ -472,7 +466,7 @@ def _gather_lookup_prices(
 
 
 def format_report(report: ComparisonReport) -> str:
-    """Render a Markdown table: item rows (name, woolworths, coles, aldi
+    """Render a Markdown table: item rows (name, woolworths, coles
     prices with store-source markers), then totals, discount lines
     (team + extra), cheapest store, and max savings.
     Top 25 items + a summary. Secret-free.
@@ -484,8 +478,8 @@ def format_report(report: ComparisonReport) -> str:
         return "\n".join(lines)
 
     # Header
-    lines.append("| # | Product | Woolworths | Coles | Aldi |")
-    lines.append("|---|---------|------------|-------|------|")
+    lines.append("| # | Product | Woolworths | Coles |")
+    lines.append("|---|---------|------------|-------|")
 
     # Items (top 25)
     for i, item in enumerate(report.items[:25], 1):
@@ -497,15 +491,11 @@ def format_report(report: ComparisonReport) -> str:
             f"${item.prices['coles']:.2f}"
             if "coles" in item.prices else "—"
         )
-        al = (
-            f"${item.prices['aldi']:.2f}"
-            if "aldi" in item.prices else "—"
-        )
-        lines.append(f"| {i} | {item.name} | {ww} | {cl} | {al} |")
+        lines.append(f"| {i} | {item.name} | {ww} | {cl} |")
 
     if len(report.items) > 25:
         lines.append(
-            f"| ... | *{len(report.items) - 25} more items* | | | |"
+            f"| ... | *{len(report.items) - 25} more items* | | |"
         )
 
     lines.append("")

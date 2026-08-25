@@ -14,11 +14,11 @@ from typing import Optional
 class ProductItem:
     """Standardised representation of a single grocery product.
 
-    All extractors (Woolworths, Coles, Aldi) return lists of this type.
+    All extractors (Woolworths, Coles) return lists of this type.
     Fields not available from a given store are left as ``None``.
 
     Attributes:
-        store: Store identifier (``"woolworths"``, ``"coles"``, ``"aldi"``).
+        store: Store identifier (``"woolworths"``, ``"coles"``).
         raw_name: Product name exactly as listed on the store website.
         price: Numeric price in AUD (float).
         is_special: Whether the product is on special / discounted.

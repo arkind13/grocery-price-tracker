@@ -33,7 +33,7 @@ from core.name_matcher import KeywordIndex  # for _normalize reuse
 # ============================================================================
 
 # 0-based indices into Products_Master row (positional, locked)
-PRICE_COL = {"woolworths": 3, "coles": 4, "aldi": 5}   # D, E, F
+PRICE_COL = {"woolworths": 3, "coles": 4}   # D, E
 LAST_UPDATED_COL = 7                                     # H
 ALDI_REFRESH_COL = 11                                    # L (legacy; untouched)
 
@@ -312,8 +312,8 @@ def update_single_price(
     Args:
         product_name: generic name to find in Col A (exact, case-insensitive,
             whitespace-normalized via KeywordIndex._normalize), falling back
-            to the store's keyword col (Col I/J/K via STORE_KEYWORD_COL).
-        store: "woolworths"|"coles"|"aldi".
+            to the store's keyword col (Col I/J via STORE_KEYWORD_COL).
+        store: "woolworths"|"coles".
         price: new price (float). Must be > 0.
         dry_run: if True, report old/new without writing.
         worksheet: optional pre-connected worksheet.
@@ -382,8 +382,8 @@ def update_single_price(
             found_idx = i
             row_data = row
             break
-        # Step 2: match on this store's keyword col (Col I/J/K) via the
-        # per-store keyword map (woolworths=8/coles=9/aldi=10). Fixes
+        # Step 2: match on this store's keyword col (Col I/J) via the
+        # per-store keyword map (woolworths=8/coles=9). Fixes
         # DEFECT-1: rows whose Col A differs from the Word-doc name but
         # whose store keyword matches now resolve correctly.
         if (
@@ -475,11 +475,11 @@ def mark_not_available(
     price col "NA" makes the unavailability visible in the sheet.
 
     Row matching reuses the same two-step strategy as update_single_price:
-    exact Col A match first, then the store's keyword col (Col I/J/K).
+    exact Col A match first, then the store's keyword col (Col I/J).
 
     Args:
         product_name (str): Generic name (Col A) or store keyword to match.
-        store (str): "woolworths" | "coles" | "aldi".
+        store (str): "woolworths" | "coles".
         worksheet: Open gspread worksheet; connected if None.
         dry_run (bool): If True, return the planned write without mutating.
 
@@ -578,16 +578,16 @@ def mark_not_available(
 
 
 def set_store_keyword(product_name, store, keyword, worksheet=None, dry_run=False):
-    """Write a store keyword (Col I/J/K) for an existing sheet row.
+    """Write a store keyword (Col I/J) for an existing sheet row.
 
     The user manually provides the exact store product name when live search
     returns nothing. This writes that name to the store's keyword column
-    (Col I for woolworths, J for coles, K for aldi) so the row is matched on
+    (Col I for woolworths, J for coles) so the row is matched on
     next sync.
 
     Args:
         product_name: Generic name (Col A) or existing keyword to match.
-        store: "woolworths" | "coles" | "aldi".
+        store: "woolworths" | "coles".
         keyword: The store's product name to save.
         worksheet: Open gspread worksheet; connected if None.
         dry_run: If True, return planned write without mutating.
@@ -650,8 +650,8 @@ def set_store_keyword(product_name, store, keyword, worksheet=None, dry_run=Fals
 # Section E2: Add new product row (auto-add from live search)
 # ============================================================================
 
-# Store keyword column map (Col I/J/K) for add_product_row
-STORE_KEYWORD_COL = {"woolworths": 8, "coles": 9, "aldi": 10}
+# Store keyword column map (Col I/J) for add_product_row
+STORE_KEYWORD_COL = {"woolworths": 8, "coles": 9}
 
 # Keywords header for Col P (user-side aliases)
 KEYWORDS_HEADER = "Keywords"
@@ -674,18 +674,18 @@ def add_product_row(
 
     Used by the lookup engine Step 5 auto-add: when a live search result
     is confirmed by the user, a new row is written with the generic name,
-    the store's price (Col D/E/F), brand (Col G), timestamp (Col H), the
-    store keyword (Col I/J/K), and optionally the user query as a Col P
+    the store's price (Col D/E), brand (Col G), timestamp (Col H), the
+    store keyword (Col I/J), and optionally the user query as a Col P
     alias.
 
     Args:
         generic_name: the product name for Col A.
-        store: "woolworths"|"coles"|"aldi" — which price column to fill.
+        store: "woolworths"|"coles" — which price column to fill.
         price: numeric price (must be > 0).
         brand: brand string for Col G (default "").
         size: size string for Col C (default "").
         category: category string for Col B (default "").
-        store_keyword: the store's exact product name for Col I/J/K
+        store_keyword: the store's exact product name for Col I/J
             (default "" — leave the keyword cell empty).
         alias: the user's original query to persist as a Col P alias
             (default "" — no alias written).
@@ -741,11 +741,11 @@ def add_product_row(
         new_row[1] = category                      # Col B
     if size:
         new_row[2] = size                          # Col C
-    new_row[price_col] = price                     # Col D/E/F
+    new_row[price_col] = price                     # Col D/E
     new_row[6] = brand                             # Col G
     new_row[LAST_UPDATED_COL] = _sydney_now_str()  # Col H
     if kw_col is not None and store_keyword:
-        new_row[kw_col] = store_keyword            # Col I/J/K
+        new_row[kw_col] = store_keyword            # Col I/J
     if keywords_col is not None and alias:
         new_row[keywords_col] = alias              # Col P
 

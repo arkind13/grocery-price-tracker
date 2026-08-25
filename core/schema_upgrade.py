@@ -26,8 +26,8 @@ from core.sheets_client import connect_worksheet
 
 EXPECTED_BASE_HEADERS = [
     "Product_Name", "Category", "Size", "Woolworths_Price", "Coles_Price",
-    "Aldi_Price", "Brand_Type", "Last_Updated", "Search_Keyword_Woolworths",
-    "Search_Keyword_Coles", "Search_Keyword_Aldi", "Aldi_Refresh",
+    "Brand_Type", "Last_Updated", "Search_Keyword_Woolworths",
+    "Search_Keyword_Coles",
 ]
 
 NEW_COLUMNS = [

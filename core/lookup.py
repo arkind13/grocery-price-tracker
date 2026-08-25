@@ -44,7 +44,6 @@ COL_BRAND = 6         # G — Brand_Type
 COL_LAST_UPDATED = 7   # H — Last_Updated
 COL_KW_WOOL = 8        # I — Search_Keyword_Woolworths (sync path)
 COL_KW_COLES = 9      # J — Search_Keyword_Coles (sync path)
-COL_KW_ALDI = 10      # K — Search_Keyword_Aldi (sync path)
 
 # Header-driven (resolved at runtime via _find_col)
 KEYWORDS_HEADER = "Keywords"            # Col P — user-side aliases
@@ -235,8 +234,8 @@ class LookupIndex:
             if norm not in self._generic_map:
                 self._generic_map[norm] = row_dict
 
-            # Col I/J/K keyword map (first wins)
-            for kw_col in (COL_KW_WOOL, COL_KW_COLES, COL_KW_ALDI):
+            # Col I/J keyword map (first wins)
+            for kw_col in (COL_KW_WOOL, COL_KW_COLES):
                 if kw_col < len(row) and row[kw_col].strip():
                     kw_norm = self._normalize(row[kw_col])
                     if kw_norm not in self._keyword_map:

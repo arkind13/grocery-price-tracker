@@ -35,7 +35,7 @@ class MatchResult:
         row_index: 1-based sheet row number of the matched row
             (2 = first data row; row 1 is the header). None if unmatched.
         generic_name: Col A value of the matched row ("" if unmatched).
-        store: The store this item came from ("woolworths"|"coles"|"aldi").
+        store: The store this item came from ("woolworths"|"coles").
         raw_name: The original scraped product name (unmodified).
         strategy: How the match was made: "exact_keyword" or "none".
     """
@@ -51,7 +51,7 @@ class KeywordIndex:
     """In-memory map of normalized store keyword -> (row_index, generic_name).
 
     Built once from a sheet snapshot (or mock rows) and reused across many
-    NameMatcher.match() calls. Holds three internal dicts, one per store,
+    NameMatcher.match() calls. Holds two internal dicts, one per store,
     keyed by the normalized keyword.
 
     First occurrence wins on duplicate keywords.
@@ -61,12 +61,10 @@ class KeywordIndex:
     _COL_GENERIC_NAME = 0
     _COL_KW_WOOLWORTHS = 8
     _COL_KW_COLES = 9
-    _COL_KW_ALDI = 10
 
     _STORE_COL_MAP: dict[str, int] = {
         "woolworths": _COL_KW_WOOLWORTHS,
         "coles": _COL_KW_COLES,
-        "aldi": _COL_KW_ALDI,
     }
 
     def __init__(self, rows: list[list[str]]) -> None:
@@ -80,7 +78,6 @@ class KeywordIndex:
         """
         self._woolworths: dict[str, tuple[int, str]] = {}
         self._coles: dict[str, tuple[int, str]] = {}
-        self._aldi: dict[str, tuple[int, str]] = {}
 
         for i, row in enumerate(rows):
             row_index = i + 2  # 1-based: row 1 = header, row 2 = first data row
@@ -89,11 +86,10 @@ class KeywordIndex:
             self._index_store_keywords(row, row_index, generic_name)
 
     def _index_store_keywords(self, row: list[str], row_index: int, generic_name: str) -> None:
-        """Index keyword columns for all three stores from a single row."""
+        """Index keyword columns for both stores from a single row."""
         store_dicts = {
             "woolworths": self._woolworths,
             "coles": self._coles,
-            "aldi": self._aldi,
         }
         for store, col_idx in self._STORE_COL_MAP.items():
             if len(row) <= col_idx:
@@ -111,8 +107,8 @@ class KeywordIndex:
         """Return (row_index, generic_name) for an exact keyword match, else None.
 
         Args:
-            store: "woolworths"|"coles"|"aldi" — selects which keyword column
-                (I/J/K) to look in.
+            store: "woolworths"|"coles" — selects which keyword column
+                (I/J) to look in.
             raw_name: the scraped product name.
         """
         store_key = store.lower()
@@ -130,8 +126,8 @@ class KeywordIndex:
         return re.sub(r"\s+", " ", str(s).strip().lower())
 
     def __len__(self) -> int:
-        """Total number of indexed keywords across all three stores."""
-        return len(self._woolworths) + len(self._coles) + len(self._aldi)
+        """Total number of indexed keywords across both stores."""
+        return len(self._woolworths) + len(self._coles)
 
 
 # ---------------------------------------------------------------------------
