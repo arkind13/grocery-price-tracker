@@ -441,6 +441,9 @@ def update_single_price(
         full_row.append("")
     full_row[price_col] = price
     full_row[LAST_UPDATED_COL] = ts
+    # Truncate to target_width — the sheet row has 16 cols (A-P) but we only
+    # write up to LAST_UPDATED_COL; gspread rejects writing past the range.
+    full_row = full_row[:target_width]
 
     range_name = f"A{sheet_row}:{_col_letter(target_width - 1)}{sheet_row}"
     _update_with_backoff(worksheet, [full_row], range_name)
