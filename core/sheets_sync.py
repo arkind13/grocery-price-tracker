@@ -556,6 +556,10 @@ def mark_not_available(
     if kw_col is not None:
         full_row[kw_col] = "NA"
     full_row[LAST_UPDATED_COL] = _sydney_now_str()
+    # Truncate to target_width so the range write doesn't overflow into
+    # columns past target_width (the sheet has 16 cols A-P but we only
+    # write up to the keyword col; gspread rejects writing past the range).
+    full_row = full_row[:target_width]
 
     range_name = f"A{sheet_row}:{_col_letter(target_width - 1)}{sheet_row}"
     _update_with_backoff(worksheet, [full_row], range_name)
