@@ -13,6 +13,24 @@ from typing import Optional
 from core.sheets_sync import _find_col, PRICE_COL
 
 
+def _resolve_brand_col(header) -> int:
+    """Resolve the brand column index for a Products_Master header.
+
+    Prefers a column titled "Brand", then "Brand_Type"; falls back to
+    positional Col G (index 6) which is the historical brand cell.
+
+    Args:
+        header: first spreadsheet row (list of title strings).
+
+    Returns:
+        0-based column index.
+    """
+    col = _find_col(header, "Brand")
+    if col is None:
+        col = _find_col(header, "Brand_Type")
+    return 6 if col is None else col
+
+
 # ============================================================================
 # Section B: get_active_specials()
 # ============================================================================
@@ -26,9 +44,9 @@ def get_active_specials(store=None, worksheet=None) -> list:
         worksheet: optional pre-connected worksheet for tests.
 
     Returns:
-        list[dict], each: {name, store, special_desc, price, row_index}.
-        A product is "on special" if its store specials cell (M for
-        woolworths, N for coles) is non-empty.
+        list[dict], each: {name, store, special_desc, price, brand,
+        row_index}. A product is "on special" if its store specials cell
+        (M for woolworths, N for coles) is non-empty.
     """
     store_lower = store.lower() if store else None
 
@@ -62,11 +80,17 @@ def get_active_specials(store=None, worksheet=None) -> list:
     if not specials_col:
         return []
 
+    brand_col = _resolve_brand_col(header)
+
     results = []
     for row_idx, row in enumerate(rows):
         if not row or not row[0].strip():
             continue
         name = str(row[0]).strip()
+        brand = (
+            str(row[brand_col]).strip()
+            if brand_col < len(row) else ""
+        )
         sheet_row = row_idx + 2  # 1-based
 
         for store_key, col_idx in specials_col.items():
@@ -89,6 +113,7 @@ def get_active_specials(store=None, worksheet=None) -> list:
                     "store": store_key,
                     "special_desc": str(row[col_idx]).strip(),
                     "price": price,
+                    "brand": brand,
                     "row_index": sheet_row,
                 })
 
@@ -109,7 +134,9 @@ def get_bonus_rewards(store=None, worksheet=None) -> list:
         worksheet: optional pre-connected worksheet.
 
     Returns:
-        list[dict], each: {name, rewards, price, row_index}.
+        list[dict], each: {name, rewards, price, store, brand,
+        row_index}. "store" records WHICH store's price column supplied
+        the parsed price ("" when none parsed).
     """
     if worksheet is None:
         from core.sheets_client import connect_worksheet
@@ -131,12 +158,17 @@ def get_bonus_rewards(store=None, worksheet=None) -> list:
         return []
 
     store_lower = store.lower() if store else None
+    brand_col = _resolve_brand_col(header)
 
     results = []
     for row_idx, row in enumerate(rows):
         if not row or not row[0].strip():
             continue
         name = str(row[0]).strip()
+        brand = (
+            str(row[brand_col]).strip()
+            if brand_col < len(row) else ""
+        )
         sheet_row = row_idx + 2
 
         if rewards_col < len(row) and row[rewards_col].strip():
@@ -146,17 +178,21 @@ def get_bonus_rewards(store=None, worksheet=None) -> list:
             if store_lower and store_lower not in rewards_text.lower():
                 continue
 
-            # Parse price (any store, first available)
+            # Parse price (any store, first available) — remember which
+            # store's column supplied it so discounts can be attributed.
             price = None
+            price_store = ""
             for store_key, price_col in PRICE_COL.items():
                 if price_col < len(row) and row[price_col]:
                     cell = str(row[price_col])
                     m = re.search(r"(?:A\$|\$)\s*(\d+\.?\d*)", cell)
                     if m:
                         price = float(m.group(1))
+                        price_store = store_key
                         break
                     try:
                         price = float(cell)
+                        price_store = store_key
                         break
                     except (ValueError, TypeError):
                         pass
@@ -165,6 +201,8 @@ def get_bonus_rewards(store=None, worksheet=None) -> list:
                 "name": name,
                 "rewards": rewards_text,
                 "price": price,
+                "store": price_store,
+                "brand": brand,
                 "row_index": sheet_row,
             })
 
@@ -178,10 +216,18 @@ def get_bonus_rewards(store=None, worksheet=None) -> list:
 
 def format_specials_report(specials: list, store=None) -> str:
     """Render a Markdown table: item name, store, special_desc, price.
-    Top 25 rows + a count summary. Secret-free.
+
+    Woolworths rows show the always-on discounted price (extra 5% when
+    the row's brand/name is a home brand); Coles rows stay raw. Top 25
+    rows + a count summary. Secret-free.
     """
     if not specials:
         return "No active specials."
+
+    from core.woolworths_discounts import (
+        format_discounted_price,
+        is_woolworths_home_brand,
+    )
 
     store_label = store.capitalize() if store else "All Stores"
     lines = [
@@ -192,9 +238,18 @@ def format_specials_report(specials: list, store=None) -> str:
     ]
 
     for i, s in enumerate(specials[:25], 1):
-        price_str = (
-            f"${s['price']:.2f}" if s.get("price") is not None else "—"
-        )
+        raw_price = s.get("price")
+        if s.get("store") == "woolworths" and raw_price is not None:
+            price_str = format_discounted_price(
+                raw_price,
+                is_woolworths_home_brand(
+                    s.get("name", ""), s.get("brand", "")
+                ),
+            )
+        else:
+            price_str = (
+                f"${raw_price:.2f}" if raw_price is not None else "—"
+            )
         lines.append(
             f"| {i} | {s['name']} | {s['store'].capitalize()} | "
             f"{s['special_desc']} | {price_str} |"

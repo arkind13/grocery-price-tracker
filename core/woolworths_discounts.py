@@ -1,20 +1,71 @@
 #!/usr/bin/env python3
-"""Woolworths discount engine: home-brand detection, Team Discount (5%),
-monthly Extra Discount, and usage tracker."""
+"""Woolworths discount engine: always-on display discounts.
+
+Every displayed Woolworths price gets 5% off; Woolworths home-brand items
+get an additional 5% on top (compounding => ~9.75% total). Coles and Aldi
+prices are never discounted here. Discounts are DISPLAY-TIME only — the
+Google Sheet always stores raw prices.
+
+Also hosts: home-brand detection (32 canonical labels + macro alias),
+the monthly Extra Discount helper, and the monthly usage tracker.
+"""
 from __future__ import annotations
 import json
 import os
+import re
 import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
 
-TEAM_DISCOUNT_RATE = 0.05  # 5% off home-brand Woolworths items
+# Discount rates (spec §5). Base applies to EVERY Woolworths price;
+# home-brand items get a second, compounded 5% off.
+WOOLWORTHS_BASE_DISCOUNT = 0.05
+HOME_BRAND_EXTRA_DISCOUNT = 0.05
 
-# Woolworths-owned home-brand labels (case-insensitive substring match).
-HOME_BRAND_LABELS = (
-    "woolworths", "macro", "the odd bunch", "gold", "free from",
-)
+# Canonical Woolworths home-brand list (spec §3) — single source of truth.
+# Entries are pre-normalized via _normalize_brand_text(): lowercase,
+# punctuation/apostrophes stripped, whitespace collapsed. 32 canonical
+# names + the short-form "macro" alias for "Macro Wholefoods Market".
+# NOTE: legacy substring labels "gold" and "free from" are intentionally
+# DROPPED (false-positived on e.g. "Golden Circle", "Free From" ranges).
+WOOLWORTHS_HOME_BRANDS = frozenset({
+    # 32 canonical labels (normalized spellings)
+    "apollo",
+    "balnea",
+    "baxters",
+    "bell farms",
+    "clean",
+    "essentials",
+    "farmers own",                # Farmer's Own
+    "help at hand",
+    "hillview",
+    "inspire",
+    "la gina",
+    "la meida",
+    "la mesita",
+    "lantern alley",
+    "little ones",
+    "little wishes",
+    "lolly go round",
+    "macro wholefoods market",
+    "market value",
+    "plantitude",
+    "ready chef",
+    "smiling tums",
+    "smitten",
+    "strength meals co",
+    "strike",
+    "sushi izu",
+    "the odd bunch",
+    "thomas dux",
+    "voeu",
+    "woolworths bbq",
+    "woolworths cook",
+    "woolworths",                 # plain brand itself
+    # short-form alias (live API often returns just "Macro")
+    "macro",
+})
 
 # Monthly discount tracker (one use per calendar month).
 TRACKER_PATH = (
@@ -28,53 +79,152 @@ TRACKER_PATH = (
 # ============================================================================
 
 
+def _normalize_brand_text(value) -> str:
+    """Normalize brand/product text for matching.
+
+    Lowercases, strips punctuation and apostrophes (so ``Farmer's Own``
+    matches the stored ``farmers own``), and collapses internal whitespace.
+
+    Args:
+        value: raw brand or product-name string (None-safe).
+
+    Returns:
+        Normalized string ("" for empty/None input).
+    """
+    lowered = str(value or "").lower()
+    stripped = re.sub(r"[^a-z0-9\s]", "", lowered)
+    return re.sub(r"\s+", " ", stripped).strip()
+
+
 def is_woolworths_home_brand(product_name: str, brand: str) -> bool:
     """True if the product is a Woolworths home-brand item.
 
-    Detection (case-insensitive substring on either field):
-        - brand contains "woolworths", OR
-        - product_name contains "woolworths", OR
-        - brand or product_name contains any HOME_BRAND_LABELS
-          ("macro", "the odd bunch", "gold", "free from").
+    Detection order (spec §4 — exact matching only, NO free substring):
+        1. both inputs empty -> False;
+        2. normalized brand == "home" (the sheet Col G marker) -> True;
+        3. normalized brand equals a WOOLWORTHS_HOME_BRANDS entry -> True;
+        4. normalized brand starts with "woolworths" -> True;
+        5. brand field EMPTY -> normalized product NAME starts with a list
+           label at a word boundary (name == label OR name starts with
+           label + space) -> True (rescues rows with blank Col G);
+        6. otherwise False. A non-empty, non-matching brand always wins
+           over the name fallback (avoids e.g. brand "Bega" + name
+           "Woolworths Milk" being classified as home brand).
 
     Args:
-        product_name: raw or generic name (may be "").
-        brand: Brand_Type / ProductItem.brand (may be "").
+        product_name: raw or generic product name (may be "" / None).
+        brand: Brand_Type sheet cell or ProductItem.brand (may be "")..
 
     Returns:
-        bool. False if both inputs are empty/whitespace.
+        bool.
     """
-    name_lower = product_name.lower() if product_name else ""
-    brand_lower = brand.lower() if brand else ""
-    if not name_lower and not brand_lower:
+    normalized_name = _normalize_brand_text(product_name)
+    normalized_brand = _normalize_brand_text(brand)
+
+    if not normalized_name and not normalized_brand:
         return False
-    combined = f"{name_lower} {brand_lower}"
-    for label in HOME_BRAND_LABELS:
-        if label in combined:
-            return True
+
+    # Primary: brand-field match
+    if normalized_brand == "home":
+        return True
+    if normalized_brand in WOOLWORTHS_HOME_BRANDS:
+        return True
+    if normalized_brand.startswith("woolworths"):
+        return True
+
+    # Fallback: leading word-boundary match on the product name,
+    # ONLY when the brand field carries no information.
+    if not normalized_brand:
+        for label in WOOLWORTHS_HOME_BRANDS:
+            if normalized_name == label or normalized_name.startswith(
+                label + " "
+            ):
+                return True
+
     return False
 
 
 # ============================================================================
-# Section C: Team Discount
+# Section C: Always-on Woolworths discounts
 # ============================================================================
 
 
-def apply_team_discount(items, store: str = "woolworths") -> list:
-    """Apply 5% Team Discount to home-brand Woolworths items.
+def discounted_woolworths_price(price: float, is_home: bool) -> dict:
+    """Compute the displayed price for one Woolworths item.
+
+    Regular item: single 5% cut. Home-brand item: compounded cuts
+    (round(round(price * 0.95, 2) * 0.95, 2)). Rounding is PER ITEM —
+    totals must sum these rounded finals (spec §5).
 
     Args:
-        items: iterable of dicts OR objects with .price, .brand, .raw_name.
-            Accepts ProductItem directly (duck-typed attribute access).
-        store: must be "woolworths" (only store with Team Discount).
-            Any other store returns items unchanged with applied=False.
+        price: raw shelf/promo price (> 0 expected, not enforced).
+        is_home: whether the item is a Woolworths home-brand product.
 
     Returns:
-        list[dict] one per input item, each:
-            {name, brand, original_price, discounted_price, applied: bool}
-        discounted_price = original * 0.95 when applied, else original.
+        dict {"original": float, "final": float, "savings": float,
+        "is_home": bool}. savings is original - final (rounded to cents).
     """
-    store_lower = store.lower()
+    original = float(price)
+    base = round(original * (1 - WOOLWORTHS_BASE_DISCOUNT), 2)
+    if is_home:
+        final = round(base * (1 - HOME_BRAND_EXTRA_DISCOUNT), 2)
+    else:
+        final = base
+    return {
+        "original": original,
+        "final": final,
+        "savings": round(original - final, 2),
+        "is_home": bool(is_home),
+    }
+
+
+def format_discounted_price(price: float, is_home: bool) -> str:
+    """Format one Woolworths price for display surfaces.
+
+    Shows the discounted price prominently, then the raw price and which
+    discounts were applied.
+
+    Args:
+        price: raw shelf/promo price.
+        is_home: whether the item is a Woolworths home-brand product.
+
+    Returns:
+        str like "$4.51 (Home 9.75% off, was $5.00)" for home brands or
+        "$4.75 (5% off, was $5.00)" for regular items.
+    """
+    result = discounted_woolworths_price(price, is_home)
+    if is_home:
+        return (
+            f"${result['final']:.2f} "
+            f"(Home 9.75% off, was ${result['original']:.2f})"
+        )
+    return (
+        f"${result['final']:.2f} (5% off, was ${result['original']:.2f})"
+    )
+
+
+def apply_woolworths_discounts(items, store: str = "woolworths") -> list:
+    """Apply always-on Woolworths display discounts to a basket.
+
+    Every item gets the base 5% when store == woolworths; home-brand
+    items additionally get the compounded extra 5%. Any other store is a
+    no-op (prices returned unchanged, all flags False).
+
+    Args:
+        items: iterable of dicts OR duck-typed objects exposing
+            .price/.brand/.raw_name (or .name) — ProductItem compatible.
+        store: store id; only "woolworths" triggers discounts.
+
+    Returns:
+        list[dict], one per input item, each:
+            {name, brand, original_price, base_price, discounted_price,
+             applied: bool, home_extra_applied: bool, is_home: bool}
+        base_price = round(original * 0.95, 2) — the single-discount
+        intermediate (used to split savings reporting); absent extras
+        leave discounted_price == base_price.
+    """
+    store_lower = (store or "").lower()
+    is_ww = store_lower == "woolworths"
     results = []
     for item in items:
         # Duck-typed access: try dict, then attribute
@@ -87,19 +237,33 @@ def apply_team_discount(items, store: str = "woolworths") -> list:
             brand = getattr(item, "brand", "")
             name = getattr(item, "raw_name", getattr(item, "name", ""))
 
-        applied = False
-        discounted = float(price)
-        if store_lower == "woolworths" and is_woolworths_home_brand(name, brand):
-            discounted = round(price * (1 - TEAM_DISCOUNT_RATE), 2)
-            applied = True
-
-        results.append({
-            "name": name,
-            "brand": brand,
-            "original_price": float(price),
-            "discounted_price": discounted,
-            "applied": applied,
-        })
+        original = float(price)
+        if is_ww:
+            is_home = is_woolworths_home_brand(name, brand)
+            outcome = discounted_woolworths_price(original, is_home)
+            results.append({
+                "name": name,
+                "brand": brand,
+                "original_price": outcome["original"],
+                "base_price": round(
+                    original * (1 - WOOLWORTHS_BASE_DISCOUNT), 2
+                ),
+                "discounted_price": outcome["final"],
+                "applied": True,
+                "home_extra_applied": is_home,
+                "is_home": is_home,
+            })
+        else:
+            results.append({
+                "name": name,
+                "brand": brand,
+                "original_price": original,
+                "base_price": original,
+                "discounted_price": original,
+                "applied": False,
+                "home_extra_applied": False,
+                "is_home": False,
+            })
     return results
 
 
@@ -112,7 +276,7 @@ def apply_extra_discount(basket_total: float, discount_pct: float) -> tuple:
     """Apply X% discount to a Woolworths basket total.
 
     Args:
-        basket_total: the post-Team-Discount Woolworths total (>= 0).
+        basket_total: the post-discount Woolworths total (>= 0).
         discount_pct: 0-100.
 
     Returns:
@@ -247,34 +411,68 @@ def format_discount_report(
     team_discount_total: float,
     extra_discount_pct: float,
     extra_discount_savings: float,
+    home_extra_total: float = 0.0,
+    home_brand_count: int = 0,
 ) -> str:
     """Render a clean text block showing what discounts were applied.
 
-    Lists each home-brand item that received the Team Discount with its
-    original -> discounted price, the team discount total, and (if
-    extra_discount_pct > 0) the extra discount line.
-    Secret-free. If no discounts applied: "No discounts applied.".
+    Structure:
+      * Base line — 5% off ALL Woolworths items, with the summed base
+        total (team_discount_total).
+      * Home-brand extra line — additional 5% (compounded) on home-brand
+        items, listing each affected item with its base -> final price.
+      * Extra discount line (when extra_discount_pct > 0) — unchanged
+        monthly mechanism.
+
+    Secret-free. If nothing applied: "No discounts applied.".
+
+    Args:
+        items: per-item result dicts from apply_woolworths_discounts
+            (duck-typed attribute access also supported).
+        team_discount_total: summed BASE savings over all WW items.
+        extra_discount_pct: monthly extra discount percent (0 = none).
+        extra_discount_savings: dollar savings from that extra discount.
+        home_extra_total: summed home-brand EXTRA savings (default 0.0).
+        home_brand_count: number of home-brand WW items (default 0).
+
+    Returns:
+        Multi-line Markdown-ish string.
     """
+
+    def _get(item, key, default=None):
+        if isinstance(item, dict):
+            return item.get(key, default)
+        return getattr(item, key, default)
+
     lines = []
     if team_discount_total > 0:
-        lines.append("**Team Discount (5% off Woolworths home-brand):**")
+        lines.append("**Woolworths Discount (5% off all prices):**")
         for item in items:
-            if isinstance(item, dict):
-                applied = item.get("applied", False)
-                name = item.get("name", "")
-                orig = item.get("original_price", 0)
-                disc = item.get("discounted_price", 0)
-            else:
-                applied = getattr(item, "applied", False)
-                name = getattr(item, "name", "")
-                orig = getattr(item, "original_price", 0)
-                disc = getattr(item, "discounted_price", 0)
-            if applied:
+            if _get(item, "applied", False) \
+                    and not _get(item, "home_extra_applied", False):
                 lines.append(
-                    f"  - {name}: ${orig:.2f} -> ${disc:.2f} "
-                    f"(save ${orig - disc:.2f})"
+                    f"  - {_get(item, 'name', '')}: "
+                    f"${_get(item, 'original_price', 0):.2f} -> "
+                    f"${_get(item, 'discounted_price', 0):.2f}"
                 )
-        lines.append(f"  Team Discount total: ${team_discount_total:.2f}")
+        lines.append(
+            f"  Base discount total: ${team_discount_total:.2f}"
+        )
+        lines.append("")
+
+    if home_brand_count > 0 and home_extra_total > 0:
+        lines.append(
+            f"**Home Brand Extra (additional 5% off "
+            f"{home_brand_count} home-brand item(s)):**"
+        )
+        for item in items:
+            if _get(item, "home_extra_applied", False):
+                lines.append(
+                    f"  - {_get(item, 'name', '')}: "
+                    f"${_get(item, 'base_price', 0):.2f} -> "
+                    f"${_get(item, 'discounted_price', 0):.2f}"
+                )
+        lines.append(f"  Home extra total: ${home_extra_total:.2f}")
         lines.append("")
 
     if extra_discount_pct > 0 and extra_discount_savings > 0:

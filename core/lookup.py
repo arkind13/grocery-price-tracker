@@ -672,11 +672,24 @@ if __name__ == "__main__":
         if result.generic_name:
             print(f"Match: {result.generic_name}")
         if result.prices:
-            price_str = ", ".join(
-                f"{store}: ${p:.2f}"
-                for store, p in sorted(result.prices.items())
+            # Always-on display discounts: the Woolworths entry shows
+            # discounted price + raw; shared math, no chain changes.
+            from core.woolworths_discounts import (
+                format_discounted_price,
+                is_woolworths_home_brand,
             )
-            print(f"Prices: {price_str}")
+            segments = []
+            for store, p in sorted(result.prices.items()):
+                if store == "woolworths":
+                    is_home = is_woolworths_home_brand(
+                        result.generic_name or "", result.brand or ""
+                    )
+                    segments.append(
+                        f"woolworths: {format_discounted_price(p, is_home)}"
+                    )
+                else:
+                    segments.append(f"{store}: ${p:.2f}")
+            print(f"Prices: {', '.join(segments)}")
         if result.candidates:
             print("Candidates:")
             for i, c in enumerate(result.candidates, 1):

@@ -2,7 +2,9 @@
 """Dual-mode basket comparator across Woolworths and Coles.
 
 Modes: "sheet" (stored prices), "live" (API search), "auto" (sheet + live
-fallback). Integrates Woolworths Team + Extra discounts.
+fallback). Integrates the always-on Woolworths display discounts (base 5%
+on all WW prices + compounded 5% home-brand extra) and the monthly Extra
+Discount. The sheet itself always stores RAW prices.
 """
 from __future__ import annotations
 import argparse
@@ -60,7 +62,12 @@ class ComparisonReport:
             excluded; NOT zero-filled).
         store_coverage: store -> int count of items available at that store.
         team_discount_applied: bool.
-        team_discount_savings: float total $ saved by Team Discount (>= 0).
+        team_discount_savings: float total $ saved by the base 5% Woolworths
+            discount, summed over ALL Woolworths items (>= 0).
+        home_extra_savings: float additional $ saved by the compounded
+            home-brand extra 5% (>= 0).
+        home_brand_count: int number of Woolworths items classified as
+            home-brand (and thus given the extra 5%).
         extra_discount_pct: float pct applied to Woolworths basket (0 if none).
         extra_discount_savings: float $ saved by Extra Discount (>= 0).
         final_totals: store -> float final total (after all discounts).
@@ -76,6 +83,8 @@ class ComparisonReport:
     store_coverage: dict = field(default_factory=dict)
     team_discount_applied: bool = False
     team_discount_savings: float = 0.0
+    home_extra_savings: float = 0.0
+    home_brand_count: int = 0
     extra_discount_pct: float = 0.0
     extra_discount_savings: float = 0.0
     final_totals: dict = field(default_factory=dict)
@@ -105,10 +114,12 @@ def compare_basket(
         product_names: ingredient/product list (string or list).
         mode: "sheet" = stored prices only; "live" = live search all items;
             "auto" = sheet first, live fallback per item (default).
-        team_discount: apply Woolworths 5% Team Discount on home-brand items.
+        team_discount: apply the always-on Woolworths display discounts
+            (base 5% on ALL WW items + extra 5% on home brands). False
+            shows raw prices.
         extra_discount_pct: 0-100. If > 0 AND can_use_monthly_discount(),
-            apply X% to the entire Woolworths basket total (after Team
-            Discount) and mark the monthly discount used.
+            apply X% to the entire Woolworths basket total (after the
+            base/home discounts) and mark the monthly discount used.
         worksheet: optional pre-connected worksheet for tests/reuse.
 
     Returns:
@@ -117,7 +128,7 @@ def compare_basket(
     """
     from core.woolworths_discounts import (
         is_woolworths_home_brand,
-        apply_team_discount,
+        apply_woolworths_discounts,
         apply_extra_discount,
         can_use_monthly_discount,
         mark_monthly_discount_used,
@@ -181,9 +192,11 @@ def compare_basket(
             raw_totals[store] = round(total, 2)
             store_coverage[store] = count
 
-    # 5. Woolworths discounts
+    # 5. Woolworths discounts (always-on display discounts)
     team_discount_applied = False
     team_discount_savings = 0.0
+    home_extra_savings = 0.0
+    home_brand_count = 0
     extra_savings = 0.0
     extra_pct = 0.0
 
@@ -197,17 +210,31 @@ def compare_basket(
             })
 
     if team_discount and woolworths_items_for_discount:
-        discounted = apply_team_discount(
+        discounted = apply_woolworths_discounts(
             woolworths_items_for_discount, "woolworths"
         )
         team_discount_applied = any(d["applied"] for d in discounted)
+        # Base savings: 5% summed over ALL Woolworths items.
         team_discount_savings = round(
             sum(
-                d["original_price"] - d["discounted_price"]
+                d["original_price"] - d["base_price"]
                 for d in discounted
             ),
             2,
         )
+        # Home-brand extra: compounded second 5% on home items only.
+        home_extra_savings = round(
+            sum(
+                d["base_price"] - d["discounted_price"]
+                for d in discounted
+                if d["home_extra_applied"]
+            ),
+            2,
+        )
+        home_brand_count = sum(
+            1 for d in discounted if d["home_extra_applied"]
+        )
+        # Final WW total = sum of per-item ROUNDED finals (spec §5).
         woolworths_post_team = round(
             sum(d["discounted_price"] for d in discounted), 2
         )
@@ -264,6 +291,8 @@ def compare_basket(
         store_coverage=store_coverage,
         team_discount_applied=team_discount_applied,
         team_discount_savings=team_discount_savings,
+        home_extra_savings=home_extra_savings,
+        home_brand_count=home_brand_count,
         extra_discount_pct=extra_pct if extra_savings > 0 else 0.0,
         extra_discount_savings=extra_savings,
         final_totals=final_totals,
@@ -481,12 +510,20 @@ def format_report(report: ComparisonReport) -> str:
     lines.append("| # | Product | Woolworths | Coles |")
     lines.append("|---|---------|------------|-------|")
 
-    # Items (top 25)
+    # Items (top 25). Woolworths cell shows the always-on discounted
+    # price with the raw price visible; raw-only when discounts are off.
+    from core.woolworths_discounts import format_discounted_price
     for i, item in enumerate(report.items[:25], 1):
-        ww = (
-            f"${item.prices['woolworths']:.2f}"
-            if "woolworths" in item.prices else "—"
-        )
+        if "woolworths" in item.prices:
+            if report.team_discount_applied:
+                ww = format_discounted_price(
+                    item.prices["woolworths"],
+                    item.is_woolworths_home_brand,
+                )
+            else:
+                ww = f"${item.prices['woolworths']:.2f}"
+        else:
+            ww = "—"
         cl = (
             f"${item.prices['coles']:.2f}"
             if "coles" in item.prices else "—"
@@ -522,25 +559,39 @@ def format_report(report: ComparisonReport) -> str:
         )
     lines.append("")
 
-    # Discounts
-    from core.woolworths_discounts import format_discount_report
+    # Discounts — consume the shared engine per item (NO inline recompute).
+    from core.woolworths_discounts import (
+        format_discount_report,
+        discounted_woolworths_price,
+        WOOLWORTHS_BASE_DISCOUNT,
+    )
     discount_items = []
     if report.team_discount_applied:
         for item in report.items:
-            if item.is_woolworths_home_brand and "woolworths" in item.prices:
-                disc_price = round(item.prices["woolworths"] * 0.95, 2)
-                discount_items.append({
-                    "name": item.name,
-                    "brand": item.brand,
-                    "original_price": item.prices["woolworths"],
-                    "discounted_price": disc_price,
-                    "applied": True,
-                })
+            if "woolworths" not in item.prices:
+                continue
+            raw_price = item.prices["woolworths"]
+            outcome = discounted_woolworths_price(
+                raw_price, item.is_woolworths_home_brand
+            )
+            discount_items.append({
+                "name": item.name,
+                "brand": item.brand,
+                "original_price": raw_price,
+                "base_price": round(
+                    raw_price * (1 - WOOLWORTHS_BASE_DISCOUNT), 2
+                ),
+                "discounted_price": outcome["final"],
+                "applied": True,
+                "home_extra_applied": item.is_woolworths_home_brand,
+            })
     discount_text = format_discount_report(
         discount_items,
         report.team_discount_savings,
         report.extra_discount_pct,
         report.extra_discount_savings,
+        home_extra_total=report.home_extra_savings,
+        home_brand_count=report.home_brand_count,
     )
     if discount_text.strip():
         lines.append(discount_text)

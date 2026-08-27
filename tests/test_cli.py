@@ -482,7 +482,7 @@ class TestCLI(unittest.TestCase):
     # ========================================================================
 
     @patch("extractors.coles_extractor.fetch_coles_search")
-    @patch("extractors.woolworths_extractor.fetch_woolworths_search")
+    @patch("extractors.woolworths_extractor.fetch_woolworths_search_noauth")
     def test_search_both_stores_empty(self, mock_ww, mock_coles):
         """Both stores return empty -> 'No results found'."""
         from grocery_price_cli import _cmd_search
@@ -586,6 +586,321 @@ class TestCLI(unittest.TestCase):
                 sys.stdout = old_stdout
             self.assertEqual(code, 0)
             self.assertIn("No active specials", output)
+
+    # ========================================================================
+    # Phase 9.7.d — search (noauth), map, compare --mode auto tests
+    # ========================================================================
+
+    @patch("extractors.coles_extractor.fetch_coles_search")
+    @patch("extractors.woolworths_extractor.fetch_woolworths_search_noauth")
+    def test_search_with_results_cheapest(self, mock_ww, mock_coles):
+        """search returns cheapest store when both stores have results."""
+        from grocery_price_cli import _cmd_search
+        from extractors.models import ProductItem
+
+        mock_ww.return_value = [
+            ProductItem("woolworths", "WW Milk 2L", 3.50),
+        ]
+        mock_coles.return_value = [
+            ProductItem("coles", "Coles Milk 2L", 3.20),
+        ]
+        args = argparse.Namespace(product="milk")
+        old_stdout = sys.stdout
+        try:
+            sys.stdout = io.StringIO()
+            code = _cmd_search(args)
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+        self.assertEqual(code, 0)
+        self.assertIn("Cheapest", output)
+        self.assertIn("Woolworths", output)
+        self.assertIn("Coles", output)
+
+    @patch("extractors.coles_extractor.fetch_coles_search")
+    @patch("extractors.woolworths_extractor.fetch_woolworths_search_noauth")
+    def test_search_with_specials(self, mock_ww, mock_coles):
+        """search shows special badge when item is on special."""
+        from grocery_price_cli import _cmd_search
+        from extractors.models import ProductItem
+
+        mock_ww.return_value = [
+            ProductItem("woolworths", "WW Milk 2L", 3.50,
+                        is_special=True, special_desc="Half Price"),
+        ]
+        mock_coles.return_value = []
+        args = argparse.Namespace(product="milk")
+        old_stdout = sys.stdout
+        try:
+            sys.stdout = io.StringIO()
+            code = _cmd_search(args)
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+        self.assertEqual(code, 0)
+        self.assertIn("Half Price", output)
+
+    @patch("extractors.coles_extractor.fetch_coles_search")
+    @patch("extractors.woolworths_extractor.fetch_woolworths_search_noauth")
+    def test_search_woolworths_exception_fallback(self, mock_ww, mock_coles):
+        """search handles Woolworths exception gracefully, still shows Coles."""
+        from grocery_price_cli import _cmd_search
+        from extractors.models import ProductItem
+
+        mock_ww.side_effect = RuntimeError("curl_cffi error")
+        mock_coles.return_value = [
+            ProductItem("coles", "Coles Milk 2L", 3.20),
+        ]
+        args = argparse.Namespace(product="milk")
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        try:
+            sys.stdout = io.StringIO()
+            sys.stderr = io.StringIO()
+            code = _cmd_search(args)
+            output = sys.stdout.getvalue()
+            stderr_output = sys.stderr.getvalue()
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+        self.assertEqual(code, 0)
+        self.assertIn("Coles", output)
+        self.assertIn("unavailable", stderr_output)
+
+    def test_map_subcommand_registered(self):
+        """map subcommand is registered in the parser."""
+        from grocery_price_cli import build_parser
+        parser = build_parser()
+        # parse map status (no-op read)
+        args = parser.parse_args(["map", "status"])
+        self.assertEqual(args.list_name, "status")
+
+    def test_map_choices_reject_bad_list(self):
+        """map subcommand rejects invalid list names."""
+        from grocery_price_cli import build_parser
+        parser = build_parser()
+        with self.assertRaises(SystemExit) as ctx:
+            parser.parse_args(["map", "bogus"])
+        self.assertEqual(ctx.exception.code, 2)
+
+    def test_parser_includes_all_phase9_subcommands(self):
+        """Parser registers all Phase 9 subcommands: search, map, wednesday."""
+        from grocery_price_cli import build_parser
+        parser = build_parser()
+        old_stdout = sys.stdout
+        try:
+            sys.stdout = io.StringIO()
+            with self.assertRaises(SystemExit):
+                parser.parse_args(["--help"])
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+        for cmd in ["search", "map", "wednesday", "compare", "update"]:
+            self.assertIn(cmd, output)
+
+    @patch("core.price_comparator.format_report")
+    @patch("core.price_comparator.compare_basket")
+    @patch("grocery_price_cli._load_env")
+    def test_compare_auto_mode_flag(self, mock_env, mock_compare, mock_format):
+        """compare --mode auto passes through to compare_basket."""
+        from grocery_price_cli import _cmd_compare
+        from core.price_comparator import ComparisonReport, BasketItem
+
+        item = BasketItem(
+            name="Milk", prices={"woolworths": 3.00},
+            sources={"woolworths": "live"},
+        )
+        report = ComparisonReport(
+            items=[item],
+            raw_totals={"woolworths": 3.00},
+            store_coverage={"woolworths": 1},
+            final_totals={"woolworths": 3.00},
+            cheapest_store="woolworths",
+            most_expensive_store="woolworths",
+            max_savings=0.0,
+            not_available={"woolworths": [], "coles": ["Milk"], "aldi": ["Milk"]},
+        )
+        mock_compare.return_value = report
+        mock_format.return_value = "**Cheapest store:** Woolworths"
+
+        args = argparse.Namespace(
+            items="milk", mode="auto", team_discount=False, extra_discount=0.0,
+        )
+        old_stdout = sys.stdout
+        try:
+            sys.stdout = io.StringIO()
+            code = _cmd_compare(args)
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+        self.assertEqual(code, 0)
+        self.assertIn("Woolworths", output)
+
+    # ========================================================================
+    # Always-on Woolworths display discounts — CLI surface tests
+    # ========================================================================
+
+    @patch("extractors.coles_extractor.fetch_coles_search")
+    @patch("extractors.woolworths_extractor.fetch_woolworths_search_noauth")
+    def test_search_cheapest_uses_discounted_ww(self, mock_ww, mock_coles):
+        """Discounting can flip the cheapest store: WW home-brand $4.00
+        -> $3.61 beats raw Coles $3.80; Coles rows stay raw."""
+        from grocery_price_cli import _cmd_search
+        from extractors.models import ProductItem
+
+        mock_ww.return_value = [
+            ProductItem("woolworths", "Macro Milk 2L", 4.00,
+                        brand="Macro"),
+        ]
+        mock_coles.return_value = [
+            ProductItem("coles", "Coles Milk 2L", 3.80),
+        ]
+        args = argparse.Namespace(product="milk")
+        old_stdout = sys.stdout
+        try:
+            sys.stdout = io.StringIO()
+            code = _cmd_search(args)
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+        self.assertEqual(code, 0)
+        # WW cell: discounted price prominent + raw visible.
+        self.assertIn("$3.61 (Home 9.75% off, was $4.00)", output)
+        # Cheapest computed on the DISCOUNTED WW value.
+        self.assertIn("**Cheapest:** Woolworths at $3.61", output)
+
+    @patch("core.specials_reporter.get_bonus_rewards")
+    @patch("grocery_price_cli._load_env")
+    def test_rewards_discount_only_woolworths_rows(
+            self, mock_env, mock_rewards):
+        """Price cell discounted only when the reward's store is WW."""
+        from grocery_price_cli import _cmd_rewards
+        mock_rewards.return_value = [
+            {"name": "Macro Oats", "rewards": "500 pts",
+             "price": 4.00, "store": "woolworths",
+             "brand": "Macro Wholefoods Market"},
+            {"name": "Bega Cheese", "rewards": "300 pts",
+             "price": 5.00, "store": "coles", "brand": "Bega"},
+        ]
+        args = argparse.Namespace(store="all")
+        old_stdout = sys.stdout
+        try:
+            sys.stdout = io.StringIO()
+            code = _cmd_rewards(args)
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+        self.assertEqual(code, 0)
+        self.assertIn("Home 9.75% off, was $4.00", output)  # WW discounted
+        self.assertIn("| $5.00 |", output)                   # Coles raw
+        self.assertNotIn("was $5.00", output)
+
+
+class BatchFakeWorksheet(FakeWorksheet):
+    """FakeWorksheet plus gspread's batch_update for backfill tests."""
+    def __init__(self, rows):
+        super().__init__(rows)
+        self.batch_calls = []
+
+    def batch_update(self, cells):
+        self.batch_calls.append(list(cells))
+        return len(cells)
+
+
+class TestBackfillHomeBrands(unittest.TestCase):
+    """backfill-home-brands: dry-run planning + one batched live write."""
+
+    @staticmethod
+    def _rows():
+        header = _make_header()
+        return [
+            header,
+            # Empty G + leading name label -> planned.
+            ["Macro Rolled Oats 1kg", "", "", "$6.00", "", "",
+             "", "", "", "", "", ""],
+            # Non-matching non-empty G -> skipped by default.
+            ["Bega Cheese Block", "", "", "", "$8.00", "",
+             "Bega", "", "", "", "", ""],
+            # Matching-value G ("Woolworths BBQ") -> normalized to Home.
+            ["BBQ Sausages 400g", "", "", "$7.50", "", "",
+             "Woolworths BBQ", "", "", "", "", ""],
+            # Already 'Home' -> idempotent skip.
+            ["Odd Bunch Apples", "", "", "", "", "",
+             "Home", "", "", "", "", ""],
+            # Name matches but brand cell says otherwise:
+            # only planned WITH --overwrite.
+            ["Essentials Paper Towel 2pk", "Household", "2pk", "$2.00",
+             "", "", "Generic Brand", "", "", "", "", ""],
+        ]
+
+    @patch("core.sheets_client.connect_worksheet")
+    @patch("grocery_price_cli._load_env")
+    def test_dry_run_plans_without_writing(self, mock_env, mock_conn):
+        from grocery_price_cli import _cmd_backfill_home_brands
+        ws = BatchFakeWorksheet(self._rows())
+        mock_conn.return_value = ws
+        args = argparse.Namespace(dry_run=True, overwrite=False)
+        old_stdout = sys.stdout
+        try:
+            sys.stdout = io.StringIO()
+            code = _cmd_backfill_home_brands(args)
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+        self.assertEqual(code, 0)
+        self.assertIn("[DRY RUN]", output)
+        # Rows 2 (name match) and 4 (matching value) planned.
+        self.assertIn("| 2 | Macro Rolled Oats 1kg |", output)
+        self.assertIn("| 4 | BBQ Sausages 400g | Woolworths BBQ | Home |",
+                      output)
+        # Skips: already-Home row 5; non-matching Bega row 3; not in plan.
+        self.assertNotIn("| 3 |", output)
+        self.assertNotIn("| 5 |", output)
+        self.assertNotIn("| 6 |", output)
+        self.assertEqual(ws.batch_calls, [])
+
+    @patch("core.sheets_client.connect_worksheet")
+    @patch("grocery_price_cli._load_env")
+    def test_live_write_one_batch(self, mock_env, mock_conn):
+        from grocery_price_cli import _cmd_backfill_home_brands
+        ws = BatchFakeWorksheet(self._rows())
+        mock_conn.return_value = ws
+        args = argparse.Namespace(dry_run=False, overwrite=True)
+        old_stdout = sys.stdout
+        try:
+            sys.stdout = io.StringIO()
+            code = _cmd_backfill_home_brands(args)
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+        self.assertEqual(code, 0)
+        # --overwrite adds row 6 via name-match override.
+        self.assertIn("Wrote 3 Col G cell(s)", output)
+        self.assertEqual(len(ws.batch_calls), 1)  # ONE batched update
+        ranges = [c["range"] for c in ws.batch_calls[0]]
+        self.assertEqual(ranges, ["G2", "G4", "G6"])
+        values = [c["values"][0][0] for c in ws.batch_calls[0]]
+        self.assertEqual(values, ["Home", "Home", "Home"])
+
+
+class TestWednesdaySpecialsDisplay(unittest.TestCase):
+    """Light check of the Wednesday Step-8 table discounting."""
+
+    def test_step8_lines_contain_discounted_prices(self):
+        """Docx items carry no brand -> name fallback classifies home
+        brands (9.75%) while regular items get the flat 5%."""
+        from grocery_price_cli import _build_ww_specials_lines
+        items = [
+            {"name": "Macro Rolled Oats 900g", "price": 4.00,
+             "detail": "Half Price"},
+            {"name": "Arnott's Tim Tams 200g", "price": 5.00,
+             "detail": "save $1.00"},
+        ]
+        lines = _build_ww_specials_lines(items)
+        text = "\n".join(lines)
+        self.assertIn("$3.61 (Home 9.75% off, was $4.00)", text)
+        self.assertIn("$4.75 (5% off, was $5.00)", text)
+        self.assertIn("**Total:** 2 specials", text)
 
 
 if __name__ == "__main__":

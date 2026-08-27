@@ -742,7 +742,14 @@ def add_product_row(
     if size:
         new_row[2] = size                          # Col C
     new_row[price_col] = price                     # Col D/E
-    new_row[6] = brand                             # Col G
+    # Home-brand rows are classified ONCE at insert time: the literal
+    # "Home" marker replaces the raw brand so every later discount calc
+    # can trust Col G. Price cells ALWAYS stay raw (display-time only).
+    from core.woolworths_discounts import is_woolworths_home_brand
+    if is_woolworths_home_brand(generic_name, brand):
+        new_row[6] = "Home"                        # Col G (marker)
+    else:
+        new_row[6] = brand                         # Col G
     new_row[LAST_UPDATED_COL] = _sydney_now_str()  # Col H
     if kw_col is not None and store_keyword:
         new_row[kw_col] = store_keyword            # Col I/J

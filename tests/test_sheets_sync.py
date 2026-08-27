@@ -701,11 +701,56 @@ class TestSheetsSync(unittest.TestCase):
         self.assertEqual(updated[1][0], "Test Milk 2L")     # Col A
         self.assertEqual(updated[1][1], "Dairy")             # Col B
         self.assertEqual(updated[1][2], "2L")                # Col C
-        self.assertEqual(updated[1][3], 3.50)                # Col D
+        self.assertEqual(updated[1][3], 3.50)                # Col D RAW
         self.assertEqual(updated[1][6], "TestBrand")         # Col G
         self.assertTrue(updated[1][7])                        # Col H
         self.assertEqual(updated[1][8], "Woolworths Test Milk 2L")  # Col I
         self.assertEqual(updated[1][15], "test milk")         # Col P
+
+    def test_add_product_row_writes_home_literal(self):
+        """Home-brand rows get the literal 'Home' marker in Col G;
+        the price cell still stores the RAW value."""
+        header = [
+            "Product_Name", "Category", "Size", "Woolworths_Price",
+            "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+            "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+            "Search_Keyword_Aldi", "Aldi_Refresh",
+        ]
+        ws = FakeWorksheet([header])
+
+        result = add_product_row(
+            generic_name="Macro Wholefoods Market Oats 1kg",
+            store="woolworths",
+            price=6.20,
+            brand="Macro Wholefoods Market",
+            worksheet=ws,
+        )
+        self.assertTrue(result["wrote"])
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][6], "Home")   # Col G literal marker
+        self.assertEqual(updated[1][3], 6.20)     # Col D stays RAW
+
+    def test_add_product_row_home_via_name_fallback(self):
+        """Empty brand + leading home-brand label in name -> 'Home'."""
+        header = [
+            "Product_Name", "Category", "Size", "Woolworths_Price",
+            "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+            "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+            "Search_Keyword_Aldi", "Aldi_Refresh",
+        ]
+        ws = FakeWorksheet([header])
+
+        result = add_product_row(
+            generic_name="Essentials Milk 2L",
+            store="woolworths",
+            price=3.10,
+            brand="",
+            worksheet=ws,
+        )
+        self.assertTrue(result["wrote"])
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][6], "Home")   # via name fallback
+        self.assertEqual(updated[1][3], 3.10)     # price stays raw
 
     # ------------------------------------------------------------------ #
     # Test 22: add_product_row dry run

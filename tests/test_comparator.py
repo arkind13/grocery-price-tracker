@@ -177,13 +177,13 @@ class TestComparator(unittest.TestCase):
         self.assertIn("milk", report.not_available["coles"])
         self.assertNotIn("coles", report.raw_totals)
 
-    def test_team_discount_only_on_home_brands(self):
-        """5% off home-brand Woolworths items only."""
+    def test_base_discount_all_items_plus_home_extra(self):
+        """Base 5% on ALL WW items; compounded extra 5% on home brands."""
         from core.price_comparator import compare_basket
         header = _make_header()
         rows = [
             header,
-            ["Woolworths Milk", "Dairy", "2L", "$3.00", "$3.20", "",
+            ["Woolworths Milk", "Dairy", "2L", "$4.00", "$4.20", "",
              "Woolworths", "", "milk", "", "", "", "", "", ""],
             ["Bega Cheese", "Dairy", "500g", "$5.00", "$4.80", "",
              "Bega", "", "cheese", "", "", "", "", "", ""],
@@ -194,13 +194,19 @@ class TestComparator(unittest.TestCase):
             team_discount=True, worksheet=ws,
         )
         self.assertTrue(report.team_discount_applied)
-        # 5% of $3.00 = $0.15
-        self.assertAlmostEqual(report.team_discount_savings, 0.15)
-        # Post-team woolworths total: 2.85 + 5.00 = 7.85
-        self.assertAlmostEqual(report.final_totals["woolworths"], 7.85)
+        # Base savings over ALL WW items: 0.20 (milk) + 0.25 (bega)
+        self.assertAlmostEqual(report.team_discount_savings, 0.45)
+        # Home-brand extra only for the Woolworths milk: 3.80 -> 3.61
+        self.assertAlmostEqual(report.home_extra_savings, 0.19)
+        self.assertEqual(report.home_brand_count, 1)
+        # WW final total = sum of rounded per-item finals: 3.61 + 4.75
+        self.assertAlmostEqual(report.final_totals["woolworths"], 8.36)
+        # Coles never discounted (raw).
+        self.assertAlmostEqual(report.raw_totals["coles"], 9.00)
+        self.assertAlmostEqual(report.final_totals["coles"], 9.00)
 
     def test_team_discount_toggle_off(self):
-        """team_discount=False disables team discount."""
+        """team_discount=False disables ALL display discounts."""
         from core.price_comparator import compare_basket
         header = _make_header()
         rows = [
@@ -215,6 +221,8 @@ class TestComparator(unittest.TestCase):
         )
         self.assertFalse(report.team_discount_applied)
         self.assertEqual(report.team_discount_savings, 0.0)
+        self.assertEqual(report.home_extra_savings, 0.0)
+        self.assertEqual(report.home_brand_count, 0)
         self.assertEqual(report.final_totals["woolworths"], 3.00)
 
     def test_extra_discount_applied_when_available(self):
@@ -231,7 +239,9 @@ class TestComparator(unittest.TestCase):
                 header = _make_header()
                 rows = [
                     header,
-                    ["Milk", "Dairy", "2L", "$3.00", "$2.80", "",
+                    # $4.00 (not $3.00): avoids float half-cent boundary —
+                    # base 3.80, extra 10% of 3.80 = 0.38 exactly.
+                    ["Milk", "Dairy", "2L", "$4.00", "$2.80", "",
                      "", "", "milk", "", "", "", "", "", ""],
                 ]
                 ws = FakeWorksheet(rows)
@@ -306,7 +316,9 @@ class TestComparator(unittest.TestCase):
                 self.assertEqual(summary["history_len"], 1)
 
     def test_is_woolworths_home_brand_labels(self):
-        """Correct detection of Woolworths home-brand labels."""
+        """Detection follows spec §4: exact brand match, Home marker,
+        woolworths prefix, leading name fallback. Dropped labels
+        ('gold', 'free from') must NOT match."""
         from core.woolworths_discounts import is_woolworths_home_brand
 
         self.assertTrue(
@@ -321,10 +333,11 @@ class TestComparator(unittest.TestCase):
         self.assertTrue(
             is_woolworths_home_brand("Bananas", "The Odd Bunch")
         )
-        self.assertTrue(
+        # Dropped labels — no longer home brands.
+        self.assertFalse(
             is_woolworths_home_brand("Gold Coffee", "")
         )
-        self.assertTrue(
+        self.assertFalse(
             is_woolworths_home_brand("Free From Bread", "")
         )
         self.assertFalse(
@@ -421,23 +434,73 @@ class TestComparator(unittest.TestCase):
         self.assertEqual(result.prices, {})
 
     def test_specials_reporter_filters_active(self):
-        """get_active_specials returns items with non-empty specials."""
-        from core.specials_reporter import get_active_specials
+        """get_active_specials returns items with non-empty specials,
+        carrying their Col G brand for discount attribution."""
+        from core.specials_reporter import (
+            get_active_specials, format_specials_report,
+        )
         header = _make_header()
         rows = [
             header,
             ["Milk", "Dairy", "2L", "$3.00", "", "",
-             "", "", "milk", "", "", "",
+             "Bega", "", "milk", "", "", "",
              "Half Price", "", ""],
             ["Bread", "Bakery", "650g", "$2.50", "", "",
              "", "", "bread", "", "", "",
-             "", "", ""],
+              "", "", ""],
         ]
         ws = FakeWorksheet(rows)
         specials = get_active_specials(store="woolworths", worksheet=ws)
         self.assertEqual(len(specials), 1)
         self.assertEqual(specials[0]["name"], "Milk")
         self.assertEqual(specials[0]["special_desc"], "Half Price")
+        # Brand resolved from the brand cell (Brand_Type fallback).
+        self.assertEqual(specials[0]["brand"], "Bega")
+
+        # WW rows display discounted price + raw; Coles rows stay raw.
+        # Regular brand -> base 5% only ($3.00 -> $2.85).
+        output = format_specials_report(specials, "woolworths")
+        self.assertIn("2.85", output)     # 3.00 base-discounted
+        self.assertIn("3.00", output)     # raw still visible
+        self.assertIn("5% off", output)
+
+    def test_specials_reporter_home_brand_extra_discount(self):
+        """WW home-brand special shows compounded ~9.75% discount."""
+        from core.specials_reporter import (
+            get_active_specials, format_specials_report,
+        )
+        header = _make_header()
+        rows = [
+            header,
+            ["Odd Bunch Apples", "Produce", "1kg", "$4.00", "", "",
+             "The Odd Bunch", "", "apples", "", "", "",
+             "Special", "", ""],
+        ]
+        ws = FakeWorksheet(rows)
+        specials = get_active_specials(store="woolworths", worksheet=ws)
+        output = format_specials_report(specials, "woolworths")
+        self.assertIn("3.61", output)      # 4.00 -> 3.80 -> 3.61
+        self.assertIn("Home 9.75% off", output)
+        self.assertIn("4.00", output)
+
+    def test_bonus_rewards_carry_store_and_brand(self):
+        """get_bonus_rewards records which store supplied the price."""
+        from core.specials_reporter import get_bonus_rewards
+        header = _make_header()
+        rows = [
+            header,
+            ["Woolworths Milk", "Dairy", "2L", "$4.00", "$3.80", "",
+             "Woolworths", "", "milk", "", "", "",
+             "", "", "1000 pts"],
+        ]
+        ws = FakeWorksheet(rows)
+        rewards = get_bonus_rewards(worksheet=ws)
+        self.assertEqual(len(rewards), 1)
+        r = rewards[0]
+        # Price parsed from the FIRST populated store column: woolworths.
+        self.assertEqual(r["store"], "woolworths")
+        self.assertAlmostEqual(r["price"], 4.00)
+        self.assertEqual(r["brand"], "Woolworths")
 
     def test_specials_reporter_missing_columns_returns_empty(self):
         """Missing M/N/O columns returns empty lists, no exception."""
@@ -454,38 +517,50 @@ class TestComparator(unittest.TestCase):
         self.assertEqual(get_bonus_rewards(worksheet=ws), [])
 
     def test_format_report_contains_discount_lines(self):
-        """format_report output includes discount info and cheapest store."""
+        """format_report shows the base + home-extra discount lines, the
+        WW item cell with discounted AND raw price, and cheapest store
+        computed on final totals."""
         from core.price_comparator import ComparisonReport, format_report
         from core.price_comparator import BasketItem
 
+        # $4.00 home brand: base 3.80 -> compounded final 3.61.
         item = BasketItem(
             name="Woolworths Milk",
-            prices={"woolworths": 3.00, "coles": 3.20},
+            prices={"woolworths": 4.00, "coles": 3.20},
             sources={"woolworths": "sheet", "coles": "sheet"},
             brand="Woolworths",
             is_woolworths_home_brand=True,
         )
         report = ComparisonReport(
             items=[item],
-            raw_totals={"woolworths": 3.00, "coles": 3.20},
+            raw_totals={"woolworths": 4.00, "coles": 3.20},
             store_coverage={"woolworths": 1, "coles": 1},
             team_discount_applied=True,
-            team_discount_savings=0.15,
+            team_discount_savings=0.20,
+            home_extra_savings=0.19,
+            home_brand_count=1,
             extra_discount_pct=10.0,
-            extra_discount_savings=0.29,
-            final_totals={"woolworths": 2.56, "coles": 3.20},
-            cheapest_store="woolworths",
-            most_expensive_store="coles",
-            max_savings=0.64,
+            extra_discount_savings=0.36,
+            final_totals={"woolworths": 3.25, "coles": 3.20},
+            cheapest_store="coles",
+            most_expensive_store="woolworths",
+            max_savings=0.05,
             not_available={
                 "woolworths": [], "coles": [],
                 "aldi": ["Woolworths Milk"],
             },
         )
         output = format_report(report)
-        self.assertIn("Team Discount", output)
+        # Base-5%-all-items line with its total...
+        self.assertIn("5% off all", output)
+        self.assertIn("0.20", output)
+        # ...AND the home-brand extra line with its total.
+        self.assertIn("Home Brand Extra", output)
+        self.assertIn("0.19", output)
         self.assertIn("Extra Discount", output)
-        self.assertIn("woolworths", output.lower())
+        # WW item cell: discounted price prominent + raw visible.
+        self.assertIn("3.61", output)
+        self.assertIn("4.00", output)
 
     def test_compare_auto_mode_sheet_then_live(self):
         """auto mode: sheet items use sheet, missing items fall back to live."""
