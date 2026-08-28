@@ -349,7 +349,8 @@ class TestRealFormatterInvariants(unittest.TestCase):
         self.assertNotIn("|---", output)
         self.assertNotIn("| # |", output)
         self.assertIn("2.85", output)     # 3.00 base-discounted
-        self.assertIn("5% off", output)
+        self.assertNotIn("was $2.85", output)  # no team-discount "was"
+        self.assertIn("was $24.50", output)    # genuine Coles desc intact
 
     def test_format_discount_report_pipe_free(self):
         """discount report contains no pipe-table markup."""

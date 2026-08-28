@@ -219,10 +219,12 @@ def format_specials_report(specials: list, store=None) -> str:
 
     List-style numbered items: the price line shows the always-on
     discounted price for Woolworths rows (extra 5% when the row's
-    brand/name is a home brand, via format_discounted_price's bracket
-    form); Coles rows stay raw. The special description rides along via
-    a `·` separator. Top 25 rows + an overflow line + a 📊 count line.
-    Pipe-free (no markdown tables). Secret-free.
+    brand/name is a home brand); Coles rows stay raw. The special
+    description rides along via a `·` separator. No "(was $x)" suffix
+    is invented for the team discount — genuine "Was $x" specials text
+    from the sheet shows through the description. Top 25 rows + an
+    overflow line + a 📊 count line. Pipe-free (no markdown tables).
+    Secret-free.
     """
     if not specials:
         return "No active specials."

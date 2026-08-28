@@ -178,17 +178,26 @@ class TestDiscountMath(unittest.TestCase):
         ]
         self.assertAlmostEqual(sum(finals), 15.53)
 
-    def test_format_discounted_price_shows_both_prices(self):
-        """Formatted string shows discounted price + raw + discount marker."""
+    def test_format_discounted_price_plain_no_was(self):
+        """Formatted string shows ONLY the discounted price — no team
+        discount "(was $x)" suffix (reserved for genuine specials)."""
         from core.woolworths_discounts import format_discounted_price
         home = format_discounted_price(5.00, True)
-        self.assertIn("4.51", home)
-        self.assertIn("5.00", home)
-        self.assertIn("Home", home)
+        self.assertEqual(home, "$4.51")
         regular = format_discounted_price(4.00, False)
-        self.assertIn("3.80", regular)
-        self.assertIn("4.00", regular)
-        self.assertNotIn("Home", regular)
+        self.assertEqual(regular, "$3.80")
+
+    def test_was_price_from_special_desc(self):
+        """Genuine "Was $X" specials text yields the was-price; free-text
+        descs and empty input yield None."""
+        from core.woolworths_discounts import was_price_from_special_desc
+        self.assertEqual(was_price_from_special_desc("Was $4.50"), 4.50)
+        self.assertEqual(was_price_from_special_desc("was $24.50"), 24.50)
+        self.assertEqual(was_price_from_special_desc("WAS $3.00"), 3.00)
+        self.assertIsNone(was_price_from_special_desc("Half Price"))
+        self.assertIsNone(was_price_from_special_desc("2 for $4.50"))
+        self.assertIsNone(was_price_from_special_desc(""))
+        self.assertIsNone(was_price_from_special_desc(None))
 
 
 class TestApplyWoolworthsDiscounts(unittest.TestCase):

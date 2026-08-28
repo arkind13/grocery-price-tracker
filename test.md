@@ -1,122 +1,109 @@
-# Test Results — Unified Telegram Message Formatting (03 Code)
+# Test Results — "(was $x)" shown only for genuine specials (03 Code)
 
 - **Date:** 2026-08-28
-- **Executed by:** 03 Code Agent (per `implementation-plan.md`, all phases 1–8)
+- **Executed by:** 03 Code Agent (direct edit mode — no plan/architect flow)
 - **Environment:** Windows PowerShell 5.1, Anaconda Python (`$env:PYTHONIOENCODING="utf-8"` set for every run)
+- **Defect (user report):** Telegram compare message showed `🟢 Woolworths $3.61 (was $4.00)` for a NON-special home-brand item. The always-on team discount (5% + 5% home-brand) was being annotated as a "(was $x)" price on every Woolworths line.
 
 ---
 
-## Baseline (recorded before ANY edit)
+## Root cause
 
-`pytest tests -q` → **8 failed, 191 passed** — NOT the all-green state the plan
-assumed. All 8 failures are in `tests/test_extractors.py`:
+`core/woolworths_discounts.py::format_discounted_price()` always rendered
+`"(5% off, was $X)"` / `"(Home 9.75% off, was $X)"`, and every display
+surface (compare, search, lookup, specials, rewards, specials-scan,
+Wednesday report) called it. The "was" therefore reflected the team
+discount, not a real special.
 
-| Failure | Cause | In scope? |
+## Fix
+
+1. `format_discounted_price()` now returns ONLY the discounted price
+   (e.g. `$3.61`). No team-discount "was" suffix anywhere.
+2. New helper `was_price_from_special_desc()` extracts the GENUINE
+   store WasPrice from specials text of the form `"Was $X.XX"` (both
+   store extractors emit this). Free-text descs (`"Half Price"`,
+   `"2 for $4.50"`) yield `None`.
+3. `core/price_comparator.py::format_report()` — WW and Coles item lines
+   append `(was $x)` ONLY when the store reports the item on special
+   with a WasPrice.
+4. `core/lookup.py` CLI print — same rule for the Woolworths segment.
+5. All other surfaces (search 🏷️ suffix, specials `·` desc,
+   specials-scan Regular column, Wednesday specials detail) already
+   carry the genuine specials text and now show clean discounted
+   prices.
+
+Discount MATH is unchanged: 5% base + compounded 5% home-brand extra,
+display-time only, sheet still stores raw prices.
+
+---
+
+## Test runs (all with `python -m unittest`)
+
+| Run | Module(s) | Result |
 |---|---|---|
-| `TestSessionManager::test_get_headers_no_cookie` | A saved Woolworths cookie file exists on this machine; test expects none | No (env state; extractor files are §4-prohibited) |
-| `TestWoolworthsExtractor::test_parse_api_item*` (4) | ImportError — tests import `_parse_api_item`, which no longer exists in `extractors/woolworths_extractor.py` (test/code drift, pre-existing) | No (extractor APIs + their tests are §4-prohibited) |
-| `TestColesExtractor::test_parse_search_result*` (3) | Same drift for `_parse_search_result` in `coles_extractor.py` | No |
+| 1 | `tests.test_woolworths_discounts` + `tests.test_comparator` + `tests.test_telegram_format` | **PASS** — Ran 79 tests, OK |
+| 2 | `tests.test_cli` + `tests.test_lookup` + `tests.test_name_matcher` + `tests.test_sheets_sync` | **PASS** — Ran 108 tests, OK |
+| 3 | Full suite `unittest discover -s tests` | 229 tests: 8 pre-existing failures, all in `tests/test_extractors.py` |
 
-Gate applied instead of the plan's "all 199 pass": **no NEW failures vs this
-baseline; all formatting-related tests pass.** Baseline and final skip count: 0
-(no skips introduced).
+### Pre-existing failure check (not caused by this change)
 
-One transient flake observed during Phase 2 verification:
-`test_name_matcher.py::test_append_unmatched_is_idempotent` failed once in a
-combined run, then passed in isolation, in the full module (25/25), and in
-three consecutive full-suite runs. Shared `data/` file contention — unrelated
-to formatting (name_matcher logic untouched).
+`git stash push` → clean HEAD → `unittest tests.test_extractors` →
+**FAILED (failures=4, errors=4)** — identical 8 failures → `git stash pop`.
+Same set documented in the previous test.md baseline (saved-cookie env
+state + extractor/test drift). No NEW failures vs baseline.
 
----
+### Updated / added test cases (all PASS)
 
-## Phase results
-
-| Phase | Verification | Result |
-|---|---|---|
-| 1 — `core/telegram_format.py` + `tests/test_telegram_format.py` | `pytest tests/test_telegram_format.py -q` | **PASS** — 23/25 immediately; the 2 §5.3 invariant tests were intentionally red (TDD, they assert the NEW core formatters) until Phase 2 landed. Final: **25/25 PASS** |
-| 2 — core formatter swaps + §5.2 updates | `pytest tests -q` | **PASS** — 8 pre-existing failures only, 219 passed |
-| 3 — `grocery_price_cli.py` restyle | `pytest tests -q` + `py_compile ..\grocery_price_cli.py` | **PASS** — one name-shadowing bug caught and fixed (local `header = all_values[0]` shadowed the imported `header()` in `_cmd_backfill_home_brands`; renamed to `sheet_header`). Compile OK |
-| 4 — gateway scripts | `py_compile` both files | **PASS** |
-| 5 — 8 sibling tools | `py_compile` all 8 | **PASS** |
-| 6 — SKILL.md relay rules | grep for remaining "Markdown table" instructions | **PASS** — zero remaining; internal documentation tables left intact per plan |
-| 7 — README | archive reference check | **PASS** — `architecture-spec-woolworths-discounts.md` confirmed absent; reference now points to `architecture-spec.md` with a note; kit section documents the shipped API |
-| 8.1 — full suite | `pytest tests -q` | **PASS** — **219 passed, 8 failed (all pre-existing extractor), 0 skipped** |
-| 8.2 — pipe-table ban grep | `\|---\|\| # \|` over `*.py`, whole workspace | **PASS — ZERO matches** |
-| 8.2b — `parse_mode` grep | whole workspace `*.py` | **PASS** — only pre-existing occurrences (`daily_digest.py` HTML pipeline, untouched `handlers.py`, a comment). Zero added |
-| 8.3 — smoke `compare --items "green capsicum"` | live | **PASS** (rendered; that exact query has no sheet/live price → empty-prices render, still correctly styled) |
-| 8.3 — smoke `compare --items "milk"` | live | **PASS** — full render: 🛒 header, 🏠 item block, aligned 🟢/🔴 lines, fenced box TOTALS (equal-length lines), 🏷️ HOME BRAND EXTRA sub-block, 🏆 + 🏷️ tails |
-| 8.3 — smoke `specials` | live | **PASS** — 🏷️ header, numbered list, `·` separators, 📊 count |
-| 8.3 — smoke `search --product "green capsicum"` | live | **PASS** — 🔍 header, item blocks, bracket-form WW discounts, 🏷️ special suffix, `…` truncation, 🏆 tail |
-
-### Scope audit (plan §6)
-
-- `git diff` hunk ranges verified: changes in `core/` are confined to
-  `format_report` (+ its new helper), `format_discount_report`, and
-  `format_specials_report` + the `__main__` rewards block.
-  `discounted_woolworths_price` / `format_discounted_price` byte-identical
-  (no hunks before line 415 of `woolworths_discounts.py`).
-- `telegram_gateway/handlers.py` untouched. No sheet-write, lookup/sync, or
-  extractor logic touched. No flag/arg/exit-code changes in any CLI.
-- Files changed = exactly the §"May modify" list. Pre-existing dirty files
-  (`.kilo/agent/*`, `Development Workflow/*` deletions, xlsx/docx/data files,
-  main-repo `README.md`, `tests/test_name_matcher.py`, `architecture-spec.md`,
-  `implementation-plan.md`) were NOT touched by this agent.
+- `test_format_discounted_price_plain_no_was` — formatted price is
+  exactly `$4.51` / `$3.80`, no bracket (replaces
+  `test_format_discounted_price_shows_both_prices`).
+- `test_was_price_from_special_desc` — `"Was $4.50"`/`"was $24.50"`/
+  `"WAS $3.00"` parse; `"Half Price"`, `"2 for $4.50"`, `""`, `None`
+  → None.
+- `test_format_report_was_only_for_genuine_specials` — REGRESSION test:
+  special items show `(was $4.00)` / `(was $2.90)` (WW + Coles), regular
+  item shows none; `(was $4.00)` occurs exactly once.
+- `test_format_report_contains_discount_lines` — updated: no
+  `(was $4.00)` / `(Home 9.75% off` on the item line; raw $4.00 only in
+  the totals table.
+- Specials-reporter tests — discounted price only, genuine desc
+  ("Half Price"/"Special") rides along, no team "was".
+- `test_search_cheapest_uses_discounted_ww`, rewards test, Wednesday
+  specials test — clean discounted prices, no team "was".
 
 ---
 
-## Test-matrix coverage (plan §5.1 — all 17 + §5.3 invariants)
+## End-to-end smoke test (user's exact scenario)
 
-All 17 required tests implemented in `tests/test_telegram_format.py` plus
-`test_divider_default_and_custom`, `test_store_line_unknown_store`,
-`test_item_block_numbered_lines_indented`, `test_fenced_table_money_columns_right_aligned`,
-and the three §5.3 real-formatter invariant tests. **25/25 pass.**
+File-based script (avoids PowerShell `$` interpolation), fake report
+reproducing the Telegram example:
 
----
+```
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
 
-## Deviations from the plan (all documented, none behavioral)
+1. fetta cheese  🏠
+   🟢 Woolworths  $3.61
+   🔴 Coles       $2.50
 
-1. **Baseline gate adjusted.** Plan expected 199/199 passing; measured baseline
-   is 8 failed / 191 passed (extractor test drift + local cookie file). Gate
-   applied: no new failures; formatting tests all green. Extractor files are
-   §4-prohibited, so not fixed here.
-2. **Three test spots updated beyond §5.2's list** (necessary consequence of
-   the approved format contracts; assert content, not byte-equality):
-   - `tests/test_cli.py:181` — `"Total:"` → `"pending unmapped item(s)"`
-     (unmapped count line is now `📊 N pending unmapped item(s)`).
-   - `tests/test_cli.py:770` — `"**Cheapest:** Woolworths at $3.61"` →
-     `"Cheapest: Woolworths at $3.61"` (search tail is now `🏆 Cheapest: …`;
-     bold markup dropped from the assert). Line 768 was kept green by design:
-     the search WW line intentionally keeps `format_discounted_price`'s
-     §9-approved bracket form.
-   - `tests/test_cli.py:903` — `"**Total:** 2 specials"` → `"2 specials"`
-     (Wednesday Step-8 count line is now `📊 2 specials`; pipe table removed
-     per the golden rule — this builder must not emit tables to Telegram).
-3. **`_build_ww_specials_lines` restyled.** Not in the Phase-3 table, but it
-   printed a pipe table to Telegram, which violates locked decision #2.
-   Now list-style + 📊 count.
-4. **`Discount_github.py` NOT changed.** It is a Streamlit stub (browser UI,
-   no stdout rows exist to restyle). py_compile gate passes.
-5. **`Code_for_usage.py` gained a 📊 stdout block** (grand totals + fenced
-   per-model table). The file had no tabular stdout before (data went to
-   Excel only); plan asked for "📊 header + fenced usage table", so the block
-   was added — display-only, Excel output unchanged. `--query` single-value
-   outputs are deliberately untouched (machine-readable contract).
-6. **`daily_digest.py` minimal touch.** It already used the kit skeleton
-   (heavy separators, per-model cards); only the digest header was retitled to
-   the 📅 vocabulary. Its HTML parse_mode pipeline is pre-existing and was NOT
-   extended.
-7. **`fenced_table` `box=True` includes the ``` fences** around the ╔═╗ box
-   (plan §3's sample is ambiguous); equal-length lines contract enforced by
-   tests.
-8. **🏷️ WW-discounts tail line includes per-component amounts** —
-   `🏷️ WW discounts: −$0.75 (5% all $0.20 + 🏠 home extra $0.19 + extra 10%
-   $0.36)` — because §5.2 requires asserting `"5%"` AND `"0.20"` while §2a
-   requires composing the total from team+home+extra. Shape preserved
-   (`🏷️ WW discounts: −$X (…)`).
+2. bega fetta crumbled
+   🟢 Woolworths  $2.85 (was $4.00)
+   🔴 Coles       $2.50 (was $2.90)
+...
+🏆 Cheapest: Coles — you save $1.46 (vs Woolworths)
+🏷️ WW discounts: −$0.54 (5% all $0.35 + 🏠 home extra $0.19)
+----- assertions -----
+SMOKE TEST PASS
+```
 
----
+- Non-special home-brand item: discounted price only — **no "(was $4.00)"** ✅
+- Genuine special: store WasPrice shown ✅
+- Discount math unchanged (4.00 → 3.80 → 3.61) ✅
 
-## Status
+Note: a first inline `python -c` smoke run misleadingly showed no
+`(was $4.00)` — PowerShell double-quote `$`-interpolation/escaping had
+mangled the input string (`Was \$4.00`). File-based rerun confirmed the
+code correct. Lesson: never smoke-test `$`-containing strings via
+PowerShell inline `-c`.
 
-Phases 1–8 COMPLETE. Phase 9 (git commits, GitHub push, VPS tar/scp sync,
-docker restart, faithful Telegram test) is MANUAL — handed to the user below.
+## Status: PASS (fix verified; deployment via scp + docker restart follows)

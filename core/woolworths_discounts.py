@@ -17,6 +17,7 @@ import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 # Discount rates (spec §5). Base applies to EVERY Woolworths price;
 # home-brand items get a second, compounded 5% off.
@@ -181,26 +182,46 @@ def discounted_woolworths_price(price: float, is_home: bool) -> dict:
 def format_discounted_price(price: float, is_home: bool) -> str:
     """Format one Woolworths price for display surfaces.
 
-    Shows the discounted price prominently, then the raw price and which
-    discounts were applied.
+    Shows ONLY the discounted price. The always-on team discount is
+    deliberately NOT rendered as a "(was $X)" suffix — "was" annotations
+    are reserved for genuine store specials, sourced from the store's
+    WasPrice via was_price_from_special_desc().
 
     Args:
         price: raw shelf/promo price.
-        is_home: whether the item is a Woolworths home-brand product.
+        is_home: whether the item is a Woolworths home-brand product
+            (drives the compounded extra 5% off).
 
     Returns:
-        str like "$4.51 (Home 9.75% off, was $5.00)" for home brands or
-        "$4.75 (5% off, was $5.00)" for regular items.
+        str like "$4.51" for home brands or "$4.75" for regular items.
     """
     result = discounted_woolworths_price(price, is_home)
-    if is_home:
-        return (
-            f"${result['final']:.2f} "
-            f"(Home 9.75% off, was ${result['original']:.2f})"
-        )
-    return (
-        f"${result['final']:.2f} (5% off, was ${result['original']:.2f})"
+    return f"${result['final']:.2f}"
+
+
+def was_price_from_special_desc(special_desc: str) -> Optional[float]:
+    """Extract the GENUINE pre-special price from a special description.
+
+    Both store extractors emit specials text of the form "Was $X.XX"
+    (woolworths_extractor WasPrice / coles_extractor pricing.was). Only
+    that genuine was-price may be displayed as "(was $X)" — sheet
+    free-text descs like "Half Price" carry no was-price and yield None.
+
+    Args:
+        special_desc: specials description text (None-safe).
+
+    Returns:
+        float was-price when the description contains "Was $X", else
+        None.
+    """
+    match = re.search(
+        r"Was\s*\$\s*(\d+(?:\.\d+)?)",
+        str(special_desc or ""),
+        re.IGNORECASE,
     )
+    if match:
+        return float(match.group(1))
+    return None
 
 
 def apply_woolworths_discounts(items, store: str = "woolworths") -> list:

@@ -544,9 +544,14 @@ def format_report(report: ComparisonReport) -> str:
     lines = [header("Basket Comparison", "🛒"), ""]
 
     # Items (top 25) — list-style blocks. WW shows the always-on
-    # discounted price with the raw price visible; raw-only when the
-    # discounts are off.
-    from core.woolworths_discounts import format_discounted_price
+    # discounted price (NO "(was $x)" suffix — that annotation is
+    # reserved for genuine specials); raw-only when the discounts are
+    # off. A "(was $x)" suffix appears ONLY when the store itself
+    # reports the item on special with a WasPrice.
+    from core.woolworths_discounts import (
+        format_discounted_price,
+        was_price_from_special_desc,
+    )
     for i, item in enumerate(report.items[:25], 1):
         store_lines = []
         if "woolworths" in item.prices:
@@ -557,11 +562,21 @@ def format_report(report: ComparisonReport) -> str:
                 )
             else:
                 ww = f"${item.prices['woolworths']:.2f}"
-            store_lines.append(store_line("woolworths", ww))
-        if "coles" in item.prices:
-            store_lines.append(
-                store_line("coles", f"${item.prices['coles']:.2f}")
+            ww_was = was_price_from_special_desc(
+                item.specials.get("woolworths", "")
             )
+            store_lines.append(store_line(
+                "woolworths", ww,
+                was=f"${ww_was:.2f}" if ww_was is not None else None,
+            ))
+        if "coles" in item.prices:
+            coles_was = was_price_from_special_desc(
+                item.specials.get("coles", "")
+            )
+            store_lines.append(store_line(
+                "coles", f"${item.prices['coles']:.2f}",
+                was=f"${coles_was:.2f}" if coles_was is not None else None,
+            ))
         lines.append(item_block(
             i, item.name, store_lines,
             home_brand=item.is_woolworths_home_brand,

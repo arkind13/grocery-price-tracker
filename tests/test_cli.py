@@ -764,8 +764,10 @@ class TestCLI(unittest.TestCase):
         finally:
             sys.stdout = old_stdout
         self.assertEqual(code, 0)
-        # WW line: discounted price prominent + raw visible.
-        self.assertIn("$3.61 (Home 9.75% off, was $4.00)", output)
+        # WW line: discounted price only — NO team-discount "was" suffix.
+        self.assertIn("$3.61", output)
+        self.assertNotIn("was $4.00", output)
+        self.assertNotIn("9.75%", output)
         # Cheapest computed on the DISCOUNTED WW value.
         self.assertIn("Cheapest: Woolworths at $3.61", output)
         # Pipe-table ban on the search output.
@@ -794,7 +796,8 @@ class TestCLI(unittest.TestCase):
         finally:
             sys.stdout = old_stdout
         self.assertEqual(code, 0)
-        self.assertIn("Home 9.75% off, was $4.00", output)  # WW discounted
+        self.assertIn("$3.61", output)                        # WW discounted
+        self.assertNotIn("was $4.00", output)                 # no team "was"
         self.assertIn("$5.00", output)                        # Coles raw
         self.assertNotIn("| $5.00 |", output)                 # pipe ban
         self.assertNotIn("was $5.00", output)
@@ -902,8 +905,13 @@ class TestWednesdaySpecialsDisplay(unittest.TestCase):
         ]
         lines = _build_ww_specials_lines(items)
         text = "\n".join(lines)
-        self.assertIn("$3.61 (Home 9.75% off, was $4.00)", text)
-        self.assertIn("$4.75 (5% off, was $5.00)", text)
+        # Discounted prices only — no team-discount "was" suffix; the
+        # genuine special detail ("Half Price", "save $1.00") rides along.
+        self.assertIn("$3.61", text)
+        self.assertIn("$4.75", text)
+        self.assertNotIn("was $4.00", text)
+        self.assertNotIn("was $5.00", text)
+        self.assertIn("Half Price", text)
         self.assertIn("2 specials", text)
         # Pipe-table ban on the Wednesday specials block.
         self.assertNotIn("|---", text)

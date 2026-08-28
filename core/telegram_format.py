@@ -264,8 +264,10 @@ def store_line(store: str, price: str, was: str | None = None) -> str:
         store: store id or display name ("woolworths"/"coles"
             case-insensitive).
         price: pre-rendered price string (e.g. "$2.47" or a
-            format_discounted_price() bracket string).
-        was: optional raw price string; renders " (was $x)".
+            format_discounted_price() string).
+        was: optional GENUINE pre-special price string (from a store
+            WasPrice); renders " (was $x)". Never use this for the
+            always-on Woolworths team discount.
 
     Returns:
         str: e.g. "🟢 Woolworths  $2.47 (was $2.90)".
