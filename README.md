@@ -353,12 +353,9 @@ report) is automatically discounted at display time:
   [`architecture-spec.md`](architecture-spec.md) §"Replaces" — the original
   spec archive `architecture-spec-woolworths-discounts.md` is no longer on
   disk).
-- **Master switch:** `TEAM_DISCOUNT_ENABLED` in `core/woolworths_discounts.py`
-  is the single on/off control. `False` reverts EVERY display surface
-  (compare, search, recipe, specials, specials-scan, rewards, map/lookup,
-  Wednesday report, cheapest-store math) to the original raw Woolworths
-  price with no other code changes — for users without the team discount.
-  Per-call flags still override: `--no-team-discount` / `--team-discount`.
+- Prices are printed PLAIN (e.g. `$3.61`) — the team discount is never
+  shown as a "(was $x)" suffix. A `(was $x)` suffix appears ONLY when the
+  store itself reports the item on special with a WasPrice.
 - The Google Sheet always stores **raw** prices — discounts are display-only.
 - Home-brand detection and the 32-brand list (Apollo, Balnea, … Woolworths)
   live in `core/woolworths_discounts.py`. The sheet's Col G `Home` marker is
@@ -366,9 +363,45 @@ report) is automatically discounted at display time:
 - When new rows are added (`add_product_row`), a home-brand item's Brand cell
   (Col G) is written as `Home` automatically. `backfill-home-brands` can
   normalise existing rows.
-- Coles/Aldi prices are never discounted. `--no-team-discount` shows raw
-  Woolworths prices (escape hatch). The monthly `--extra-discount` flag is a
-  separate, unchanged mechanism.
+- Coles/Aldi prices are never discounted. The monthly `--extra-discount`
+  flag is a separate, unchanged mechanism.
+
+### Woolworths team discount — ONE-LINE on/off switch
+
+The entire team discount is controlled by a single constant at the top of
+`core/woolworths_discounts.py`:
+
+```python
+TEAM_DISCOUNT_ENABLED = True   # False = show original raw Woolworths prices
+```
+
+| Value | Behaviour |
+|-------|-----------|
+| `True` (default) | All WW prices **displayed** with the team discount (5% + 5% home-brand extra). |
+| `False` | EVERY surface automatically reverts to the **original raw Woolworths price** — compare, search, recipe, specials, specials-scan, rewards, map/lookup, the Wednesday report, and cheapest-store math. No other code changes needed. |
+
+Example for the same item (home-brand fetta, sheet price $4.00):
+
+```
+TEAM_DISCOUNT_ENABLED = True    🟢 Woolworths  $3.61
+TEAM_DISCOUNT_ENABLED = False   🟢 Woolworths  $4.00
+```
+
+**How to toggle:**
+
+1. Edit the one line in `grocery-price-tracker/core/woolworths_discounts.py`.
+2. Local use: nothing more — every CLI run picks it up immediately.
+3. Production (VPS): sync the one file — no Docker restart needed (the CLI
+   runs fresh each call and the folder is a live bind-mount):
+
+   ```powershell
+   scp core\woolworths_discounts.py myvps:/home/ubuntu/openclaw/tasks/ai-tools/grocery-price-tracker/core/woolworths_discounts.py
+   ```
+
+**Per-call override (works regardless of the switch):**
+`compare`/`recipe` accept `--team-discount` / `--no-team-discount` to force
+discounts on/off for a single call without touching the switch (their
+default is to follow `TEAM_DISCOUNT_ENABLED`).
 
 ### Live APIs used
 
@@ -646,6 +679,11 @@ Gateway status:    ssh myvps 'docker exec openclaw-core node /app/openclaw.mjs s
 Skills list:       ssh myvps 'docker exec openclaw-core node /app/openclaw.mjs skills list'
 
 Local Python:      & "$env:USERPROFILE\anaconda3\python.exe" ..\grocery_price_cli.py --help
+
+WW team discount:  ONE-LINE switch — TEAM_DISCOUNT_ENABLED in core/woolworths_discounts.py
+                   True = discounted prices (default) / False = raw prices
+                   Toggle on VPS: scp core\woolworths_discounts.py myvps:/home/ubuntu/openclaw/tasks/ai-tools/grocery-price-tracker/core/
+                   (no Docker restart needed; per-call override: --no-team-discount)
 
 AI Studio (VPS):   cd /home/ubuntu/openclaw/tasks/aistudio/ai-studio && docker compose up -d
                   Rebuild: docker compose build ai-studio-app && docker compose up -d ai-studio-app
