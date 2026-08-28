@@ -107,3 +107,41 @@ code correct. Lesson: never smoke-test `$`-containing strings via
 PowerShell inline `-c`.
 
 ## Status: PASS (fix verified; deployment via scp + docker restart follows)
+
+---
+
+## Deployment & E2E verification (VPS)
+
+**Sync (scp, branches diverged — no git pull on VPS):** md5-verified local↔VPS
+for `core/woolworths_discounts.py`, `core/price_comparator.py`,
+`core/lookup.py`, `core/specials_reporter.py`, `core/telegram_format.py`,
+`grocery_price_cli.py` — all 6 match.
+
+**Docker:** `openclaw-core` restarted (twice: after code sync and after
+skill sync) — `Up (healthy)`, gateway health OK, Telegram configured.
+
+**In-container CLI (bind-mount live, new code):**
+- `compare --items "fetta cheese"` → `🟢 Woolworths  $3.61` — NO "(was $4.00)" ✅
+- `compare --items "macro milk"` → `🟢 Woolworths  $4.65` — NO "(was $5.15)" ✅
+- `compare --items "birds eye frozen peas"` → `🟢 Woolworths  $5.42` — NO was ✅
+
+**Telegram E2E (`openclaw.mjs agent --deliver`):**
+1. First test — agent re-worded CLI output and re-injected "(was $4.00)".
+   Root causes found and fixed:
+   - **`claw-skills/grocery-price/SKILL.md` itself documented the OLD
+     bracket format** (`$4.51 (Home 9.75% off, was $5.00)`) — the agent
+     imitated it. Section rewritten: prices are printed PLAIN, "was" is
+     reserved for genuine specials. Also added: Raw column is NOT a "was"
+     price; concrete good/bad relay example; price lines must be kept
+     exactly as printed.
+   - Session memory of pre-fix turns reinforced the pattern → verified
+     with isolated sessions (`--session-id fresh-was-fix-test-*`).
+2. Isolated-session tests after the skill fix:
+   - Live-search path: clean relay, no fabricated was-annotations ✅
+   - Sheet path (fetta cheese): `Woolworths: $3.61` with discount
+     explained in prose — **no false "(was $x)" special price** ✅
+
+Note: `claw-skills/` lives outside the git repo (parent dir is not a
+repo) — it is scp-synced only, per the README deployment workflow.
+
+## Final status: PASS — fixed, tested, deployed, verified on Telegram
