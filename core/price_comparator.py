@@ -104,7 +104,7 @@ def compare_basket(
     product_names,            # str (comma/newline separated) OR list[str]
     *,
     mode: str = "auto",       # "sheet" | "live" | "auto"
-    team_discount: bool = True,
+    team_discount=None,       # None -> follow TEAM_DISCOUNT_ENABLED switch
     extra_discount_pct: float = 0.0,
     worksheet=None,           # optional pre-connected gspread Worksheet
 ) -> ComparisonReport:
@@ -115,8 +115,10 @@ def compare_basket(
         mode: "sheet" = stored prices only; "live" = live search all items;
             "auto" = sheet first, live fallback per item (default).
         team_discount: apply the always-on Woolworths display discounts
-            (base 5% on ALL WW items + extra 5% on home brands). False
-            shows raw prices.
+            (base 5% on ALL WW items + extra 5% on home brands). None
+            (default) follows the TEAM_DISCOUNT_ENABLED master switch in
+            core.woolworths_discounts; True/False force one behaviour for
+            this call regardless of the switch. False shows raw prices.
         extra_discount_pct: 0-100. If > 0 AND can_use_monthly_discount(),
             apply X% to the entire Woolworths basket total (after the
             base/home discounts) and mark the monthly discount used.
@@ -132,7 +134,12 @@ def compare_basket(
         apply_extra_discount,
         can_use_monthly_discount,
         mark_monthly_discount_used,
+        TEAM_DISCOUNT_ENABLED,
     )
+
+    # None -> follow the master switch (single on/off control).
+    if team_discount is None:
+        team_discount = TEAM_DISCOUNT_ENABLED
 
     # 1. Normalize names
     if isinstance(product_names, str):

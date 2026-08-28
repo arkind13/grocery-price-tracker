@@ -200,6 +200,39 @@ class TestDiscountMath(unittest.TestCase):
         self.assertIsNone(was_price_from_special_desc(None))
 
 
+class TestTeamDiscountMasterSwitch(unittest.TestCase):
+    """TEAM_DISCOUNT_ENABLED=False must revert EVERY surface to raw
+    Woolworths prices with no other code changes (single on/off point)."""
+
+    def test_switch_off_format_returns_raw(self):
+        """format_discounted_price returns the original price when off."""
+        from core import woolworths_discounts as wd
+        with patch.object(wd, "TEAM_DISCOUNT_ENABLED", False):
+            self.assertEqual(wd.format_discounted_price(4.00, True), "$4.00")
+            self.assertEqual(wd.format_discounted_price(5.00, False), "$5.00")
+        # Switch back on (default): discounted again.
+        self.assertEqual(wd.format_discounted_price(4.00, True), "$3.61")
+
+    def test_switch_off_apply_is_noop(self):
+        """apply_woolworths_discounts flags everything unapplied when off."""
+        from core import woolworths_discounts as wd
+        items = [
+            {"name": "Macro Rice", "brand": "Macro", "price": 10.00},
+            {"name": "Bega Cheese", "brand": "Bega", "price": 5.00},
+        ]
+        with patch.object(wd, "TEAM_DISCOUNT_ENABLED", False):
+            results = wd.apply_woolworths_discounts(
+                items, store="woolworths"
+            )
+        self.assertTrue(all(not r["applied"] for r in results))
+        self.assertTrue(
+            all(r["discounted_price"] == r["original_price"] for r in results)
+        )
+        # Switch back on (default): discounts apply again.
+        results = wd.apply_woolworths_discounts(items, store="woolworths")
+        self.assertTrue(all(r["applied"] for r in results))
+
+
 class TestApplyWoolworthsDiscounts(unittest.TestCase):
     """Engine contract: base 5% on ALL WW items, extra 5% on home brands."""
 

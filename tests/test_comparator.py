@@ -225,6 +225,52 @@ class TestComparator(unittest.TestCase):
         self.assertEqual(report.home_brand_count, 0)
         self.assertEqual(report.final_totals["woolworths"], 3.00)
 
+    def test_master_switch_off_reverts_to_raw(self):
+        """team_discount=None follows TEAM_DISCOUNT_ENABLED: switch off ->
+        raw totals everywhere, no savings, final == raw."""
+        from core.price_comparator import compare_basket
+        from core import woolworths_discounts
+        header = _make_header()
+        rows = [
+            header,
+            ["Woolworths Milk", "Dairy", "2L", "$3.00", "", "",
+             "Woolworths", "", "milk", "", "", "", "", "", ""],
+        ]
+        ws = FakeWorksheet(rows)
+        with patch.object(
+            woolworths_discounts, "TEAM_DISCOUNT_ENABLED", False
+        ):
+            report = compare_basket(
+                "woolworths milk", mode="sheet", worksheet=ws,
+            )
+        self.assertFalse(report.team_discount_applied)
+        self.assertEqual(report.team_discount_savings, 0.0)
+        self.assertEqual(report.home_extra_savings, 0.0)
+        self.assertEqual(report.home_brand_count, 0)
+        self.assertEqual(
+            report.final_totals["woolworths"],
+            report.raw_totals["woolworths"],
+        )
+        self.assertEqual(report.final_totals["woolworths"], 3.00)
+
+    def test_master_switch_default_on(self):
+        """team_discount=None with the default switch ON behaves like the
+        classic always-on path (discounts applied)."""
+        from core.price_comparator import compare_basket
+        header = _make_header()
+        rows = [
+            header,
+            ["Woolworths Milk", "Dairy", "2L", "$3.00", "", "",
+             "Woolworths", "", "milk", "", "", "", "", "", ""],
+        ]
+        ws = FakeWorksheet(rows)
+        report = compare_basket(
+            "woolworths milk", mode="sheet", worksheet=ws,
+        )
+        self.assertTrue(report.team_discount_applied)
+        # Brand "Woolworths" -> home brand -> compounded: 3.00 -> 2.71.
+        self.assertEqual(report.final_totals["woolworths"], 2.71)
+
     def test_extra_discount_applied_when_available(self):
         """Extra discount applied when monthly tracker is empty."""
         from core.price_comparator import compare_basket

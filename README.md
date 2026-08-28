@@ -353,6 +353,12 @@ report) is automatically discounted at display time:
   [`architecture-spec.md`](architecture-spec.md) §"Replaces" — the original
   spec archive `architecture-spec-woolworths-discounts.md` is no longer on
   disk).
+- **Master switch:** `TEAM_DISCOUNT_ENABLED` in `core/woolworths_discounts.py`
+  is the single on/off control. `False` reverts EVERY display surface
+  (compare, search, recipe, specials, specials-scan, rewards, map/lookup,
+  Wednesday report, cheapest-store math) to the original raw Woolworths
+  price with no other code changes — for users without the team discount.
+  Per-call flags still override: `--no-team-discount` / `--team-discount`.
 - The Google Sheet always stores **raw** prices — discounts are display-only.
 - Home-brand detection and the 32-brand list (Apollo, Balnea, … Woolworths)
   live in `core/woolworths_discounts.py`. The sheet's Col G `Home` marker is

@@ -24,6 +24,25 @@ from typing import Optional
 WOOLWORTHS_BASE_DISCOUNT = 0.05
 HOME_BRAND_EXTRA_DISCOUNT = 0.05
 
+# ============================================================================
+# MASTER SWITCH — Woolworths team discount (THE single on/off control)
+# ============================================================================
+#
+#   True  (default): all Woolworths prices are DISPLAYED with the
+#                    always-on team discount (5% base + 5% home-brand
+#                    extra). Sheets still store raw prices.
+#   False          : every surface automatically reverts to the ORIGINAL
+#                    raw Woolworths price — compare, search, recipe,
+#                    specials, specials-scan, rewards, map/lookup, the
+#                    Wednesday report, and cheapest-store math. No other
+#                    code changes needed (e.g. for users without the
+#                    Woolworths team discount).
+#
+# Per-invocation escape hatches still work regardless of this flag:
+# `--no-team-discount` forces raw prices ON for one call, and
+# `--team-discount` forces discounts ON for one call (both via the CLI).
+TEAM_DISCOUNT_ENABLED = True
+
 # Canonical Woolworths home-brand list (spec §3) — single source of truth.
 # Entries are pre-normalized via _normalize_brand_text(): lowercase,
 # punctuation/apostrophes stripped, whitespace collapsed. 32 canonical
@@ -182,20 +201,28 @@ def discounted_woolworths_price(price: float, is_home: bool) -> dict:
 def format_discounted_price(price: float, is_home: bool) -> str:
     """Format one Woolworths price for display surfaces.
 
-    Shows ONLY the discounted price. The always-on team discount is
-    deliberately NOT rendered as a "(was $X)" suffix — "was" annotations
-    are reserved for genuine store specials, sourced from the store's
-    WasPrice via was_price_from_special_desc().
+    Shows the price after the always-on team discount (5% base +
+    compounded extra 5% for home brands) — UNLESS the master switch
+    TEAM_DISCOUNT_ENABLED is False, in which case the ORIGINAL raw
+    price is returned unchanged. The team discount is deliberately NOT
+    rendered as a "(was $X)" suffix — "was" annotations are reserved
+    for genuine store specials, sourced from the store's WasPrice via
+    was_price_from_special_desc().
 
     Args:
         price: raw shelf/promo price.
         is_home: whether the item is a Woolworths home-brand product
-            (drives the compounded extra 5% off).
+            (drives the compounded extra 5% off; ignored when the
+            master switch is off).
 
     Returns:
-        str like "$4.51" for home brands or "$4.75" for regular items.
+        str like "$4.51" (home brand) or "$4.75" (regular) — or the
+        raw "$5.00" when TEAM_DISCOUNT_ENABLED is False.
     """
-    result = discounted_woolworths_price(price, is_home)
+    original = float(price)
+    if not TEAM_DISCOUNT_ENABLED:
+        return f"${original:.2f}"
+    result = discounted_woolworths_price(original, is_home)
     return f"${result['final']:.2f}"
 
 
@@ -228,7 +255,9 @@ def apply_woolworths_discounts(items, store: str = "woolworths") -> list:
     """Apply always-on Woolworths display discounts to a basket.
 
     Every item gets the base 5% when store == woolworths; home-brand
-    items additionally get the compounded extra 5%. Any other store is a
+    items additionally get the compounded extra 5%. When the master
+    switch TEAM_DISCOUNT_ENABLED is False, behaves like a non-WW store:
+    prices returned unchanged, all flags False. Any other store is a
     no-op (prices returned unchanged, all flags False).
 
     Args:
@@ -245,7 +274,7 @@ def apply_woolworths_discounts(items, store: str = "woolworths") -> list:
         leave discounted_price == base_price.
     """
     store_lower = (store or "").lower()
-    is_ww = store_lower == "woolworths"
+    is_ww = store_lower == "woolworths" and TEAM_DISCOUNT_ENABLED
     results = []
     for item in items:
         # Duck-typed access: try dict, then attribute

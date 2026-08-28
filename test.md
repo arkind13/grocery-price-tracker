@@ -145,3 +145,55 @@ Note: `claw-skills/` lives outside the git repo (parent dir is not a
 repo) — it is scp-synced only, per the README deployment workflow.
 
 ## Final status: PASS — fixed, tested, deployed, verified on Telegram
+
+---
+
+# Run 2 — discount narration removed + TEAM_DISCOUNT_ENABLED master switch
+
+- **Date:** 2026-08-28 (follow-up user request)
+- **Requests:** (1) agent must stop narrating "5% team discount…" in every
+  reply — it's known by default; (2) a central on/off switch so prices
+  automatically revert to original Woolworths prices when someone without
+  the team discount wants them.
+
+## Changes
+
+1. **`core/woolworths_discounts.py`** — new `TEAM_DISCOUNT_ENABLED = True`
+   master switch (single on/off point, documented inline). When `False`:
+   - `format_discounted_price()` returns the raw original price;
+   - `apply_woolworths_discounts()` flags everything unapplied;
+   - every surface (compare, search, recipe, specials, specials-scan,
+     rewards, map/lookup, Wednesday report) auto-reverts with zero other
+     code changes.
+2. **`core/price_comparator.py`** — `compare_basket(team_discount=None)`
+   now follows the switch; True/False still force per-call behaviour.
+3. **`grocery_price_cli.py`** — `--team-discount` default changed True→None
+   (None = follow switch; explicit flags override); recipe path follows the
+   switch; `search` cheapest-store math switches between discounted and raw.
+4. **`claw-skills/grocery-price/SKILL.md`** — new hard rule: NEVER narrate
+   or explain the team discount in replies; prices are relayed as printed.
+5. **`README.md`** — master switch documented.
+
+## Answer to "how many changes to toggle?"
+
+ONE line: set `TEAM_DISCOUNT_ENABLED = False` in
+`grocery-price-tracker/core/woolworths_discounts.py` (then scp that one
+file to the VPS if toggling in production). Everything reverts
+automatically; flip back to `True` to re-enable. Per-call CLI flags
+(`--no-team-discount` / `--team-discount`) work regardless.
+
+## Test runs
+
+| Run | Module(s) | Result |
+|---|---|---|
+| 1 | discount/comparator/cli/telegram_format/lookup/matcher/sync modules | **PASS — Ran 191 tests, OK** (incl. 4 new switch tests) |
+| 2 | Smoke (file-based, patch switch): OFF → raw $4.00 everywhere, no discount blocks; ON → $3.61 + discount tail | **SMOKE TEST PASS** |
+
+## Deployment
+
+scp to VPS: `core/woolworths_discounts.py`, `core/price_comparator.py`,
+`grocery_price_cli.py`, `claw-skills/grocery-price/SKILL.md` (md5-verified)
+→ `docker restart openclaw-core` → E2E Telegram check that discount
+narration is gone.
+
+## Status: PASS
