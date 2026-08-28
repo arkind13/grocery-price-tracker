@@ -1,0 +1,26 @@
+map wool        → shows item 1/1 → reply: na   (marks NA, row excluded next sync)
+map coles       → shows item 1/17 → reply: na   (marks NA, row excluded next sync)
+map unmatched   → shows item → reply: forget   (junk item permanently excluded)
+map status      → shows X/Y per list
+
+In-session replies:
+  <number>  → pick candidate N            (unmatched only)
+  add       → confirm add row / write price
+  na        → mark NA at this store        (wool/coles only)
+  forget    → permanently exclude this item (unmatched only — e.g. "Anything At All [woolworths]")
+  skip/next → skip current
+  stop      → pause (resume later)
+  done      → end session
+
+
+Command	Status	What it does
+map status	✅	Shows 10/1/17
+map wool --next	✅	Progressive search: size tokens stripped, fallback to 3 tokens
+map wool --na	✅	Writes "NA" to Col D+I (verified: row 82, sheet confirmed)
+map wool --add	✅	Size-fallback search + writes price
+map coles --next	✅	Shows 5 Coles results
+map unmatched --next	✅	Shows candidates / live search
+map unmatched --forget	✅	Writes to ignored_items.txt (verified: file has content)
+map unmatched --add	✅	Now forces live search — no more dead-end on bad candidates
+map unmatched --skip	✅	Advances
+mark_not_available	✅	Finds row correctly (dry-run: row 82)

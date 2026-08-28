@@ -1,79 +1,120 @@
 {
   "phase": "9",
   "created": "2026-08-24",
-  "total_defects": 9,
+  "last_reconciled": "2026-08-24",
+  "total_active_defects": 8,
+  "status_legend": {
+    "RESOLVED": "code complete AND verified by a passing 9.7 scenario",
+    "PENDING_VERIFICATION": "code complete; verification deferred to 9.7 test matrix — does NOT block code progress, but defect stays open until proven",
+    "PENDING_FIX": "not addressed; MUST be resolved before moving the related feature forward (blocker)",
+    "REMOVED": "obsoleted by an architecture change; no longer applicable"
+  },
+  "removed": [
+    {
+      "id": "DEFECT-4",
+      "symptom": "search needs live cookie, AuthManager round-trip deferred",
+      "root_cause": "cookie never proven live",
+      "status": "REMOVED",
+      "removed_reason": "No-login pivot (2026-08-24): Woolworths search via curl_cffi Chrome-131 impersonation + Coles via Scrape.do — both work without login. Tracked in PHASE_9_TRACKER.md lines 28-52.",
+      "removed_in_subtask": "9.0.b (cookie investigation) -> superseded by 9.2.e / 9.5.a"
+    }
+  ],
   "defects": [
     {
       "id": "DEFECT-1",
       "symptom": "update says 'product not found'",
-      "root_cause": "sheets_sync.py:375-379 matches Col A only, not keyword cols",
-      "status": "open",
+      "root_cause": "sheets_sync.py update_single_price matched Col A only, not keyword cols",
+      "status": "PENDING_VERIFICATION",
+      "code_verified": true,
+      "code_verified_detail": "sheets_sync.py:302 update_single_price has Col I/J/K fallback via STORE_KEYWORD_COL (woolworths=8/coles=9/aldi=10) at L374,385-393. KeywordIndex._normalize used.",
       "verified_by_scenario": null,
-      "fix_subtask": "9.1.k + 9.2.d"
+      "fix_subtask": "9.3.a",
+      "resolution_gate": "Col I/J/K must be populated (via Wednesday Word-doc sync 9.4) + 9.7 scenario confirms keyword-col match returns hits. Does NOT depend on 9.9 (Col P).",
+      "blocks_progress": false
     },
     {
       "id": "DEFECT-2",
       "symptom": "specials cols M/N/O never added to live sheet",
-      "root_cause": "Phase 3.1 only dry-ran schema_upgrade.py",
-      "status": "open",
+      "root_cause": "Phase 3.1 only dry-ran schema_upgrade.py — never applied live",
+      "status": "PENDING_FIX",
+      "code_verified": true,
+      "code_verified_detail": "schema_upgrade.py NEW_COLUMNS lists Woolworths_Specials(M)/Coles_Specials(N)/Rewards_Points(O); upgrade_schema() is idempotent. sheets_sync writes specials/rewards when cols present.",
       "verified_by_scenario": null,
-      "fix_subtask": "9.2.a + 9.2.b"
+      "fix_subtask": "needs assignment — run `python -m core.schema_upgrade` live (or confirm cols already present via audit_schema)",
+      "resolution_gate": "Audit live Products_Master for M/N/O headers; if absent, run schema_upgrade live. Then 9.7 scenario confirms specials written.",
+      "blocks_progress": true
     },
     {
       "id": "DEFECT-3",
       "symptom": "compare --mode sheet reads empty D/E/F",
       "root_cause": "sync never populated price columns",
-      "status": "open",
+      "status": "PENDING_VERIFICATION",
+      "code_verified": true,
+      "code_verified_detail": "sheets_sync.sync_prices batch-writes Col D/E/F (PRICE_COL woolworths=3/coles=4/aldi=5). 9.4 reports 127 items synced to A2:O82.",
       "verified_by_scenario": null,
-      "fix_subtask": "9.4.a"
-    },
-    {
-      "id": "DEFECT-4",
-      "symptom": "search needs live cookie, AuthManager round-trip deferred",
-      "root_cause": "cookie never proven live",
-      "status": "open",
-      "verified_by_scenario": null,
-      "fix_subtask": "9.3.b-9.3.g"
+      "fix_subtask": "9.4.b",
+      "resolution_gate": "9.7 scenario: after a Wednesday sync, `compare --items <sample> --mode sheet` returns non-'---' prices for both stores.",
+      "blocks_progress": false
     },
     {
       "id": "DEFECT-5",
       "symptom": "'milk' returns 'no products found' (no alias resolution)",
       "root_cause": "no user-query alias column / lookup",
-      "status": "code_fixed",
+      "status": "PENDING_VERIFICATION",
+      "code_verified": true,
+      "code_verified_detail": "lookup.py Step 2 Col P two-pass: exact alias then token subset (find_product L405, persist_alias L534). Col P header = 'Keywords' (schema_upgrade.py NEW_COLUMNS).",
       "verified_by_scenario": null,
-      "fix_subtask": "9.2.b (Col P two-pass lookup) + 9.2.e (live search fallback)"
+      "fix_subtask": "9.2.b + 9.2.e",
+      "resolution_gate": "9.9 Col P backfill (DATA prerequisite — empty Col P makes lookup hollow) + 9.7 GROUP A scenario confirms 'milk' resolves.",
+      "blocks_progress": false
     },
     {
       "id": "DEFECT-6",
       "symptom": "no interactive candidate selection / persistence",
-      "root_cause": "'not found' instead of offer candidates",
-      "status": "code_fixed",
+      "root_cause": "'not found' instead of offering candidates",
+      "status": "PENDING_VERIFICATION",
+      "code_verified": true,
+      "code_verified_detail": "lookup.py find_candidates (L315) returns top MAX_CANDIDATES=5 by score>0; find_product Step 3 surfaces them (L469-477). persist_alias (L534) writes Col P on selection.",
       "verified_by_scenario": null,
-      "fix_subtask": "9.2.c (partial candidates + interactive) + 9.2.d (persist alias)"
+      "fix_subtask": "9.2.c + 9.2.d",
+      "resolution_gate": "9.7 GROUP A/E scenario confirms candidate list rendered + alias persisted on pick.",
+      "blocks_progress": false
     },
     {
       "id": "DEFECT-7",
       "symptom": "items not in sheet return 'not found' instead of live-search + auto-add",
       "root_cause": "no Step 5 terminal state",
-      "status": "code_fixed",
+      "status": "PENDING_VERIFICATION",
+      "code_verified": true,
+      "code_verified_detail": "lookup.py _live_search (L608) calls Woolworths curl_cffi + Coles Scrape.do; sheets_sync.add_product_row (L471) writes new row incl. Col P alias + Col I/J/K store keyword.",
       "verified_by_scenario": null,
-      "fix_subtask": "9.2.e (live search + auto-add) + 9.2.f (add_product_row)"
+      "fix_subtask": "9.2.e + 9.2.f",
+      "resolution_gate": "9.7 GROUP B scenario (mocked curl_cffi/Scrape.do) confirms live results + auto-add row.",
+      "blocks_progress": false
     },
     {
       "id": "DEFECT-8",
       "symptom": "alias collision on shared keywords crashes / arbitrary first-match",
       "root_cause": "no brand-disambiguation / cheapest-default",
-      "status": "open",
+      "status": "PENDING_FIX",
+      "code_verified": false,
+      "code_verified_detail": "NO disambiguation logic found in lookup.py. Original fix_subtask '9.1.c' is STALE — 9.1.c is the Wednesday reminder 'done' Telegram handler, unrelated. find_candidates returns first-sorted by score with no brand tiebreak.",
       "verified_by_scenario": null,
-      "fix_subtask": "9.1.c"
+      "fix_subtask": "UNASSIGNED — needs new subtask to add brand-disambiguation / cheapest-default tiebreak in lookup.py alias resolution",
+      "resolution_gate": "Implement brand tiebreak (use Col H Brand_Type) or cheapest-price-default in find_product Step 2 when multiple rows share a keyword alias. Then 9.7 scenario confirms deterministic pick.",
+      "blocks_progress": true
     },
     {
       "id": "DEFECT-9",
       "symptom": "alias matching semantics undefined (exact vs substring over-matching)",
       "root_cause": "no two-pass exact/token rule",
-      "status": "code_fixed",
+      "status": "PENDING_VERIFICATION",
+      "code_verified": true,
+      "code_verified_detail": "lookup.py Step 2 two-pass: exact alias match first, then token-subset match. Semantics defined in docstrings.",
       "verified_by_scenario": null,
-      "fix_subtask": "9.2.b (Col P two-pass: exact alias then token subset)"
+      "fix_subtask": "9.2.b",
+      "resolution_gate": "9.9 Col P backfill (DATA prerequisite) + 9.7 GROUP A scenario confirms exact-then-token order (no over-matching).",
+      "blocks_progress": false
     }
   ]
 }
