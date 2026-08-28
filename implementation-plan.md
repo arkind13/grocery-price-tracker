@@ -1,9 +1,10 @@
-# Implementation Plan — Always-On Woolworths Display Discounts + Home-Brand Classification
+# Implementation Plan — Unified Telegram Message Formatting (Claw Skills)
 
-- **Date:** 2026-08-27
+- **Date:** 2026-08-28
 - **Pipeline stage:** 02 Plan (this doc) → 03 Code → 04 Architect Checker
-- **Source spec:** `grocery-price-tracker/architecture-spec.md` (250 lines — locked contract)
-- **Status:** Ready for the coding model. All decisions below are carried verbatim from the spec; nothing is invented.
+- **Source spec:** `grocery-price-tracker/architecture-spec.md` (status: Confirmed — all §9 decisions approved by user)
+- **Status:** Ready for the coding model. Every decision below is carried from the spec; nothing behavioral is invented.
+- **Baseline measured 2026-08-28:** 199 tests collected via pytest (Anaconda Python). All 199 must still pass (with the specific assertion updates listed in §5) plus the new mandatory tests.
 
 ---
 
@@ -12,337 +13,398 @@
 | Label | What it is | Who runs it |
 |---|---|---|
 | `[LOCAL — VS Code]` | Kilo editing files (read/write/edit/grep tools) | Coding model |
-| `[LOCAL — PowerShell]` | Windows PowerShell, workspace root `C:\Users\User.DESKTOP-R2G441H\Documents\AI related`. Python = Anaconda: `& "$env:USERPROFILE\anaconda3\python.exe"` | Coding model (tests, compile, smoke) |
-| `[LOCAL — PowerShell]` **MANUAL** | git commit/push — **Kilo NEVER runs git** | User |
-| `[VPS — SSH]` **MANUAL** | `ssh ubuntu@169.58.107.0` — scp files, docker restart | User |
-| `[VPS — container]` **MANUAL** | `sudo docker exec -w /app/tasks/ai-tools openclaw-core …` | User |
-| `[Telegram — DM]` **MANUAL** | User sends a test query to `@ClawArkindBot` | User |
+| `[LOCAL — PowerShell]` | Windows PowerShell 5.1, cwd `C:\Users\User.DESKTOP-R2G441H\Documents\AI related`. Python = Anaconda: `& "$env:USERPROFILE\anaconda3\python.exe"` (plain `python` is NOT on PATH). Always set `$env:PYTHONIOENCODING="utf-8"` first — emojis crash console output otherwise | Coding model (tests, compile checks, smoke) |
+| `[LOCAL — PowerShell]` **MANUAL** | git add/commit — **the coding model NEVER runs git write commands** | User |
+| `[VPS — SSH]` **MANUAL** | `ssh myvps` (alias for `ubuntu@169.58.107.0`). VPS base path: `/home/ubuntu/openclaw/tasks/ai-tools/` (bind-mounted into the container at `/app/tasks/ai-tools`). **Sync is scp/tar, NOT `git pull`** — VPS checkout (`master`) has diverged from local `main`; container reads the working tree (README §Common Workflows) | User |
+| `[Telegram — DM]` **MANUAL** | User observes messages from `@ClawArkindBot` on the phone | User |
 
-Rules carried from project workflow: **one command at a time** for MANUAL steps (present, wait for pasted output, then next). The `grocery-price-tracker/` folder is a **separate nested git repo** — its commits are separate from the main repo.
-
----
-
-## 1. Locked decisions (from spec §1–§5 — the coding model must honour every one)
-
-1. **Every displayed Woolworths price gets 5% off; home-brand WW items get an additional 5% on top (compounding ⇒ ≈9.75%).**
-2. **The Google Sheet always stores RAW prices.** Discounts are display-time only. `sync_prices`, `update_single_price`, `add_product_row` price values stay raw.
-3. **Coles and Aldi prices are never discounted by this feature.**
-4. **New-row writes:** when the item's brand is a WW home brand, `add_product_row` writes the literal `Home` (capital H) into Col G instead of the raw brand name.
-5. **Canonical 32-entry brand list** (spec §3) lives in `core/woolworths_discounts.py` — single source of truth. `"gold"` and `"free from"` are DROPPED. `"macro"` is kept as short-form alias for "Macro Wholefoods Market".
-6. **Detection rules** (spec §4): normalize (lowercase, strip punctuation/apostrophes, collapse whitespace); brand-field match by exact equality / `Home` marker / `woolworths` prefix / `macro` alias; product-name fallback ONLY when brand is empty (leading word-boundary match). No free substring search.
-7. **`--team-discount/--no-team-discount` stays** as the escape hatch (default ON = base + home extra; OFF = raw). The monthly `--extra-discount` tracker mechanism is UNCHANGED.
-8. **`apply_team_discount` is REPLACED** by `apply_woolworths_discounts(items, store="woolworths")`; per-item result dict gains `"home_extra_applied"`. Update all callers + tests.
-9. **43/0 registry invariant, extractors, `coles_extractor.py:58` (R-S1), name matching, recipe resolver, schema_upgrade, telegram_gateway — ALL untouched** (spec §7/§8 "out of scope").
-
-### ⚠ SPEC DISCREPANCY — READ BEFORE WRITING TEST MATH
-
-Spec §5 (normative formula, locked default = **compounding**):
-`home final = round(round(price * 0.95, 2) * 0.95, 2)` → **$5.00 → $4.51**.
-
-Spec §10's illustration "compounding home (e.g. $5.00 → $4.50)" is **arithmetically wrong for compounding** ($4.50 is flat 10%, the rejected alternative in §12). The plan resolves this in favour of the **§5 formula** (the locked decision). Tests MUST assert **$5.00 → $4.51**. If the user later prefers flat 10%, it is a one-constant change (§12) — do NOT pre-empt it.
-
-**Half-cent warning:** avoid raw prices whose intermediates land on a `.xx5` boundary (e.g. $3.00 → 2.85 → 2.7075) in hand-computed assertions — binary float rounding is ambiguous there. Use the safe values given in §6 of this plan.
+Rules carried from project workflow: one command at a time for MANUAL steps (present it, wait for pasted output, then next). `grocery-price-tracker/` is a **separate nested git repo** — its commit is separate from the main `AI related` repo.
 
 ---
 
-## 2. Current-state map (verified by the plan agent — line numbers as of 2026-08-27)
+## 1. Locked decisions (spec §1–§5, §9 — every one is mandatory)
 
-| File | Relevant code today |
-|---|---|
-| `core/woolworths_discounts.py` (297 ln) | `TEAM_DISCOUNT_RATE` L12; legacy `HOME_BRAND_LABELS` substring tuple L15–17; `is_woolworths_home_brand` L31–55 (substring on `name+brand`); `apply_team_discount` L63–103 (5% home-only); `apply_extra_discount` L111–129 (keep); monthly tracker L137–237 (keep); `format_discount_report` L245–297 |
-| `core/price_comparator.py` (611 ln) | `BasketItem` L25–45 (has `is_woolworths_home_brand` field); `ComparisonReport` L53–86; `compare_basket` L94–275 (discount block L184–231, imports L118–124); `format_report` L468–569 (item rows RAW; inline `* 0.95` recompute at L531) |
-| `core/specials_reporter.py` (245 ln) | `get_active_specials` L21–95 (result dict L87–93, no brand); `get_bonus_rewards` L103–171 (no store/brand in dict L164–169); `format_specials_report` L179–210 (raw prices) |
-| `core/sheets_sync.py` (813 ln) | `add_product_row` L660–764; `new_row[6] = brand` at **L745** (the ONLY line region to change) |
-| `grocery_price_cli.py` (2095 ln, main repo) | `build_parser` L31–139; `_cmd_rewards` L280–305; `_cmd_search` L388–448 (raw + cheapest on raw); `_cmd_specials` L455–487 (Mode A raw); `_cmd_specials_scan` L566–663; `_cmd_wednesday` Step 8 L1095–1151; `_map_unmatched_item` L1298–1377 (Prices: L1315/1321/1356; live lines L1359–1362); `_format_prices` L1524–1530; `_resolve_and_print_unmatched` L1627–1672; `_resolve_and_print_store` L1675–1704; backfill pattern `_cmd_backfill_keywords` L2006–2074 (`_BRAND_TYPE_COL` L1970) |
-| `core/lookup.py` | `__main__` L640–679 (`Prices:` print L674–679) |
-| `core/sheet_analyst.py` | brand col via `_find_col(header, "Brand_Type") or 6` at L117/166/203 — positional fallback 6 already covers a "Brand"-titled header ⇒ **NO CHANGE** |
-| Tests | `test_comparator.py`: `FakeWorksheet` L25–50, `_make_header` L74–83, team tests L180–218, labels test L308–333, reporter tests L423–455, `test_format_report_contains_discount_lines` L456+. `test_sheets_sync.py`: add_product_row tests L674–750 (asserts Col G `"TestBrand"` at L705). `test_cli.py`: FakeWorksheet L32, search/rewards/specials tests L486–704. `test_lookup.py`: NO price-string assertions (verified) |
+1. **Display-only.** Same data, same numbers, same commands, same flags, same exit codes, same sheet writes. Only stdout/stdout-string formatting changes.
+2. **Golden rule — no markdown tables.** No tool output that can reach Telegram may contain pipe tables (`| col |` header + `|---|` separator). Replacements: **list-style item blocks** and **```-fenced monospace blocks** (Telegram renders fences in a monospace font, so manual padding aligns).
+3. **Zero-dependency styling.** Layout survives even if the gateway strips all markdown: unicode heavy divider `━` ×20 under main headers, light `─` ×10 for sub-blocks, `·` inline separator, CAPS header words. `**bold**` allowed on header lines only. **No `parse_mode` is added anywhere** — everything is plain text.
+4. **Icon vocabulary (spec §2.3):** 🛒 grocery/basket · 🔍 search · 🏷️ specials/discounts · 💰 money/savings · 🏆 cheapest · 🏠 WW home brand · ⚠️ warning · ✅ success · ❌ unavailable · 🟢 Woolworths · 🔴 Coles · 📊 totals/report · 🧾 recipe · 🔄 sync · 🤖 LLM pricing · 📅 daily digest · ⏱️ timestamp footer.
+5. **Moderate emoji density:** headers + store lines only, not every line.
+6. **Message skeleton (all skills):** `<ICON> <TITLE IN CAPS>` → `━━━━━━━━━━━━━━━━━━━━` → body (list items and/or fenced block) → tail (🏆 / ⚠️) → optional `⏱️` footer.
+7. **Width budgets:** `MAX_NAME_WIDTH = 24`, `MAX_BLOCK_WIDTH = 34` (fenced blocks, phone-fit). Longer names truncate with `…`.
+8. **Store icon lines:** 🟢 Woolworths / 🔴 Coles (user-approved §9).
+9. **`format_discounted_price()` is NOT changed** — keeps the `(was $x)` bracket form (`$4.51 (Home 9.75% off, was $5.00)` / `$4.75 (5% off, was $5.00)`); tests asserting it stay green.
+10. **`telegram_gateway/wednesday_reminder.py` must NOT import the kit.** It is intentionally self-contained for the VPS sparse checkout (see its docstring). Restyle `REMINDER_TEXT` with the kit's unicode vocabulary as a hardcoded string.
 
 ---
 
-## 3. Stage-by-stage execution (dependency order; TDD where marked)
+## 2. Work order — sequential phases
 
-### Stage 0 — Preflight + baseline `[LOCAL — VS Code]` / `[LOCAL — PowerShell]`
+Execute in order. Each phase ends with its verification command before moving on.
 
-1. Read (do NOT edit): `core/woolworths_discounts.py`, `core/price_comparator.py`, `core/specials_reporter.py`, `core/sheets_sync.py` (add_product_row region), `grocery_price_cli.py` (sections in §2), `claw-skills/grocery-price/SKILL.md`, tracker `README.md`, the four test files.
-2. **Baseline suite (MANDATORY, before any edit):**
-   ```powershell
-   [LOCAL — PowerShell]  workdir: grocery-price-tracker
-   & "$env:USERPROFILE\anaconda3\python.exe" -m pytest tests -q
-   ```
-   Record the pass count (expect 137+ passing, 0 failed). If the baseline is NOT green, STOP and report — do not start edits on a red baseline.
+### Phase 1 — `core/telegram_format.py` (NEW) + `tests/test_telegram_format.py` (NEW)
 
-### Stage 1 — New module core: `tests/test_woolworths_discounts.py` FIRST, then `core/woolworths_discounts.py` `[LOCAL — VS Code]`
+`[LOCAL — VS Code]` Create `grocery-price-tracker/core/telegram_format.py`. Stdlib-only (`unicodedata` allowed for width math; no new deps in `requirements.txt`). Module docstring documents the skeleton + icon table (spec §2.3–§2.4).
 
-**1a. Write the new test file first (TDD — it will fail red until 1b).** Full case list in §6.1.
+**Public API (exact signatures — spec §3):**
 
-**1b. Rewrite `core/woolworths_discounts.py`:**
-
-- Replace `HOME_BRAND_LABELS` with:
-  ```python
-  WOOLWORTHS_HOME_BRANDS = frozenset({
-      "apollo", "balnea", "baxters", "bell farms", "clean", "essentials",
-      "farmer's own"→normalized "farmers own", "help at hand", "hillview",
-      "inspire", "la gina", "la meida", "la mesita", "lantern alley",
-      "little ones", "little wishes", "lolly go round",
-      "macro wholefoods market", "market value", "plantitude", "ready chef",
-      "smiling tums", "smitten", "strength meals co", "strike", "sushi izu",
-      "the odd bunch", "thomas dux", "voeu", "woolworths bbq",
-      "woolworths cook", "woolworths", "macro",
-  })
-  ```
-  (store entries pre-normalized; 32 canonical names + the `macro` alias).
-- New constants: `WOOLWORTHS_BASE_DISCOUNT = 0.05`, `HOME_BRAND_EXTRA_DISCOUNT = 0.05`. Keep `TEAM_DISCOUNT_RATE` as a deprecated alias `= WOOLWORTHS_BASE_DISCOUNT` only if some caller still imports it after Stage 2 — otherwise delete.
-- `_normalize_brand_text(s)`: lowercase, strip punctuation/apostrophes (`Farmer's Own` → `farmers own`), collapse whitespace.
-- Reimplement **`is_woolworths_home_brand(product_name, brand)`** (same name/signature) per spec §4, in this order:
-  1. both empty → False;
-  2. normalized brand `== "home"` → True;
-  3. normalized brand `in WOOLWORTHS_HOME_BRANDS` (exact equality) → True;
-  4. normalized brand starts with `"woolworths"` → True;
-  5. brand field empty → normalized **product name starts with** a list label at a word boundary (name == label OR name startswith `label + " "`) → True;
-  6. else False.
-- New **`discounted_woolworths_price(price: float, is_home: bool) -> dict`** → `{"original", "final", "savings", "is_home"}`; `final = round(round(price*0.95, 2)*0.95, 2)` when `is_home` else `round(price*0.95, 2)`.
-- New **`format_discounted_price(price: float, is_home: bool) -> str`** — must show the discounted price prominently + the raw price + which discounts applied (e.g. `$4.51 (Home 9.75% off, was $5.00)` / `$4.75 (5% off, was $5.00)`). Exact wording finalized in this stage; tests assert the two dollar figures + a marker, NOT exact phrasing.
-- Replace **`apply_team_discount`** with **`apply_woolworths_discounts(items, store="woolworths")`**: base 5% on ALL items when store == woolworths; extra 5% (compounded) on home brands. Per-item dict: `{name, brand, original_price, discounted_price, applied, home_extra_applied, is_home}`. Non-woolworths store → unchanged prices, `applied=False, home_extra_applied=False`.
-- Update **`format_discount_report`**: base line covers ALL WW items (5% off every Woolworths price), plus a separate home-brand extra line. Extend signature with keyword defaults `home_extra_total: float = 0.0, home_brand_count: int = 0` (backward compatible). Show base total and home-extra total.
-- Monthly tracker (Section E) and `apply_extra_discount`: **byte-for-byte unchanged**.
-
-**1c. Run the new test file — must be green before Stage 2:**
-```powershell
-& "$env:USERPROFILE\anaconda3\python.exe" -m pytest tests/test_woolworths_discounts.py -q
-```
-
-### Stage 2 — `core/price_comparator.py` `[LOCAL — VS Code]`
-
-1. `ComparisonReport`: add fields `home_extra_savings: float = 0.0`, `home_brand_count: int = 0`. Redefine `team_discount_savings` = **base 5% savings summed over ALL WW items** (update docstring).
-2. `compare_basket` L184–231: call `apply_woolworths_discounts` instead of `apply_team_discount`. Compute:
-   - `team_discount_savings` = Σ(price − round(price·0.95, 2)) over all WW items;
-   - `home_extra_savings` = Σ over home items of (round(price·0.95,2) − final);
-   - `home_brand_count` = # home-brand WW items;
-   - WW final total = Σ per-item finals (round per item, then sum — spec §5);
-   - monthly extra discount still applies ON TOP of the post-discount WW total (unchanged position).
-3. `format_report`:
-   - Item table WW cell shows the **discounted** price with raw in parens (use `format_discounted_price`); when `team_discount` was OFF (report not applied) show raw only. Coles cell unchanged.
-   - **Delete the inline `* 0.95` recompute at L531** — the discount section now consumes the per-item result dicts from the new engine and shows BOTH lines (base for all WW items + home extra).
-4. Update `tests/test_comparator.py` (see §6.2), run:
-```powershell
-& "$env:USERPROFILE\anaconda3\python.exe" -m pytest tests/test_comparator.py -q
-```
-
-### Stage 3 — `core/specials_reporter.py` `[LOCAL — VS Code]`
-
-1. `get_active_specials`: resolve brand col via `_find_col(header, "Brand") or _find_col(header, "Brand_Type") or 6`; add `"brand"` to each result dict.
-2. `format_specials_report`: for rows with `store == "woolworths"` and a parseable price, display the discounted price (home extra when `is_woolworths_home_brand(name, brand)`); Coles rows raw. Keep top-25 cap.
-3. `get_bonus_rewards`: record which store's price column supplied the parsed price → add `"store"` and `"brand"` to each result dict.
-4. Update the reporter tests in `test_comparator.py` (§6.2); re-run that file.
-
-### Stage 4 — `core/sheets_sync.py` — `add_product_row` ONLY `[LOCAL — VS Code]`
-
-At L745 replace `new_row[6] = brand` with:
 ```python
-from core.woolworths_discounts import is_woolworths_home_brand  # (module top or local import)
-new_row[6] = "Home" if is_woolworths_home_brand(generic_name, brand) else brand
+MAX_NAME_WIDTH = 24    # product-name column budget
+MAX_BLOCK_WIDTH = 34   # fenced-table visible width budget
+
+def header(title: str, icon: str) -> str
+    # "🛒 BASKET COMPARISON\n" + "━" * 20   (title uppercased by the function)
+
+def subheader(title: str, icon: str | None = None) -> str
+    # light divider block: "─" * 10 label line (icon optional)
+
+def divider(char: str = "─", width: int = 10) -> str
+
+def fenced_table(headers: list[str], rows: list[list[str]],
+                 box: bool = False) -> str
+    # Triple-backtick fence. Columns padded with spaces so EVERY content
+    # line has identical character length. box=True draws ╔═╗/║/╚╝ borders
+    # (used by the compare TOTALS block, spec §5.1). Left-align text
+    # columns, right-align money columns. Truncate over-wide cells with …;
+    # total visible width ≤ MAX_BLOCK_WIDTH. Empty rows list → fence with
+    # just headers; empty headers → ValueError (fail fast).
+
+def item_block(index: int, name: str, prices: list[str],
+               home_brand: bool = False) -> str
+    # "2. Full Cream Milk 2L  🏠" + indented store lines (prices are
+    # pre-rendered store_line() strings). Name truncated to
+    # MAX_NAME_WIDTH. home_brand appends "  🏠".
+
+def store_line(store: str, price: str, was: str | None = None) -> str
+    # "🟢 Woolworths  $2.47 (was $2.90)" / "🔴 Coles       $3.50".
+    # Store label padded so the price column aligns across stores
+    # (emoji counted as 2 cells). store accepts "woolworths"/"coles"
+    # (case-insensitive); unknown store → no icon, label as-given.
+
+def kv(label: str, value: str) -> str          # "label · value"
+
+def money(n) -> str
+    # 4.0 → "$4.00" · 0 → "$0.00" · None → "—" · negative → "−$x.xx"
+    # (U+2212 minus, matching spec §5.1 "−$1.65")
+
+def warn(text: str) -> str    # "⚠️ {text}"
+def ok(text: str) -> str      # "✅ {text}"
+def fail(text: str) -> str    # "❌ {text}"
+
+def tail(winner: str, savings: float, vs: str | None = None) -> str
+    # "🏆 Cheapest: Woolworths — you save $2.35" (+ " (vs Coles)" when vs)
+
+def footer(ts=None) -> str    # "⏱️ 2026-08-28 14:05" (ts defaults to now)
+
+def truncate(s: str, width: int) -> str       # "…"-ellipsis, never > width
 ```
-**No other write-path changes.** `sync_prices` / `update_single_price` / `mark_not_available` / `set_store_keyword` untouched. Price cells stay raw. Update `tests/test_sheets_sync.py` (§6.3); run it.
 
-### Stage 5 — `grocery_price_cli.py` (main repo) + `core/lookup.py` `__main__` `[LOCAL — VS Code]`
+Design notes for the coding model:
+- All width math treats emoji as 2 cells (document a `_cells()` helper; tests may reuse it).
+- No function may emit `"|---"` or a pipe-table header — enforced by tests (§5).
 
-All edits display-only; shared logic comes from `core.woolworths_discounts` helpers — no duplicated math.
+**`[LOCAL — VS Code]`** Then write `grocery-price-tracker/tests/test_telegram_format.py` (unittest style matching the existing suite) covering every function per the mandatory test matrix in §5.1. TDD: write tests first or together — either way both land in the same commit unit.
 
-1. **`_format_prices(prices, brand="")`** — gains brand param. When `"woolworths" in prices` and a WW discount context applies: show discounted WW (+raw); home extra when `is_woolworths_home_brand("", brand)`… careful: use the name/brand pair available at the call site — pass the product name too where known (signature: `_format_prices(prices, brand="", name="")`). Update call sites: `_map_unmatched_item` (L1315/1321/1356 — `result.brand`), `_resolve_and_print_unmatched` (L1657/1665).
-2. **Live-item print loops** (L1359–1362 in `_map_unmatched_item`, L1666–1668 in `_resolve_and_print_unmatched`, L1700–1702 in `_resolve_and_print_store`, `_map_store_item` L1455–1457): each WW line uses the item's OWN `item.brand` → discounted price + raw.
-3. **`_cmd_search`**: each WW row discounted via `format_discounted_price(item.price, is_home(item.raw_name, item.brand))`; **cheapest-store calc uses discounted WW values** vs raw Coles. Coles rows unchanged.
-4. **`_cmd_specials` Mode A** (L464–485): live saved-list rows discounted per item brand.
-5. **`_cmd_specials_scan`**: WW sale prices discounted (5% + home extra via each item's brand). "Regular/Was" column and store savings-% stay as-is.
-6. **`_cmd_wednesday` Step 8** (L1116–1131): display-only discount on the specials table. Docx items carry no brand ⇒ use the product-name fallback `is_woolworths_home_brand(item["name"], "")` (leading-label match); base 5% for everything else.
-7. **`_cmd_rewards`**: discount the price cell ONLY when `r.get("store") == "woolworths"` (price attributable to Col D), using `r.get("brand")`; other rows raw.
-8. **New subcommand `backfill-home-brands [--dry-run] [--overwrite]`** — patterned exactly on `_cmd_backfill_keywords` (L2006–2074), registered in `build_parser`:
-   - Read sheet once; per row: brand cell = Col G (`_find_col(header, "Brand") or _find_col(header, "Brand_Type") or 6`).
-   - Candidate when: (Col G empty AND leading Col A name matches §3 list) OR (Col G non-empty AND its value matches the list) OR Col G already `Home` (skip — idempotent).
-   - `--overwrite`: ALSO rewrite rows whose Col G is non-empty and non-matching when the leading Col A name matches (trust the name over the brand cell). Without it, non-empty non-matching cells are skipped (spec §9 default).
-   - `--dry-run`: print the planned-writes table (Row | Col A | Current Col G | Proposed). Live: ONE `ws.batch_update([{"range": f"G{row}", "values": [["Home"]]}, …])`.
-9. **`core/lookup.py` `__main__`** (L674–679): route the `Prices:` line through the same shared formatting (discount WW entry using `result.brand`). No chain-logic changes.
-10. Update `tests/test_cli.py` (§6.4); check `tests/test_lookup.py` — expected NO changes (no price-string assertions); only touch if an assertion actually breaks.
+**Verify (Phase 1):**
+```powershell
+[LOCAL — PowerShell]  cwd: grocery-price-tracker
+$env:PYTHONIOENCODING="utf-8"; & "$env:USERPROFILE\anaconda3\python.exe" -m pytest tests/test_telegram_format.py -q
+```
+Expected: all new tests pass, 0 errors.
 
-### Stage 6 — Documentation `[LOCAL — VS Code]`
+### Phase 2 — Core formatter swaps (grocery tracker)
 
-1. **`claw-skills/grocery-price/SKILL.md`** (main repo): add a short "Woolworths discounts (always on)" section — displayed WW prices include 5% (+ extra 5% home brands ≈9.75% compounded); sheet always stores raw; new home-brand rows get Col G `Home`; `--no-team-discount` shows raw. Update the `compare` row note (default ON) and the `backfill-home-brands` subcommand row in the intent table.
-2. **`grocery-price-tracker/README.md`**: new subsection under Grocery Price Tracker describing the feature; update the Col G row in the schema table (literal `Home` for home brands); add `test_woolworths_discounts.py` + updated counts to the tests table.
+**2a. `core/price_comparator.py` — `format_report()` (lines 497–620).**
+Signature and `ComparisonReport` unchanged. New output exactly per spec §5.1:
 
-### Stage 7 — Full local verification `[LOCAL — PowerShell]` (one command at a time)
+```
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. Green Capsicum
+   🟢 Woolworths  $2.47 (was $2.90)
+   🔴 Coles       $3.50
+
+2. Full Cream Milk 2L  🏠
+   🟢 Woolworths  $3.32 (was $3.68)
+   🔴 Coles       $3.40
+
+📊 TOTALS
+```
+followed by the fenced box table (`fenced_table(..., box=True)`; columns Store / Raw / Final; `—` when a store has no price), then:
+
+```
+🏆 Cheapest: Woolworths — you save $2.35
+🏷️ WW discounts: −$1.65 (5% all + 🏠 home extra)
+⚠️ 1 item missing at Coles
+```
+
+Rules carried from spec §5.1: top-25 cap unchanged, overflow renders `… +N more items`; the discounts sub-block (from `format_discount_report`) lists ONLY home-brand and extra-discount lines — base 5% is summarised in the 🏷️ tail line (compose the tail from `report.team_discount_savings + report.home_extra_savings + report.extra_discount_savings`); empty basket keeps a friendly "No items provided." line under the header; warnings become `warn()` lines; existing `**Cheapest store:**`/`**Max savings:**` markdown lines are replaced by `tail()`. Keep the two `from core.woolworths_discounts import …` local imports as-is (no import cycles; `telegram_format` imports nothing from siblings).
+
+**2b. `core/woolworths_discounts.py` — `format_discount_report()` (lines 409–495).**
+Signature unchanged. New output:
+- `🏷️ HOME BRAND EXTRA` subheader; per home-brand item a `was/now` line (`name · $3.80 → $3.61` using `kv`-style or `→` arrow); total line `💰 Home extra: $0.19`.
+- Extra discount line when applicable: `🏷️ Extra 10% · save $0.36`; the "not applied (already used this month)" branch keeps its meaning via `warn()`.
+- Base 5%: NO per-item lines (dropped — that is the compaction); a single summary line `🏷️ 5% off all WW items · save $X` is emitted ONLY when the function is called standalone (i.e., when not being embedded — add keyword-only param `compact: bool = False`; `format_report` passes `compact=True` so the base line is omitted there because its tail already summarises it). When nothing applied: `No discounts applied.` (unchanged text, no pipe tables).
+- `format_discounted_price()` and `discounted_woolworths_price()` untouched (spec §4.1).
+
+**2c. `core/specials_reporter.py` — `format_specials_report()` (lines 217–265) + `__main__` rewards block (lines 289–296).**
+New output per spec §5.3:
+```
+🏷️ SPECIALS — WOOLWORTHS
+━━━━━━━━━━━━━━━━━━━━
+1. Coke 24-pack
+   $19.00  (was $24.50 · save $5.50)
+…
+📊 12 active specials
+```
+Item price strings still come from `format_discounted_price()` for WW rows (keeps `(5% off, was $x)` / `(Home 9.75% off, was $x)` — spec §9-approved bracket form) and raw `$x.xx` for Coles; `special_desc` rides along via `·` separators. Top-25 cap + `… +N more specials` line. The `__main__` rewards block becomes `✅ name · rewards` lines under a `💰 BONUS REWARDS` subheader with a count line.
+
+**Verify (Phase 2):**
+```powershell
+[LOCAL — PowerShell]  cwd: grocery-price-tracker
+$env:PYTHONIOENCODING="utf-8"; & "$env:USERPROFILE\anaconda3\python.exe" -m pytest tests -q
+```
+Expected: failures ONLY in the three test spots listed in §5.2 (update them in Phase 2, not later) — then full green.
+
+### Phase 3 — `grocery_price_cli.py` (prints only — zero flag/arg changes)
+
+`[LOCAL — VS Code]` Add near the existing bootstrap (after line 17):
+```python
+from core.telegram_format import (header, subheader, fenced_table,
+    item_block, store_line, kv, money, warn, ok, fail, tail, truncate)
+```
+Restyle every stdout surface that currently prints pipe tables or bare markdown (line numbers are current; re-grep before editing):
+
+| Function | Lines (approx) | New form |
+|---|---|---|
+| `_cmd_unmapped` | 170–182 | 📋 header + list-style rows (name/category per line), `… +N more items` |
+| `_cmd_analyze` | 212–272 | 📊 header + fenced category-count table + list-style product rows |
+| `_cmd_rewards` | 306–329 | 💰 header + `name · rewards · price` list lines, WW prices via `format_discounted_price` (unchanged logic) |
+| `_cmd_recipe` | 407 | `🧾 RECIPE — <NAME>` header + divider, then the compare report |
+| `_cmd_search` | 441–488 | spec §5.2: `🔍 <PRODUCT> — LIVE PRICES` header; numbered items `name` + `🟢 Woolworths  $x  🏷️ was $y` / `🔴 Coles  $x`; `🏆 Cheapest: …` tail; `❌ No results found` empty case |
+| `_cmd_specials` (saved-list block) | 515–524 | 🏷️ subheader + list lines (no pipe table) |
+| `_cmd_sync` | 532–607 | 🔄 header + ✅/❌ per-store status lines + 📊 fenced counts block + 📋 unmatched summary (spec §5.5) |
+| `_cmd_specials_scan` | 615–708 | 🏷️ header + list-style discount rows (regular/sale/save%/store per line) |
+| `_cmd_wednesday` | 887–940 | 📅 header + status lines; embedded `format_specials_report`/`format_report` text now arrives pre-styled from Phase 2 — relay, do not re-wrap |
+| `_cmd_map` / `_cmd_map_noninteractive` | 1661–2140 | numbered candidates list-style (name + score per line); the SKILL.md action-prompt line is prefixed `✳️` and otherwise UNCHANGED; ✅ confirmations for pick/add/skip/na/forget |
+| `_cmd_backfill_keywords` | 2179–2189 | 📋 header + list lines (row · product · existing → proposed) |
+| `_cmd_backfill_home_brands` | 2282–2293 | 📋 header + list lines; `[DRY RUN]` marker preserved as a `warn()` line |
+
+Hard constraints: no subcommand names/flags/exit-code changes; `EM_DASH`/`WARN`/`ARROW` module constants may stay (still used); every removed `|---` string must be gone from the file afterwards (verify with grep, §6).
+
+**Verify (Phase 3):**
+```powershell
+[LOCAL — PowerShell]  cwd: grocery-price-tracker
+$env:PYTHONIOENCODING="utf-8"; & "$env:USERPROFILE\anaconda3\python.exe" -m pytest tests -q
+& "$env:USERPROFILE\anaconda3\python.exe" -m py_compile ..\grocery_price_cli.py
+```
+
+### Phase 4 — Gateway scripts (output strings only)
+
+**4a. `telegram_gateway/wednesday_reminder.py`** — replace only `REMINDER_TEXT` (lines 68–76): `📅 WEDNESDAY GROCERY SYNC` + `━` divider + short numbered steps (copy lists → save docs → run the command) + closing line. Plain text, NO markdown, NO kit import (self-containment for the sparse VPS checkout — locked decision #10). `send_message()` stays plain (no `parse_mode`).
+
+**4b. `telegram_gateway/budget_sheets.py`** — restyle stdout strings only: `summary` → `💰 BUDGET SUMMARY` + `━` divider + `kv`-style lines (keep the aligned values); `woolies` → `💰 WOOLIES PAY SUMMARY` same shape; `update` confirm `OK: field = value` → `✅ field · value`. Since this script is also deployed beyond the tracker folder, hardcode the small vocabulary (header line + divider + `·`) rather than importing the kit — 5 lines, zero coupling. The `__doc__` usage prints (lines 244–249) stay as-is.
+
+**Verify (Phase 4):**
+```powershell
+[LOCAL — PowerShell]  cwd: AI related
+& "$env:USERPROFILE\anaconda3\python.exe" -m py_compile telegram_gateway\wednesday_reminder.py telegram_gateway\budget_sheets.py
+```
+
+### Phase 5 — Sibling claw tools (stdout formatting only)
+
+Pattern for each: add the 3-line bootstrap (file-relative, mirrors `grocery_price_cli.py` lines 14–17):
+```python
+from pathlib import Path
+_TRACKER = Path(__file__).resolve().parent.parent / "grocery-price-tracker"
+if str(_TRACKER) not in sys.path:
+    sys.path.insert(0, str(_TRACKER))
+```
+Works locally (`AI related/`) and on the VPS (`/app/tasks/ai-tools/`) because the tracker folder is a sibling in both layouts.
+
+| Tool file | New stdout form |
+|---|---|
+| `openrouter model costs/claude_pricing.py` | 🤖 CLAUDE PRICING header + fenced table (Model ≤24 chars / In $/M / Out $/M). Keep `MAX_ROWS`, sort order, and the `.txt` file write as-is — restyle ONLY the stdout block (lines 66–70) |
+| `openrouter model costs/gpt_pricing.py` | same pattern |
+| `openrouter model costs/Openroutervideo.py` | same (video models) |
+| `openrouter model costs/Discount_github.py` | 🏷️ list-style discount rows |
+| `openrouter model costs/free_api.py` | 🤖 list-style free-model rows |
+| `openrouter_usage/Code_for_usage.py` | 📊 header + fenced usage table |
+| `daily-models-digest/daily_digest.py` | 📅 digest cards (per-model sub-blocks, kit skeleton) |
+| `Credit_Card_Tracking/category.py` | 💰 category lines (kv style) |
+
+web-scrape / sketchnote / image-studio: no tabular stdout → no code changes (spec §4.2 "light touch" applies only if they print prose summaries — verified: they do not print tables; leave them).
+
+**Verify (Phase 5):**
+```powershell
+[LOCAL — PowerShell]  cwd: AI related
+& "$env:USERPROFILE\anaconda3\python.exe" -m py_compile "openrouter model costs\claude_pricing.py" "openrouter model costs\gpt_pricing.py" "openrouter model costs\Openroutervideo.py" "openrouter model costs\Discount_github.py" "openrouter model costs\free_api.py" openrouter_usage\Code_for_usage.py daily-models-digest\daily_digest.py Credit_Card_Tracking\category.py
+```
+(Network runs are NOT required for these — API-key live checks are best-effort and never block the phase.)
+
+### Phase 6 — SKILL.md relay rules (all `claw-skills/*/SKILL.md`)
+
+Replace every instruction of the form *"return the Markdown table the script prints"* with the spec §4.4 block:
+
+> The CLI output is **already Telegram-formatted**. Relay it **verbatim**. Never re-wrap it in your own tables, never reformat, never add markdown tables of your own.
+
+- `claw-skills/grocery-price/SKILL.md` is the critical edit: line 66 ("Run the command and return the Markdown table the script prints") and the §Output section (line 142: "Markdown tables to stdout (top-25 cap). Return the table in chat.") both get the relay rule.
+- The other skills (budget-sheets, claude-pricing, daily-digest, discounts, expenses-summary, expenses-view, free-models, gpt-pricing, image-studio, openrouter-usage, sheet-analyst, sketchnote, video-pricing, web-scrape) get the same rule wherever they describe output. SKILL.md internal *documentation* tables (subcommand reference, env tables — e.g. grocery-price lines 31–44, 128–137) are read by the agent, not relayed to Telegram — leave them.
+- No run-command, env, or routing changes.
+
+### Phase 7 — README
+
+`grocery-price-tracker/README.md`: the §"Telegram message formatting (all skills)" section (line 435) already announces the kit — update it to match the shipped API (one usage example of `header`/`fenced_table`), and make sure the archived-spec reference (`architecture-spec-woolworths-discounts.md`, referenced at line 352) resolves: if the file is absent, fix the reference to point to the current `architecture-spec.md` history note (do not fabricate archive content). No other README sections.
+
+### Phase 8 — Full local verification (MANDATORY — no step may be skipped)
 
 ```powershell
-& "$env:USERPROFILE\anaconda3\python.exe" -m py_compile grocery_price_cli.py grocery-price-tracker\core\woolworths_discounts.py grocery-price-tracker\core\price_comparator.py grocery-price-tracker\core\specials_reporter.py grocery-price-tracker\core\sheets_sync.py grocery-price-tracker\core\lookup.py
-```
-```powershell
-[workdir: grocery-price-tracker]
-& "$env:USERPROFILE\anaconda3\python.exe" -m pytest tests -q
-```
-**Gate: FULL suite green — 0 failed, 0 errors. This gate is pass/fail for the whole task.**
+[LOCAL — PowerShell]  cwd: grocery-price-tracker
+# 8.1 Full suite (199 existing, updated where §5.2 says so, + new file):
+$env:PYTHONIOENCODING="utf-8"; & "$env:USERPROFILE\anaconda3\python.exe" -m pytest tests -q
+# Expected: ALL PASS, 0 failed, 0 errors. Skips allowed only where already skipped pre-change (compare skip counts to baseline).
 
-Optional sheet-mode smoke (uses local parent `.env`; never print secrets):
-```powershell
-[workdir: grocery-price-tracker]
-& "$env:USERPROFILE\anaconda3\python.exe" ..\grocery_price_cli.py compare --items "milk" --mode sheet
-```
-Expect WW column discounted + raw in parens; Coles raw.
+# 8.2 Pipe-table ban grep (source):
+# (use the Grep tool, pattern: `\|---|\| # \|`, include *.py over the whole AI related workspace)
+# Expected: ZERO matches in any code path that prints to stdout.
+# (SKILL.md documentation tables are excluded — restrict include to *.py.)
 
-### Stage 8 — Deploy `[MANUAL — flagged: git, scp, container lifecycle]`
-
-**Kilo must NOT run git/scp/ssh/docker.** Present these to the user ONE AT A TIME and wait for each output. No secrets appear in any of these files — verify diffs before committing.
-
-**8.1 Git — tracker repo (USER, `[LOCAL — PowerShell]`):**
-```powershell
-cd "C:\Users\User.DESKTOP-R2G441H\Documents\AI related\grocery-price-tracker"
-git status   # confirm ONLY: core/{woolworths_discounts,price_comparator,specials_reporter,sheets_sync,lookup}.py, tests/, README.md, implementation-plan.md
-git add core/woolworths_discounts.py core/price_comparator.py core/specials_reporter.py core/sheets_sync.py core/lookup.py tests/ README.md
-git commit -m "feat(discounts): always-on WW display discounts (5% + 5% home-brand) + Home brand classification"
-git push
+# 8.3 Smoke (needs .env + network; 10–30 s each, documented workflow):
+$env:PYTHONIOENCODING="utf-8"; & "$env:USERPROFILE\anaconda3\python.exe" ..\grocery_price_cli.py compare --items "green capsicum"
+$env:PYTHONIOENCODING="utf-8"; & "$env:USERPROFILE\anaconda3\python.exe" ..\grocery_price_cli.py specials
+$env:PYTHONIOENCODING="utf-8"; & "$env:USERPROFILE\anaconda3\python.exe" ..\grocery_price_cli.py search --product "green capsicum"
+# Eyeball: header+divider, item blocks with 🟢/🔴 lines, fenced totals aligned, 🏆 tail. No pipes anywhere.
 ```
 
-**8.2 Git — main repo (USER, `[LOCAL — PowerShell]`):**
-```powershell
-cd "C:\Users\User.DESKTOP-R2G441H\Documents\AI related"
-git status   # confirm ONLY: grocery_price_cli.py, claw-skills/grocery-price/SKILL.md
-git add grocery_price_cli.py claw-skills/grocery-price/SKILL.md
-git commit -m "feat(grocery): display-time WW discounts on all price surfaces + backfill-home-brands"
-git push origin master
-```
+### Phase 9 — MANUAL deployment & faithful Telegram test (User)
 
-**8.3 scp BOTH roots to the VPS (USER, `[VPS — SSH]` from workspace root, one command at a time):**
-```
-scp grocery_price_cli.py ubuntu@169.58.107.0:/home/ubuntu/openclaw/tasks/ai-tools/
-scp grocery-price-tracker/core/woolworths_discounts.py grocery-price-tracker/core/price_comparator.py grocery-price-tracker/core/specials_reporter.py grocery-price-tracker/core/sheets_sync.py grocery-price-tracker/core/lookup.py ubuntu@169.58.107.0:/home/ubuntu/openclaw/tasks/ai-tools/grocery-price-tracker/core/
-scp grocery-price-tracker/tests/test_woolworths_discounts.py ubuntu@169.58.107.0:/home/ubuntu/openclaw/tasks/ai-tools/grocery-price-tracker/tests/
-scp claw-skills/grocery-price/SKILL.md ubuntu@169.58.107.0:/home/ubuntu/openclaw/tasks/ai-tools/claw-skills/grocery-price/
-```
+Present these one at a time:
 
-**8.4 Container restart (USER, `[VPS — SSH]`) — container lifecycle action:**
-```
-sudo docker restart openclaw-core
-sudo docker ps | grep openclaw-core    # confirm Up
-```
-
-### Stage 9 — Post-deploy verification `[MANUAL]`
-
-1. **Telegram test query (USER, `[Telegram — DM]` to `@ClawArkindBot`):** *"Compare prices for milk between Woolworths and Coles"* — Claw's reply must show the WW price discounted (with raw visible) and Coles raw. Also run one specials query.
-2. **Backfill dry-run → review → live (USER, `[VPS — container]`):**
+1. **[LOCAL — PowerShell] MANUAL — commit nested repo** (`grocery-price-tracker/`): stage `core/telegram_format.py`, `core/price_comparator.py`, `core/woolworths_discounts.py`, `core/specials_reporter.py`, `tests/test_telegram_format.py`, updated test files, `README.md`, `implementation-plan.md`. Suggested message: `Add Telegram Style Kit; replace markdown tables with list + fenced blocks (display-only)`.
+2. **[LOCAL — PowerShell] MANUAL — commit main repo** (`AI related/`): stage `grocery_price_cli.py`, `telegram_gateway/wednesday_reminder.py`, `telegram_gateway/budget_sheets.py`, the Phase-5 tool files, `claw-skills/*/SKILL.md`. Same message style. (Reminder: review `git diff --staged` for secrets first — standard rule.)
+3. **[LOCAL — PowerShell] MANUAL — push both repos to GitHub** (backup; NOT the VPS deploy path): `git push origin main` in each repo. If push is rejected (remote ahead), stop and surface the divergence — do not force-push.
+4. **[LOCAL — PowerShell] MANUAL — sync to VPS (scp/tar — NEVER `git pull`/`git clone` on the VPS: its `master` checkout has diverged and the container bind-mounts the working tree, README lines 550–551, 570–571).**
+   - Tracker folder — documented tar bulk sync (excludes data/secrets/cache):
+     ```powershell
+     tar -czf "$env:TEMP\kilo\sync.tar.gz" --exclude="data" --exclude=".git" --exclude="*__pycache__*" --exclude="credentials.json" .
+     scp "$env:TEMP\kilo\sync.tar.gz" myvps:/tmp/sync.tar.gz
+     ssh myvps 'cd /home/ubuntu/openclaw/tasks/ai-tools/grocery-price-tracker && tar -xzf /tmp/sync.tar.gz && rm /tmp/sync.tar.gz'
+     ```
+     (run the tar from inside `grocery-price-tracker/`)
+   - Parent-level files (live at `ai-tools/` root on the VPS) — one scp per file:
+     `grocery_price_cli.py`, `telegram_gateway/wednesday_reminder.py`, `telegram_gateway/budget_sheets.py`, `openrouter model costs/*.py` (5 files), `openrouter_usage/Code_for_usage.py`, `daily-models-digest/daily_digest.py`, `Credit_Card_Tracking/category.py`, every touched `claw-skills/*/SKILL.md` → `myvps:/home/ubuntu/openclaw/tasks/ai-tools/<same relative path>`
+   - Reminder cron copy (outside the repo checkout):
+     `scp telegram_gateway\wednesday_reminder.py myvps:/home/ubuntu/scripts/wednesday_reminder.py`
+   - Verify at least the kit landed intact (documented md5 check):
+     ```powershell
+     Get-FileHash core\telegram_format.py -Algorithm MD5
+     ssh myvps 'md5sum /home/ubuntu/openclaw/tasks/ai-tools/grocery-price-tracker/core/telegram_format.py'
+     ```
+5. **[VPS — SSH] MANUAL — restart container (REQUIRED this deploy):** SKILL.md instructions are read at agent startup, so the 14+ changed SKILL.md files need a restart (Python files alone would not). Documented form:
+   ```bash
+   ssh myvps 'docker restart openclaw-core; sleep 30; docker ps --format "{{.Names}} {{.Status}}"'
    ```
-   sudo docker exec -w /app/tasks/ai-tools openclaw-core python3 grocery_price_cli.py backfill-home-brands --dry-run
+   Confirm the container reports `Up` before continuing.
+6. **[VPS — container] MANUAL — faithful Telegram test** (spec §7.5; PowerShell 5.1 mangles nested quotes — use the ssh single-quote wrapper form):
+   ```bash
+   ssh myvps 'docker exec openclaw-core node /app/openclaw.mjs agent --channel telegram --to 1594431983 --message "compare green capsicum in woolworths and coles" --deliver'
    ```
-   User reviews the planned writes, then re-runs WITHOUT `--dry-run` (add `--overwrite` only if the name-vs-brand-cell override is wanted).
+   **[Telegram — DM] MANUAL** — confirm on the phone: item blocks aligned, totals box monospace-aligned, 🏆 tail present, no raw pipes, layout survives any gateway markdown-stripping. Optionally repeat with a `specials` query.
+7. **Optional MANUAL — reminder test:** `ssh myvps 'python3 /home/ubuntu/scripts/wednesday_reminder.py --test'` (sends a real DM + topic post; state file is NOT advanced by `--test`). Otherwise the next Wednesday 05:00 Sydney cron exercises it.
 
 ---
 
-## 4. Files NOT to touch (regression guard)
+## 3. Format contracts (canonical examples — coding model must match shapes)
 
-- `grocery-price-tracker/extractors/**` — **especially `coles_extractor.py:58` (R-S1, permanently closed)**
-- `core/name_matcher.py`, `core/recipe_resolver.py`, `core/schema_upgrade.py`, `core/missing_items_tracker.py`, `core/sheet_analyst.py`, `core/sheets_client.py`
-- `telegram_gateway/**`, `app.py`, `local_sync.py`, `name_importer.py`, `Woolworths_Historical.py`
-- Monthly tracker code (Section E of `woolworths_discounts.py`) and `data/woolworths_discount_usage.json`
-- All other claw-skills, `ai-studio/`
-
-## 5. Final `git status` expectation (Stage 8 gates)
-
-- Tracker repo: only the §8.1 list. Main repo: only the §8.2 list. Anything else modified ⇒ STOP and revert the stray change.
-
----
-
-## 6. MANDATORY TEST PLAN — no test may be skipped, filtered away, or marked xfail/skip by the coding agent
-
-**Rules:** (a) full suite must run and pass (`0 failed, 0 errors`) at Stage 7 — no `-k` filtering to dodge failures; (b) every case below must exist and assert concrete values; (c) use the safe numeric fixtures given (they avoid float half-cent boundaries); (d) TDD: `test_woolworths_discounts.py` is written BEFORE the module rewrite.
-
-### 6.1 NEW `tests/test_woolworths_discounts.py` (unittest, mirrors existing FakeWorksheet/mock conventions)
-
-**Detection — positives (all 32 labels via the brand field, exact equality):**
-1. `test_all_32_brand_labels_match` — parametrised loop over the canonical list (incl. `"Farmer's Own"`, `"La Meida"`, `"La Mesita"`, `"Macro Wholefoods Market"`, `"Woolworths BBQ"`, `"Woolworths Cook"`, plain `"Woolworths"`, `"The Odd Bunch"`) asserting `is_woolworths_home_brand("anything", label)` is True.
-2. `test_home_marker_matches` — brand `"Home"` → True.
-3. `test_woolworths_prefix_variants` — `"Woolworths"`, `"woolworths bbq"`, `"WOOLWORTHS COOK"` → True.
-4. `test_macro_short_alias` — brand `"Macro"` → True.
-5. `test_normalization_apostrophe_whitespace` — `"  Farmer's   OWN "` → True; `"macro wholefoods  market"` → True.
-6. `test_name_fallback_leading_label` — brand empty: `"Macro Rolled Oats 1kg"` → True; `"The Odd Bunch Apples"` → True.
-7. `test_name_fallback_word_boundary` — `"Essentials"` alone → True; `"Coles Milk"` with brand `""` → False.
-
-**Detection — negatives:**
-8. `test_golden_circle_is_not_home_brand` — name `"Golden Circle Pineapple"`, brand `"Golden Circle"` → False (gold dropped).
-9. `test_mr_clean_not_home_brand` — `"Mr Clean Magic Eraser"`, brand `"Mr Clean"` → False.
-10. `test_mid_name_occurrence_no_match` — brand empty, name `"Juice Gold Blend"` → False; name `"Dairy Farmers Bell Farms Yogurt"` (label mid-name, brand empty) → False — leading position only.
-11. `test_coles_and_third_party_brands` — `"Coles"`, `"Bega"`, `"Oatly"` → False.
-12. `test_empty_inputs` — `("", "")` → False.
-13. `test_brand_field_beats_name` — name `"Woolworths Milk"`, brand `"Bega"` → False (non-empty non-matching brand disables name fallback).
-
-**Math:**
-14. `test_regular_item_base_5pct` — `discounted_woolworths_price(5.00, False)` → final 4.75, savings 0.25.
-15. `test_home_brand_compounding` — `discounted_woolworths_price(5.00, True)` → **final 4.51** (per §5 formula — see §1 discrepancy note), savings 0.49.
-16. `test_home_brand_safe_value` — `(8.00, True)` → 7.60 → final **7.22**.
-17. `test_round_per_item_then_sum` — items 5.00 + 8.00 home, 4.00 regular → per-item finals 4.51 + 7.22 + 3.80 = **15.53** (sum of rounded per-item values, not round of the sum).
-18. `test_format_discounted_price_shows_both_prices` — output for `(5.00, True)` contains `"4.51"` and `"5.00"` and a home marker; `(4.00, False)` contains `"3.80"` and `"4.00"` (no exact-phrasing lock).
-
-**apply_woolworths_discounts:**
-19. `test_base_applies_to_all_ww_items` — mixed basket: every WW item discounted ≥5%; per-item `applied=True` for all, `home_extra_applied=True` only for home.
-20. `test_non_woolworths_store_noop` — `store="coles"` → prices unchanged, all flags False.
-21. `test_object_and_dict_inputs` — duck-typed ProductItem objects AND plain dicts both work (mirror old `apply_team_discount` contract).
-
-**Tracker regression guard:**
-22. `test_monthly_tracker_unchanged` — `can_use_monthly_discount` / `mark_monthly_discount_used` / `monthly_discount_summary` still behave as in `test_monthly_tracker_can_use_then_block` (temp-file patch).
-
-### 6.2 UPDATE `tests/test_comparator.py`
-
-- **Rewrite** `test_team_discount_only_on_home_brands` → `test_base_discount_all_items_plus_home_extra`: fixtures priced **$4.00** (brand `Woolworths`, home) and **$5.00** (brand `Bega`): base savings 0.20 + 0.25 = **0.45**; home-extra 3.80→3.61 = **0.19**; `home_brand_count == 1`; WW final total **3.61 + 4.75 = 7.36**; Coles raw.
-- `test_team_discount_toggle_off` — expectations unchanged (raw 3.00 / no flags) but assert `home_extra_savings == 0.0` too.
-- **Rewrite** `test_is_woolworths_home_brand_labels` (L308–333): `"Gold Coffee"`/`""` → now **False**; `"Free From Bread"` → now **False** (labels dropped — spec §3); keep True cases: Woolworths brand, `Macro Free Range Eggs` (leading name), `"The Odd Bunch"` brand; `Bega`/empty stay False.
-- `test_format_report_contains_discount_lines` — assert BOTH lines (base-5%-all-items line + home-extra line) and that the WW item cell shows the discounted value with the raw price visible; cheapest store still computed on finals.
-- Extra-discount tests (L220–285): expectations still hold (10% on post-discount WW total) — recompute: fixture `$3.00` no-brand → base 2.85 → extra 10% of 2.85 = 0.285 → round 0.29… **avoid** the half-cent trap: change fixture price to `$4.00` → base 3.80 → extra savings 0.38; assert accordingly.
-- Reporter tests (L423–455): add brand to fixtures; WW row price shows discounted value; `get_bonus_rewards` dicts now carry `store` + `brand`.
-
-### 6.3 UPDATE `tests/test_sheets_sync.py`
-
-- `test_add_product_row_appends_correctly` — `TestBrand` is NOT a home brand ⇒ Col G stays `"TestBrand"` (unchanged) AND add: price cell raw (3.50).
-- **NEW** `test_add_product_row_writes_home_literal` — `brand="Macro Wholefoods Market"` (or `"Woolworths"`) ⇒ Col G == `"Home"`; price cell still raw.
-- **NEW** `test_add_product_row_home_via_name_fallback` — `brand=""`, `generic_name="Essentials Milk 2L"` ⇒ Col G == `"Home"`.
-- Dry-run + validation tests: no changes expected — verify they still pass.
-
-### 6.4 UPDATE `tests/test_cli.py`
-
-- `test_search_with_results_cheapest` (+specials variant): WW rows show discounted price (+raw); **cheapest computed on discounted WW** — construct a case where discounting flips the cheapest store (e.g. WW 3.00 home-brand vs Coles 2.90 → WW final 2.70 wins); Coles assertions unchanged.
-- `test_search_woolworths_exception_fallback` — degradation path unaffected.
-- `test_rewards_empty_column_o` + populated-rewards test: price shown discounted only when the reward's store == woolworths; otherwise raw.
-- `test_compare_sheet_mode_cheapest_store` — mock `compare_basket`/`format_report` are patched ⇒ likely unaffected; verify, adjust only if report-field names changed.
-- **NEW** `test_backfill_home_brands_dry_run_and_write` — FakeWorksheet + patched `connect_worksheet`: dry-run plans only matching rows (empty-G name match OR matching-G value; skips `Home` idempotent; skips non-matching non-empty G by default; `--overwrite` applies name-match override); live mode issues ONE `batch_update` of G-cells with `Home`.
-- **NEW** `test_wednesday_step8_discounts_display` (light): patch `_extract_woolworths_specials` + `_send_telegram`; assert the specials table lines contain discounted values (name-fallback brands get 9.75%).
-
-### 6.5 `tests/test_lookup.py`
-
-Expected NO changes (no price-string assertions exist — verified). Run and confirm green; only touch if an assertion actually breaks, and record why.
-
-### 6.6 Suite-level gate
+Compare/recipe totals box (fenced, `box=True` — every line the same character length; store column left-aligned, money right-aligned):
 
 ```
-pytest tests -q  →  0 failed, 0 errors, 0 skipped-beyond-baseline   (baseline skips recorded in Stage 0)
+📊 TOTALS
 ```
+╔══════════════════════════╗
+║ Store        Raw    Final ║
+║ Woolworths  $23.40  $21.75║
+║ Coles       $24.10  $24.10║
+╚══════════════════════════╝
+```
+🏆 Cheapest: Woolworths — you save $2.35
+🏷️ WW discounts: −$1.65 (5% all + 🏠 home extra)
+⚠️ 1 item missing at Coles
+```
+
+(The fenced_table implementation must produce internally consistent padding — the spec's illustrative example has a typo in row 3; equal-length lines are the contract, enforced by tests.)
+
+Search (spec §5.2):
+```
+🔍 GREEN CAPSICUM — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+1. Green Capsicum 500g
+   🟢 Woolworths  $2.90  🏷️ was $3.50
+2. …
+```
+
+Sync / Wednesday summary (spec §5.5): ✅/❌ per-store status lines, 📊 fenced counts block, 📋 unmatched summary.
+
+Pricing tools (spec §5.6): 🤖 header + fenced table (name ≤ 24 chars truncated).
 
 ---
 
-## 7. Verification matrix (definition of done)
+## 4. Prohibitions (spec §6 — the 04 Checker enforces these)
 
-| # | Check | Where | Pass criterion |
-|---|---|---|---|
-| V1 | Baseline suite recorded | Stage 0 | 137+ pass, 0 fail before edits |
-| V2 | New module tests green | Stage 1c | §6.1 all pass |
-| V3 | Comparator/specials tests green | Stages 2–3 | §6.2 pass |
-| V4 | Sheets-sync tests green | Stage 4 | §6.3 pass |
-| V5 | CLI tests green | Stage 5 | §6.4 pass; lookup suite unaffected |
-| V6 | py_compile all touched files | Stage 7 | exit 0 |
-| V7 | FULL suite green | Stage 7 | 0 failed / 0 errors — **hard gate** |
-| V8 | Sheet stays raw | tests | add_product_row/sync/update price cells raw; only Col G `Home` write added |
-| V9 | Coles/Aldi untouched | tests + grep | no discount code on coles/aldi paths |
-| V10 | Monthly tracker untouched | diff | Section E + usage JSON unchanged |
-| V11 | Forbidden files untouched | Stage 8 git status | only §8.1/§8.2 lists modified |
-| V12 | Deployed | Stage 8 | scp OK; container Up after restart |
-| V13 | Telegram live check | Stage 9.1 | WW price discounted in Claw's reply |
-| V14 | Backfill dry-run reviewed then run | Stage 9.2 | dry-run output reviewed by user before live write |
-| V15 | No secrets in diffs/output | all | no cookie/key/JSON anywhere |
+Must NOT modify: sheet schema/writes, discount math (`discounted_woolworths_price` et al.), lookup/sync logic, extractor APIs, `.env` handling, `openclaw.json`, any CLI subcommand names/flags/exit codes, any data file, `telegram_gateway/handlers.py` (not in the authorized list — the map-session replies it builds are out of scope this round).
 
-## 8. Rollback
+---
 
-Any red gate ⇒ stop, fix, re-run. Deployed regression ⇒ re-scp the previous file versions (both git repos have the pre-change commits) and `sudo docker restart openclaw-core`. The sheet needs no rollback — nothing written by this feature ever changes stored prices (only Col G `Home` cells from the explicitly-run backfill, reversible by re-writing the prior brand values from the dry-run table).
+## 5. Test plan (ALL mandatory — the coding model may NOT skip, weaken, or mark any of these skipped)
+
+### 5.1 New `tests/test_telegram_format.py` — required matrix
+
+| # | Test | Asserts |
+|---|---|---|
+| 1 | `test_header_caps_and_divider` | icon + UPPERCASED title + `━`×20 second line |
+| 2 | `test_subheader_light_divider` | `─`×10 line, optional icon |
+| 3 | `test_fenced_table_all_rows_equal_width` | strip fences → every line identical `len()` |
+| 4 | `test_fenced_table_respects_width_budget` | max visible width ≤ `MAX_BLOCK_WIDTH` with long cells |
+| 5 | `test_fenced_table_truncates_with_ellipsis` | over-wide cell ends in `…`, never exceeds budget |
+| 6 | `test_fenced_table_box_borders` | `box=True` → first/last border lines `╔═…╗` / `╚═…╝` |
+| 7 | `test_fenced_table_empty_rows` | headers-only renders; `headers=[]` raises `ValueError` |
+| 8 | `test_money_formats` | `0→"$0.00"`, `None→"—"`, `4→"$4.00"`, `-1.5→"−$1.50"` |
+| 9 | `test_truncate_short_unchanged` / `..._long_ellipsized` | `len` never exceeds width; `…` appended |
+| 10 | `test_store_line_alignment` | Woolworths/Coles lines: price starts at the same cell offset (padding correct with 2-cell emoji) |
+| 11 | `test_store_line_was_price` | `(was $2.90)` suffix present when `was` given |
+| 12 | `test_item_block_home_brand_marker` | `🏠` appended when `home_brand=True`; name truncated at `MAX_NAME_WIDTH` |
+| 13 | `test_kv_separator` | single `·` between label and value |
+| 14 | `test_warn_ok_fail_icons` | ⚠️ / ✅ / ❌ prefixes |
+| 15 | `test_tail_line` | 🏆 + winner + savings; `(vs X)` when `vs` given |
+| 16 | `test_footer_timestamp` | ⏱️ prefix; deterministic when `ts` passed |
+| 17 | `test_no_pipe_tables_ever` | for a representative composite message built from every function: `"|---"` not in output and `"| # |"` not in output |
+
+### 5.2 Regression updates (assert content, not byte-equality)
+
+| File : line (current) | Change |
+|---|---|
+| `tests/test_comparator.py` :: `test_format_report_contains_discount_lines` (519–563) | Keep asserting `3.61`, `4.00`, home-extra total `0.19`; replace `"5% off all"` → the 🏷️ tail summary (assert `"5%"` and `"0.20"`); replace `"Home Brand Extra"` → `🏠` home sub-block heading; replace `"Extra Discount"` → `🏷️` extra line; add: cheapest-store 🏆 line present; add pipe-ban asserts on the whole output |
+| `tests/test_comparator.py` :: specials tests (462–484) | assertions are content-based (`"2.85"`, `"5% off"`, `"Home 9.75% off"`) and survive because `format_discounted_price` is unchanged — verify, and only loosen if the `·`-joined line ordering breaks an assert |
+| `tests/test_woolworths_discounts.py` :: `TestFormatDiscountReport` (295–330) | update to new sub-block output: base summary line total, home `was → now` line, `No discounts applied.` case stays |
+| `tests/test_cli.py:795` | `assertIn("| $5.00 |")` → assert Coles raw `$5.00` present AND `"| $5.00 |"` absent (pipe ban) |
+| `tests/test_cli.py:853–859` | backfill dry-run pipe-row asserts → new list-line content asserts (row number + product + proposed `Home`); keep the `assertNotIn` skip checks (adapted to new row prefixes) |
+| `tests/test_cli.py:527, 701` | these mock `format_report` — no change expected; verify only |
+
+### 5.3 New invariant tests (add to `tests/test_telegram_format.py`)
+
+Parametrize over the real formatters: build a small fixture report/specials/discount-items set and assert `format_report`, `format_specials_report`, `format_discount_report` outputs contain neither `"|---"` nor `"| # |"`, and (for compare) that the fenced TOTALS block lines are all equal length.
+
+### 5.4 Suite-level gates
+
+- Baseline before any edit: run the suite once, record pass/skip counts (expected ≈199 collected, all passing).
+- After Phase 8.1: same or better. **A skip introduced to dodge a formatting failure is a defect**, not a pass. If a smoke command (8.3) cannot run for environment reasons (no network), report it explicitly in the final summary — never silently omit.
+
+---
+
+## 6. Final self-check for the coding model (before handing to 04 Checker)
+
+1. `grep` the workspace for `\|---|\| # \|` in `*.py` → zero hits in stdout paths.
+2. `grep` for `parse_mode` → no new occurrences added anywhere.
+3. Diff review: no changes outside the §"May modify" list (spec §6); no flag/arg/exit-code diffs in any CLI; `handlers.py` untouched; sheet-write logic untouched; `format_discounted_price` byte-identical.
+4. Full suite green (§5.4); new test file present and passing.
+5. Every MANUAL step in Phase 9 listed for the user with exact commands; nothing git/docker executed by the coding model.

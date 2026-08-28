@@ -551,16 +551,22 @@ class TestComparator(unittest.TestCase):
             },
         )
         output = format_report(report)
-        # Base-5%-all-items line with its total...
-        self.assertIn("5% off all", output)
-        self.assertIn("0.20", output)
-        # ...AND the home-brand extra line with its total.
-        self.assertIn("Home Brand Extra", output)
-        self.assertIn("0.19", output)
-        self.assertIn("Extra Discount", output)
-        # WW item cell: discounted price prominent + raw visible.
+        # WW item line: discounted price prominent + raw visible.
         self.assertIn("3.61", output)
         self.assertIn("4.00", output)
+        # Home-brand extra sub-block with its total.
+        self.assertIn("HOME BRAND EXTRA", output)
+        self.assertIn("0.19", output)
+        # 🏷️ WW discounts tail: 5% base summarised with its amount.
+        self.assertIn("5%", output)
+        self.assertIn("0.20", output)
+        # Extra discount rendered as the compact 🏷️ line.
+        self.assertIn("Extra 10%", output)
+        # Cheapest store announced by the 🏆 tail line.
+        self.assertIn("🏆 Cheapest: Coles", output)
+        # Pipe-table ban on the whole output.
+        self.assertNotIn("|---", output)
+        self.assertNotIn("| # |", output)
 
     def test_compare_auto_mode_sheet_then_live(self):
         """auto mode: sheet items use sheet, missing items fall back to live."""

@@ -413,18 +413,24 @@ def format_discount_report(
     extra_discount_savings: float,
     home_extra_total: float = 0.0,
     home_brand_count: int = 0,
+    *,
+    compact: bool = False,
 ) -> str:
-    """Render a clean text block showing what discounts were applied.
+    """Render the Telegram-style discount sub-block (spec §5.1).
 
-    Structure:
-      * Base line — 5% off ALL Woolworths items, with the summed base
-        total (team_discount_total).
-      * Home-brand extra line — additional 5% (compounded) on home-brand
-        items, listing each affected item with its base -> final price.
-      * Extra discount line (when extra_discount_pct > 0) — unchanged
-        monthly mechanism.
+    Structure (Telegram Style Kit — no markdown tables):
+      * `🏷️ HOME BRAND EXTRA` sub-block — one `name · $base → $final`
+        line per home-brand item, plus a `💰 Home extra: $x` total.
+      * `🏷️ Extra X% · save $x` line when the monthly extra discount
+        applied; a ⚠️ line when it was skipped (already used).
+      * Base 5%: NO per-item lines (that is the compaction). A single
+        summary line `🏷️ 5% off all WW items · save $x` is emitted ONLY
+        in standalone mode (compact=False). Embedded callers (the basket
+        report) pass compact=True because their tail line already
+        summarises the base 5%.
 
-    Secret-free. If nothing applied: "No discounts applied.".
+    Secret-free. If nothing applies: "No discounts applied." (or an
+    empty string in compact mode so embedders can skip the block).
 
     Args:
         items: per-item result dicts from apply_woolworths_discounts
@@ -434,9 +440,12 @@ def format_discount_report(
         extra_discount_savings: dollar savings from that extra discount.
         home_extra_total: summed home-brand EXTRA savings (default 0.0).
         home_brand_count: number of home-brand WW items (default 0).
+        compact: keyword-only. True when the output is embedded in a
+            larger report whose tail summarises the base 5% (default
+            False).
 
     Returns:
-        Multi-line Markdown-ish string.
+        Multi-line plain-text string ("" possible in compact mode).
     """
 
     def _get(item, key, default=None):
@@ -444,52 +453,42 @@ def format_discount_report(
             return item.get(key, default)
         return getattr(item, key, default)
 
-    lines = []
-    if team_discount_total > 0:
-        lines.append("**Woolworths Discount (5% off all prices):**")
-        for item in items:
-            if _get(item, "applied", False) \
-                    and not _get(item, "home_extra_applied", False):
-                lines.append(
-                    f"  - {_get(item, 'name', '')}: "
-                    f"${_get(item, 'original_price', 0):.2f} -> "
-                    f"${_get(item, 'discounted_price', 0):.2f}"
-                )
-        lines.append(
-            f"  Base discount total: ${team_discount_total:.2f}"
-        )
-        lines.append("")
+    from core.telegram_format import subheader, kv, money, warn
 
-    if home_brand_count > 0 and home_extra_total > 0:
-        lines.append(
-            f"**Home Brand Extra (additional 5% off "
-            f"{home_brand_count} home-brand item(s)):**"
+    blocks = []
+
+    # Base 5% — summary line only, standalone mode only.
+    if not compact and team_discount_total > 0:
+        blocks.append(
+            f"🏷️ 5% off all WW items · save {money(team_discount_total)}"
         )
+
+    # Home-brand extra — sub-block with per-item was -> now lines.
+    if home_brand_count > 0 and home_extra_total > 0:
+        home_lines = [subheader("HOME BRAND EXTRA", "🏷️")]
         for item in items:
             if _get(item, "home_extra_applied", False):
-                lines.append(
-                    f"  - {_get(item, 'name', '')}: "
-                    f"${_get(item, 'base_price', 0):.2f} -> "
-                    f"${_get(item, 'discounted_price', 0):.2f}"
-                )
-        lines.append(f"  Home extra total: ${home_extra_total:.2f}")
-        lines.append("")
+                home_lines.append(kv(
+                    str(_get(item, "name", "")),
+                    f"${_get(item, 'base_price', 0):.2f} \u2192 "
+                    f"${_get(item, 'discounted_price', 0):.2f}",
+                ))
+        home_lines.append(f"💰 Home extra: {money(home_extra_total)}")
+        blocks.append("\n".join(home_lines))
 
+    # Monthly extra discount.
     if extra_discount_pct > 0 and extra_discount_savings > 0:
-        lines.append(
-            f"**Extra Discount ({extra_discount_pct:.0f}% off "
-            "Woolworths basket):**"
+        blocks.append(
+            f"🏷️ Extra {extra_discount_pct:.0f}% · "
+            f"save {money(extra_discount_savings)}"
         )
-        lines.append(f"  Extra savings: ${extra_discount_savings:.2f}")
-        lines.append("")
     elif extra_discount_pct > 0:
-        lines.append(
-            f"**Extra Discount ({extra_discount_pct:.0f}%):** not applied "
+        blocks.append(warn(
+            f"Extra {extra_discount_pct:.0f}% not applied "
             f"(already used this month)"
-        )
-        lines.append("")
+        ))
 
-    if not lines:
-        lines.append("No discounts applied.")
+    if not blocks:
+        return "" if compact else "No discounts applied."
 
-    return "\n".join(lines)
+    return "\n\n".join(blocks)

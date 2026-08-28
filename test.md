@@ -1,65 +1,122 @@
-# Test Log — Always-On Woolworths Display Discounts + Home-Brand Classification
+# Test Results — Unified Telegram Message Formatting (03 Code)
 
-- **Date:** 2026-08-27
-- **Plan:** `grocery-price-tracker/implementation-plan.md` (Stages 0–9)
-- **Commits:** tracker repo `a9215d8` (main) · main repo `db40415` (main)
-- **Deploy target:** VPS 169.58.107.0 → `/home/ubuntu/openclaw/tasks/ai-tools` (live mount of `openclaw-core`)
+- **Date:** 2026-08-28
+- **Executed by:** 03 Code Agent (per `implementation-plan.md`, all phases 1–8)
+- **Environment:** Windows PowerShell 5.1, Anaconda Python (`$env:PYTHONIOENCODING="utf-8"` set for every run)
 
-## Automated results
+---
 
-| # | Check | Command / scope | Result |
-|---|-------|-----------------|--------|
-| T1 | Baseline suite (Stage 0, pre-edit) | `pytest tests -q` | **8 failed / 158 passed** — all 8 pre-existing in `tests/test_extractors.py` (out-of-scope, spec-locked files). Gate adjusted to "no NEW failures". |
-| T2 | New module tests red-first (TDD, Stage 1a) | `pytest tests/test_woolworths_discounts.py -q` | 16 failed / 8 passed — expected before module rewrite |
-| T3 | New module tests green (Stage 1c) | same file after rewrite | **24 passed** ✅ |
-| T4 | Comparator + discounts gate (Stage 2/§6.2) | `pytest tests/test_comparator.py tests/test_woolworths_discounts.py` | First run 1 failure — plan's own arithmetic slip ($3.61+$4.75=7.36 → corrected to **8.36**); re-run **49 passed** ✅ |
-| T5 | Sheets-sync gate incl. new Home-literal tests (Stage 4) | `pytest tests/test_sheets_sync.py -q` | **29 passed** ✅ |
-| T6 | CLI + lookup suites (Stage 5/§6.4) | `pytest tests/test_cli.py tests/test_lookup.py -q` | 1 test-side assertion bug fixed (gspread `values=[["Home"]]` shape); final full-suite run below |
-| T7 | FULL suite gate (Stage 7 / V7 adjusted) | `pytest tests -q` | **191 passed / 0 errors / exactly the 8 known extractors failures — zero new failures** ✅ |
-| T8 | py_compile all touched files | `py_compile …cli woolworths_discounts price_comparator specials_reporter sheets_sync lookup` | exit 0 ✅ |
-| T9 | Secrets scan pre-commit | diff scan (`ai_user/_abck/wow-auth/dtCookie/private keys`) + repo pre-commit hook | CLEAN / Passed ✅ |
+## Baseline (recorded before ANY edit)
 
-## Math spot-checks (spec §5 compounding)
+`pytest tests -q` → **8 failed, 191 passed** — NOT the all-green state the plan
+assumed. All 8 failures are in `tests/test_extractors.py`:
 
-| Input | Expected | Actual |
-|-------|----------|--------|
-| `$5.00` home brand | $4.51 | $4.51 ✅ |
-| `$5.00` regular | $4.75 | $4.75 ✅ |
-| `$8.00` home brand | $7.22 | $7.22 ✅ |
-| `$4.00` home brand | $3.61 | $3.61 ✅ |
-| Per-item rounded sum (4.51+7.22+3.80) | 15.53 | 15.53 ✅ |
+| Failure | Cause | In scope? |
+|---|---|---|
+| `TestSessionManager::test_get_headers_no_cookie` | A saved Woolworths cookie file exists on this machine; test expects none | No (env state; extractor files are §4-prohibited) |
+| `TestWoolworthsExtractor::test_parse_api_item*` (4) | ImportError — tests import `_parse_api_item`, which no longer exists in `extractors/woolworths_extractor.py` (test/code drift, pre-existing) | No (extractor APIs + their tests are §4-prohibited) |
+| `TestColesExtractor::test_parse_search_result*` (3) | Same drift for `_parse_search_result` in `coles_extractor.py` | No |
 
-## Deployment verification (VPS)
+Gate applied instead of the plan's "all 199 pass": **no NEW failures vs this
+baseline; all formatting-related tests pass.** Baseline and final skip count: 0
+(no skips introduced).
 
-| # | Check | Result |
-|---|-------|--------|
-| D1 | scp of `grocery_price_cli.py`, 5 nested core modules, 1 test file, SKILL.md | All uploaded (1 retry via `/tmp`+sudo for root-owned `tests/`) ✅ |
-| D2 | SHA256 host ↔ VPS for all 6 runtime files | Identical ✅ |
-| D3 | Container restart `openclaw-core` | Up (healthy) ✅ |
-| D4 | In-container smoke: `format_discounted_price(5.00, home)` | `$4.51 (Home 9.75% off, was $5.00)` ✅ |
-| D5 | In-container parser: `backfill-home-brands --dry-run` against LIVE sheet | Runs read-only: 82 rows, **2 planned writes**, 26 already `Home`, 40 safely skipped ✅ |
-| D6 | Cron interference incident | VPS crontab runs `git pull --autostash` every 5 min on ai-tools clone; raw-scp copies of git-tracked files were reverted mid-deploy by a failing pull (root-owned/read-only `claw-skills/grocery-price`). **Fixed**: perms repaired, clone hard-reset onto `origin/main` (=`db40415`), stash clutter cleared, all hashes re-verified post-reset, container restarted clean ✅ |
+One transient flake observed during Phase 2 verification:
+`test_name_matcher.py::test_append_unmatched_is_idempotent` failed once in a
+combined run, then passed in isolation, in the full module (25/25), and in
+three consecutive full-suite runs. Shared `data/` file contention — unrelated
+to formatting (name_matcher logic untouched).
 
-## Final state (post-repair, re-verified)
+---
 
-```
-VPS container : openclaw-core Up (healthy)
-clone HEAD    : db40415 feat(grocery): display-time WW discounts …
-cli hash      : d6e7a0ef…  == local working copy
-core/*.py ×5  : 49c2d97c / 78254528 / 8539628f / a8aea64c / 53d19184  == local
-backfill dry-run planned writes:
-  Row 48 | Hillview Cheese Slice      | Hillview   -> Home
-  Row 83 | Woolworths Beef Mince 500g | Woolworths -> Home
-```
+## Phase results
 
-## Pending MANUAL items (user, per plan §9) — ✅ COMPLETED by user 2026-08-27
+| Phase | Verification | Result |
+|---|---|---|
+| 1 — `core/telegram_format.py` + `tests/test_telegram_format.py` | `pytest tests/test_telegram_format.py -q` | **PASS** — 23/25 immediately; the 2 §5.3 invariant tests were intentionally red (TDD, they assert the NEW core formatters) until Phase 2 landed. Final: **25/25 PASS** |
+| 2 — core formatter swaps + §5.2 updates | `pytest tests -q` | **PASS** — 8 pre-existing failures only, 219 passed |
+| 3 — `grocery_price_cli.py` restyle | `pytest tests -q` + `py_compile ..\grocery_price_cli.py` | **PASS** — one name-shadowing bug caught and fixed (local `header = all_values[0]` shadowed the imported `header()` in `_cmd_backfill_home_brands`; renamed to `sheet_header`). Compile OK |
+| 4 — gateway scripts | `py_compile` both files | **PASS** |
+| 5 — 8 sibling tools | `py_compile` all 8 | **PASS** |
+| 6 — SKILL.md relay rules | grep for remaining "Markdown table" instructions | **PASS** — zero remaining; internal documentation tables left intact per plan |
+| 7 — README | archive reference check | **PASS** — `architecture-spec-woolworths-discounts.md` confirmed absent; reference now points to `architecture-spec.md` with a note; kit section documents the shipped API |
+| 8.1 — full suite | `pytest tests -q` | **PASS** — **219 passed, 8 failed (all pre-existing extractor), 0 skipped** |
+| 8.2 — pipe-table ban grep | `\|---\|\| # \|` over `*.py`, whole workspace | **PASS — ZERO matches** |
+| 8.2b — `parse_mode` grep | whole workspace `*.py` | **PASS** — only pre-existing occurrences (`daily_digest.py` HTML pipeline, untouched `handlers.py`, a comment). Zero added |
+| 8.3 — smoke `compare --items "green capsicum"` | live | **PASS** (rendered; that exact query has no sheet/live price → empty-prices render, still correctly styled) |
+| 8.3 — smoke `compare --items "milk"` | live | **PASS** — full render: 🛒 header, 🏠 item block, aligned 🟢/🔴 lines, fenced box TOTALS (equal-length lines), 🏷️ HOME BRAND EXTRA sub-block, 🏆 + 🏷️ tails |
+| 8.3 — smoke `specials` | live | **PASS** — 🏷️ header, numbered list, `·` separators, 📊 count |
+| 8.3 — smoke `search --product "green capsicum"` | live | **PASS** — 🔍 header, item blocks, bracket-form WW discounts, 🏷️ special suffix, `…` truncation, 🏆 tail |
 
-1. **Telegram DM to @ClawArkindBot:** *"Compare prices for milk between Woolworths and Coles"* — **PASS** (user-confirmed; WW discounted + raw Coles as expected).
-2. **Backfill live run** — **PASS** (user-executed `python3 grocery_price_cli.py backfill-home-brands` inside container; sheet Col G corrected).
+### Scope audit (plan §6)
 
-Both final verification-matrix items (V13, V14) now closed. Definition of done reached.
+- `git diff` hunk ranges verified: changes in `core/` are confined to
+  `format_report` (+ its new helper), `format_discount_report`, and
+  `format_specials_report` + the `__main__` rewards block.
+  `discounted_woolworths_price` / `format_discounted_price` byte-identical
+  (no hunks before line 415 of `woolworths_discounts.py`).
+- `telegram_gateway/handlers.py` untouched. No sheet-write, lookup/sync, or
+  extractor logic touched. No flag/arg/exit-code changes in any CLI.
+- Files changed = exactly the §"May modify" list. Pre-existing dirty files
+  (`.kilo/agent/*`, `Development Workflow/*` deletions, xlsx/docx/data files,
+  main-repo `README.md`, `tests/test_name_matcher.py`, `architecture-spec.md`,
+  `implementation-plan.md`) were NOT touched by this agent.
 
-## Known non-blocking issues
+---
 
-- `tests/test_extractors.py`: 8 failures pre-date this task (`_parse_api_item` missing from `woolworths_extractor`; Coles `_parse_search_result` signature drift; a cookie-loaded SessionManager header case). Files are spec-locked (`extractors/**`) so they were NOT touched here — needs a separate dedicated fix session.
-- Tracker repo carries unrelated uncommitted WIP from a prior session (README body, `tests/test_name_matcher.py`, data/*.txt, docx/xlsx binaries, `tests/test_live_search.py`, `architecture-spec.md`). Untouched by design.
+## Test-matrix coverage (plan §5.1 — all 17 + §5.3 invariants)
+
+All 17 required tests implemented in `tests/test_telegram_format.py` plus
+`test_divider_default_and_custom`, `test_store_line_unknown_store`,
+`test_item_block_numbered_lines_indented`, `test_fenced_table_money_columns_right_aligned`,
+and the three §5.3 real-formatter invariant tests. **25/25 pass.**
+
+---
+
+## Deviations from the plan (all documented, none behavioral)
+
+1. **Baseline gate adjusted.** Plan expected 199/199 passing; measured baseline
+   is 8 failed / 191 passed (extractor test drift + local cookie file). Gate
+   applied: no new failures; formatting tests all green. Extractor files are
+   §4-prohibited, so not fixed here.
+2. **Three test spots updated beyond §5.2's list** (necessary consequence of
+   the approved format contracts; assert content, not byte-equality):
+   - `tests/test_cli.py:181` — `"Total:"` → `"pending unmapped item(s)"`
+     (unmapped count line is now `📊 N pending unmapped item(s)`).
+   - `tests/test_cli.py:770` — `"**Cheapest:** Woolworths at $3.61"` →
+     `"Cheapest: Woolworths at $3.61"` (search tail is now `🏆 Cheapest: …`;
+     bold markup dropped from the assert). Line 768 was kept green by design:
+     the search WW line intentionally keeps `format_discounted_price`'s
+     §9-approved bracket form.
+   - `tests/test_cli.py:903` — `"**Total:** 2 specials"` → `"2 specials"`
+     (Wednesday Step-8 count line is now `📊 2 specials`; pipe table removed
+     per the golden rule — this builder must not emit tables to Telegram).
+3. **`_build_ww_specials_lines` restyled.** Not in the Phase-3 table, but it
+   printed a pipe table to Telegram, which violates locked decision #2.
+   Now list-style + 📊 count.
+4. **`Discount_github.py` NOT changed.** It is a Streamlit stub (browser UI,
+   no stdout rows exist to restyle). py_compile gate passes.
+5. **`Code_for_usage.py` gained a 📊 stdout block** (grand totals + fenced
+   per-model table). The file had no tabular stdout before (data went to
+   Excel only); plan asked for "📊 header + fenced usage table", so the block
+   was added — display-only, Excel output unchanged. `--query` single-value
+   outputs are deliberately untouched (machine-readable contract).
+6. **`daily_digest.py` minimal touch.** It already used the kit skeleton
+   (heavy separators, per-model cards); only the digest header was retitled to
+   the 📅 vocabulary. Its HTML parse_mode pipeline is pre-existing and was NOT
+   extended.
+7. **`fenced_table` `box=True` includes the ``` fences** around the ╔═╗ box
+   (plan §3's sample is ambiguous); equal-length lines contract enforced by
+   tests.
+8. **🏷️ WW-discounts tail line includes per-component amounts** —
+   `🏷️ WW discounts: −$0.75 (5% all $0.20 + 🏠 home extra $0.19 + extra 10%
+   $0.36)` — because §5.2 requires asserting `"5%"` AND `"0.20"` while §2a
+   requires composing the total from team+home+extra. Shape preserved
+   (`🏷️ WW discounts: −$X (…)`).
+
+---
+
+## Status
+
+Phases 1–8 COMPLETE. Phase 9 (git commits, GitHub push, VPS tar/scp sync,
+docker restart, faithful Telegram test) is MANUAL — handed to the user below.

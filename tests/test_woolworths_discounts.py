@@ -288,10 +288,10 @@ class TestMonthlyTrackerRegressionGuard(unittest.TestCase):
 
 
 class TestFormatDiscountReport(unittest.TestCase):
-    """Report formatter: base line (all WW items) + home-extra line."""
+    """Telegram-style discount sub-block (standalone + compact)."""
 
     def test_report_shows_base_and_home_extra_lines(self):
-        """Base total and home-extra total both appear when provided."""
+        """Standalone: base summary line total + home was->now lines."""
         from core.woolworths_discounts import format_discount_report
 
         items = [
@@ -312,16 +312,57 @@ class TestFormatDiscountReport(unittest.TestCase):
             home_extra_total=0.19,
             home_brand_count=1,
         )
-        self.assertIn("0.45", report)   # base total over ALL WW items
+        self.assertIn("0.45", report)   # base summary line over ALL items
+        self.assertIn("HOME BRAND EXTRA", report)
+        self.assertIn("$3.80 \u2192 $3.61", report)  # was -> now line
         self.assertIn("0.19", report)   # home-extra total
-        self.assertIn("Home Brand", report)
+        # Base 5% has NO per-item lines anymore (compaction).
+        self.assertNotIn("Bega Cheese", report)
+        # Pipe-table ban.
+        self.assertNotIn("|---", report)
+        self.assertNotIn("| # |", report)
+
+    def test_compact_mode_drops_base_summary(self):
+        """compact=True (embedded): base line omitted, home block kept."""
+        from core.woolworths_discounts import format_discount_report
+
+        items = [
+            {"name": "WW Milk", "brand": "Woolworths",
+             "original_price": 4.00, "base_price": 3.80,
+             "discounted_price": 3.61, "applied": True,
+             "home_extra_applied": True},
+        ]
+        report = format_discount_report(
+            items, 0.20, 0.0, 0.0,
+            home_extra_total=0.19, home_brand_count=1, compact=True,
+        )
+        self.assertNotIn("5% off all WW items", report)
+        self.assertIn("HOME BRAND EXTRA", report)
+        self.assertIn("0.19", report)
+
+    def test_compact_nothing_applied_returns_empty(self):
+        """compact=True with nothing applicable renders an empty string
+        so the embedding report can skip the block entirely."""
+        from core.woolworths_discounts import format_discount_report
+
+        self.assertEqual(format_discount_report([], 0.5, 0.0, 0.0,
+                                                compact=True), "")
+
+    def test_standalone_nothing_applied_message(self):
+        """Standalone no-op still reports 'No discounts applied.'."""
+        from core.woolworths_discounts import format_discount_report
+
+        self.assertEqual(
+            format_discount_report([], 0.0, 0.0, 0.0),
+            "No discounts applied.",
+        )
 
     def test_backward_compatible_signature(self):
         """Old 4-positional-arg call sites still work."""
         from core.woolworths_discounts import format_discount_report
 
         report = format_discount_report([], 0.0, 10.0, 2.50)
-        self.assertIn("Extra Discount", report)
+        self.assertIn("Extra 10%", report)
         self.assertIn("2.50", report)
 
 

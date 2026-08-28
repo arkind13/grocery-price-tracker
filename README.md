@@ -348,7 +348,11 @@ specials, specials-scan, rewards, map/lookup prints, Wednesday specials
 report) is automatically discounted at display time:
 
 - **5% off every Woolworths price**, plus an **additional 5% off Woolworths
-  home-brand items** (compounds to ≈9.75%; see `architecture-spec.md` §5).
+  home-brand items** (compounds to ≈9.75%; discount math in
+  `core/woolworths_discounts.py`, history note in
+  [`architecture-spec.md`](architecture-spec.md) §"Replaces" — the original
+  spec archive `architecture-spec-woolworths-discounts.md` is no longer on
+  disk).
 - The Google Sheet always stores **raw** prices — discounts are display-only.
 - Home-brand detection and the 32-brand list (Apollo, Balnea, … Woolworths)
   live in `core/woolworths_discounts.py`. The sheet's Col G `Home` marker is
@@ -430,6 +434,32 @@ Each tool has a `SKILL.md` that tells the OpenClaw agent how to invoke it. The s
 | `web-scrape` | `web-scrape/SKILL.md` | Web page scraping (ZenRows → Scrape.do) |
 
 The `grocery-price/SKILL.md` is the most detailed skill file — it defines subcommand→intent mappings, the NL routing table, multi-turn conversation flows (resolve sessions), degradation rules, and hard rules for the agent.
+
+### Telegram message formatting (all skills)
+
+All Claw skill output shown on Telegram uses the shared **Telegram Style Kit** (`core/telegram_format.py`): no markdown tables (they break in Telegram), list-style item blocks, fenced monospace totals, unicode dividers, and a shared icon vocabulary. SKILL.md files instruct the agent to relay CLI output verbatim. Spec: [`architecture-spec.md`](architecture-spec.md).
+
+The kit is stdlib-only and imports nothing from siblings. Key API:
+
+- `header(title, icon)` / `subheader(title, icon=None)` — CAPS title + heavy `━`×20 / light `─`×10 divider.
+- `item_block(index, name, prices, home_brand=False)` / `store_line(store, price, was=None)` — list-style items with 🟢/🔴 aligned price lines.
+- `fenced_table(headers, rows, box=False)` — padded ```-fenced table, equal-width lines, ≤ `MAX_BLOCK_WIDTH` (34) cells.
+- `money(n)` / `kv(l, v)` / `tail(w, s, vs)` / `warn` / `ok` / `fail` / `footer(ts)` / `truncate(s, width)`.
+
+Example:
+
+```python
+from core.telegram_format import header, fenced_table
+
+print(header("Basket Comparison", "🛒"))
+print(fenced_table(
+    ["Store", "Raw", "Final"],
+    [["Woolworths", "$23.40", "$21.75"], ["Coles", "$24.10", "$24.10"]],
+    box=True,
+))
+```
+
+Width budgets: `MAX_NAME_WIDTH = 24` (product names), `MAX_BLOCK_WIDTH = 34` (fenced blocks, phone-fit). Emoji count as 2 cells (`_cells()`).
 
 ---
 

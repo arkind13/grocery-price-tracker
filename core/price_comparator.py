@@ -494,26 +494,61 @@ def _gather_lookup_prices(
 # ============================================================================
 
 
-def format_report(report: ComparisonReport) -> str:
-    """Render a Markdown table: item rows (name, woolworths, coles
-    prices with store-source markers), then totals, discount lines
-    (team + extra), cheapest store, and max savings.
-    Top 25 items + a summary. Secret-free.
+def _format_ww_discounts_line(report: ComparisonReport, total: float) -> str:
+    """Build the 🏷️ WW-discounts tail summary line (spec §5.1).
+
+    Args:
+        report: the ComparisonReport being rendered.
+        total: summed WW savings (team + home extra + extra discount).
+
+    Returns:
+        str like "🏷️ WW discounts: −$0.75 (5% all $0.20 + 🏠 home extra
+        $0.19 + extra 10% $0.36)", or "" when there is nothing to show.
     """
-    lines = []
+    from core.telegram_format import money
+
+    parts = []
+    if report.team_discount_savings > 0:
+        parts.append(f"5% all {money(report.team_discount_savings)}")
+    if report.home_extra_savings > 0:
+        parts.append(f"🏠 home extra {money(report.home_extra_savings)}")
+    if (
+        report.extra_discount_savings > 0
+        and report.extra_discount_pct > 0
+    ):
+        parts.append(
+            f"extra {report.extra_discount_pct:.0f}% "
+            f"{money(report.extra_discount_savings)}"
+        )
+    if not parts:
+        return ""
+    return f"🏷️ WW discounts: −{money(total)} ({' + '.join(parts)})"
+
+
+def format_report(report: ComparisonReport) -> str:
+    """Render the Telegram-style basket comparison (spec §5.1).
+
+    Layout: 🛒 header + heavy divider, list-style item blocks with
+    per-store price lines (🟢/🔴), a fenced box TOTALS table, the compact
+    discounts sub-block, then the 🏆/🏷️/⚠️ tail. Top-25 cap with an
+    overflow line. Pipe-free (no markdown tables), secret-free.
+    """
+    from core.telegram_format import (
+        header, item_block, store_line, money, warn, fail, tail,
+        fenced_table,
+    )
 
     if not report.items:
-        lines.append("**Basket Comparison:** No items provided.")
-        return "\n".join(lines)
+        return header("Basket Comparison", "🛒") + "\nNo items provided."
 
-    # Header
-    lines.append("| # | Product | Woolworths | Coles |")
-    lines.append("|---|---------|------------|-------|")
+    lines = [header("Basket Comparison", "🛒"), ""]
 
-    # Items (top 25). Woolworths cell shows the always-on discounted
-    # price with the raw price visible; raw-only when discounts are off.
+    # Items (top 25) — list-style blocks. WW shows the always-on
+    # discounted price with the raw price visible; raw-only when the
+    # discounts are off.
     from core.woolworths_discounts import format_discounted_price
     for i, item in enumerate(report.items[:25], 1):
+        store_lines = []
         if "woolworths" in item.prices:
             if report.team_discount_applied:
                 ww = format_discounted_price(
@@ -522,44 +557,42 @@ def format_report(report: ComparisonReport) -> str:
                 )
             else:
                 ww = f"${item.prices['woolworths']:.2f}"
-        else:
-            ww = "—"
-        cl = (
-            f"${item.prices['coles']:.2f}"
-            if "coles" in item.prices else "—"
-        )
-        lines.append(f"| {i} | {item.name} | {ww} | {cl} |")
+            store_lines.append(store_line("woolworths", ww))
+        if "coles" in item.prices:
+            store_lines.append(
+                store_line("coles", f"${item.prices['coles']:.2f}")
+            )
+        lines.append(item_block(
+            i, item.name, store_lines,
+            home_brand=item.is_woolworths_home_brand,
+        ))
+        lines.append("")
 
     if len(report.items) > 25:
-        lines.append(
-            f"| ... | *{len(report.items) - 25} more items* | | |"
-        )
+        lines.append(f"… +{len(report.items) - 25} more items")
+        lines.append("")
 
-    lines.append("")
-
-    # Totals
-    lines.append(
-        "| Store | Raw Total | Items Available | Final Total |"
-    )
-    lines.append(
-        "|-------|-----------|-----------------|-------------|"
-    )
+    # Totals — fenced box table (Store / Raw / Final; — when no price).
+    lines.append("📊 TOTALS")
+    totals_rows = []
     for store in STORES:
         raw = (
-            f"${report.raw_totals[store]:.2f}"
+            money(report.raw_totals[store])
             if store in report.raw_totals else "—"
         )
-        cov = report.store_coverage.get(store, 0)
         final = (
-            f"${report.final_totals[store]:.2f}"
+            money(report.final_totals[store])
             if store in report.final_totals else "—"
         )
-        lines.append(
-            f"| {store.capitalize()} | {raw} | {cov} | {final} |"
-        )
+        totals_rows.append([store.capitalize(), raw, final])
+    lines.append(fenced_table(
+        ["Store", "Raw", "Final"], totals_rows, box=True
+    ))
     lines.append("")
 
     # Discounts — consume the shared engine per item (NO inline recompute).
+    # compact=True: the sub-block lists ONLY home-brand and extra-discount
+    # lines; the base 5% is summarised in the 🏷️ tail line below.
     from core.woolworths_discounts import (
         format_discount_report,
         discounted_woolworths_price,
@@ -592,30 +625,46 @@ def format_report(report: ComparisonReport) -> str:
         report.extra_discount_savings,
         home_extra_total=report.home_extra_savings,
         home_brand_count=report.home_brand_count,
+        compact=True,
     )
     if discount_text.strip():
         lines.append(discount_text)
         lines.append("")
 
-    # Summary
+    # Tail: cheapest store, WW discounts summary, missing items, warnings.
     if report.cheapest_store:
-        lines.append(
-            f"**Cheapest store:** "
-            f"{report.cheapest_store.capitalize()}"
-        )
         if report.max_savings > 0:
+            lines.append(tail(
+                report.cheapest_store.capitalize(),
+                report.max_savings,
+                vs=report.most_expensive_store.capitalize(),
+            ))
+        else:
             lines.append(
-                f"**Max savings:** ${report.max_savings:.2f} "
-                f"(vs {report.most_expensive_store.capitalize()})"
+                f"🏆 Cheapest: {report.cheapest_store.capitalize()}"
             )
+        ww_total_savings = round(
+            report.team_discount_savings
+            + report.home_extra_savings
+            + report.extra_discount_savings,
+            2,
+        )
+        if ww_total_savings > 0:
+            ww_line = _format_ww_discounts_line(report, ww_total_savings)
+            if ww_line:
+                lines.append(ww_line)
     else:
-        lines.append("**No prices available for any store.**")
+        lines.append(fail("No prices available for any store."))
 
-    # Warnings
-    if report.warnings:
-        lines.append("")
-        for w in report.warnings:
-            lines.append(f"> ⚠ {w}")
+    for store, missing in report.not_available.items():
+        if missing:
+            noun = "item" if len(missing) == 1 else "items"
+            lines.append(warn(
+                f"{len(missing)} {noun} missing at {store.capitalize()}"
+            ))
+
+    for w in report.warnings:
+        lines.append(warn(w))
 
     return "\n".join(lines)
 

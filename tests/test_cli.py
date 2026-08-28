@@ -178,7 +178,7 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("Test Item 1", output)
         self.assertIn("Test Item 2", output)
-        self.assertIn("Total:", output)
+        self.assertIn("pending unmapped item(s)", output)
 
     # ========================================================================
     # _cmd_update tests
@@ -764,10 +764,13 @@ class TestCLI(unittest.TestCase):
         finally:
             sys.stdout = old_stdout
         self.assertEqual(code, 0)
-        # WW cell: discounted price prominent + raw visible.
+        # WW line: discounted price prominent + raw visible.
         self.assertIn("$3.61 (Home 9.75% off, was $4.00)", output)
         # Cheapest computed on the DISCOUNTED WW value.
-        self.assertIn("**Cheapest:** Woolworths at $3.61", output)
+        self.assertIn("Cheapest: Woolworths at $3.61", output)
+        # Pipe-table ban on the search output.
+        self.assertNotIn("|---", output)
+        self.assertNotIn("| # |", output)
 
     @patch("core.specials_reporter.get_bonus_rewards")
     @patch("grocery_price_cli._load_env")
@@ -792,7 +795,8 @@ class TestCLI(unittest.TestCase):
             sys.stdout = old_stdout
         self.assertEqual(code, 0)
         self.assertIn("Home 9.75% off, was $4.00", output)  # WW discounted
-        self.assertIn("| $5.00 |", output)                   # Coles raw
+        self.assertIn("$5.00", output)                        # Coles raw
+        self.assertNotIn("| $5.00 |", output)                 # pipe ban
         self.assertNotIn("was $5.00", output)
 
 
@@ -850,13 +854,13 @@ class TestBackfillHomeBrands(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("[DRY RUN]", output)
         # Rows 2 (name match) and 4 (matching value) planned.
-        self.assertIn("| 2 | Macro Rolled Oats 1kg |", output)
-        self.assertIn("| 4 | BBQ Sausages 400g | Woolworths BBQ | Home |",
+        self.assertIn("2. Macro Rolled Oats 1kg", output)
+        self.assertIn("4. BBQ Sausages 400g · Woolworths BBQ → Home",
                       output)
         # Skips: already-Home row 5; non-matching Bega row 3; not in plan.
-        self.assertNotIn("| 3 |", output)
-        self.assertNotIn("| 5 |", output)
-        self.assertNotIn("| 6 |", output)
+        self.assertNotIn("3. Bega Cheese", output)
+        self.assertNotIn("5. Odd Bunch Apples", output)
+        self.assertNotIn("6. Essentials Paper Towel", output)
         self.assertEqual(ws.batch_calls, [])
 
     @patch("core.sheets_client.connect_worksheet")
@@ -900,7 +904,10 @@ class TestWednesdaySpecialsDisplay(unittest.TestCase):
         text = "\n".join(lines)
         self.assertIn("$3.61 (Home 9.75% off, was $4.00)", text)
         self.assertIn("$4.75 (5% off, was $5.00)", text)
-        self.assertIn("**Total:** 2 specials", text)
+        self.assertIn("2 specials", text)
+        # Pipe-table ban on the Wednesday specials block.
+        self.assertNotIn("|---", text)
+        self.assertNotIn("| # |", text)
 
 
 if __name__ == "__main__":

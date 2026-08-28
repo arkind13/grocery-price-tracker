@@ -215,27 +215,26 @@ def get_bonus_rewards(store=None, worksheet=None) -> list:
 
 
 def format_specials_report(specials: list, store=None) -> str:
-    """Render a Markdown table: item name, store, special_desc, price.
+    """Render the Telegram-style specials report (spec §5.3).
 
-    Woolworths rows show the always-on discounted price (extra 5% when
-    the row's brand/name is a home brand); Coles rows stay raw. Top 25
-    rows + a count summary. Secret-free.
+    List-style numbered items: the price line shows the always-on
+    discounted price for Woolworths rows (extra 5% when the row's
+    brand/name is a home brand, via format_discounted_price's bracket
+    form); Coles rows stay raw. The special description rides along via
+    a `·` separator. Top 25 rows + an overflow line + a 📊 count line.
+    Pipe-free (no markdown tables). Secret-free.
     """
     if not specials:
         return "No active specials."
 
+    from core.telegram_format import header
     from core.woolworths_discounts import (
         format_discounted_price,
         is_woolworths_home_brand,
     )
 
     store_label = store.capitalize() if store else "All Stores"
-    lines = [
-        f"**Active Specials — {store_label}**",
-        "",
-        "| # | Product | Store | Special | Price |",
-        "|---|---------|-------|---------|-------|",
-    ]
+    lines = [header(f"Specials — {store_label}", "🏷️"), ""]
 
     for i, s in enumerate(specials[:25], 1):
         raw_price = s.get("price")
@@ -250,18 +249,18 @@ def format_specials_report(specials: list, store=None) -> str:
             price_str = (
                 f"${raw_price:.2f}" if raw_price is not None else "—"
             )
-        lines.append(
-            f"| {i} | {s['name']} | {s['store'].capitalize()} | "
-            f"{s['special_desc']} | {price_str} |"
-        )
+        price_line = f"   {price_str}"
+        desc = (s.get("special_desc") or "").strip()
+        if desc:
+            price_line += f"  ·  {desc}"
+        lines.append(f"{i}. {s['name']}")
+        lines.append(price_line)
 
     if len(specials) > 25:
-        lines.append(
-            f"| ... | *{len(specials) - 25} more specials* | | | |"
-        )
+        lines.append(f"… +{len(specials) - 25} more specials")
 
     lines.append("")
-    lines.append(f"**Total:** {len(specials)} active special(s)")
+    lines.append(f"📊 {len(specials)} active specials")
     return "\n".join(lines)
 
 
@@ -288,10 +287,11 @@ if __name__ == "__main__":
 
         rewards = get_bonus_rewards(store=store)
         if rewards:
-            print("**Bonus Rewards:**")
+            from core.telegram_format import subheader, ok
+            print(subheader("BONUS REWARDS", "💰"))
             for r in rewards:
-                print(f"  - {r['name']}: {r['rewards']}")
-            print(f"  Total: {len(rewards)} bonus reward(s)")
+                print(ok(f"{r['name']} · {r['rewards']}"))
+            print(f"📊 {len(rewards)} bonus rewards")
         else:
             print("No bonus rewards.")
         sys.exit(0)
