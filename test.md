@@ -197,3 +197,25 @@ scp to VPS: `core/woolworths_discounts.py`, `core/price_comparator.py`,
 narration is gone.
 
 ## Status: PASS
+
+---
+
+# Run 3 - restore TROPHY-style comparison emojis in Telegram replies
+
+- Date: 2026-08-28 (follow-up user request)
+- Observation: newest Telegram comparison replies lost the trophy emoji
+  styling the user liked. NO icons were stripped from the code - the CLI
+  still emits the full set (basket header, WW/Coles store icons, totals,
+  discounts, cheapest-trophy, warnings; verified by grep + smoke output).
+  The variation came from the OpenClaw agent re-wording replies.
+- Fix: SKILL.md new rule "ALWAYS keep the comparison icon vocabulary":
+  store icons on price lines, trophy NEVER dropped on the cheapest line
+  (preferred form: trophy + "Coles is cheaper by" + amount), home-brand/
+  specials/warning/totals icons kept; includes the exact preferred reply
+  template. Also removed a duplicated bullet block left in the discount
+  section by the previous edit.
+- Deployed: SKILL.md scp'd to VPS, openclaw-core restarted.
+- E2E verified (fresh session, delivered to Telegram):
+  bullet WW .61 (home brand) / bullet Coles .50
+  trophy line: Coles is cheaper by 1.11
+- Status: PASS
