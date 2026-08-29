@@ -235,18 +235,22 @@ class TestLookupEngine(unittest.TestCase):
 
     # --- Scenario 9: Step 3 — no candidates, proceeds to Step 5 ---
     def test_step3_no_candidates_proceeds_to_live(self):
-        """No candidates → live search. Mock returns results."""
+        """No candidates → live search. UOM-passing pair priced both."""
+        # Spec B2 (§3.2): the shown pair must pass the UOM gate — sizes
+        # added to the fixtures so the pair is comparable.
         def stub_ww(query, page_size=5):
-            return [ProductItem("woolworths", "WW Chocolate 200g", 4.50)]
+            return [ProductItem("woolworths", "WW Chocolate 200g", 4.50,
+                                size="200g")]
 
         def stub_coles(query, page_size=5):
-            return [ProductItem("coles", "Coles Chocolate 200g", 4.20)]
+            return ([ProductItem("coles", "Coles Chocolate 200g", 4.20,
+                                 size="200g")], "ok")
 
         with patch(
             "extractors.woolworths_extractor.fetch_woolworths_search_noauth",
             side_effect=stub_ww,
         ), patch(
-            "extractors.coles_extractor.fetch_coles_search",
+            "extractors.coles_extractor.fetch_coles_search_status",
             side_effect=stub_coles,
         ):
             result = self.engine.find_product("chocolate")
@@ -255,26 +259,28 @@ class TestLookupEngine(unittest.TestCase):
         self.assertIn("coles", result.prices)
         self.assertGreater(len(result.live_items), 0)
 
-    # --- Scenario 10: Step 5 — live search returns results ---
+    # --- Scenario 10: Step 5 — live search, Coles unavailable ---
     def test_step5_live_search_results(self):
-        """Live search returns prices for both stores."""
+        """Coles unavailable → Woolworths-only price (B4.3)."""
         def stub_ww(query, page_size=5):
-            return [ProductItem("woolworths", "WW Bread 650g", 2.50)]
+            return [ProductItem("woolworths", "WW Bread 650g", 2.50,
+                                size="650g")]
 
         def stub_coles(query, page_size=5):
-            return []
+            return ([], "unavailable")
 
         with patch(
             "extractors.woolworths_extractor.fetch_woolworths_search_noauth",
             side_effect=stub_ww,
         ), patch(
-            "extractors.coles_extractor.fetch_coles_search",
+            "extractors.coles_extractor.fetch_coles_search_status",
             side_effect=stub_coles,
         ):
             result = self.engine.find_product("bread")
         self.assertEqual(result.status, LookupStatus.LIVE_SEARCH)
         self.assertEqual(result.prices["woolworths"], 2.50)
         self.assertNotIn("coles", result.prices)
+        self.assertEqual(result.store_unavailable, ["coles"])
 
     # --- Scenario 11: Step 6 — genuine not found ---
     def test_step6_not_found(self):
@@ -283,8 +289,8 @@ class TestLookupEngine(unittest.TestCase):
             "extractors.woolworths_extractor.fetch_woolworths_search_noauth",
             side_effect=lambda q, **kw: [],
         ), patch(
-            "extractors.coles_extractor.fetch_coles_search",
-            side_effect=lambda q, **kw: [],
+            "extractors.coles_extractor.fetch_coles_search_status",
+            side_effect=lambda q, **kw: ([], "empty"),
         ):
             result = self.engine.find_product("xyzunknown")
         self.assertEqual(result.status, LookupStatus.NOT_FOUND)

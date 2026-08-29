@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lookup engine: generic name -> keywords -> live search -> auto-add.
+"""Lookup engine: generic name -> keywords -> live search (display-only).
 
 Context 2 (user query) state machine. Fuzzy + alias learning IS allowed
 here, per TASK_3.5.8 Operating Rule #10. This is SEPARATE from the sync
@@ -13,7 +13,10 @@ Lookup chain (find_product):
     Step 3: Partial candidates in Col A with interactive selection.
     Step 4: Persist alias to Col P on user selection (persist_alias).
     Step 5: Not in sheet -> live search Woolworths (curl_cffi, no login)
-            + Coles (Scrape.do). Results returned for confirm/auto-add.
+            + Coles (Scrape.do). Ranked per store; the shown pair passes
+            the UOM 20% gate (core/uom.py). Display-only: no auto-add —
+            explicit adds go through `search --add-item` / `map --add`
+            (spec §0.7 / B2).
     Step 6: Genuine "not found" only if BOTH stores return empty.
 
 Col P ("Keywords") stores user-side aliases, pipe-delimited within a
@@ -22,6 +25,7 @@ sync and must never be conflated with Col P.
 """
 from __future__ import annotations
 
+import difflib
 import re
 import sys
 from dataclasses import dataclass, field
@@ -35,6 +39,7 @@ _PROJECT = _HERE.parent                          # grocery-price-tracker/
 if str(_PROJECT) not in sys.path:
     sys.path.insert(0, str(_PROJECT))
 
+from core.uom import Verdict, compare_sizes, parse_size
 from core.sheets_sync import PRICE_COL, _find_col, _col_letter, _pad_rows
 from core.sheets_sync import _update_with_backoff, _sydney_now_str
 
@@ -115,6 +120,16 @@ class LookupResult:
         candidates: list[CandidateRow] for Step 3 (empty otherwise).
         live_items: list[ProductItem] for Step 5 (empty otherwise).
         note: human-readable resolution note.
+        matched_names: store -> matched product name for the price shown
+            (Col A value for sheet steps; raw store name for live).
+        matched_sizes: store -> matched size string (Col C for sheet
+            steps; the live listing size for live).
+        closest: store -> {"name", "size"} of the top-ranked product when
+            no comparable pair was found (found-block data, Step 5).
+        uom_reason: "" or "family_mismatch" | "beyond_20pct" |
+            "missing_size" | "no_results_<store>" (Step 5 gate outcome).
+        store_unavailable: stores not checked this run (e.g. Coles when
+            Scrape.do is unavailable/breaker-open/cap-exceeded).
     """
     query: str
     status: LookupStatus
@@ -126,6 +141,11 @@ class LookupResult:
     candidates: list = field(default_factory=list)
     live_items: list = field(default_factory=list)
     note: str = ""
+    matched_names: dict = field(default_factory=dict)
+    matched_sizes: dict = field(default_factory=dict)
+    closest: dict = field(default_factory=dict)
+    uom_reason: str = ""
+    store_unavailable: list = field(default_factory=list)
 
 
 # ============================================================================
@@ -368,6 +388,144 @@ class LookupIndex:
 
 
 # ============================================================================
+# Section B2: live-search ranking + UOM pair selection (Step 5)
+# ============================================================================
+
+
+def _token_variants(token: str) -> set:
+    """Return singular/plural normalisation variants of one token.
+
+    Absorbs the tomatoes/tomato class: "ies"->"y", trailing "es", and
+    trailing "s" each produce an extra candidate variant.
+
+    Args:
+        token (str): lowercased single word.
+
+    Returns:
+        set: the token plus its plausible singular/plural forms.
+    """
+    variants = {token}
+    if token.endswith("ies") and len(token) > 4:
+        variants.add(token[:-3] + "y")
+    if token.endswith("es") and len(token) > 3:
+        variants.add(token[:-2])
+    if token.endswith("s") and len(token) > 2:
+        variants.add(token[:-1])
+    return variants
+
+
+def rank_live_results(query: str, items: list) -> list:
+    """Rank live-search results by tolerant relevance. NEVER rejects.
+
+    Score = 2 x (fraction of significant query tokens present in the
+    product name, singular/plural normalised) + difflib SequenceMatcher
+    ratio on the normalised full strings. Stdlib only.
+
+    Args:
+        query (str): the user-typed search string.
+        items (list): ProductItem-like objects for ONE store.
+
+    Returns:
+        list: the same items, ordered rank desc then raw_name asc.
+        Every input item is returned.
+    """
+    norm_query = LookupIndex._normalize(query)
+    query_variants = [
+        _token_variants(t) for t in norm_query.split()
+        if len(t) >= MIN_WORD_LEN and t not in STOPWORDS
+    ]
+    scored = []
+    for item in items:
+        name = str(getattr(item, "raw_name", "") or "")
+        norm_name = LookupIndex._normalize(name)
+        name_variants = {
+            v for t in norm_name.split() for v in _token_variants(t)
+        }
+        overlap = sum(1 for vs in query_variants if vs & name_variants)
+        fraction = overlap / len(query_variants) if query_variants else 0.0
+        ratio = difflib.SequenceMatcher(None, norm_query, norm_name).ratio()
+        scored.append((fraction * 2.0 + ratio, name, item))
+    scored.sort(key=lambda t: (-t[0], t[1].lower()))
+    return [item for _score, _name, item in scored]
+
+
+# Price sanity ceiling: among gate-passing pairs prefer the first whose
+# prices are within 10x of each other (spec §3.2.3).
+PAIR_PRICE_CEILING = 10.0
+
+
+def select_live_pair(query: str, ww_items: list,
+                     coles_items: list) -> dict:
+    """Pick the Woolworths+Coles pair to show, gated by the UOM rule.
+
+    Pairwise walk: Woolworths rank order (outer) x Coles rank order
+    (inner); every pair whose compare_sizes verdict is COMPARABLE_*
+    collects (in walk order). Among those, the first whose prices sit
+    within 10x of each other wins; if none, the first passing pair.
+    Ranking never rejects: single-sided results come back ranked for
+    display (found-block / map flow).
+
+    Args:
+        query (str): the user-typed search string.
+        ww_items (list): Woolworths ProductItems (unranked ok).
+        coles_items (list): Coles ProductItems (unranked ok).
+
+    Returns:
+        dict: {"ww": ProductItem | None, "coles": ProductItem | None,
+        "pair_passed": bool, "reason": str, "ww_ranked": list,
+        "coles_ranked": list}. reason is the first attempted
+        comparison's failure reason ("family_mismatch" | "beyond_20pct"
+        | "missing_size") when no pair passed.
+    """
+    ww_ranked = rank_live_results(query, ww_items or [])
+    coles_ranked = rank_live_results(query, coles_items or [])
+    result = {
+        "ww": None,
+        "coles": None,
+        "pair_passed": False,
+        "reason": "",
+        "ww_ranked": ww_ranked,
+        "coles_ranked": coles_ranked,
+    }
+    if not ww_ranked or not coles_ranked:
+        return result
+
+    passing: list[tuple] = []
+    first_reason = ""
+    for ww_item in ww_ranked:
+        ww_size = parse_size(getattr(ww_item, "size", "") or "")
+        for coles_item in coles_ranked:
+            coles_size = parse_size(getattr(coles_item, "size", "") or "")
+            cmp = compare_sizes(ww_size, coles_size)
+            if cmp.verdict in (Verdict.COMPARABLE_SAME,
+                               Verdict.COMPARABLE_TOLERANT):
+                passing.append((ww_item, coles_item))
+            elif not first_reason and cmp.reason:
+                first_reason = cmp.reason
+
+    if not passing:
+        result["reason"] = first_reason
+        return result
+
+    chosen = None
+    for ww_item, coles_item in passing:
+        ww_price = float(getattr(ww_item, "price", 0.0) or 0.0)
+        coles_price = float(getattr(coles_item, "price", 0.0) or 0.0)
+        low, high = sorted((ww_price, coles_price))
+        if low > 0 and high / low <= PAIR_PRICE_CEILING:
+            chosen = (ww_item, coles_item)
+            break
+    if chosen is None:
+        chosen = passing[0]
+
+    result["ww"] = chosen[0]
+    result["coles"] = chosen[1]
+    result["pair_passed"] = True
+    result["reason"] = ""
+    return result
+
+
+# ============================================================================
 # Section C: LookupEngine (state machine)
 # ============================================================================
 
@@ -434,6 +592,10 @@ class LookupEngine:
                 prices=dict(exact["prices"]),
                 specials=dict(exact["specials"]),
                 brand=exact.get("brand", ""),
+                matched_names={s: exact["generic_name"]
+                               for s in exact["prices"]},
+                matched_sizes={s: exact.get("size", "")
+                               for s in exact["prices"]},
                 note=f"exact match: '{exact['generic_name']}'",
             )
 
@@ -448,6 +610,10 @@ class LookupEngine:
                 prices=dict(alias["prices"]),
                 specials=dict(alias["specials"]),
                 brand=alias.get("brand", ""),
+                matched_names={s: alias["generic_name"]
+                               for s in alias["prices"]},
+                matched_sizes={s: alias.get("size", "")
+                               for s in alias["prices"]},
                 note=f"Col P alias match: '{alias['generic_name']}'",
             )
 
@@ -462,6 +628,10 @@ class LookupEngine:
                 prices=dict(token_match["prices"]),
                 specials=dict(token_match["specials"]),
                 brand=token_match.get("brand", ""),
+                matched_names={s: token_match["generic_name"]
+                               for s in token_match["prices"]},
+                matched_sizes={s: token_match.get("size", "")
+                               for s in token_match["prices"]},
                 note=f"Col P token match: '{token_match['generic_name']}'",
             )
 
@@ -488,39 +658,135 @@ class LookupEngine:
                     prices=dict(row_dict["prices"]),
                     specials=dict(row_dict["specials"]),
                     brand=row_dict.get("brand", ""),
+                    matched_names={s: top.generic_name
+                                   for s in row_dict["prices"]},
+                    matched_sizes={s: row_dict.get("size", "")
+                                   for s in row_dict["prices"]},
                     note=f"auto-picked candidate: '{top.generic_name}'",
                 )
 
-        # Step 5: live search (Woolworths curl_cffi + Coles Scrape.do)
-        live_items = self._live_search(query)
-        if live_items:
-            # Pick first result per store
-            prices: dict = {}
-            specials: dict = {}
-            brand = ""
-            name = ""
-            seen_stores = set()
-            for item in live_items:
-                store = item.store.lower()
-                if (store in ("woolworths", "coles")
-                        and store not in seen_stores):
-                    seen_stores.add(store)
-                    prices[store] = item.price
-                    if item.is_special and item.special_desc:
-                        specials[store] = item.special_desc
-                    if not brand and item.brand:
-                        brand = item.brand
-                    if not name and item.raw_name:
-                        name = item.raw_name
+        # Step 5: live search (display-only; explicit adds happen via
+        # `search --add-item` / `map --add` — spec §0.7 / B2)
+        ww_items, coles_items, coles_status = self._live_search_pair(query)
+        ww_ranked = rank_live_results(query, ww_items)
+        coles_ranked = rank_live_results(query, coles_items)
+        coles_unavailable = coles_status in (
+            "unavailable", "breaker_open", "cap_exceeded")
+
+        if ww_ranked and coles_ranked:
+            pair = select_live_pair(query, ww_items, coles_items)
+            if pair["pair_passed"]:
+                chosen_ww = pair["ww"]
+                chosen_coles = pair["coles"]
+                prices = {
+                    "woolworths": chosen_ww.price,
+                    "coles": chosen_coles.price,
+                }
+                specials: dict = {}
+                if chosen_ww.is_special and chosen_ww.special_desc:
+                    specials["woolworths"] = chosen_ww.special_desc
+                if chosen_coles.is_special and chosen_coles.special_desc:
+                    specials["coles"] = chosen_coles.special_desc
+                matched_names = {
+                    "woolworths": chosen_ww.raw_name,
+                    "coles": chosen_coles.raw_name,
+                }
+                matched_sizes = {
+                    "woolworths": chosen_ww.size,
+                    "coles": chosen_coles.size,
+                }
+                rest = [
+                    it for it in ww_ranked + coles_ranked
+                    if it is not chosen_ww and it is not chosen_coles
+                ]
+                return LookupResult(
+                    query=query,
+                    status=LookupStatus.LIVE_SEARCH,
+                    generic_name=chosen_ww.raw_name or chosen_coles.raw_name,
+                    prices=prices,
+                    specials=specials,
+                    brand=chosen_ww.brand or chosen_coles.brand,
+                    matched_names=matched_names,
+                    matched_sizes=matched_sizes,
+                    live_items=[chosen_ww, chosen_coles] + rest,
+                    note="live match from store APIs (UOM-gated pair)",
+                )
+            # No pair passed the gate -> honest found-block (IN-1):
+            # no prices, closest top-ranked product per returning store.
+            closest = {}
+            if ww_ranked:
+                closest["woolworths"] = {
+                    "name": ww_ranked[0].raw_name,
+                    "size": ww_ranked[0].size,
+                }
+            if coles_ranked:
+                closest["coles"] = {
+                    "name": coles_ranked[0].raw_name,
+                    "size": coles_ranked[0].size,
+                }
             return LookupResult(
                 query=query,
                 status=LookupStatus.LIVE_SEARCH,
-                generic_name=name,
-                prices=prices,
-                specials=specials,
-                brand=brand,
-                live_items=live_items,
-                note="live match from store APIs",
+                generic_name=(ww_ranked[0].raw_name if ww_ranked
+                              else coles_ranked[0].raw_name),
+                prices={},
+                specials={},
+                brand="",
+                closest=closest,
+                uom_reason=pair["reason"],
+                live_items=ww_ranked + coles_ranked,
+                note="no comparable pair — closest products shown",
+            )
+
+        # Single-sided: Woolworths only
+        if ww_ranked and not coles_ranked:
+            top = ww_ranked[0]
+            if coles_unavailable:
+                # B4.3: show the Woolworths-only answer.
+                return LookupResult(
+                    query=query,
+                    status=LookupStatus.LIVE_SEARCH,
+                    generic_name=top.raw_name,
+                    prices={"woolworths": top.price},
+                    specials=({"woolworths": top.special_desc}
+                              if top.is_special and top.special_desc else {}),
+                    brand=top.brand,
+                    matched_names={"woolworths": top.raw_name},
+                    matched_sizes={"woolworths": top.size},
+                    store_unavailable=["coles"],
+                    live_items=ww_ranked,
+                    note="woolworths only — coles not checked",
+                )
+            # Coles returned 0 hits: no price enters the report (IN-1).
+            return LookupResult(
+                query=query,
+                status=LookupStatus.LIVE_SEARCH,
+                generic_name=top.raw_name,
+                prices={},
+                specials={},
+                brand="",
+                closest={"woolworths": {
+                    "name": top.raw_name, "size": top.size}},
+                uom_reason="no_results_coles",
+                live_items=ww_ranked,
+                note="coles found no matching product",
+            )
+
+        # Single-sided: Coles only (Woolworths empty or failed)
+        if coles_ranked and not ww_ranked:
+            top = coles_ranked[0]
+            return LookupResult(
+                query=query,
+                status=LookupStatus.LIVE_SEARCH,
+                generic_name=top.raw_name,
+                prices={},
+                specials={},
+                brand="",
+                closest={"coles": {
+                    "name": top.raw_name, "size": top.size}},
+                uom_reason="no_results_woolworths",
+                live_items=coles_ranked,
+                note="woolworths found no matching product",
             )
 
         # Step 6: genuine not found
@@ -604,11 +870,50 @@ class LookupEngine:
                 "range_written": range_name, "aliases": existing,
                 "error": ""}
 
-    def _live_search(self, query: str) -> list:
-        """Step 5: live search Woolworths (curl_cffi, no login) + Coles.
+    def _live_search_pair(self, query: str) -> tuple[list, list, str]:
+        """Step 5: search each store separately, keeping Coles status.
 
-        Concatenates results from both stores. Swallow exceptions (return
-        [] on total failure). Each store failure yields [] for that store.
+        Woolworths via curl_cffi noauth search; Coles via the
+        credit-guarded fetch_coles_search_status. Per-store failures
+        yield [] for that store (never raise).
+
+        Args:
+            query (str): the user-typed search string.
+
+        Returns:
+            tuple[list, list, str]: (ww_items, coles_items, coles_status)
+            where coles_status is one of "ok" | "empty" | "unavailable" |
+            "breaker_open" | "cap_exceeded".
+        """
+        if not query or not query.strip():
+            return [], [], "empty"
+        # Lazy imports to avoid import cycles and keep test import cheap
+        from extractors.woolworths_extractor import fetch_woolworths_search_noauth
+        from extractors.coles_extractor import fetch_coles_search_status
+        ww_items: list = []
+        try:
+            ww_items = fetch_woolworths_search_noauth(query, page_size=5) or []
+        except Exception as exc:
+            print(
+                f"[lookup] woolworths live search failed: {exc}",
+                file=sys.stderr,
+            )
+        coles_items: list = []
+        coles_status = "unavailable"
+        try:
+            coles_items, coles_status = fetch_coles_search_status(
+                query, page_size=5)
+        except Exception as exc:
+            print(
+                f"[lookup] coles live search failed: {exc}",
+                file=sys.stderr,
+            )
+        return ww_items, coles_items or [], coles_status
+
+    def _live_search(self, query: str) -> list:
+        """Legacy Step-5 concat (kept for compatibility): both stores in
+        one list, Woolworths first. Swallow exceptions (return [] on
+        total failure). Each store failure yields [] for that store.
         """
         if not query or not query.strip():
             return []
