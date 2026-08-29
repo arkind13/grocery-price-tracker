@@ -601,8 +601,8 @@ class TestAutomationAssets(unittest.TestCase):
         self.assertEqual(len(plan), len(self.deploy._FILE_MANIFEST))
 
     def test_d2_scp_then_restart_then_smoke_order(self):
-        """D-2: scps per manifest file -> ONE docker restart -> container
-        smoke (searched-items show), in that order."""
+        """D-2: scps per manifest file -> ONE ssh-wrapped docker restart
+        on the VPS -> container smoke (searched-items show), in order."""
         calls = []
 
         def fake_run(cmd, **kwargs):
@@ -620,12 +620,14 @@ class TestAutomationAssets(unittest.TestCase):
         self.assertEqual(len(scps), len(self.deploy._FILE_MANIFEST))
         for c in scps:
             self.assertIsInstance(c, list)      # argument LIST, no shell
-        restarts = [c for c in calls if c[0] == "docker"
-                    and c[1] == "restart"]
+        # docker commands are ssh-wrapped (openclaw-core lives on the VPS)
+        restarts = [c for c in calls if "docker" in c and "restart" in c]
         self.assertEqual(len(restarts), 1)
-        smokes = [c for c in calls if c[0] == "docker"
-                  and c[1] == "exec" and "searched-items" in c]
+        self.assertEqual(restarts[0][0], "ssh")
+        smokes = [c for c in calls if "searched-items" in c]
         self.assertEqual(len(smokes), 1)
+        self.assertIn("docker", smokes[0])
+        self.assertIn("exec", smokes[0])
         # Order: every scp BEFORE the restart, restart BEFORE the smoke.
         first_non_scp = next(i for i, c in enumerate(calls)
                              if c[0] != "scp")
@@ -750,7 +752,7 @@ class TestAutomationAssets(unittest.TestCase):
         self.assertIn('["scp", "-o", "ConnectTimeout=10"',
                       Path(self.deploy.__file__).read_text(
                           encoding="utf-8"))
-        self.assertIn('["docker", "restart"',
+        self.assertIn('"docker", *docker_args',
                       Path(self.deploy.__file__).read_text(
                           encoding="utf-8"))
 

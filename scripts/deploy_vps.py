@@ -115,7 +115,19 @@ def build_plan(root: Path = _ROOT) -> list:
 
 def _run(cmd: list) -> subprocess.CompletedProcess:
     """Run a command with an ARGUMENT LIST (never via a shell)."""
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+
+
+def _scp_cmd(local, remote_dir, name) -> list:
+    """BatchMode scp argument list (fails fast without keys)."""
+    return ["scp", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes",
+            str(local), f"{VPS_HOST}:{remote_dir}/{name}"]
+
+
+def _vps_docker_cmd(*docker_args: str) -> list:
+    """ssh-wrapped docker command list (openclaw-core lives on the VPS)."""
+    return ["ssh", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes",
+            VPS_HOST, "docker", *docker_args]
 
 
 def _has_git_remote(root: Path = _ROOT) -> bool:
@@ -140,8 +152,7 @@ def _deploy_scp(plan: list, host: str = VPS_HOST) -> list:
     failed = []
     for local, remote in plan:
         print(f"  scp {local.name} -> {host}:{remote}/")
-        result = _run(["scp", "-o", "ConnectTimeout=10", str(local),
-                       f"{host}:{remote}/{local.name}"])
+        result = _run(_scp_cmd(local, remote, local.name))
         if result.returncode != 0:
             print(f"    FAILED: {(result.stderr or '').strip()}")
             failed.append((local, remote))
@@ -221,16 +232,18 @@ def main() -> int:
               file=sys.stderr)
         return 1
 
-    # Container restart (exactly once) + in-container smoke check.
-    print(f"Restarting container {CONTAINER}…")
-    restart = _run(["docker", "restart", CONTAINER])
+    # Container restart (exactly once) + in-container smoke check —
+    # both run ON the VPS via ssh (openclaw-core is a VPS container).
+    print(f"Restarting container {CONTAINER} on the VPS…")
+    restart = _run(_vps_docker_cmd("restart", CONTAINER))
     if restart.returncode != 0:
         print(f"docker restart FAILED: {(restart.stderr or '').strip()}",
               file=sys.stderr)
         return 1
     print("    OK")
-    smoke = _run(["docker", "exec", CONTAINER, "python3",
-                  CLI_IN_CONTAINER, "searched-items", "show"])
+    smoke = _run(_vps_docker_cmd("exec", CONTAINER, "python3",
+                                 CLI_IN_CONTAINER, "searched-items",
+                                 "show"))
     if smoke.returncode != 0:
         print(f"Container smoke check FAILED: "
               f"{(smoke.stderr or smoke.stdout).strip()}", file=sys.stderr)
