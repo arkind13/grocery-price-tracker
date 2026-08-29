@@ -33,7 +33,9 @@ VPS_HOST = "ubuntu@169.58.107.0"
 VPS_BASE = "/home/ubuntu/openclaw/tasks/ai-tools"
 VPS_SKILLS = "/home/ubuntu/openclaw/skills/grocery-price"
 CONTAINER = "openclaw-core"
-CLI_IN_CONTAINER = f"{VPS_BASE}/grocery_price_cli.py"
+# In-container path: openclaw-core mounts the ai-tools tree at /app/tasks
+# (the VPS_BASE host path does not exist inside the container).
+CLI_IN_CONTAINER = "/app/tasks/ai-tools/grocery_price_cli.py"
 
 # FILE_MANIFEST (D-1): every file created/edited by Tasks 1–11 — local
 # path relative to the workspace root, remote absolute directory.

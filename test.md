@@ -276,6 +276,15 @@ Audit performed:
    the Scrape.do recipe landed. Replaced with the mandated ≥ 90 s rule
    for `compare` / `search` / `recipe`.
 
+3. **`deploy_vps.py` smoke path bug** — `CLI_IN_CONTAINER` pointed at
+   the VPS host path (`/home/ubuntu/openclaw/tasks/ai-tools/…`) but the
+   smoke runs `docker exec` INSIDE openclaw-core, which mounts the tree
+   at `/app/tasks/ai-tools/`. First checker re-deploy failed the smoke
+   with "No such file or directory". Fixed the constant to
+   `/app/tasks/ai-tools/grocery_price_cli.py`; matrix D (8/8) still
+   green; re-deploy verified end-to-end: restart OK, container smoke
+   `searched_items is empty ✅`, exit 0.
+
 **Final suite (after checker fixes):**
 `446 passed, 0 failed, 0 skipped` —
 `C:\Users\USER~1.DES\anaconda3\python.exe -m pytest grocery-price-tracker/tests/ -q`
