@@ -204,9 +204,9 @@ failures as baseline; 0 new failures; 0 skips)
   command = anaconda python + scripts/session_heartbeat_entry.py)
 - Heartbeat live run: `woolworths: alive`, `coles: unknown`, exit 0
 
-## Pre-existing failures (NOT touched — Task 0.2 directive)
+## Pre-existing failures (resolved by 04 Checker — see bottom section)
 
-All 8 are stale Phase-1 tests in `tests/test_extractors.py`, failing
+All 8 were stale Phase-1 tests in `tests/test_extractors.py`, failing
 identically at baseline (both files unchanged since commit `0942f81`):
 
 1. `TestSessionManager::test_get_headers_no_cookie` — environment-
@@ -220,5 +220,62 @@ identically at baseline (both files unchanged since commit `0942f81`):
    keys the parser never unwrapped; current `_parse_search_result`
    (and its committed callers) consume raw product dicts.
 
-Per the plan ("do NOT fix, do NOT skip — record"), these remain
-untouched and are handed to 04 Checker with this note.
+Per the plan ("do NOT fix, do NOT skip — record"), 03 Code left them
+untouched and handed them to 04 Checker with this note.
+
+## 04 Architect Checker audit (2026-08-29)
+
+**Verdict: PASS.** All spec §8 acceptance criteria verified; the 8
+handed-over failures were repaired and the suite is now fully green.
+
+Audit performed:
+
+1. **Independent full-suite run** — confirmed the 03 Code result
+   (438 passed / 8 failed) before any checker changes.
+2. **File boundaries (spec §6, plan §2)** — `git diff pre-live-trial..HEAD`:
+   23 files, all within the authorised create/edit lists (+ the two
+   flagged micro-exceptions IN-6 `models.py` 4 lines / WW probe 4 lines,
+   IN-7 new test file). No frozen file touched: `core/sheets_sync.py`,
+   `core/name_matcher.py`, `core/add_to_list.py`,
+   `core/missing_items_tracker.py`, docx parsers, `telegram_gateway/`,
+   `core/woolworths_discounts.py`, `core/telegram_format.py`, `.env`,
+   no `.docx` — all absent from the diff. Parent repo touched only
+   `grocery_price_cli.py` + `claw-skills/grocery-price/SKILL.md`.
+3. **Guardrail greps** — no `scrape.do` reference in
+   `session_refresh.py` / `live_list_fetch.py` (guardrail 5); no
+   per-unit price strings in `price_comparator.py` (guardrail 1);
+   `store_keyword=""` on both new add paths (guardrail 2 / 0.4); the
+   only `set_store_keyword` caller is the pre-existing `map --keyword`
+   flow (unchanged).
+4. **Automation evidence** — `pre-live-trial` tag present; 14-task
+   commit cadence in both repos; `schtasks /Query` shows
+   `grocery-session-heartbeat` Ready; deploy table + container smoke
+   recorded above.
+5. **Exact-wording tests** — found-block §3.3, B4.3 line, §3.4
+   management phrases, S-15 unknown-code error, WC-4 §5.2 stop message
+   (exit 1 + `sync_prices` never called + manual docx steps) all
+   asserted in the suite.
+
+**Defects found and fixed by 04 Checker:**
+
+1. **The 8 stale `test_extractors.py` tests** (handed over above) —
+   tests were asserting a Phase-1-era API; the shipped code is proven
+   by 438 passing tests and was NOT changed. Fixes:
+   - `test_get_headers_no_cookie` made hermetic (temporarily clears
+     `WOOLWORTHS_COOKIE`, same save/restore pattern as the sibling
+     `test_get_headers_with_cookie`).
+   - WW tests rewritten against `_parse_product_detail` (current keys
+     `IsOnSpecial`/`WasPrice`/`PackageSize`/`IsAvailable`; the old
+     `productName`/`sellPrice` alternate-key test became a
+     DisplayName/unavailable-price test matching the current contract).
+   - Coles tests rewritten against raw product dicts (no
+     `{"product": ...}` wrapper; `pricing.was`/`promotionType` specials
+     detection; `product_id` probe now asserted).
+2. **SKILL.md missing the ≥90 s tool-call timeout rule** (spec §3.5.6 /
+   plan §7.10 first bullet) — the file still said "10–30 s" from before
+   the Scrape.do recipe landed. Replaced with the mandated ≥ 90 s rule
+   for `compare` / `search` / `recipe`.
+
+**Final suite (after checker fixes):**
+`446 passed, 0 failed, 0 skipped` —
+`C:\Users\USER~1.DES\anaconda3\python.exe -m pytest grocery-price-tracker/tests/ -q`

@@ -120,11 +120,24 @@ class TestSessionManager(unittest.TestCase):
         self.assertIsInstance(cookies, dict)
 
     def test_get_headers_no_cookie(self):
-        """get_headers returns base headers when no cookie is set."""
-        headers = self.sm.get_headers("woolworths")
-        self.assertIn("User-Agent", headers)
-        self.assertIn("Accept", headers)
-        self.assertNotIn("Cookie", headers)
+        """get_headers returns base headers when no cookie is set.
+
+        Hermetic: WOOLWORTHS_COOKIE may exist in the real environment
+        (loaded from the root .env at module import) — temporarily
+        remove it so the no-cookie path is actually exercised.
+        """
+        import os
+        old = os.environ.get("WOOLWORTHS_COOKIE", "")
+        if old:
+            del os.environ["WOOLWORTHS_COOKIE"]
+        try:
+            headers = self.sm.get_headers("woolworths")
+            self.assertIn("User-Agent", headers)
+            self.assertIn("Accept", headers)
+            self.assertNotIn("Cookie", headers)
+        finally:
+            if old:
+                os.environ["WOOLWORTHS_COOKIE"] = old
 
     def test_get_headers_with_cookie(self):
         """get_headers includes Cookie header when cookie is set."""
@@ -237,104 +250,105 @@ class TestDocParser(unittest.TestCase):
 # Test Woolworths Extractor
 # =========================================================================
 class TestWoolworthsExtractor(unittest.TestCase):
-    """Tests for the Woolworths extractor (API item parsing)."""
+    """Tests for the Woolworths extractor (product-detail parsing)."""
 
-    def test_parse_api_item(self):
-        """_parse_api_item extracts fields from a standard API response dict."""
-        from extractors.woolworths_extractor import _parse_api_item as parse
+    def test_parse_product_detail(self):
+        """_parse_product_detail extracts fields from a product-detail dict."""
+        from extractors.woolworths_extractor import _parse_product_detail as parse
 
         item = parse({
             "Name": "Oatly Barista Edition 1L",
             "Price": 4.50,
-            "IsSpecial": True,
+            "IsAvailable": True,
+            "IsOnSpecial": True,
             "WasPrice": 5.50,
             "CupPriceString": "$4.50 / 1L",
+            "PackageSize": "1L",
         })
         self.assertIsNotNone(item)
         self.assertEqual(item.raw_name, "Oatly Barista Edition 1L")
         self.assertAlmostEqual(item.price, 4.50)
         self.assertTrue(item.is_special)
         self.assertIn("Was", item.special_desc)
+        self.assertEqual(item.size, "1L")
 
-    def test_parse_api_item_no_price(self):
+    def test_parse_product_detail_no_price(self):
         """An item without a price returns 0.0."""
-        from extractors.woolworths_extractor import _parse_api_item as parse
+        from extractors.woolworths_extractor import _parse_product_detail as parse
 
         item = parse({"Name": "Unknown Product"})
         self.assertIsNotNone(item)
         self.assertAlmostEqual(item.price, 0.0)
 
-    def test_parse_api_item_empty_name(self):
+    def test_parse_product_detail_empty_name(self):
         """An item without a name returns None."""
-        from extractors.woolworths_extractor import _parse_api_item as parse
+        from extractors.woolworths_extractor import _parse_product_detail as parse
 
         item = parse({"Price": 5.00})
         self.assertIsNone(item)
 
-    def test_parse_api_item_alternate_keys(self):
-        """_parse_api_item handles alternate key names."""
-        from extractors.woolworths_extractor import _parse_api_item as parse
+    def test_parse_product_detail_unavailable_zeroes_price(self):
+        """An unavailable item keeps its name but prices as 0.0."""
+        from extractors.woolworths_extractor import _parse_product_detail as parse
 
         item = parse({
-            "productName": "Woolworths Full Cream Milk 2L",
-            "sellPrice": 3.60,
+            "DisplayName": "Woolworths Full Cream Milk 2L",
+            "Price": 3.60,
+            "IsAvailable": False,
         })
         self.assertIsNotNone(item)
         self.assertEqual(item.raw_name, "Woolworths Full Cream Milk 2L")
-        self.assertAlmostEqual(item.price, 3.60)
+        self.assertAlmostEqual(item.price, 0.0)
 
 
 # =========================================================================
 # Test Coles Extractor
 # =========================================================================
 class TestColesExtractor(unittest.TestCase):
-    """Tests for the Coles extractor (API result parsing)."""
+    """Tests for the Coles extractor (search-result parsing)."""
 
     def test_parse_search_result(self):
-        """_parse_search_result extracts fields from a Coles search result."""
+        """_parse_search_result extracts fields from a raw product dict."""
         from extractors.coles_extractor import _parse_search_result as parse
 
         item = parse({
-            "product": {
-                "name": "Coles Full Cream Milk 2L",
-                "pricing": {
-                    "now": 3.80,
-                    "was": 4.50,
-                    "unitPrice": "$1.90 / 1L",
-                },
-                "flybuysPoints": 100,
-                "size": "2L",
-            }
+            "id": "1063932",
+            "name": "Coles Full Cream Milk 2L",
+            "pricing": {
+                "now": 3.80,
+                "was": 4.50,
+                "comparable": "$1.90 / 1L",
+            },
+            "size": "2L",
         })
         self.assertIsNotNone(item)
         self.assertEqual(item.raw_name, "Coles Full Cream Milk 2L")
         self.assertAlmostEqual(item.price, 3.80)
         self.assertTrue(item.is_special)
-        self.assertEqual(item.rewards_points, "100")
+        self.assertEqual(item.special_desc, "Was $4.50")
         self.assertEqual(item.size, "2L")
+        self.assertEqual(item.product_id, "1063932")
 
-    def test_parse_search_result_no_product_wrapper(self):
-        """_parse_search_result handles flat product dict."""
+    def test_parse_search_result_minimal_fields(self):
+        """_parse_search_result handles a flat dict with only name + price."""
         from extractors.coles_extractor import _parse_search_result as parse
 
         item = parse({
             "name": "Coles White Bread 700g",
-            "price": 3.50,
+            "pricing": {"now": 3.50},
         })
         self.assertIsNotNone(item)
         self.assertEqual(item.raw_name, "Coles White Bread 700g")
         self.assertAlmostEqual(item.price, 3.50)
+        self.assertFalse(item.is_special)
 
-    def test_parse_search_result_with_badges(self):
-        """_parse_search_result detects specials from badges."""
+    def test_parse_search_result_with_promotion_type(self):
+        """_parse_search_result detects specials from promotionType."""
         from extractors.coles_extractor import _parse_search_result as parse
 
         item = parse({
-            "product": {
-                "name": "Coles Butter 250g",
-                "pricing": {"now": 3.00},
-                "badges": [{"label": "Half Price"}],
-            }
+            "name": "Coles Butter 250g",
+            "pricing": {"now": 3.00, "promotionType": "HALF_PRICE"},
         })
         self.assertIsNotNone(item)
         self.assertTrue(item.is_special)
