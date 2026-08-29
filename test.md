@@ -200,7 +200,8 @@ failures as baseline; 0 new failures; 0 skips)
 - Container smoke: `docker exec openclaw-core python3
   /app/tasks/ai-tools/grocery_price_cli.py searched-items show` →
   `searched_items is empty ✅`, exit 0
-- schtasks registered: `grocery-session-heartbeat` (hourly, Ready,
+- schtasks registered: `grocery-session-heartbeat` (every 6 h per plan
+  A-4 — 04 Checker re-registered; 03 had used hourly, Ready,
   command = anaconda python + scripts/session_heartbeat_entry.py)
 - Heartbeat live run: `woolworths: alive`, `coles: unknown`, exit 0
 
