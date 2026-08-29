@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Pure unit tests for Phase 5: CLI dispatch + missing-items tracker.
 
 No network, no live sheet. Uses FakeWorksheet mock pattern.
@@ -14,6 +14,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 _HERE = Path(__file__).resolve().parent
@@ -112,7 +113,8 @@ class TestCLI(unittest.TestCase):
         finally:
             sys.stdout = old_stdout
         for cmd in ["specials", "rewards", "compare", "search", "recipe",
-                     "update", "sync", "specials-scan", "unmapped"]:
+                     "update", "sync", "specials-scan", "unmapped",
+                     "add-to-list"]:
             self.assertIn(cmd, output)
 
     def test_unknown_command_exit_2(self):
@@ -481,13 +483,14 @@ class TestCLI(unittest.TestCase):
     # Search handler tests
     # ========================================================================
 
-    @patch("extractors.coles_extractor.fetch_coles_search")
+    @patch("extractors.coles_extractor.fetch_coles_search_status")
     @patch("extractors.woolworths_extractor.fetch_woolworths_search_noauth")
     def test_search_both_stores_empty(self, mock_ww, mock_coles):
         """Both stores return empty -> 'No results found'."""
+        # Spec IN-5: _cmd_search consumes the status-signalling variant.
         from grocery_price_cli import _cmd_search
         mock_ww.return_value = []
-        mock_coles.return_value = []
+        mock_coles.return_value = ([], "empty")
         args = argparse.Namespace(product="nonexistent")
         old_stdout = sys.stdout
         try:
@@ -591,19 +594,20 @@ class TestCLI(unittest.TestCase):
     # Phase 9.7.d — search (noauth), map, compare --mode auto tests
     # ========================================================================
 
-    @patch("extractors.coles_extractor.fetch_coles_search")
+    @patch("extractors.coles_extractor.fetch_coles_search_status")
     @patch("extractors.woolworths_extractor.fetch_woolworths_search_noauth")
     def test_search_with_results_cheapest(self, mock_ww, mock_coles):
         """search returns cheapest store when both stores have results."""
+        # Spec IN-5 + §4.8-2: status-signalling Coles search; ≤3 shown.
         from grocery_price_cli import _cmd_search
         from extractors.models import ProductItem
 
         mock_ww.return_value = [
             ProductItem("woolworths", "WW Milk 2L", 3.50),
         ]
-        mock_coles.return_value = [
+        mock_coles.return_value = ([
             ProductItem("coles", "Coles Milk 2L", 3.20),
-        ]
+        ], "ok")
         args = argparse.Namespace(product="milk")
         old_stdout = sys.stdout
         try:
@@ -617,7 +621,7 @@ class TestCLI(unittest.TestCase):
         self.assertIn("Woolworths", output)
         self.assertIn("Coles", output)
 
-    @patch("extractors.coles_extractor.fetch_coles_search")
+    @patch("extractors.coles_extractor.fetch_coles_search_status")
     @patch("extractors.woolworths_extractor.fetch_woolworths_search_noauth")
     def test_search_with_specials(self, mock_ww, mock_coles):
         """search shows special badge when item is on special."""
@@ -628,7 +632,7 @@ class TestCLI(unittest.TestCase):
             ProductItem("woolworths", "WW Milk 2L", 3.50,
                         is_special=True, special_desc="Half Price"),
         ]
-        mock_coles.return_value = []
+        mock_coles.return_value = ([], "ok")
         args = argparse.Namespace(product="milk")
         old_stdout = sys.stdout
         try:
@@ -640,7 +644,7 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("Half Price", output)
 
-    @patch("extractors.coles_extractor.fetch_coles_search")
+    @patch("extractors.coles_extractor.fetch_coles_search_status")
     @patch("extractors.woolworths_extractor.fetch_woolworths_search_noauth")
     def test_search_woolworths_exception_fallback(self, mock_ww, mock_coles):
         """search handles Woolworths exception gracefully, still shows Coles."""
@@ -648,9 +652,9 @@ class TestCLI(unittest.TestCase):
         from extractors.models import ProductItem
 
         mock_ww.side_effect = RuntimeError("curl_cffi error")
-        mock_coles.return_value = [
+        mock_coles.return_value = ([
             ProductItem("coles", "Coles Milk 2L", 3.20),
-        ]
+        ], "ok")
         args = argparse.Namespace(product="milk")
         old_stdout = sys.stdout
         old_stderr = sys.stderr
@@ -740,7 +744,7 @@ class TestCLI(unittest.TestCase):
     # Always-on Woolworths display discounts — CLI surface tests
     # ========================================================================
 
-    @patch("extractors.coles_extractor.fetch_coles_search")
+    @patch("extractors.coles_extractor.fetch_coles_search_status")
     @patch("extractors.woolworths_extractor.fetch_woolworths_search_noauth")
     def test_search_cheapest_uses_discounted_ww(self, mock_ww, mock_coles):
         """Discounting can flip the cheapest store: WW home-brand $4.00
@@ -752,9 +756,9 @@ class TestCLI(unittest.TestCase):
             ProductItem("woolworths", "Macro Milk 2L", 4.00,
                         brand="Macro"),
         ]
-        mock_coles.return_value = [
+        mock_coles.return_value = ([
             ProductItem("coles", "Coles Milk 2L", 3.80),
-        ]
+        ], "ok")
         args = argparse.Namespace(product="milk")
         old_stdout = sys.stdout
         try:
@@ -916,6 +920,888 @@ class TestWednesdaySpecialsDisplay(unittest.TestCase):
         # Pipe-table ban on the Wednesday specials block.
         self.assertNotIn("|---", text)
         self.assertNotIn("| # |", text)
+
+
+class TestAddToListCLI(unittest.TestCase):
+    """add-to-list subcommand + wool/coles add-flow queue hooks (B1-B21).
+
+    Every test isolates the queue file via patch.object over
+    core.add_to_list.ADD_TO_LIST_PATH; map-flow tests additionally point
+    progress_path/data_dir at a tempdir and mock the search/price-sheet
+    boundaries.
+    """
+
+    # ========================================================================
+    # Helpers
+    # ========================================================================
+
+    def _atl_ctx(self, tmpdir):
+        """Patch context for an isolated ADD_TO_LIST_PATH."""
+        from core import add_to_list as atl
+        return patch.object(atl, "ADD_TO_LIST_PATH",
+                            Path(tmpdir) / "add_to_list.json")
+
+    def _map_args(self, **overrides):
+        """Namespace for _cmd_map_noninteractive with all action flags."""
+        defaults = {"next": False, "pick": None, "add": False,
+                    "skip": False, "na": False, "forget": False,
+                    "keyword": None}
+        defaults.update(overrides)
+        return argparse.Namespace(**defaults)
+
+    def _fake_prod(self, raw_name, price):
+        """Duck-typed live-search result covering the print path attrs."""
+        return SimpleNamespace(raw_name=raw_name, price=price, brand="",
+                               is_special=False, special_desc="")
+
+    def _seed_four(self, atl):
+        """Seed 2 Coles + 2 Woolworths entries."""
+        atl.add_entry("coles", "Coles Item One", "Generic One")
+        atl.add_entry("coles", "Coles Item Two", "Generic Two")
+        atl.add_entry("woolworths", "Woolies Item Three", "Generic Three")
+        atl.add_entry("woolworths", "Woolies Item Four", "Generic Four")
+
+    def _capture_stdout(self, fn, *args, **kwargs):
+        """Run fn capturing stdout; returns (result, output)."""
+        old_stdout = sys.stdout
+        try:
+            sys.stdout = io.StringIO()
+            result = fn(*args, **kwargs)
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+        return result, output
+
+    def _capture_both(self, fn, *args, **kwargs):
+        """Run fn capturing stdout+stderr; returns (result, out, err)."""
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        try:
+            sys.stdout = io.StringIO()
+            sys.stderr = io.StringIO()
+            result = fn(*args, **kwargs)
+            out = sys.stdout.getvalue()
+            err = sys.stderr.getvalue()
+        finally:
+            sys.stdout, sys.stderr = old_stdout, old_stderr
+        return result, out, err
+
+    # ========================================================================
+    # Parser + show/done handler (B1-B8)
+    # ========================================================================
+
+    def test_add_to_list_subparser_registered(self):
+        """B1: add-to-list parses; func is _cmd_add_to_list; bare 'done'
+        parses (handler validates --items)."""
+        from grocery_price_cli import _cmd_add_to_list, build_parser
+        parser = build_parser()
+        args = parser.parse_args(["add-to-list", "show"])
+        self.assertIs(args.func, _cmd_add_to_list)
+        args_done = parser.parse_args(["add-to-list", "done"])
+        self.assertEqual(args_done.action, "done")
+        self.assertIsNone(args_done.items)
+
+    def test_show_empty_prints_friendly_line(self):
+        """B2: show on an empty queue -> exit 0 + friendly line."""
+        from grocery_price_cli import _cmd_add_to_list
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                args = argparse.Namespace(action="show", items=None)
+                code, output = self._capture_stdout(_cmd_add_to_list, args)
+        self.assertEqual(code, 0)
+        self.assertIn("add_to_list is empty", output)
+
+    def test_show_two_sections_continuous_numbering(self):
+        """B3: Seed 2C+2W -> both section headers, 1)..4), each keyword."""
+        from grocery_price_cli import _cmd_add_to_list
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                from core import add_to_list as atl
+                self._seed_four(atl)
+                args = argparse.Namespace(action="show", items=None)
+                code, output = self._capture_stdout(_cmd_add_to_list, args)
+        self.assertEqual(code, 0)
+        self.assertIn("Coles", output)
+        self.assertIn("Woolworths", output)
+        for line in ("1) Coles Item One", "2) Coles Item Two",
+                     "3) Woolies Item Three", "4) Woolies Item Four"):
+            self.assertIn(line, output)
+
+    def test_done_valid_removes_and_reprints(self):
+        """B4: done --items "1,3" -> exit 0; two Removed lines;
+        "2 still pending"; file holds the other 2."""
+        from grocery_price_cli import _cmd_add_to_list
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                from core import add_to_list as atl
+                self._seed_four(atl)
+                args = argparse.Namespace(action="done", items="1,3")
+                code, output = self._capture_stdout(_cmd_add_to_list, args)
+                remaining = [e["keyword"] for e in atl.load_pending()]
+        self.assertEqual(code, 0)
+        self.assertIn("Removed: Coles Item One (Coles)", output)
+        self.assertIn("Removed: Woolies Item Three (Woolworths)", output)
+        self.assertIn("2 still pending:", output)
+        self.assertIn("1) Coles Item Two (Coles)", output)
+        self.assertIn("2) Woolies Item Four (Woolworths)", output)
+        self.assertEqual(remaining, ["Coles Item Two", "Woolies Item Four"])
+
+    def test_done_out_of_range_removes_nothing_exit_1(self):
+        """B5: done --items "9" on 4 -> exit 1, stderr names range, file
+        unchanged."""
+        from grocery_price_cli import _cmd_add_to_list
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                from core import add_to_list as atl
+                self._seed_four(atl)
+                before = atl.ADD_TO_LIST_PATH.read_bytes()
+                args = argparse.Namespace(action="done", items="9")
+                code, out, err = self._capture_both(_cmd_add_to_list, args)
+                self.assertEqual(atl.ADD_TO_LIST_PATH.read_bytes(), before)
+        self.assertEqual(code, 1)
+        self.assertIn("1-4", err)
+        self.assertEqual(out, "")
+
+    def test_done_missing_items_arg_exit_1(self):
+        """B6: Namespace without items -> exit 1, stderr mentions --items."""
+        from grocery_price_cli import _cmd_add_to_list
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                args = argparse.Namespace(action="done")
+                code, out, err = self._capture_both(_cmd_add_to_list, args)
+        self.assertEqual(code, 1)
+        self.assertIn("--items", err)
+
+    def test_done_unparsable_items_exit_1(self):
+        """B7: done --items "abc" -> exit 1."""
+        from grocery_price_cli import _cmd_add_to_list
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                args = argparse.Namespace(action="done", items="abc")
+                code, out, err = self._capture_both(_cmd_add_to_list, args)
+        self.assertEqual(code, 1)
+        self.assertIn("could not parse items", err)
+
+    def test_done_empty_queue_exit_1(self):
+        """B8: done with no queue file -> exit 1, stderr mentions empty."""
+        from grocery_price_cli import _cmd_add_to_list
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                args = argparse.Namespace(action="done", items="1")
+                code, out, err = self._capture_both(_cmd_add_to_list, args)
+        self.assertEqual(code, 1)
+        self.assertIn("empty", err.lower())
+
+    # ========================================================================
+    # wool/coles map add hooks (B9-B16)
+    # ========================================================================
+
+    def _run_map_add(self, list_name, item, tmpdir, mock_search,
+                     mock_update, store_raw_name, price=9.50):
+        """Shared arrange for non-interactive map add tests.
+
+        Patches _load_env + search (returning one fake result) +
+        update_single_price (found=True) and runs the add flow.
+        Returns (exit_code, output).
+        """
+        from grocery_price_cli import _cmd_map_noninteractive
+        mock_search.return_value = (
+            [self._fake_prod(store_raw_name, price)], item)
+        mock_update.return_value = {"found": True, "row_index": 7}
+        progress_path = Path(tmpdir) / "list_action_progress.json"
+        args = self._map_args(add=True)
+        return self._capture_stdout(
+            _cmd_map_noninteractive, args, list_name, [item], 0, {},
+            progress_path, Path(tmpdir))
+
+    @patch("core.sheets_sync.update_single_price")
+    @patch("grocery_price_cli._search_store_with_fallback")
+    @patch("grocery_price_cli._load_env")
+    def test_map_wool_add_queues_raw_name(
+            self, mock_env, mock_search, mock_update):
+        """B9: wool --add queues raw_name as keyword, Col A as generic."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                from core import add_to_list as atl
+                code, output = self._run_map_add(
+                    "wool", "Beef Mince 500g", tmpdir, mock_search,
+                    mock_update, "Woolworths Beef Mince 500g")
+                data = atl.load_pending()
+        self.assertEqual(code, 0)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["store"], "woolworths")
+        self.assertEqual(data[0]["keyword"], "Woolworths Beef Mince 500g")
+        self.assertEqual(data[0]["generic_name"], "Beef Mince 500g")
+        self.assertIn("Added to add_to_list:", output)
+
+    @patch("core.sheets_sync.update_single_price")
+    @patch("grocery_price_cli._search_store_with_fallback")
+    @patch("grocery_price_cli._load_env")
+    def test_map_coles_add_queues(
+            self, mock_env, mock_search, mock_update):
+        """B10: coles --add queues the same way under store coles."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                from core import add_to_list as atl
+                code, output = self._run_map_add(
+                    "coles", "Butter 500g", tmpdir, mock_search,
+                    mock_update, "Coles Butter 500g")
+                data = atl.load_pending()
+        self.assertEqual(code, 0)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["store"], "coles")
+        self.assertEqual(data[0]["keyword"], "Coles Butter 500g")
+        self.assertEqual(data[0]["generic_name"], "Butter 500g")
+        self.assertIn("Added to add_to_list:", output)
+
+    @patch("core.sheets_sync.set_store_keyword")
+    @patch("core.sheets_sync.mark_not_available")
+    @patch("core.sheets_sync.update_single_price")
+    @patch("grocery_price_cli._search_store_with_fallback")
+    @patch("grocery_price_cli._load_env")
+    def test_map_add_sheet_write_is_price_only(
+            self, mock_env, mock_search, mock_update, mock_na, mock_kw):
+        """B11: add writes price ONLY — no keyword/NA calls; price called
+        once with (item, store, best.price)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                code, _output = self._run_map_add(
+                    "wool", "Beef Mince 500g", tmpdir, mock_search,
+                    mock_update, "Woolworths Beef Mince 500g", price=8.20)
+        self.assertEqual(code, 0)
+        mock_kw.assert_not_called()
+        mock_na.assert_not_called()
+        mock_update.assert_called_once_with(
+            "Beef Mince 500g", "woolworths", 8.20)
+
+    @patch("core.sheets_sync.update_single_price")
+    @patch("grocery_price_cli._search_store_with_fallback")
+    @patch("grocery_price_cli._load_env")
+    def test_map_add_not_found_queues_nothing(
+            self, mock_env, mock_search, mock_update):
+        """B12: update_single_price found=False -> no queue file."""
+        from grocery_price_cli import _cmd_map_noninteractive
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                from core import add_to_list as atl
+                mock_search.return_value = (
+                    [self._fake_prod("WW Item", 1.0)], "q")
+                mock_update.return_value = {"found": False,
+                                            "error": "product not found"}
+                args = self._map_args(add=True)
+                code, _out = self._capture_stdout(
+                    _cmd_map_noninteractive, args, "wool",
+                    ["Beef Mince 500g"], 0, {},
+                    Path(tmpdir) / "progress.json", Path(tmpdir))
+                self.assertFalse(atl.ADD_TO_LIST_PATH.exists())
+        self.assertEqual(code, 0)
+
+    @patch("core.sheets_sync.update_single_price")
+    @patch("grocery_price_cli._search_store_with_fallback")
+    @patch("grocery_price_cli._load_env")
+    def test_map_add_update_raises_queues_nothing(
+            self, mock_env, mock_search, mock_update):
+        """B13: update_single_price raises -> no queue file."""
+        from grocery_price_cli import _cmd_map_noninteractive
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                from core import add_to_list as atl
+                mock_search.return_value = (
+                    [self._fake_prod("WW Item", 1.0)], "q")
+                mock_update.side_effect = RuntimeError("sheet down")
+                args = self._map_args(add=True)
+                code, _out = self._capture_stdout(
+                    _cmd_map_noninteractive, args, "wool",
+                    ["Beef Mince 500g"], 0, {},
+                    Path(tmpdir) / "progress.json", Path(tmpdir))
+                self.assertFalse(atl.ADD_TO_LIST_PATH.exists())
+        self.assertEqual(code, 0)
+
+    @patch("core.sheets_sync.update_single_price")
+    @patch("grocery_price_cli._search_store_with_fallback")
+    @patch("grocery_price_cli._load_env")
+    def test_map_add_no_search_results_queues_nothing(
+            self, mock_env, mock_search, mock_update):
+        """B14: Search returns ([], query) -> exit 1, no file."""
+        from grocery_price_cli import _cmd_map_noninteractive
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                from core import add_to_list as atl
+                mock_search.return_value = ([], "Beef Mince 500g")
+                args = self._map_args(add=True)
+                code, _out = self._capture_stdout(
+                    _cmd_map_noninteractive, args, "wool",
+                    ["Beef Mince 500g"], 0, {},
+                    Path(tmpdir) / "progress.json", Path(tmpdir))
+                self.assertFalse(atl.ADD_TO_LIST_PATH.exists())
+        self.assertEqual(code, 1)
+        mock_update.assert_not_called()
+
+    @patch("core.sheets_sync.update_single_price")
+    @patch("grocery_price_cli._search_store_with_fallback")
+    @patch("grocery_price_cli._load_env")
+    def test_map_add_already_pending_prints_and_keeps_one(
+            self, mock_env, mock_search, mock_update):
+        """B15: Pre-seeded entry -> already-there line, still 1 entry,
+        price refresh still fires."""
+        from grocery_price_cli import _cmd_map_noninteractive
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                from core import add_to_list as atl
+                atl.add_entry("woolworths", "Old WW Keyword",
+                              "Beef Mince 500g")
+                mock_search.return_value = (
+                    [self._fake_prod("Woolworths Beef Mince 500g", 9.50)],
+                    "Beef Mince 500g")
+                mock_update.return_value = {"found": True, "row_index": 7}
+                args = self._map_args(add=True)
+                code, output = self._capture_stdout(
+                    _cmd_map_noninteractive, args, "wool",
+                    ["Beef Mince 500g"], 0, {},
+                    Path(tmpdir) / "progress.json", Path(tmpdir))
+                data = atl.load_pending()
+        self.assertEqual(code, 0)
+        self.assertIn("Already on add_to_list (since", output)
+        self.assertIn("not added again", output)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["keyword"], "Old WW Keyword")
+        mock_update.assert_called_once()
+
+    @patch("core.sheets_sync.update_single_price")
+    @patch("grocery_price_cli._search_store_with_fallback")
+    @patch("grocery_price_cli._load_env")
+    def test_map_add_advances_normally(
+            self, mock_env, mock_search, mock_update):
+        """B16: After add, the next-item header prints — auto-advance
+        unchanged."""
+        from grocery_price_cli import _cmd_map_noninteractive
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                mock_search.return_value = (
+                    [self._fake_prod("WW Item", 1.0)], "q")
+                mock_update.return_value = {"found": True, "row_index": 7}
+                args = self._map_args(add=True)
+                code, output = self._capture_stdout(
+                    _cmd_map_noninteractive, args, "wool",
+                    ["Item One", "Item Two"], 0, {},
+                    Path(tmpdir) / "progress.json", Path(tmpdir))
+        self.assertEqual(code, 0)
+        self.assertIn("--- Item 2/2 ---", output)
+
+    # ========================================================================
+    # Interactive add path + negative controls (B17-B21)
+    # ========================================================================
+
+    @patch("core.sheets_sync.update_single_price")
+    @patch("grocery_price_cli._prompt_action")
+    @patch("grocery_price_cli._search_store_with_fallback")
+    def test_map_interactive_add_path_hooks_queue(
+            self, mock_search, mock_prompt, mock_update):
+        """B17: Interactive 'add' action writes the queue, then 'done'
+        ends the session."""
+        from grocery_price_cli import _map_store_item
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                from core import add_to_list as atl
+                mock_search.return_value = (
+                    [self._fake_prod("Woolworths Beef Mince 500g", 9.50)],
+                    "Beef Mince 500g")
+                mock_prompt.side_effect = ["add", "done"]
+                mock_update.return_value = {"found": True, "row_index": 3}
+                code_ret, output = self._capture_stdout(
+                    _map_store_item, "wool", "Beef Mince 500g")
+                data = atl.load_pending()
+        self.assertEqual(code_ret, "done")
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["store"], "woolworths")
+        self.assertEqual(data[0]["keyword"], "Woolworths Beef Mince 500g")
+        self.assertEqual(data[0]["generic_name"], "Beef Mince 500g")
+        self.assertIn("Added to add_to_list:", output)
+
+    @patch("core.sheets_sync.update_single_price")
+    @patch("grocery_price_cli._search_store_with_fallback")
+    @patch("grocery_price_cli._load_env")
+    def test_map_skip_leaves_queue_untouched(
+            self, mock_env, mock_search, mock_update):
+        """B18: --skip advances without touching the queue."""
+        from grocery_price_cli import _cmd_map_noninteractive
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                from core import add_to_list as atl
+                args = self._map_args(skip=True)
+                code, _out = self._capture_stdout(
+                    _cmd_map_noninteractive, args, "wool",
+                    ["Item One"], 0, {},
+                    Path(tmpdir) / "progress.json", Path(tmpdir))
+                self.assertFalse(atl.ADD_TO_LIST_PATH.exists())
+        self.assertEqual(code, 0)
+        mock_update.assert_not_called()
+
+    @patch("core.sheets_sync.mark_not_available")
+    @patch("grocery_price_cli._load_env")
+    def test_map_na_leaves_queue_untouched(self, mock_env, mock_na):
+        """B19: --na (found=True) leaves the queue untouched."""
+        from grocery_price_cli import _cmd_map_noninteractive
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                from core import add_to_list as atl
+                mock_na.return_value = {"found": True, "row_index": 2}
+                args = self._map_args(na=True)
+                code, _out = self._capture_stdout(
+                    _cmd_map_noninteractive, args, "wool",
+                    ["Item One"], 0, {},
+                    Path(tmpdir) / "progress.json", Path(tmpdir))
+                self.assertFalse(atl.ADD_TO_LIST_PATH.exists())
+        self.assertEqual(code, 0)
+        mock_na.assert_called_once()
+
+    @patch("core.sheets_sync.set_store_keyword")
+    @patch("grocery_price_cli._load_env")
+    def test_map_keyword_leaves_queue_untouched(self, mock_env, mock_kw):
+        """B20: --keyword "X" (found=True) leaves the queue untouched."""
+        from grocery_price_cli import _cmd_map_noninteractive
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                from core import add_to_list as atl
+                mock_kw.return_value = {"found": True, "row_index": 2}
+                args = self._map_args(keyword="X")
+                code, _out = self._capture_stdout(
+                    _cmd_map_noninteractive, args, "wool",
+                    ["Item One"], 0, {},
+                    Path(tmpdir) / "progress.json", Path(tmpdir))
+                self.assertFalse(atl.ADD_TO_LIST_PATH.exists())
+        self.assertEqual(code, 0)
+        mock_kw.assert_called_once()
+
+    @patch("grocery_price_cli._add_from_live_search")
+    @patch("core.lookup.LookupEngine")
+    @patch("grocery_price_cli._load_env")
+    def test_map_unmatched_add_leaves_queue_untouched(
+            self, mock_env, mock_engine_cls, mock_add_live):
+        """B21: unmatched --add (live-search add path) never touches the
+        queue file."""
+        from core.lookup import LookupStatus
+        from grocery_price_cli import _cmd_map_noninteractive
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                from core import add_to_list as atl
+                engine = mock_engine_cls.return_value
+                engine.find_product.return_value = SimpleNamespace(
+                    status=LookupStatus.LIVE_SEARCH,
+                    live_items=[self._fake_prod("Live Item", 2.0)])
+                args = self._map_args(add=True)
+                code, _out = self._capture_stdout(
+                    _cmd_map_noninteractive, args, "unmatched",
+                    ["Mystery Item 5L"], 0, {},
+                    Path(tmpdir) / "progress.json", Path(tmpdir))
+                self.assertFalse(atl.ADD_TO_LIST_PATH.exists())
+        self.assertEqual(code, 0)
+        mock_add_live.assert_called_once()
+
+
+class TestCLIPartB(unittest.TestCase):
+    """Plan matrix CLI-1..CLI-16: search display/add-item, searched-items
+    queue management, and the Queue-1 vs Queue-2 separation (guardrail 4).
+    All queue paths isolated to temp files; no network, no sheet."""
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+    def _atl_ctx(self, tmpdir):
+        """Patch context for an isolated ADD_TO_LIST_PATH."""
+        from core import add_to_list as atl
+        return patch.object(atl, "ADD_TO_LIST_PATH",
+                            Path(tmpdir) / "add_to_list.json")
+
+    def _fake_prod(self, raw_name, price):
+        """Duck-typed live-search result covering the print path attrs."""
+        return SimpleNamespace(raw_name=raw_name, price=price, brand="",
+                               is_special=False, special_desc="")
+
+    def _map_args(self, **overrides):
+        """Namespace for _cmd_map_noninteractive with all action flags."""
+        defaults = {"next": False, "pick": None, "add": False,
+                    "skip": False, "na": False, "forget": False,
+                    "keyword": None}
+        defaults.update(overrides)
+        return argparse.Namespace(**defaults)
+
+    def _si_ctx(self, tmpdir):
+        """Patch context for isolated searched_items + tombstones paths."""
+        from core import searched_items as si
+        return patch.object(si, "SEARCHED_ITEMS_PATH",
+                            Path(tmpdir) / "searched_items.json")
+
+    def _si_tomb_ctx(self, tmpdir):
+        """Patch context for an isolated tombstones path."""
+        from core import searched_items as si
+        return patch.object(si, "TOMBSTONES_PATH",
+                            Path(tmpdir) / "tombstones.json")
+
+    def _capture_stdout(self, fn, *args, **kwargs):
+        """Run fn capturing stdout; returns (result, output)."""
+        old_stdout = sys.stdout
+        try:
+            sys.stdout = io.StringIO()
+            result = fn(*args, **kwargs)
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+        return result, output
+
+    def _prod(self, store, name, price, size="", brand=""):
+        """ProductItem fixture shorthand."""
+        from extractors.models import ProductItem
+        return ProductItem(store=store, raw_name=name, price=price,
+                           size=size, brand=brand)
+
+    def _run_search(self, argv_extra=None, ww=None, coles=((), "ok"),
+                    product="milk", tmpdir=None):
+        """Run _cmd_search with store fns patched and queue paths isolated.
+
+        Args:
+            tmpdir: optional SHARED directory for the queue files so
+                consecutive runs observe each other's writes (CLI-9).
+
+        Returns:
+            tuple: (code, stdout, stderr, mock_add_row, queue_data) where
+            queue_data is the searched_items queue content AFTER the run
+            (real module code executed against an isolated temp file).
+        """
+        from grocery_price_cli import _cmd_search
+        from core import searched_items as si
+
+        ns = {"product": product, "expand": False, "add_item": None}
+        ns.update(argv_extra or {})
+        args = argparse.Namespace(**ns)
+
+        own_tmp = tmpdir is None
+        if own_tmp:
+            tmp_holder = tempfile.TemporaryDirectory()
+            tmpdir = tmp_holder.name
+        try:
+            with patch.object(si, "SEARCHED_ITEMS_PATH",
+                              Path(tmpdir) / "searched_items.json"), \
+                    patch.object(si, "TOMBSTONES_PATH",
+                                 Path(tmpdir) / "tombstones.json"), \
+                    patch("extractors.woolworths_extractor."
+                          "fetch_woolworths_search_noauth",
+                          return_value=ww or []), \
+                    patch("extractors.coles_extractor."
+                          "fetch_coles_search_status",
+                          return_value=coles), \
+                    patch("core.sheets_sync.add_product_row") as mock_row, \
+                    patch("grocery_price_cli._load_env"):
+                old_stdout, old_stderr = sys.stdout, sys.stderr
+                try:
+                    sys.stdout = io.StringIO()
+                    sys.stderr = io.StringIO()
+                    code = _cmd_search(args)
+                    out = sys.stdout.getvalue()
+                    err = sys.stderr.getvalue()
+                finally:
+                    sys.stdout, sys.stderr = old_stdout, old_stderr
+                queue_data = si.load_pending()
+        finally:
+            if own_tmp:
+                tmp_holder.cleanup()
+        return code, out, err, mock_row, queue_data
+
+    # ------------------------------------------------------------------
+    # CLI-1..CLI-5: display-only behaviour
+    # ------------------------------------------------------------------
+    def test_cli1_search_max3_continuous_numbering_ranked(self):
+        """CLI-1: <=3 per store, continuous numbering, ranked order."""
+        ww = [self._prod("woolworths", f"WW Yogurt {i}", 5.0)
+              for i in range(5)]
+        coles = ([self._prod("coles", f"Coles Yogurt {i}", 5.0)
+                  for i in range(5)], "ok")
+        code, out, _err, _row, _si = self._run_search(ww=ww, coles=coles,
+                                                      product="yogurt")
+        self.assertEqual(code, 0)
+        # Continuous numbering 1..6, never 7+.
+        self.assertIn("1. WW Yogurt", out)
+        self.assertIn("4. Coles Yogurt", out)
+        self.assertNotIn("7. ", out)
+        # WW block precedes Coles block.
+        self.assertLess(out.index("WW Yogurt 0"), out.index("Coles Yogurt 0"))
+
+    def test_cli2_expand_shows_up_to_8(self):
+        """CLI-2: --expand raises the display to 8 per store."""
+        ww = [self._prod("woolworths", f"WW Item {i:02d}", 1.0)
+              for i in range(10)]
+        coles = ([self._prod("coles", f"Coles Item {i:02d}", 1.0)
+                  for i in range(10)], "ok")
+        code, out, _err, _row, _si = self._run_search(
+            {"expand": True}, ww=ww, coles=coles, product="item")
+        self.assertEqual(code, 0)
+        self.assertIn("16. Coles Item 07", out)
+        self.assertNotIn("17. ", out)
+
+    def test_cli3_search_lines_show_size(self):
+        """CLI-3: result lines show the size when present."""
+        ww = [self._prod("woolworths", "WW Salsa 200g", 3.0, size="200g")]
+        code, out, _err, _row, _si = self._run_search(
+            ww=ww, product="salsa")
+        self.assertEqual(code, 0)
+        self.assertIn("200g", out)
+
+    def test_cli4_plain_search_writes_nothing(self):
+        """CLI-4: plain search never calls add_product_row/searched_items."""
+        ww = [self._prod("woolworths", "WW Milk 2L", 3.50)]
+        code, _out, _err, mock_row, queue_data = self._run_search(
+            ww=ww, product="milk")
+        self.assertEqual(code, 0)
+        mock_row.assert_not_called()
+        self.assertEqual(queue_data, [])
+
+    def test_cli5_compare_writes_nothing(self):
+        """CLI-5: compare never calls add_product_row/searched_items."""
+        from grocery_price_cli import _cmd_compare
+        from core.price_comparator import ComparisonReport, BasketItem
+        item = BasketItem(
+            name="Milk", prices={"woolworths": 3.00},
+            sources={"woolworths": "sheet"})
+        report = ComparisonReport(
+            items=[item], raw_totals={"woolworths": 3.00},
+            store_coverage={"woolworths": 1},
+            final_totals={"woolworths": 3.00},
+            cheapest_store="woolworths", max_savings=0.0,
+            not_available={"coles": ["Milk"]})
+        args = argparse.Namespace(items="milk", mode="sheet",
+                                  team_discount=False, extra_discount=0.0)
+        with patch("core.price_comparator.compare_basket",
+                   return_value=report), \
+                patch("core.price_comparator.format_report",
+                      return_value="report"), \
+                patch("core.sheets_sync.add_product_row") as mock_row, \
+                patch("core.searched_items.add_entry") as mock_si, \
+                patch("grocery_price_cli._load_env"):
+            old_stdout = sys.stdout
+            try:
+                sys.stdout = io.StringIO()
+                code = _cmd_compare(args)
+            finally:
+                sys.stdout = old_stdout
+        self.assertEqual(code, 0)
+        mock_row.assert_not_called()
+        mock_si.assert_not_called()
+
+    # ------------------------------------------------------------------
+    # CLI-6..CLI-9: --add-item N explicit add
+    # ------------------------------------------------------------------
+    def test_cli6_add_item_writes_row_without_keyword_and_queues(self):
+        """CLI-6: --add-item 2 -> one add_product_row (store_keyword='')
+        + exactly one searched_items entry."""
+        ww = [self._prod("woolworths", "WW Yogurt A", 5.0),
+              self._prod("woolworths", "WW Yogurt B", 4.0, size="1kg")]
+        code, out, _err, mock_row, queue_data = self._run_search(
+            {"add_item": 2}, ww=ww, product="yogurt")
+        self.assertEqual(code, 0)
+        mock_row.assert_called_once()
+        kwargs = mock_row.call_args.kwargs
+        self.assertEqual(kwargs["store_keyword"], "")       # interpretation 0.4
+        self.assertEqual(kwargs["generic_name"], "WW Yogurt B")
+        self.assertEqual(kwargs["alias"], "yogurt")
+        self.assertEqual(len(queue_data), 1)
+        self.assertEqual(queue_data[0]["store"], "woolworths")
+        self.assertEqual(queue_data[0]["keyword"], "WW Yogurt B")
+
+    def test_cli7_add_item_prints_exact_management_phrases(self):
+        """CLI-7: output carries the three exact §3.4 phrases + [CODE]."""
+        ww = [self._prod("woolworths", "WW Yogurt A", 5.0)]
+        code, out, _err, _row, _queue = self._run_search(
+            {"add_item": 1}, ww=ww, product="yogurt")
+        self.assertEqual(code, 0)
+        self.assertIn("Queued for Wednesday: 'WW Yogurt A' "
+                      "(Woolworths) [", out)
+        self.assertRegex(out, r"\[[A-Z]{3}\]")
+        self.assertRegex(out, r"💬 Reply 'remove [A-Z]{3}' if this isn't "
+                              r"the right product\.")
+        self.assertIn("💬 'show searched items' any time to review "
+                      "the queue.", out)
+
+    def test_cli8_add_item_out_of_range_errors(self):
+        """CLI-8: N out of range -> stderr error, exit 1, no writes."""
+        ww = [self._prod("woolworths", "WW Yogurt A", 5.0)]
+        code, _out, err, mock_row, queue_data = self._run_search(
+            {"add_item": 5}, ww=ww, product="yogurt")
+        self.assertEqual(code, 1)
+        self.assertIn("out of range", err)
+        mock_row.assert_not_called()
+        self.assertEqual(queue_data, [])
+
+    def test_cli9_add_item_already_queued(self):
+        """CLI-9: duplicate add -> 'Already queued' line, no dup entry."""
+        ww = [self._prod("woolworths", "WW Yogurt A", 5.0)]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Shared queue dir: the second run sees the first run's write.
+            self._run_search({"add_item": 1}, ww=ww, product="yogurt",
+                             tmpdir=tmpdir)
+            code2, out2, _err, _row, queue_data = self._run_search(
+                {"add_item": 1}, ww=ww, product="yogurt", tmpdir=tmpdir)
+        self.assertEqual(code2, 0)
+        self.assertIn("Already queued", out2)
+        self.assertEqual(len(queue_data), 1)
+
+    def test_cli10_coles_unavailable_single_line_ww_shown(self):
+        """CLI-10: Coles unavailable -> ONE line, WW results still shown."""
+        ww = [self._prod("woolworths", "WW Milk 2L", 3.50)]
+        code, out, _err, _row, _si = self._run_search(
+            ww=ww, coles=([], "unavailable"), product="milk")
+        self.assertEqual(code, 0)
+        self.assertEqual(out.count("Coles not checked (unavailable)"), 1)
+        self.assertIn("WW Milk 2L", out)
+
+    # ------------------------------------------------------------------
+    # CLI-11..CLI-14: searched-items queue management
+    # ------------------------------------------------------------------
+    def _si_args(self, action, items=None):
+        return argparse.Namespace(action=action, items=items)
+
+    def test_cli11_show_renders_format_and_empty_line(self):
+        """CLI-11: show renders 'store · name · size · [CODE]'; empty
+        queue -> friendly line."""
+        from grocery_price_cli import _cmd_searched_items
+        from core import searched_items as si
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._si_ctx(tmpdir), self._si_tomb_ctx(tmpdir):
+                code, out = self._capture_stdout(
+                    _cmd_searched_items, self._si_args("show"))
+                self.assertIn("searched_items is empty", out)
+                si.add_entry("coles", "Obela Hommus 200g", "Hommus 200g",
+                             store_product_id="1", size="200g")
+                code, out = self._capture_stdout(
+                    _cmd_searched_items, self._si_args("show"))
+        self.assertEqual(code, 0)
+        self.assertIn("coles · Obela Hommus 200g · 200g · [", out)
+
+    def test_cli12_remove_multi_codes(self):
+        """CLI-12: remove --items 'KAT,RUM' removes both + remainder."""
+        from grocery_price_cli import _cmd_searched_items
+        from core import searched_items as si
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._si_ctx(tmpdir), self._si_tomb_ctx(tmpdir):
+                e1 = si.add_entry("coles", "Item One", "one")
+                e2 = si.add_entry("woolworths", "Item Two", "two")
+                e3 = si.add_entry("coles", "Item Three", "three")
+                # Deterministic codes for the assertion.
+                for entry, code_letter in ((e1, "KAT"), (e2, "RUM")):
+                    entry["entry"]["code"] = code_letter
+                entries = [e1["entry"], e2["entry"], e3["entry"]]
+                si.save_pending(entries)
+                code, out = self._capture_stdout(
+                    _cmd_searched_items,
+                    self._si_args("remove", "KAT,RUM"))
+                data = si.load_pending()
+        self.assertEqual(code, 0)
+        self.assertEqual(len(data), 1)
+        self.assertIn("Item Three", out)
+
+    def test_cli13_unknown_code_exact_error(self):
+        """CLI-13: unknown code -> exact self-correcting error, exit 1."""
+        from grocery_price_cli import _cmd_searched_items
+        from core import searched_items as si
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._si_ctx(tmpdir), self._si_tomb_ctx(tmpdir):
+                a = si.add_entry("coles", "Item One", "one")
+                a["entry"]["code"] = "KAT"
+                b = si.add_entry("woolworths", "Item Two", "two")
+                b["entry"]["code"] = "RUM"
+                si.save_pending([a["entry"], b["entry"]])
+                old_stderr = sys.stderr
+                try:
+                    sys.stderr = io.StringIO()
+                    code = _cmd_searched_items(
+                        self._si_args("remove", "KA"))
+                    err = sys.stderr.getvalue()
+                finally:
+                    sys.stderr = old_stderr
+        self.assertEqual(code, 1)
+        self.assertIn("⚠️ Code 'KA' not found. Current queue codes: "
+                      "KAT, RUM.", err)
+
+    def test_cli14_clear_empties_and_tombstones(self):
+        """CLI-14: clear empties the queue (tombstones written)."""
+        from grocery_price_cli import _cmd_searched_items
+        from core import searched_items as si
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._si_ctx(tmpdir), self._si_tomb_ctx(tmpdir):
+                si.add_entry("coles", "Item One", "one")
+                si.add_entry("woolworths", "Item Two", "two")
+                code, out = self._capture_stdout(
+                    _cmd_searched_items, self._si_args("clear"))
+                data = si.load_pending()
+                tombs = si._load_tombstones()
+        self.assertEqual(code, 0)
+        self.assertEqual(data, [])
+        self.assertEqual(len(tombs), 2)
+        self.assertIn("Cleared 2 item(s)", out)
+
+    # ------------------------------------------------------------------
+    # CLI-15..CLI-16: Queue-1 vs Queue-2 separation (guardrail 4)
+    # ------------------------------------------------------------------
+    @patch("core.sheets_sync.update_single_price")
+    @patch("grocery_price_cli._search_store_with_fallback")
+    @patch("grocery_price_cli._load_env")
+    def test_cli15_store_map_add_feeds_queue1_only(
+            self, mock_env, mock_search, mock_update):
+        """CLI-15: wool/coles map --add -> add_to_list ONLY;
+        searched_items untouched."""
+        from grocery_price_cli import _cmd_map_noninteractive
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir), self._si_ctx(tmpdir), \
+                    self._si_tomb_ctx(tmpdir):
+                from core import add_to_list as atl
+                from core import searched_items as si
+                mock_search.return_value = (
+                    [self._fake_prod("Woolworths Beef Mince 500g", 9.50)],
+                    "Beef Mince 500g")
+                mock_update.return_value = {"found": True, "row_index": 3}
+                args = self._map_args(add=True)
+                code, _out = self._capture_stdout(
+                    _cmd_map_noninteractive, args, "wool",
+                    ["Beef Mince 500g"], 0, {},
+                    Path(tmpdir) / "progress.json", Path(tmpdir))
+                atl_data = atl.load_pending()
+                self.assertFalse(si.SEARCHED_ITEMS_PATH.exists())
+        self.assertEqual(code, 0)
+        self.assertEqual(len(atl_data), 1)  # Queue 1 fed
+
+    @patch("core.sheets_sync.add_product_row")
+    @patch("core.lookup.LookupEngine")
+    @patch("grocery_price_cli._load_env")
+    def test_cli16_unmatched_map_add_writes_row_and_queues(
+            self, mock_env, mock_engine_cls, mock_row):
+        """CLI-16: unmatched (live) --add -> add_product_row with
+        store_keyword='' + searched_items queued + phrases printed."""
+        from core.lookup import LookupStatus
+        from grocery_price_cli import _cmd_map_noninteractive
+        live_item = self._prod("coles", "Obela Hommus 200g", 3.10,
+                               size="200g")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir), self._si_ctx(tmpdir), \
+                    self._si_tomb_ctx(tmpdir):
+                from core import add_to_list as atl
+                from core import searched_items as si
+                engine = mock_engine_cls.return_value
+                engine.find_product.return_value = SimpleNamespace(
+                    status=LookupStatus.LIVE_SEARCH,
+                    live_items=[live_item])
+                mock_row.return_value = {"wrote": True, "row_index": 9}
+                args = self._map_args(add=True)
+                code, out = self._capture_stdout(
+                    _cmd_map_noninteractive, args, "unmatched",
+                    ["Mystery Item 5L"], 0, {},
+                    Path(tmpdir) / "progress.json", Path(tmpdir))
+                atl_data = atl.load_pending()
+                si_data = si.load_pending()
+        self.assertEqual(code, 0)
+        mock_row.assert_called_once()
+        self.assertEqual(mock_row.call_args.kwargs["store_keyword"], "")
+        self.assertEqual(len(si_data), 1)   # Queue 2 fed
+        self.assertEqual(atl_data, [])      # Queue 1 untouched
+        self.assertIn("Queued for Wednesday: 'Obela Hommus 200g' "
+                      "(Coles) [", out)
 
 
 if __name__ == "__main__":
