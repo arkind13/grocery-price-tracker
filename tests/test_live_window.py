@@ -628,10 +628,16 @@ class TestAutomationAssets(unittest.TestCase):
         self.assertEqual(len(smokes), 1)
         self.assertIn("docker", smokes[0])
         self.assertIn("exec", smokes[0])
-        # Order: every scp BEFORE the restart, restart BEFORE the smoke.
+        # Order: remote-dir prep (ssh mkdir) -> every scp -> ONE restart
+        # -> smoke.
+        preps = [c for c in calls if "mkdir -p" in " ".join(c)]
+        first_scp = next(i for i, c in enumerate(calls) if c[0] == "scp")
+        self.assertTrue(preps)
+        self.assertTrue(all(calls.index(p) < first_scp for p in preps))
         first_non_scp = next(i for i, c in enumerate(calls)
                              if c[0] != "scp")
-        self.assertTrue(all(c[0] == "scp" for c in calls[:first_non_scp]))
+        self.assertTrue(all(c[0] == "scp" for c in calls[first_scp:
+                                                          first_non_scp]))
         self.assertLess(calls.index(restarts[0]), calls.index(smokes[0]))
 
     def test_d3_scp_failure_retry_hint_nonzero(self):

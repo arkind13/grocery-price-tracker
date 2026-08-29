@@ -139,6 +139,37 @@ def _has_git_remote(root: Path = _ROOT) -> bool:
         return False
 
 
+def _prepare_remote_dirs(remote_dirs, host: str = VPS_HOST) -> list:
+    """Make every remote target dir writable by the deploy user.
+
+    The VPS dirs are read-only (555) by default; new files need
+    mkdir + chown + u+w (passwordless sudo required). Idempotent.
+
+    Args:
+        remote_dirs (iterable[str]): unique remote directories.
+        host (str): ssh destination host.
+
+    Returns:
+        list[str]: the failed directories (empty on success).
+    """
+    failed = []
+    for remote_dir in sorted(set(remote_dirs)):
+        print(f"  prepare remote dir {remote_dir}")
+        result = _run([
+            "ssh", "-o", "ConnectTimeout=10", "-o", "BatchMode=yes",
+            host,
+            f"sudo mkdir -p {remote_dir} && "
+            f"sudo chown -R ubuntu:ubuntu {remote_dir} && "
+            f"sudo chmod -R u+w {remote_dir}",
+        ])
+        if result.returncode != 0:
+            print(f"    FAILED: {(result.stderr or '').strip()}")
+            failed.append(remote_dir)
+        else:
+            print("    OK")
+    return failed
+
+
 def _deploy_scp(plan: list, host: str = VPS_HOST) -> list:
     """scp every manifest file (one invocation per file, arg list).
 
@@ -215,6 +246,13 @@ def main() -> int:
     if args.dry_run:
         print("Dry run complete — nothing copied.")
         return 0
+
+    # Prepare remote target dirs FIRST (idempotent mkdir/chown/u+w).
+    prep_failures = _prepare_remote_dirs(remote for _l, remote in plan)
+    if prep_failures:
+        print(f"Remote dir preparation FAILED for: {prep_failures}. "
+              f"Re-run the deploy to retry.", file=sys.stderr)
+        return 1
 
     if args.git_mode and not _has_git_remote():
         print("--git-mode requested but no origin remote configured — "
