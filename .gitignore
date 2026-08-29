@@ -257,3 +257,20 @@ uncensored chat/
 *.png
 *.jpg
 *.docx
+
+# ==== Live window runtime data (UOM+live, spec section 4.6-4.7) ====
+# Cookies and login state are SECRETS - never commit
+data/session_state.json
+data/ww_coles_profile/
+# Live window snapshots and logs (runtime state, regenerated each run)
+data/live_snapshots/
+data/live_api_capture.json
+data/live_flush_log.json
+data/live_flush_log.json.1
+# Searched-items queue + code tombstones (runtime state)
+data/searched_items.json
+data/searched_item_code_tombstones.json
+# Scrape.do circuit-breaker state (runtime state)
+data/scrapedo_health.json
+# Heartbeat log (runtime state)
+data/session_heartbeat.log

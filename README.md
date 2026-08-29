@@ -249,8 +249,8 @@ The most complex tool. Tracks Australian supermarket prices (Woolworths, Coles, 
 
 | Subcommand | Args | What it does |
 |------------|------|--------------|
-| `compare` | `--items` (req) `[--mode auto\|sheet\|live]` `[--team-discount]` `[--extra-discount FLOAT]` | Basket comparison; `--mode auto` = sheet-first then live fallback |
-| `search` | `--product` (req) | Pure live search (Woolworths API + Coles Scrape.do); no sheet |
+| `compare` | `--items` (req) `[--mode auto\|sheet\|live]` `[--team-discount]` `[--extra-discount FLOAT]` | Basket comparison; `--mode auto` = sheet-first then live fallback. Both-live items pass the UOM 20% size gate; non-comparable items render as a found-block and are excluded from totals |
+| `search` | `--product` (req) `[--expand]` `[--add-item N]` | Pure live search (Woolworths API + Coles Scrape.do recipe); no sheet, never writes. ≤3 ranked results per store (8 with `--expand`); `--add-item N` = explicit add of the Nth result (sheet row with EMPTY keyword col + searched-items queue) |
 | `specials` | `[--store woolworths\|coles\|all]` | Active specials (sheet Mode B + Woolworths saved-list Mode A) |
 | `rewards` | `[--store ...]` | Reads rewards column (O); prints "not populated" when empty |
 | `recipe` | `--name` `--ingredients` | Wraps `compare_basket(mode="auto")` for recipe ingredients |
@@ -259,19 +259,28 @@ The most complex tool. Tracks Australian supermarket prices (Woolworths, Coles, 
 | `specials-scan` | `[--min-savings INT]` `[--store woolworths]` | Tier 2 site-wide scan → Tier 1 saved-list |
 | `unmapped` | — | Reads `data/unmapped_queue.json`; offline-safe |
 | `map` | `unmatched\|wool\|coles\|status` + flags | One-item-at-a-time list resolution (non-interactive) |
-| `wednesday` | `[--dry-run]` `[--no-scp]` `[--no-telegram]` | Full pipeline: parse .docx → match → sync → scp → Telegram report |
+| `add-to-list` | `show` / `done --items "1,2,3"` | Manual website-add queue: show pending items (Coles then Woolworths, continuous numbering) / mark items done (all-or-nothing, re-prints the remainder). Offline-safe. |
+| `searched-items` | `show` / `remove --items "KAT,RUM"` / `clear` | Searched-items queue (explicit Wednesday adds): 3-letter codes (A–Z minus I/O, no repeated letter), all-or-nothing removal, 7-day code tombstones. Offline-safe. |
+| `live-refresh` | `[--flush-only]` `[--fetch-only]` `[--recapture]` | **LOCAL WINDOWS MACHINE ONLY** (headed Chrome + AU residential IP): login once → flush both queues to the store "Price Compare" lists → fetch all list pages (30-page cap) → write snapshots. The agent never runs this. |
+| `wednesday` | `[--source docx\|live]` (default docx) `[--dry-run]` `[--no-scp]` `[--no-telegram]` | Full pipeline. `docx` = previous behaviour byte-for-byte. `live` = VPS queue pull → live window (skipped when today's snapshots exist) → snapshot completeness gate (clean stop before any sheet write) → sync from snapshots → specials from the live Special-list snapshot |
 | `backfill-keywords` | — | Backfill Col P keywords from existing data |
 
 > **Routing rule (critical):** `compare X in/at woolworths and coles` must always route to `compare --items "X"` (sheet-first), NEVER `search` (live-only). The `grocery-price/SKILL.md` enforces this.
+
+> **Weekly add-to-list loop:** a wool/coles `map --add` writes the price AND queues the item on `add_to_list`. Later, on the store website, add the queued items to your shopping list, then run `add-to-list done --items "1,2,3"` to clear them — the item resurfaces in the missing list (and eventually the unmatched report) until you do, so nothing is silently dropped.
+
+> **Explicit-add-only + UOM gate (2026-08):** nothing is ever auto-queued. Plain `compare`/`search`/`expand` never write; the only live→sheet routes are `search --add-item N` and `map unmatched --add` (both leave the store keyword column EMPTY). A live item enters a comparison only via a UOM-passing pair (`core/uom.py`: same measurement family, within 20% size, no per-unit prices ever) or when the other store is unavailable (Woolworths-only answer + one ⚠️ line). Coles search runs through a credit-guard (3-attempt silent retry, 40/call-run cap, 10-min circuit breaker in `data/scrapedo_health.json`).
 
 ### Core library (`core/`)
 
 | File | Purpose |
 |------|---------|
-| `lookup.py` | **Lookup engine** — query resolution chain: exact sheet match (Col A / store keywords I/J/K) → Col P alias two-pass → partial candidates → live search → auto-add. `LookupIndex` builds `_exact` and `_alias_exact` indices; `LookupEngine` orchestrates the chain. |
+| `lookup.py` | **Lookup engine** — query resolution chain: exact sheet match (Col A / store keywords I/J/K) → Col P alias two-pass → partial candidates → live search (ranked per store, UOM-gated pair selection, display-only). `LookupIndex` builds `_exact` and `_alias_exact` indices; `LookupEngine` orchestrates the chain; `rank_live_results` / `select_live_pair` implement the tolerant ranking + 20% size gate. |
+| `uom.py` | **Unit-of-measure gate** — parses package sizes (25L → 25000 mL, multipacks to totals), compares within families only, 20% tolerance band. Pure stdlib; the sole gate on both-live comparisons. |
 | `sheets_client.py` | Shared headless Google Sheets connection (via `GROCERY_SERVICE_ACCOUNT_JSON` + `GROCERY_SPREADSHEET_ID` env vars) |
 | `sheets_sync.py` | Batch sync, `update_single_price`, `add_product_row`, range-width-aware row writes |
-| `price_comparator.py` | Dual-mode basket comparator; in `auto` mode uses the lookup engine via `_gather_lookup_prices()` |
+| `price_comparator.py` | Dual-mode basket comparator; in `auto` mode uses the lookup engine via `_gather_lookup_prices()`. Every store line carries identity + provenance (`— name size (sheet|live)`); non-comparable items render the found-block and are excluded from totals |
+| `searched_items.py` | Queue-2 (explicit Wednesday adds): 3-letter codes (A–Z minus I/O, no repeated letter), dup-guarded adds, all-or-nothing code removal, 7-day code tombstones. Mirror of `add_to_list.py` |
 | `name_matcher.py` | Exact keyword matcher for the sync path (Col I/J/K) |
 | `recipe_resolver.py` | Sheet exact → partial → live search resolver for recipe ingredients |
 | `specials_reporter.py` | Reads specials/rewards columns from the sheet |
@@ -288,7 +297,9 @@ The most complex tool. Tracks Australian supermarket prices (Woolworths, Coles, 
 | File | Purpose |
 |------|---------|
 | `woolworths_extractor.py` | Woolworths API client: saved lists (`/apis/ui/mylists`), list items, product detail, search (no-login via curl_cffi Chrome 131 impersonation in Phase 9.2) |
-| `coles_extractor.py` | Coles client: Scrape.do GET → parse `__NEXT_DATA__` → `pageProps.searchResults.results`; `.docx` fallback for saved lists |
+| `coles_extractor.py` | Coles client: Scrape.do GET → parse `__NEXT_DATA__` → `pageProps.searchResults.results`; credit-guarded search chain (3-attempt silent retry with fresh sessions, 40-call per-run cap, 10-min circuit breaker, never retries 401/403); `.docx` fallback for saved lists |
+| `live_list_fetch.py` | Offline snapshot loader for the Wednesday live path: reads `data/live_snapshots/YYYY-MM-DD_*` files, converts to ProductItems (id dedup, multipage-safe), `validate_complete()` all-or-nothing gate. No network. |
+| `session_refresh.py` | Live-window orchestrator (LOCAL only): Phase A login (headed Chrome + persistent profile + 2FA wait) → Phase B throttled queue flush (session-death abort, 3-strike park) → Phase C paginated list fetch (30-page cap) → snapshots. Plus API-discovery capture and the cookie-only heartbeat probe. Playwright imported lazily. |
 | `doc_parser.py` | Parses `Woolworths.docx` / `Coles.docx` / `Aldi.docx` / `Woolworths_Specials.docx` into `ProductItem` lists (headless, via python-docx) |
 | `session_manager.py` | Coles auth session management |
 | `auth_manager.py` | Playwright auto-login auth manager (2FA, compulsory logout) — superseded by no-login approach |
@@ -307,6 +318,14 @@ Runtime state files (not in git; synced between local↔VPS):
 | `unmapped_queue.json` | JSON queue for unmapped items |
 | `list_action_progress.json` | `map` session progress (resume indices) |
 | `ignored_items.txt` | Permanently-excluded junk items (`map --forget`) |
+| `add_to_list.json` | Manual website-add queue (fed by wool/coles `map --add`; drained by `add-to-list done`) |
+| `searched_items.json` / `searched_item_code_tombstones.json` | Queue-2 (explicit Wednesday adds via `search --add-item` / `map unmatched --add`; drained by the live-window flush; removed codes tombstoned 7 days) |
+| `session_state.json` / `ww_coles_profile/` | **Secrets** — live-window cookies + browser profile (gitignored, never committed, never printed) |
+| `live_snapshots/` | `YYYY-MM-DD_<store>_<list>.json` list snapshots written by the live window, read by `wednesday --source live` |
+| `live_api_capture.json` | Discovered add-to-list API + pagination shape per store |
+| `live_flush_log.json` | Per-item flush results (status/reason/attempts; rotated at ~1 MB) |
+| `scrapedo_health.json` | Scrape.do circuit-breaker state |
+| `session_heartbeat.log` | Cookie-only liveness probe log (alive/dead/unknown) |
 | `sheets_manager.py` | Sheet-state management helper |
 | `phase9_defect_log.json` | Phase 9 defect tracking |
 | `woolworths_discount_usage.json` | Discount usage tracking |
@@ -317,16 +336,21 @@ Runtime state files (not in git; synced between local↔VPS):
 | File | Scenarios |
 |------|-----------|
 | `test_lookup.py` | 15 GROUP A lookup state-machine scenarios |
+| `test_lookup_uom.py` | 18 UOM-gate Step-5 tests: ranking, pair selection, single-store/unavailable routing, Steps 1–4 golden regression |
+| `test_uom.py` | 24 size-parse + comparability gate tests |
+| `test_searched_items.py` | 30 Queue-2 tests: codes, tombstones, atomic IO, render |
+| `test_coles_recipe.py` | 19 Scrape.do credit-guard tests: params, retry chain, breaker, cap, probes |
+| `test_live_window.py` | 30 live-window tests: snapshot loader (F), flush engine + pagination + heartbeat (W) |
 | `test_live_search.py` | 13 GROUP B Woolworths+Coles mocked integration tests |
 | `test_sheets_sync.py` | 29 tests: `add_product_row` (incl. `Home` Col G marker), `mark_not_available`, `set_store_keyword`, Col I/J/K |
 | `test_name_matcher.py` | 25 Col P two-pass lookup tests |
-| `test_comparator.py` | 25 live-search + always-on discount comparison tests |
-| `test_cli.py` | 35 search/map/compare/discount-surface/backfill tests |
+| `test_comparator.py` | 42 live-search + always-on discount comparison + UOM report tests |
+| `test_cli.py` | 96 search/map/compare/discount-surface/backfill/live-routing tests |
 | `test_woolworths_discounts.py` | 24 always-on WW discount tests: 32-brand detection, compounding math, engine, tracker guard |
 | `test_extractors.py` | Extractor unit tests |
 | `test_sheets_conn.py` | Sheets connection tests |
 
-**Total: 191+ tests passing.**
+**Total: 430+ tests passing** (8 pre-existing Phase-1 failures in `test_extractors.py` are documented in `test.md` — stale tests predating this change, not touched).
 
 ### Google Sheet schema
 
@@ -476,7 +500,7 @@ The `grocery-price/SKILL.md` is the most detailed skill file — it defines subc
 
 ### Telegram message formatting (all skills)
 
-All Claw skill output shown on Telegram uses the shared **Telegram Style Kit** (`core/telegram_format.py`): no markdown tables (they break in Telegram), list-style item blocks, fenced monospace totals, unicode dividers, and a shared icon vocabulary. SKILL.md files instruct the agent to relay CLI output verbatim. Spec: [`architecture-spec.md`](architecture-spec.md).
+All Claw skill output shown on Telegram uses the shared **Telegram Style Kit** (`core/telegram_format.py`): no markdown tables (they break in Telegram), list-style item blocks, fenced monospace totals, unicode dividers, and a shared icon vocabulary. SKILL.md files instruct the agent to relay CLI output verbatim. Spec: [`architecture-spec-telegram-formatting.md`](architecture-spec-telegram-formatting.md).
 
 The kit is stdlib-only and imports nothing from siblings. Key API:
 
