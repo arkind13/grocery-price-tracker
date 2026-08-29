@@ -13,6 +13,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 _HERE = Path(__file__).resolve().parent
@@ -557,6 +558,201 @@ class TestSessionRefresh(unittest.TestCase):
         self.assertEqual(stored["coles"]["method"], "POST")
         self.assertEqual(stored["coles"]["pagination"]["page_param"],
                          "page")
+
+
+class TestAutomationAssets(unittest.TestCase):
+    """Matrix D-1..D-7: deploy manifest/scp/restart/smoke, heartbeat
+    entry, trial_check list comparison, arg-list-only subprocess use."""
+
+    @staticmethod
+    def _load_script(name):
+        """Import a scripts/ file as a module (no package needed)."""
+        import importlib.util
+        path = _PROJECT / "scripts" / name
+        spec = importlib.util.spec_from_file_location(name[:-3], path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def setUp(self):
+        self.deploy = self._load_script("deploy_vps.py")
+        self.entry = self._load_script("session_heartbeat_entry.py")
+        self.check = self._load_script("trial_check.py")
+
+    # ------------------------------------------------------------------
+    def test_d1_manifest_covers_tasks_and_nothing_else(self):
+        """D-1: FILE_MANIFEST covers the Tasks 1-11 artefacts; never
+        .env / data/ / .docx."""
+        manifest = " ".join(rel for rel, _ in self.deploy._FILE_MANIFEST)
+        for must in ("grocery_price_cli.py", "SKILL.md",
+                     "core/uom.py", "core/searched_items.py",
+                     "core/lookup.py", "core/price_comparator.py",
+                     "extractors/live_list_fetch.py",
+                     "extractors/session_refresh.py",
+                     "test_live_window.py", "deploy_vps.py",
+                     "trial_check.py", "session_heartbeat_entry.py",
+                     "README.md"):
+            self.assertIn(must, manifest)
+        for rel, _remote in self.deploy._FILE_MANIFEST:
+            for marker in self.deploy.FORBIDDEN_MARKERS:
+                self.assertNotIn(marker, rel)
+        # And the plan resolves to existing files.
+        plan = self.deploy.build_plan()
+        self.assertEqual(len(plan), len(self.deploy._FILE_MANIFEST))
+
+    def test_d2_scp_then_restart_then_smoke_order(self):
+        """D-2: scps per manifest file -> ONE docker restart -> container
+        smoke (searched-items show), in that order."""
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(list(cmd))
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        with patch.object(self.deploy.subprocess, "run",
+                          side_effect=fake_run), \
+                patch.object(self.deploy, "_has_git_remote",
+                             return_value=False):
+            with patch.object(sys, "argv", ["deploy_vps.py"]):
+                code = self.deploy.main()
+        self.assertEqual(code, 0)
+        scps = [c for c in calls if c[0] == "scp"]
+        self.assertEqual(len(scps), len(self.deploy._FILE_MANIFEST))
+        for c in scps:
+            self.assertIsInstance(c, list)      # argument LIST, no shell
+        restarts = [c for c in calls if c[0] == "docker"
+                    and c[1] == "restart"]
+        self.assertEqual(len(restarts), 1)
+        smokes = [c for c in calls if c[0] == "docker"
+                  and c[1] == "exec" and "searched-items" in c]
+        self.assertEqual(len(smokes), 1)
+        # Order: every scp BEFORE the restart, restart BEFORE the smoke.
+        first_non_scp = next(i for i, c in enumerate(calls)
+                             if c[0] != "scp")
+        self.assertTrue(all(c[0] == "scp" for c in calls[:first_non_scp]))
+        self.assertLess(calls.index(restarts[0]), calls.index(smokes[0]))
+
+    def test_d3_scp_failure_retry_hint_nonzero(self):
+        """D-3: scp failure -> exit 1 (covered in full by D-3b)."""
+        responses = {"fail_after": 2}
+
+        def fake_run(cmd, **kwargs):
+            responses["fail_after"] -= 1
+            ok = responses["fail_after"] > 0
+            return SimpleNamespace(returncode=0 if ok else 1,
+                                   stdout="", stderr="boom")
+
+        with patch.object(self.deploy.subprocess, "run",
+                          side_effect=fake_run), \
+                patch.object(self.deploy, "_has_git_remote",
+                             return_value=False):
+            with patch.object(sys, "argv", ["deploy_vps.py"]):
+                code = self.deploy.main()
+        self.assertEqual(code, 1)
+
+    def test_d3b_failure_hint_visible_in_output(self):
+        """D-3b: the retry hint text reaches the operator output."""
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+
+        def fake_run(cmd, **kwargs):
+            return SimpleNamespace(returncode=1, stdout="", stderr="boom")
+
+        err = io.StringIO()
+        out = io.StringIO()
+        with patch.object(self.deploy.subprocess, "run",
+                          side_effect=fake_run), \
+                patch.object(self.deploy, "_has_git_remote",
+                             return_value=False), \
+                redirect_stdout(out), redirect_stderr(err):
+            with patch.object(sys, "argv", ["deploy_vps.py"]):
+                code = self.deploy.main()
+        self.assertEqual(code, 1)
+        combined = out.getvalue() + err.getvalue()
+        self.assertIn("Re-run the deploy to retry", combined)
+        self.assertIn("FAILED", combined)
+
+    def test_d4_git_mode_without_remote_falls_back(self):
+        """D-4: --git-mode without a remote -> scp fallback, never a
+        half-deploy."""
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(list(cmd))
+            if cmd[:2] == ["git", "-C"]:
+                return SimpleNamespace(returncode=0, stdout="",
+                                       stderr="")
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        with patch.object(self.deploy.subprocess, "run",
+                          side_effect=fake_run), \
+                patch.object(self.deploy, "_has_git_remote",
+                             return_value=False):
+            with patch.object(sys, "argv",
+                              ["deploy_vps.py", "--git-mode"]):
+                code = self.deploy.main()
+        self.assertEqual(code, 0)
+        git_pushes = [c for c in calls if c[:1] == ["git"]
+                      and "push" in c]
+        self.assertEqual(git_pushes, [])          # fell back to scp
+        self.assertTrue(any(c[0] == "scp" for c in calls))
+
+    def test_d5_heartbeat_entry_exits_zero_on_raise(self):
+        """D-5: session_heartbeat_entry exits 0 even when the heartbeat
+        raises."""
+        with patch.object(self.entry, "run_heartbeat",
+                          side_effect=RuntimeError("no cookies")):
+            self.assertEqual(self.entry.main(), 0)
+
+    def test_d6_compare_lists_detects_mismatch(self):
+        """D-6: --compare-lists flags injected mismatches (exit 1) and
+        passes identical lists (exit 0)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            a, b = Path(tmp) / "a", Path(tmp) / "b"
+            a.mkdir()
+            b.mkdir()
+            (a / "unmatched.txt").write_text(
+                "# comment\nMilk [woolworths]\nBread [coles]\n",
+                encoding="utf-8")
+            (b / "unmatched.txt").write_text(
+                "# comment\nMilk [woolworths]\nBread [coles]\n",
+                encoding="utf-8")
+            for name in ("wool_missing.txt", "coles_missing.txt"):
+                (a / name).write_text("Item One\n", encoding="utf-8")
+                (b / name).write_text("Item One\n", encoding="utf-8")
+            self.assertEqual(self.check.compare_lists(a, b), [])
+            # Inject: count mismatch.
+            (b / "wool_missing.txt").write_text(
+                "Item One\nItem Two\n", encoding="utf-8")
+            mismatches = self.check.compare_lists(a, b)
+            self.assertTrue(any("wool_missing.txt" in m for m in mismatches))
+            # Inject: content mismatch.
+            (b / "wool_missing.txt").write_text(
+                "Item One\n", encoding="utf-8")
+            (b / "coles_missing.txt").write_text(
+                "Something Else\n", encoding="utf-8")
+            mismatches = self.check.compare_lists(a, b)
+            self.assertTrue(any("coles_missing.txt" in m
+                                for m in mismatches))
+            # Missing file detected.
+            (b / "unmatched.txt").unlink()
+            mismatches = self.check.compare_lists(a, b)
+            self.assertTrue(any("unmatched.txt" in m for m in mismatches))
+
+    def test_d7_arg_list_only_subprocess(self):
+        """D-7: all three scripts use subprocess arg lists — no
+        shell=True, no string-concatenated commands."""
+        for module in (self.deploy, self.entry, self.check):
+            source = Path(module.__file__).read_text(encoding="utf-8")
+            self.assertNotIn("shell=True", source)
+            self.assertNotIn("os.system", source)
+        # deploy_vps invokes via literal command lists.
+        self.assertIn('["scp", "-o", "ConnectTimeout=10"',
+                      Path(self.deploy.__file__).read_text(
+                          encoding="utf-8"))
+        self.assertIn('["docker", "restart"',
+                      Path(self.deploy.__file__).read_text(
+                          encoding="utf-8"))
 
 
 if __name__ == "__main__":
