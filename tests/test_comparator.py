@@ -16,6 +16,8 @@ _PROJECT = _HERE.parent
 if str(_PROJECT) not in sys.path:
     sys.path.insert(0, str(_PROJECT))
 
+from core.price_comparator import compare_basket, format_report  # noqa: E402
+
 
 # ============================================================================
 # FakeWorksheet (reuse pattern from test_sheets_sync.py)
@@ -682,12 +684,15 @@ class TestComparator(unittest.TestCase):
                 return [ProductItem("woolworths", "White Bread", 2.50)]
             return []
 
+        def stub_coles_status(term, page_size=5):
+            return ([], "unavailable")
+
         with patch(
             "extractors.woolworths_extractor.fetch_woolworths_search_noauth",
             side_effect=stub_search,
         ), patch(
-            "extractors.coles_extractor.fetch_coles_search",
-            side_effect=lambda t, **kw: [],
+            "extractors.coles_extractor.fetch_coles_search_status",
+            side_effect=stub_coles_status,
         ):
             report = compare_basket(
                 "milk, bread", mode="auto", worksheet=ws,
@@ -723,8 +728,8 @@ class TestComparator(unittest.TestCase):
             "extractors.woolworths_extractor.fetch_woolworths_search_noauth",
             side_effect=stub_noauth,
         ), patch(
-            "extractors.coles_extractor.fetch_coles_search",
-            side_effect=lambda t, **kw: [],
+            "extractors.coles_extractor.fetch_coles_search_status",
+            side_effect=lambda t, **kw: ([], "unavailable"),
         ):
             report = compare_basket("milk", mode="auto", worksheet=ws)
         self.assertEqual(len(report.items), 1)
@@ -741,19 +746,25 @@ class TestComparator(unittest.TestCase):
         ws = FakeWorksheet(rows)
 
         def stub_coles(term, page_size=5):
-            return [ProductItem("coles", "Coles Bread 650g", 2.80)]
+            return ([ProductItem("coles", "Coles Bread 650g", 2.80)], "ok")
 
         with patch(
             "extractors.woolworths_extractor.fetch_woolworths_search_noauth",
             side_effect=lambda t, **kw: [],
         ), patch(
-            "extractors.coles_extractor.fetch_coles_search",
+            "extractors.coles_extractor.fetch_coles_search_status",
             side_effect=stub_coles,
         ):
             report = compare_basket("bread", mode="auto", worksheet=ws)
         self.assertEqual(len(report.items), 1)
-        self.assertEqual(report.items[0].sources["coles"], "live")
-        self.assertEqual(report.items[0].prices["coles"], 2.80)
+        # IN-1 (spec §3.2.4): Woolworths empty -> the item renders as the
+        # found-block with Coles' closest product, NO price at all.
+        self.assertEqual(report.items[0].prices, {})
+        self.assertEqual(report.items[0].uom_reason, "no_results_woolworths")
+        self.assertEqual(
+            report.items[0].closest.get("coles", {}).get("name"),
+            "Coles Bread 650g",
+        )
 
     def test_compare_auto_both_stores_live(self):
         """Both stores return live results, cheapest is computed."""
@@ -765,16 +776,18 @@ class TestComparator(unittest.TestCase):
         ws = FakeWorksheet(rows)
 
         def stub_ww(term, page_size=5):
-            return [ProductItem("woolworths", "WW Milk 2L", 3.50)]
+            return [ProductItem("woolworths", "WW Milk 2L", 3.50,
+                                size="2L")]
 
         def stub_coles(term, page_size=5):
-            return [ProductItem("coles", "Coles Milk 2L", 3.20)]
+            return ([ProductItem("coles", "Coles Milk 2L", 3.20,
+                                 size="2L")], "ok")
 
         with patch(
             "extractors.woolworths_extractor.fetch_woolworths_search_noauth",
             side_effect=stub_ww,
         ), patch(
-            "extractors.coles_extractor.fetch_coles_search",
+            "extractors.coles_extractor.fetch_coles_search_status",
             side_effect=stub_coles,
         ):
             report = compare_basket("milk", mode="auto", worksheet=ws)
@@ -795,8 +808,8 @@ class TestComparator(unittest.TestCase):
             "extractors.woolworths_extractor.fetch_woolworths_search_noauth",
             side_effect=lambda t, **kw: [],
         ), patch(
-            "extractors.coles_extractor.fetch_coles_search",
-            side_effect=lambda t, **kw: [],
+            "extractors.coles_extractor.fetch_coles_search_status",
+            side_effect=lambda t, **kw: ([], "empty"),
         ):
             report = compare_basket("xyzunknown", mode="auto", worksheet=ws)
         # Item should be flagged as not available at both stores
@@ -817,19 +830,296 @@ class TestComparator(unittest.TestCase):
             raise RuntimeError("curl_cffi unavailable")
 
         def stub_coles(term, page_size=5):
-            return [ProductItem("coles", "Coles Milk 2L", 3.20)]
+            return ([ProductItem("coles", "Coles Milk 2L", 3.20)], "ok")
 
         with patch(
             "extractors.woolworths_extractor.fetch_woolworths_search_noauth",
             side_effect=stub_ww_fail,
         ), patch(
-            "extractors.coles_extractor.fetch_coles_search",
+            "extractors.coles_extractor.fetch_coles_search_status",
             side_effect=stub_coles,
         ):
             report = compare_basket("milk", mode="auto", worksheet=ws)
-        # Coles should still have a result
-        self.assertIn("coles", report.raw_totals)
-        self.assertEqual(report.raw_totals["coles"], 3.20)
+        # IN-1 (spec §3.2.4): Woolworths empty -> found-block, no price.
+        # Coles still responded — its closest product is captured.
+        self.assertNotIn("coles", report.raw_totals)
+        self.assertEqual(report.items[0].prices, {})
+        self.assertEqual(report.items[0].uom_reason, "no_results_woolworths")
+        self.assertEqual(
+            report.items[0].closest.get("coles", {}).get("name"),
+            "Coles Milk 2L",
+        )
+
+
+class TestUomReportMatrix(unittest.TestCase):
+    """Plan matrix P-1..P-14: identity/provenance lines, found-block,
+    UOM gate scope (0.1), totals exclusion, and the no-per-unit rule."""
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+    def _ws(self, rows):
+        """FakeWorksheet from raw rows (header first)."""
+        return FakeWorksheet(rows)
+
+    def _auto(self, names, ww, coles_result, ws, **kwargs):
+        """compare_basket(mode=auto) with both store fns patched."""
+        def stub_ww(term, page_size=5):
+            return ww
+
+        with patch(
+            "extractors.woolworths_extractor.fetch_woolworths_search_noauth",
+            side_effect=stub_ww,
+        ), patch(
+            "extractors.coles_extractor.fetch_coles_search_status",
+            side_effect=lambda t, **kw: coles_result,
+        ):
+            return compare_basket(names, mode="auto", worksheet=ws, **kwargs)
+
+    def _live(self, names, ww, coles, **kwargs):
+        """compare_basket(mode=live) with the legacy fns patched."""
+        with patch(
+            "extractors.woolworths_extractor.fetch_woolworths_search",
+            side_effect=lambda t, **kw: ww,
+        ), patch(
+            "extractors.coles_extractor.fetch_coles_search",
+            side_effect=lambda t, **kw: coles,
+        ):
+            return compare_basket(names, mode="live", **kwargs)
+
+    @staticmethod
+    def _prod(store, name, price, size="", special_desc="", is_special=False,
+              brand=""):
+        """ProductItem fixture shorthand."""
+        from extractors.models import ProductItem
+        return ProductItem(store=store, raw_name=name, price=price,
+                           size=size, special_desc=special_desc,
+                           is_special=is_special, brand=brand)
+
+    # ------------------------------------------------------------------
+    # P-1..P-3: report rendering
+    # ------------------------------------------------------------------
+    def test_p1_live_store_line_identity_suffix(self):
+        """P-1: store line renders ' — <name> <size> (live)'."""
+        ws = self._ws([_make_header()])
+        ww = [self._prod("woolworths", "Debco 25L Potting Mix", 19.50,
+                         size="25L", brand="Debco")]
+        coles = ([self._prod("coles", "Coles 30L Potting Mix", 8.40,
+                             size="30L")], "ok")
+        report = self._auto("potting mix", ww, coles, ws,
+                            team_discount=False)
+        text = format_report(report)
+        self.assertIn("— Debco 25L Potting Mix 25L (live)", text)
+        self.assertIn("— Coles 30L Potting Mix 30L (live)", text)
+
+    def test_p2_sheet_store_line_provenance(self):
+        """P-2: store line renders the '(sheet)' tag for sheet prices."""
+        rows = [
+            _make_header(),
+            ["Oat Milk 1L", "Dairy", "1L", "$3.20", "$3.50", "", "Bega",
+             "2026-08-28", "", "", "", "", "", "", ""],
+        ]
+        # Auto-mode sheet hit: lookup tags sources "sheet" and carries
+        # the matched Col A / Col C identity for the suffix.
+        report = self._auto("oat milk 1l", [], ([], "empty"), rows and
+                            self._ws(rows), team_discount=False)
+        self.assertEqual(report.items[0].sources.get("woolworths"), "sheet")
+        text = format_report(report)
+        self.assertIn("(sheet)", text)
+        self.assertIn("$3.20 — Oat Milk 1L 1L (sheet)", text)
+
+    def test_p3_found_block_exact_wording(self):
+        """P-3: found-block prints the EXACT §3.3 wording."""
+        ws = self._ws([_make_header()])
+        ww = [self._prod("woolworths", "Aluminium Foil 10m", 2.00,
+                         size="10m")]
+        coles = ([self._prod("coles", "Aluminium Foil 150m", 9.50,
+                             size="150m")], "ok")
+        report = self._auto("aluminium foil", ww, coles, ws)
+        text = format_report(report)
+        self.assertIn("⚠️ No matching product — sizes don't compare.", text)
+        self.assertIn("Woolworths: Aluminium Foil 10m", text)
+        # Store labels padded to equal width (names share column 12).
+        self.assertIn("Coles:      Aluminium Foil 150m", text)
+        self.assertIn("💬 Reply 'expand' to see more results.", text)
+
+    # ------------------------------------------------------------------
+    # P-4..P-6: totals exclusion + unavailable line
+    # ------------------------------------------------------------------
+    def test_p4_non_comparable_excluded_from_totals(self):
+        """P-4: non-comparable item contributes to NO totals."""
+        rows = [
+            _make_header(),
+            ["Oat Milk 1L", "Dairy", "1L", "$3.20", "$3.50", "", "Bega",
+             "2026-08-28", "", "", "", "", "", "", ""],
+        ]
+        ws = self._ws(rows)
+        ww = [self._prod("woolworths", "Aluminium Foil 10m", 2.00,
+                         size="10m")]
+        coles = ([self._prod("coles", "Aluminium Foil 150m", 9.50,
+                             size="150m")], "ok")
+        report = self._auto("oat milk 1l, aluminium foil", ww, coles, ws,
+                            team_discount=False)
+        self.assertEqual(report.raw_totals.get("woolworths"), 3.20)
+        self.assertEqual(report.raw_totals.get("coles"), 3.50)
+
+    def test_p5_non_comparable_never_wins(self):
+        """P-5: cheapest unchanged by a non-comparable item's presence."""
+        rows = [
+            _make_header(),
+            ["Oat Milk 1L", "Dairy", "1L", "$3.20", "$3.00", "", "Bega",
+             "2026-08-28", "", "", "", "", "", "", ""],
+        ]
+        ws = self._ws(rows)
+        ww = [self._prod("woolworths", "Aluminium Foil 10m", 2.00,
+                         size="10m")]
+        coles = ([self._prod("coles", "Aluminium Foil 150m", 9.50,
+                             size="150m")], "ok")
+        report = self._auto("oat milk 1l, aluminium foil", ww, coles, ws,
+                            team_discount=False)
+        self.assertEqual(report.cheapest_store, "coles")
+        self.assertEqual(report.max_savings, 0.20)
+
+    def test_p6_unavailable_store_line(self):
+        """P-6: WW-only shows the price + the Coles-unavailable line."""
+        ws = self._ws([_make_header()])
+        ww = [self._prod("woolworths", "WW Bread 650g", 2.50, size="650g")]
+        report = self._auto("bread", ww, ([], "unavailable"), ws,
+                            team_discount=False)
+        self.assertEqual(report.items[0].prices.get("woolworths"), 2.50)
+        text = format_report(report)
+        self.assertIn("⚠️ Coles not checked (unavailable)", text)
+        self.assertIn("$2.50", text)
+
+    # ------------------------------------------------------------------
+    # P-7..P-10: gate scope (interpretation 0.1)
+    # ------------------------------------------------------------------
+    def test_p7_sheet_vs_sheet_unchanged_golden(self):
+        """P-7: sheet compare never gated — golden regression."""
+        rows = [
+            _make_header(),
+            ["Soft Drink", "Drinks", "2L", "$4.00", "$3.00", "", "",
+             "2026-08-28", "", "", "", "", "", "", ""],
+            ["Juice", "Drinks", "600mL", "$2.00", "$5.00", "", "",
+             "2026-08-28", "", "", "", "", "", "", ""],
+        ]
+        report = compare_basket("soft drink, juice", mode="sheet",
+                                worksheet=self._ws(rows))
+        # 2L-vs-600mL would NEVER pass the live gate — sheet prices
+        # compare exactly as before regardless.
+        self.assertEqual(report.raw_totals.get("woolworths"), 6.00)
+        self.assertEqual(report.raw_totals.get("coles"), 8.00)
+        self.assertEqual(report.cheapest_store, "woolworths")
+
+    def test_p8_sheet_vs_live_mix_not_gated(self):
+        """P-8: mixed basket — sheet item + live item both priced."""
+        rows = [
+            _make_header(),
+            ["Soft Drink", "Drinks", "2L", "$4.00", "$3.00", "", "",
+             "2026-08-28", "", "", "", "", "", "", ""],
+        ]
+        ws = self._ws(rows)
+        ww = [self._prod("woolworths", "Debco 25L Potting Mix", 19.50,
+                         size="25L")]
+        coles = ([self._prod("coles", "Coles 30L Potting Mix", 8.40,
+                             size="30L")], "ok")
+        report = self._auto("soft drink, potting mix", ww, coles, ws,
+                            team_discount=False)
+        self.assertEqual(report.items[0].sources.get("woolworths"), "sheet")
+        self.assertEqual(report.items[0].uom_reason, "")
+        self.assertEqual(report.items[1].sources.get("woolworths"), "live")
+        self.assertEqual(report.raw_totals.get("woolworths"), 23.50)
+
+    def test_p9_both_live_gated_in_auto(self):
+        """P-9: same items both live -> the gate applies (0.1)."""
+        ws = self._ws([_make_header()])
+        ww = [self._prod("woolworths", "Aluminium Foil 10m", 2.00,
+                         size="10m")]
+        coles = ([self._prod("coles", "Aluminium Foil 150m", 9.50,
+                             size="150m")], "ok")
+        report = self._auto("aluminium foil", ww, coles, ws)
+        self.assertEqual(report.items[0].prices, {})
+        self.assertEqual(report.items[0].uom_reason, "beyond_20pct")
+
+    def test_p10_live_mode_routes_through_gate(self):
+        """P-10: --mode live routes through the gate (IN-2)."""
+        ww = [self._prod("woolworths", "Aluminium Foil 10m", 2.00,
+                         size="10m")]
+        coles = [self._prod("coles", "Aluminium Foil 150m", 9.50,
+                            size="150m")]
+        report = self._live("aluminium foil", ww, coles)
+        self.assertEqual(report.items[0].prices, {})
+        self.assertEqual(report.items[0].uom_reason, "beyond_20pct")
+        self.assertEqual(report.raw_totals, {})
+
+    # ------------------------------------------------------------------
+    # P-11..P-14: rebuild guard, totals golden, fallback rendering
+    # ------------------------------------------------------------------
+    def test_p11_home_brand_rebuild_carries_new_fields(self):
+        """P-11: step-3 rebuild keeps matched_names/sizes/closest."""
+        ws = self._ws([_make_header()])
+        ww = [self._prod("woolworths", "WW Home Brand Potting Mix 25L",
+                         19.50, size="25L", brand="Woolworths")]
+        coles = ([self._prod("coles", "Coles 30L Potting Mix", 8.40,
+                             size="30L")], "ok")
+        with patch(
+            "core.woolworths_discounts.is_woolworths_home_brand",
+            side_effect=lambda name, brand: True,
+        ):
+            report = self._auto("potting mix", ww, coles, ws)
+        item = report.items[0]
+        self.assertTrue(item.is_woolworths_home_brand)
+        self.assertEqual(item.matched_names.get("woolworths"),
+                         "WW Home Brand Potting Mix 25L")
+        self.assertEqual(item.matched_sizes.get("coles"), "30L")
+
+    def test_p12_totals_math_golden(self):
+        """P-12: totals unchanged for a fully-comparable basket."""
+        rows = [
+            _make_header(),
+            ["Oat Milk 1L", "Dairy", "1L", "$3.20", "$3.50", "", "Bega",
+             "2026-08-28", "", "", "", "", "", "", ""],
+            ["Tomato Paste 200g", "Pantry", "200g", "$1.80", "$1.50", "",
+             "", "2026-08-28", "", "", "", "", "", "", ""],
+        ]
+        report = compare_basket("oat milk 1l, tomato paste 200g",
+                                mode="sheet", worksheet=self._ws(rows),
+                                team_discount=False)
+        self.assertEqual(report.raw_totals,
+                         {"woolworths": 5.00, "coles": 5.00})
+        self.assertEqual(report.final_totals,
+                         {"woolworths": 5.00, "coles": 5.00})
+        # Perfect tie: a winner is still declared, savings zero.
+        self.assertEqual(report.cheapest_store, "woolworths")
+        self.assertEqual(report.max_savings, 0.0)
+
+    def test_p13_no_prices_no_found_block(self):
+        """P-13: empty closest + no prices -> existing rendering only."""
+        ws = self._ws([_make_header()])
+        report = self._auto("xyzunknown", [], ([], "empty"), ws)
+        self.assertEqual(report.items[0].closest, {})
+        text = format_report(report)
+        self.assertIn("No prices available for any store", text)
+        self.assertNotIn("No matching product", text)
+
+    def test_p14_no_per_unit_price_strings(self):
+        """P-14: report contains NO per-unit price strings, ever."""
+        rows = [
+            _make_header(),
+            ["Oat Milk 1L", "Dairy", "1L", "$3.20", "$3.50", "", "Bega",
+             "2026-08-28", "", "", "", "Was $4.00", "", "", ""],
+        ]
+        ws = self._ws(rows)
+        ww = [self._prod("woolworths", "Aluminium Foil 10m", 2.00,
+                         size="10m")]
+        coles = ([self._prod("coles", "Aluminium Foil 150m", 9.50,
+                             size="150m")], "ok")
+        report = self._auto("oat milk 1l, aluminium foil", ww, coles, ws,
+                            team_discount=False)
+        text = format_report(report)
+        for banned in ("/L", "/kg", "/100", "per 100", "per L", "per kg",
+                       "per litre", "per kilo"):
+            self.assertNotIn(banned, text)
 
 
 if __name__ == "__main__":

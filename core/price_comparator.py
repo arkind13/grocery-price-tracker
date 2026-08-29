@@ -38,6 +38,18 @@ class BasketItem:
         brand: brand string (for home-brand detection).
         is_woolworths_home_brand: cached result of
             woolworths_discounts.is_woolworths_home_brand(name, brand).
+        matched_names: store -> the exact product name behind the price
+            (Col A value for sheet prices; the live listing name for
+            live prices).
+        matched_sizes: store -> the matched product's size string.
+        closest: store -> {"name", "size"} of the top-ranked live product
+            when NO comparable pair was found (found-block data; the item
+            has no prices at all in that case).
+        uom_reason: "" or the UOM gate failure reason
+            ("family_mismatch" | "beyond_20pct" | "missing_size" |
+            "no_results_<store>").
+        store_unavailable: stores not checked for this item (e.g. Coles
+            when Scrape.do was unavailable/breaker-open/cap-exceeded).
     """
     name: str
     prices: dict = field(default_factory=dict)
@@ -45,6 +57,11 @@ class BasketItem:
     specials: dict = field(default_factory=dict)
     brand: str = ""
     is_woolworths_home_brand: bool = False
+    matched_names: dict = field(default_factory=dict)
+    matched_sizes: dict = field(default_factory=dict)
+    closest: dict = field(default_factory=dict)
+    uom_reason: str = ""
+    store_unavailable: list = field(default_factory=list)
 
 
 # ============================================================================
@@ -180,6 +197,13 @@ def compare_basket(
                 specials=dict(item.specials),
                 brand=item.brand,
                 is_woolworths_home_brand=hb,
+                # Carry the B3 fields through the rebuild or they are
+                # silently dropped (plan §4.5 bug guard, P-11).
+                matched_names=dict(item.matched_names),
+                matched_sizes=dict(item.matched_sizes),
+                closest=dict(item.closest),
+                uom_reason=item.uom_reason,
+                store_unavailable=list(item.store_unavailable),
             )
 
     # 4. Compute raw_totals per store
@@ -364,31 +388,23 @@ def _gather_sheet_prices(
 def _gather_live_prices(names: list[str]) -> list[BasketItem]:
     """Build BasketItems from live search only (Woolworths + Coles).
 
-    For each name: call fetch_woolworths_search + fetch_coles_search, take
-    the FIRST result per store as the price. Swallow network errors
-    (store simply absent from prices).
+    Per spec IN-2: in --mode live BOTH prices are live by definition,
+    so every item routes through the same rank+gate selector as lookup
+    Step 5 (core.lookup.select_live_pair). A price enters the item ONLY
+    via a gate-passing pair; otherwise the found-block data (closest
+    top-ranked product per returning store) is captured with no prices.
+
+    Swallow network errors (store absent from that side's results).
     """
     from extractors.woolworths_extractor import fetch_woolworths_search
     from extractors.coles_extractor import fetch_coles_search
+    from core.lookup import select_live_pair
 
     items = []
     for name in names:
-        prices = {}
-        sources = {}
-        specials = {}
-        brand = ""
-
+        ww_results: list = []
         try:
-            ww_results = fetch_woolworths_search(name, page_size=5)
-            for product in ww_results:
-                if product.store.lower() == "woolworths":
-                    prices["woolworths"] = product.price
-                    sources["woolworths"] = "live"
-                    if product.is_special and product.special_desc:
-                        specials["woolworths"] = product.special_desc
-                    if not brand and product.brand:
-                        brand = product.brand
-                    break
+            ww_results = fetch_woolworths_search(name, page_size=5) or []
         except Exception as exc:
             print(
                 f"[price_comparator] woolworths live failed "
@@ -396,17 +412,9 @@ def _gather_live_prices(names: list[str]) -> list[BasketItem]:
                 file=sys.stderr,
             )
 
+        coles_results: list = []
         try:
-            coles_results = fetch_coles_search(name, page_size=5)
-            for product in coles_results:
-                if product.store.lower() == "coles":
-                    prices["coles"] = product.price
-                    sources["coles"] = "live"
-                    if product.is_special and product.special_desc:
-                        specials["coles"] = product.special_desc
-                    if not brand and product.brand:
-                        brand = product.brand
-                    break
+            coles_results = fetch_coles_search(name, page_size=5) or []
         except Exception as exc:
             print(
                 f"[price_comparator] coles live failed "
@@ -414,12 +422,66 @@ def _gather_live_prices(names: list[str]) -> list[BasketItem]:
                 file=sys.stderr,
             )
 
+        pair = select_live_pair(name, ww_results, coles_results)
+        ww_ranked = pair["ww_ranked"]
+        coles_ranked = pair["coles_ranked"]
+
+        prices: dict = {}
+        sources: dict = {}
+        specials: dict = {}
+        brand = ""
+        matched_names: dict = {}
+        matched_sizes: dict = {}
+        closest: dict = {}
+        uom_reason = ""
+
+        if pair["pair_passed"]:
+            chosen = {"woolworths": pair["ww"], "coles": pair["coles"]}
+            for store, product in chosen.items():
+                prices[store] = product.price
+                sources[store] = "live"
+                if product.is_special and product.special_desc:
+                    specials[store] = product.special_desc
+                matched_names[store] = product.raw_name
+                matched_sizes[store] = product.size
+            brand = chosen["woolworths"].brand or chosen["coles"].brand
+        elif ww_ranked and coles_ranked:
+            # Gate failed with both stores returning results: honest
+            # found-block, no prices enter the report (IN-1).
+            closest = {
+                "woolworths": {
+                    "name": ww_ranked[0].raw_name,
+                    "size": ww_ranked[0].size,
+                },
+                "coles": {
+                    "name": coles_ranked[0].raw_name,
+                    "size": coles_ranked[0].size,
+                },
+            }
+            uom_reason = pair["reason"]
+        elif ww_ranked or coles_ranked:
+            # Single-sided: the other store returned nothing (never
+            # provably "unavailable" in live mode) -> found-block (IN-1).
+            store = "woolworths" if ww_ranked else "coles"
+            ranked = ww_ranked or coles_ranked
+            closest = {
+                store: {
+                    "name": ranked[0].raw_name,
+                    "size": ranked[0].size,
+                },
+            }
+            uom_reason = f"no_results_{'coles' if store == 'woolworths' else 'woolworths'}"
+
         items.append(BasketItem(
             name=name,
             prices=prices,
             sources=sources,
             specials=specials,
             brand=brand,
+            matched_names=matched_names,
+            matched_sizes=matched_sizes,
+            closest=closest,
+            uom_reason=uom_reason,
         ))
     return items
 
@@ -460,6 +522,11 @@ def _gather_lookup_prices(
         sources: dict = {}
         specials: dict = {}
         brand = ""
+        matched_names: dict = {}
+        matched_sizes: dict = {}
+        closest: dict = {}
+        uom_reason = ""
+        store_unavailable: list = []
 
         try:
             result = engine.find_product(name, interactive=False)
@@ -479,12 +546,20 @@ def _gather_lookup_prices(
                 sources = {store: "sheet" for store in prices}
                 specials = dict(result.specials)
                 brand = result.brand
+                matched_names = dict(result.matched_names)
+                matched_sizes = dict(result.matched_sizes)
             elif result.status == LookupStatus.LIVE_SEARCH:
-                # Live prices from store APIs (Step 5)
+                # Live prices from store APIs (Step 5) — the pair already
+                # passed the UOM gate (or is honestly absent, IN-1).
                 prices = dict(result.prices)
                 sources = {store: "live" for store in prices}
                 specials = dict(result.specials)
                 brand = result.brand
+                matched_names = dict(result.matched_names)
+                matched_sizes = dict(result.matched_sizes)
+                closest = dict(result.closest)
+                uom_reason = result.uom_reason
+                store_unavailable = list(result.store_unavailable)
 
         items.append(BasketItem(
             name=name,
@@ -492,6 +567,11 @@ def _gather_lookup_prices(
             sources=sources,
             specials=specials,
             brand=brand,
+            matched_names=matched_names,
+            matched_sizes=matched_sizes,
+            closest=closest,
+            uom_reason=uom_reason,
+            store_unavailable=store_unavailable,
         ))
     return items
 
@@ -530,6 +610,58 @@ def _format_ww_discounts_line(report: ComparisonReport, total: float) -> str:
     if not parts:
         return ""
     return f"🏷️ WW discounts: −{money(total)} ({' + '.join(parts)})"
+
+
+def _identity_suffix(item: BasketItem, store: str) -> str:
+    """Build the " — <name> <size> (<source>)" identity suffix.
+
+    Provenance is factual: the tag is the actual source of the price.
+    The size segment is omitted when the matched product has no size.
+
+    Args:
+        item: the BasketItem being rendered.
+        store: store id ("woolworths"/"coles").
+
+    Returns:
+        str: suffix, or "" when no matched name is known for the store.
+    """
+    matched_name = item.matched_names.get(store, "")
+    if not matched_name:
+        return ""
+    size = item.matched_sizes.get(store, "")
+    source = item.sources.get(store, "sheet")
+    if size:
+        return f" — {matched_name} {size} ({source})"
+    return f" — {matched_name} ({source})"
+
+
+# Found-block store labels padded to equal width (spec §3.3 example:
+# "Woolworths: " and "Coles:      " both put the name at column 12).
+_FOUND_LABELS = {"woolworths": "Woolworths:", "coles": "Coles:"}
+_FOUND_LABEL_WIDTH = 12
+
+
+def _found_block_lines(item: BasketItem) -> list[str]:
+    """Render the exact §3.3 found-block for a non-comparable item.
+
+    Args:
+        item: BasketItem with empty prices and non-empty closest.
+
+    Returns:
+        list[str]: the ⚠️ header, one padded store line per returning
+        store, and the 💬 expand hint.
+    """
+    from core.telegram_format import warn
+    lines = [warn("No matching product — sizes don't compare.")]
+    for store in ("woolworths", "coles"):
+        found = item.closest.get(store)
+        if not found:
+            continue
+        label = _FOUND_LABELS.get(store, f"{store.capitalize()}:")
+        pad = " " * max(0, _FOUND_LABEL_WIDTH - len(label))
+        lines.append(f"   {label}{pad}{found.get('name', '')}")
+    lines.append("💬 Reply 'expand' to see more results.")
+    return lines
 
 
 def format_report(report: ComparisonReport) -> str:
@@ -573,7 +705,7 @@ def format_report(report: ComparisonReport) -> str:
                 item.specials.get("woolworths", "")
             )
             store_lines.append(store_line(
-                "woolworths", ww,
+                "woolworths", ww + _identity_suffix(item, "woolworths"),
                 was=f"${ww_was:.2f}" if ww_was is not None else None,
             ))
         if "coles" in item.prices:
@@ -581,9 +713,18 @@ def format_report(report: ComparisonReport) -> str:
                 item.specials.get("coles", "")
             )
             store_lines.append(store_line(
-                "coles", f"${item.prices['coles']:.2f}",
+                "coles",
+                f"${item.prices['coles']:.2f}"
+                + _identity_suffix(item, "coles"),
                 was=f"${coles_was:.2f}" if coles_was is not None else None,
             ))
+        if not store_lines and item.closest:
+            # Non-comparable item: the exact §3.3 found-block. No prices
+            # -> excluded from totals and can never win 🏆 (automatic).
+            store_lines.extend(_found_block_lines(item))
+        for store in item.store_unavailable:
+            store_lines.append(warn(
+                f"{store.capitalize()} not checked (unavailable)"))
         lines.append(item_block(
             i, item.name, store_lines,
             home_brand=item.is_woolworths_home_brand,
