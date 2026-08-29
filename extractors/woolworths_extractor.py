@@ -566,6 +566,9 @@ def fetch_woolworths_search_noauth(
         if is_special and float(was_price or 0) > 0:
             special_desc = f"Was ${float(was_price):.2f}"
 
+        # Store product id probe (spec IN-6) — captured at search time.
+        product_id = str(actual.get("ArticleId") or actual.get("Stockcode") or "")
+
         products.append(
             ProductItem(
                 store="woolworths",
@@ -577,6 +580,7 @@ def fetch_woolworths_search_noauth(
                 brand=str(actual.get("Brand", "")),
                 size=str(actual.get("PackageSize", "")),
                 category=_extract_woolworths_category(actual),
+                product_id=product_id,
             )
         )
     return products

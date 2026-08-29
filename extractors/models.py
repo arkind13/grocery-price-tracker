@@ -33,6 +33,9 @@ class ProductItem:
         size: Product size string (e.g. ``"1L"``, ``"500g"``).
             Empty string if not available.
         brand: Product brand name. Empty string if unknown.
+        product_id: Store product id captured at search time (e.g.
+            Woolworths Stockcode/ArticleId, Coles id). Empty string when
+            the store payload lacked one.
         timestamp: ISO-8601 timestamp of when this data was extracted.
     """
 
@@ -46,6 +49,7 @@ class ProductItem:
     category: str = ""
     size: str = ""
     brand: str = ""
+    product_id: str = ""
     timestamp: str = field(default_factory=lambda: _now_iso())
 
     def to_dict(self) -> dict:
