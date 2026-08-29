@@ -1,221 +1,224 @@
-# Test Results — "(was $x)" shown only for genuine specials (03 Code)
+# test.md — UOM + live-window implementation (03 Code Agent, 2026-08-29)
 
-- **Date:** 2026-08-28
-- **Executed by:** 03 Code Agent (direct edit mode — no plan/architect flow)
-- **Environment:** Windows PowerShell 5.1, Anaconda Python (`$env:PYTHONIOENCODING="utf-8"` set for every run)
-- **Defect (user report):** Telegram compare message showed `🟢 Woolworths $3.61 (was $4.00)` for a NON-special home-brand item. The always-on team discount (5% + 5% home-brand) was being annotated as a "(was $x)" price on every Woolworths line.
+Result log for every test matrix in `implementation-plan.md` (§7), plus
+the full-suite gate, deploy evidence, and the documented pre-existing
+failures. All tests run offline (mocked stores, temp files, no browser).
 
----
+## Environment
 
-## Root cause
+- Python: 3.13.9 (local); container/VPS target: 3.11.2 (multiline
+  f-string incompatibility found and fixed, see Deployment)
+- Run command: `C:\Users\User.DESKTOP-R2G441H\anaconda3\python.exe -m
+  pytest grocery-price-tracker/tests/ -q` (from `AI related\`)
+- Baseline (pre-change, tag `pre-live-trial`): 274 collected — 266
+  passed, 8 failed (pre-existing Phase-1 drift, see "Pre-existing
+  failures" below)
+- Final: **446 collected — 438 passed, 8 failed (same pre-existing 8),
+  0 skips. 172 new tests, all green.**
 
-`core/woolworths_discounts.py::format_discounted_price()` always rendered
-`"(5% off, was $X)"` / `"(Home 9.75% off, was $X)"`, and every display
-surface (compare, search, lookup, specials, rewards, specials-scan,
-Wednesday report) called it. The "was" therefore reflected the team
-discount, not a real special.
+## Matrix U — core/uom.py + tests/test_uom.py (24 tests)
 
-## Fix
+| ID | Case | Status |
+|----|------|--------|
+| U-1 | 25L → 25000 mL, volume | PASS |
+| U-2 | 600mL case/space variants | PASS |
+| U-3 | 180g weight | PASS |
+| U-4 | 1.2kg → 1200 g | PASS |
+| U-5 | 10m / 50cm lengths | PASS |
+| U-6 | "1 each" count | PASS |
+| U-7 | "6 x 170g" multipack → 1020 g | PASS |
+| U-8 | "2 x 1L" multipack → 2000 mL | PASS |
+| U-9 | unparseable → None | PASS |
+| U-10 | family matching incl. None | PASS |
+| U-11 | exactly 20% passes | PASS |
+| U-12 | 20.1% fails | PASS |
+| U-13 | identical sizes SAME | PASS |
+| U-14 | within tolerance TOLERANT | PASS |
+| U-15 | beyond → beyond_20pct | PASS |
+| U-16 | family mismatch | PASS |
+| U-17 | missing size → missing_size | PASS |
+| U-18 | multipack vs single tolerant | PASS |
+| U-19 | count vs volume mismatch | PASS |
+| U-20 | parse idempotent on canonical | PASS |
+| U-21 | 0.75L → 750 mL | PASS |
+| U-22 | family constants + Verdict strings | PASS |
+| U-23 | compare symmetric | PASS |
+| U-24 | 20 curated real sizes sweep | PASS |
 
-1. `format_discounted_price()` now returns ONLY the discounted price
-   (e.g. `$3.61`). No team-discount "was" suffix anywhere.
-2. New helper `was_price_from_special_desc()` extracts the GENUINE
-   store WasPrice from specials text of the form `"Was $X.XX"` (both
-   store extractors emit this). Free-text descs (`"Half Price"`,
-   `"2 for $4.50"`) yield `None`.
-3. `core/price_comparator.py::format_report()` — WW and Coles item lines
-   append `(was $x)` ONLY when the store reports the item on special
-   with a WasPrice.
-4. `core/lookup.py` CLI print — same rule for the Woolworths segment.
-5. All other surfaces (search 🏷️ suffix, specials `·` desc,
-   specials-scan Regular column, Wednesday specials detail) already
-   carry the genuine specials text and now show clean discounted
-   prices.
+File: `tests/test_uom.py` — **24/24 PASS**
 
-Discount MATH is unchanged: 5% base + compounded 5% home-brand extra,
-display-time only, sheet still stores raw prices.
+## Matrix S — core/searched_items.py + tests/test_searched_items.py (30 tests)
 
----
+| ID | Case | Status |
+|----|------|--------|
+| S-1 | missing file → [] | PASS |
+| S-2 | corrupt JSON → [] | PASS |
+| S-3 | exact entry fields + UTC added_at | PASS |
+| S-4 | dup guard (normalised) | PASS |
+| S-5 | same generic other store appends | PASS |
+| S-6 | invalid inputs raise, file untouched | PASS |
+| S-7 | 3-letter code, A–Z minus I/O | PASS |
+| S-8 | no repeated letter (200 codes) | PASS |
+| S-9 | unique vs queue | PASS |
+| S-10 | unique vs live tombstones | PASS |
+| S-11 | expired tombstone reusable | PASS |
+| S-12 | remove by code | PASS |
+| S-13 | comma-separated removal | PASS |
+| S-14 | case-insensitive codes | PASS |
+| S-15 | unknown code exact error | PASS |
+| S-16 | all-or-nothing removal | PASS |
+| S-17 | tombstones written | PASS |
+| S-18 | clear_all empties + tombstones | PASS |
+| S-19 | render format + empty line | PASS |
+| S-20 | Coles-first ordering | PASS |
+| S-21 | consume_entries flush path | PASS |
+| S-22 | atomic temp cleanup on failure | PASS |
+| S-23 | since_label | PASS |
+| S-24 | deterministic rng | PASS |
+| S-25 | remove→re-add new code | PASS |
+| S-26 | corrupt tombstones → [] | PASS |
+| S-27 | queue readable encoding/indent | PASS |
+| S-28 | insertion order preserved | PASS |
+| S-29 | parse_codes_arg | PASS |
+| S-30 | no env/network import side effects | PASS |
 
-## Test runs (all with `python -m unittest`)
+File: `tests/test_searched_items.py` — **30/30 PASS**
 
-| Run | Module(s) | Result |
-|---|---|---|
-| 1 | `tests.test_woolworths_discounts` + `tests.test_comparator` + `tests.test_telegram_format` | **PASS** — Ran 79 tests, OK |
-| 2 | `tests.test_cli` + `tests.test_lookup` + `tests.test_name_matcher` + `tests.test_sheets_sync` | **PASS** — Ran 108 tests, OK |
-| 3 | Full suite `unittest discover -s tests` | 229 tests: 8 pre-existing failures, all in `tests/test_extractors.py` |
+## Matrix C — Coles Scrape.do credit guard + tests/test_coles_recipe.py (19 tests)
 
-### Pre-existing failure check (not caused by this change)
+| ID | Case | Status |
+|----|------|--------|
+| C-1 | params super/geoCode/session/token | PASS |
+| C-2 | no render/country/wait | PASS |
+| C-3 | unique sessions per call | PASS |
+| C-4 | 5xx → new-session retry → success | PASS |
+| C-5 | backoff exactly [3, 6] | PASS |
+| C-6 | 3 attempts → unavailable | PASS |
+| C-7 | 401 never retried | PASS |
+| C-8 | 403 never retried | PASS |
+| C-9 | RequestException retries like 5xx | PASS |
+| C-10 | breaker opens after 3 failed chains; 0 HTTP after | PASS |
+| C-11 | breaker closes after cooldown (601 s) | PASS |
+| C-12 | success resets streak | PASS |
+| C-13 | per-run cap → cap_exceeded + message, no HTTP | PASS |
+| C-14 | __NEXT_DATA__ fixture parse (price/special/size/id) | PASS |
+| C-15 | legacy fetch_coles_search plain list | PASS |
+| C-15b | empty result set → "empty" (IN-1) | PASS |
+| C-16 | corrupt health file treated healthy | PASS |
+| +  | WW Stockcode/ArticleId probe (IN-6) | PASS |
+| +  | Coles id/productId/_id probe variants | PASS |
 
-`git stash push` → clean HEAD → `unittest tests.test_extractors` →
-**FAILED (failures=4, errors=4)** — identical 8 failures → `git stash pop`.
-Same set documented in the previous test.md baseline (saved-cookie env
-state + extractor/test drift). No NEW failures vs baseline.
+File: `tests/test_coles_recipe.py` — **19/19 PASS**
 
-### Updated / added test cases (all PASS)
+## Matrix L — lookup Step 5 + tests/test_lookup_uom.py (18 tests)
 
-- `test_format_discounted_price_plain_no_was` — formatted price is
-  exactly `$4.51` / `$3.80`, no bracket (replaces
-  `test_format_discounted_price_shows_both_prices`).
-- `test_was_price_from_special_desc` — `"Was $4.50"`/`"was $24.50"`/
-  `"WAS $3.00"` parse; `"Half Price"`, `"2 for $4.50"`, `""`, `None`
-  → None.
-- `test_format_report_was_only_for_genuine_specials` — REGRESSION test:
-  special items show `(was $4.00)` / `(was $2.90)` (WW + Coles), regular
-  item shows none; `(was $4.00)` occurs exactly once.
-- `test_format_report_contains_discount_lines` — updated: no
-  `(was $4.00)` / `(Home 9.75% off` on the item line; raw $4.00 only in
-  the totals table.
-- Specials-reporter tests — discounted price only, genuine desc
-  ("Half Price"/"Special") rides along, no team "was".
-- `test_search_cheapest_uses_discounted_ww`, rewards test, Wednesday
-  specials test — clean discounted prices, no team "was".
+| ID | Case | Status |
+|----|------|--------|
+| L-1 | ranking deterministic (shuffles) | PASS |
+| L-2 | ranking never rejects | PASS |
+| L-3 | singular/plural normalised | PASS |
+| L-4 | difflib typo tolerance | PASS |
+| L-5 | top-ranked pair when UOM passes | PASS |
+| L-6 | next-ranked used when top fails | PASS |
+| L-7 | no pair → closest + reason | PASS |
+| L-8 | 10× sanity ceiling preferred | PASS |
+| L-9 | no 10× pair → first passing | PASS |
+| L-10 | Seasol regression: no prices, found-block | PASS |
+| L-11 | 25L vs 30L pair chosen | PASS |
+| L-12 | store empty → no prices, closest (IN-1) | PASS |
+| L-13 | coles unavailable → WW-only + store_unavailable | PASS |
+| L-14 | breaker/cap behave like unavailable | PASS |
+| L-15 | chosen pair prepended to live_items (IN-4) | PASS |
+| L-16 | matched_names/sizes from chosen pair | PASS |
+| L-17 | sheet hits populate matched fields | PASS |
+| L-18 | Steps 1–4 golden regression | PASS |
 
----
+File: `tests/test_lookup_uom.py` — **18/18 PASS**
+(`tests/test_lookup.py` scenarios 9–11 edited per guardrail 11 — spec
+B2/IN-5; `tests/test_live_search.py` untouched and green.)
 
-## End-to-end smoke test (user's exact scenario)
+## Matrix P — comparator + tests/test_comparator.py additions (14 tests)
 
-File-based script (avoids PowerShell `$` interpolation), fake report
-reproducing the Telegram example:
+| ID | Case | Status |
+|----|------|--------|
+| P-1 | live line " — name size (live)" | PASS |
+| P-2 | sheet line "(sheet)" tag | PASS |
+| P-3 | found-block EXACT §3.3 wording | PASS |
+| P-4 | non-comparable excluded from totals | PASS |
+| P-5 | non-comparable never wins 🏆 | PASS |
+| P-6 | WW-only + "⚠️ Coles not checked (unavailable)" | PASS |
+| P-7 | sheet-vs-sheet golden (never gated) | PASS |
+| P-8 | sheet-vs-live mix not gated | PASS |
+| P-9 | both-live gated in auto | PASS |
+| P-10 | --mode live routes through gate | PASS |
+| P-11 | home-brand rebuild carries new fields | PASS |
+| P-12 | totals math golden | PASS |
+| P-13 | no prices + no closest → existing rendering | PASS |
+| P-14 | no per-unit strings anywhere | PASS |
 
-```
-🛒 BASKET COMPARISON
-━━━━━━━━━━━━━━━━━━━━
+File: `tests/test_comparator.py` (class TestUomReportMatrix) —
+**14/14 PASS** (28 pre-existing comparator tests: 6 edited under
+guardrail 11, clause IN-1/IN-3/IN-5 — listed in the final report.)
 
-1. fetta cheese  🏠
-   🟢 Woolworths  $3.61
-   🔴 Coles       $2.50
+## Matrices CLI — tests/test_cli.py additions (16 + 12 tests)
 
-2. bega fetta crumbled
-   🟢 Woolworths  $2.85 (was $4.00)
-   🔴 Coles       $2.50 (was $2.90)
-...
-🏆 Cheapest: Coles — you save $1.46 (vs Woolworths)
-🏷️ WW discounts: −$0.54 (5% all $0.35 + 🏠 home extra $0.19)
------ assertions -----
-SMOKE TEST PASS
-```
+CLI-1..CLI-16 (search display/add-item, searched-items management,
+Queue-1 vs Queue-2 separation) and WC-1..WC-12 (wednesday docx golden,
+live routing, clean stop, Step-0 scp pull/pull-failure, window skip,
+dry-run flush skip, live specials, Telegram live summary + flush
+failures): **28/28 PASS**. Files: `tests/test_cli.py` (classes
+`TestCLIPartB`, `TestWednesdayLiveRouting`). 5 pre-existing search
+tests updated under guardrail 11 (clause IN-5/§4.8-2 — patch target
+swapped to `fetch_coles_search_status`; 1 fixture given sizes per
+IN-3; 2 converted to found-block assertions per IN-1).
 
-- Non-special home-brand item: discounted price only — **no "(was $4.00)"** ✅
-- Genuine special: store WasPrice shown ✅
-- Discount math unchanged (4.00 → 3.80 → 3.61) ✅
+## Matrix F+W+D — tests/test_live_window.py (38 tests)
 
-Note: a first inline `python -c` smoke run misleadingly showed no
-`(was $4.00)` — PowerShell double-quote `$`-interpolation/escaping had
-mangled the input string (`Was \$4.00`). File-based rerun confirmed the
-code correct. Lesson: never smoke-test `$`-containing strings via
-PowerShell inline `-c`.
+F-1..F-10 (snapshot conversion, specials semantics, dedup, quantity,
+offline, validate_complete naming files): **10/10 PASS**
+W-1..W-20 (pagination walker, flush grouping/success/failure/3-strike/
+session-death/retry/throttle/log+rotation, exact list match, phase
+independence + flags, heartbeat, no-scrapedo grep, lazy playwright,
+discovery capture): **20/20 PASS**
+D-1..D-7 (manifest purity, scp→restart→smoke order, failure retry
+hint, git-mode fallback, heartbeat entry exits 0, compare-lists
+mismatch/pass, arg-list-only subprocess): **8/8 PASS** (D-3 split into
+D-3/D-3b)
 
-## Status: PASS (fix verified; deployment via scp + docker restart follows)
+## Full-suite gate (Task 12)
 
----
+Command: `C:\Users\User.DESKTOP-R2G441H\anaconda3\python.exe -m pytest
+grocery-price-tracker/tests/ -q`
+Result: **8 failed, 438 passed** (446 total; same 8 pre-existing
+failures as baseline; 0 new failures; 0 skips)
 
-## Deployment & E2E verification (VPS)
+## Deployment evidence (Task 12b)
 
-**Sync (scp, branches diverged — no git pull on VPS):** md5-verified local↔VPS
-for `core/woolworths_discounts.py`, `core/price_comparator.py`,
-`core/lookup.py`, `core/specials_reporter.py`, `core/telegram_format.py`,
-`grocery_price_cli.py` — all 6 match.
+- `python scripts/deploy_vps.py` — **24/24 files OK** (prep of remote
+  dirs via ssh sudo mkdir/chown/u+w, then per-file scp, then ONE
+  `ssh … docker restart openclaw-core` = OK)
+- Container smoke: `docker exec openclaw-core python3
+  /app/tasks/ai-tools/grocery_price_cli.py searched-items show` →
+  `searched_items is empty ✅`, exit 0
+- schtasks registered: `grocery-session-heartbeat` (hourly, Ready,
+  command = anaconda python + scripts/session_heartbeat_entry.py)
+- Heartbeat live run: `woolworths: alive`, `coles: unknown`, exit 0
 
-**Docker:** `openclaw-core` restarted (twice: after code sync and after
-skill sync) — `Up (healthy)`, gateway health OK, Telegram configured.
+## Pre-existing failures (NOT touched — Task 0.2 directive)
 
-**In-container CLI (bind-mount live, new code):**
-- `compare --items "fetta cheese"` → `🟢 Woolworths  $3.61` — NO "(was $4.00)" ✅
-- `compare --items "macro milk"` → `🟢 Woolworths  $4.65` — NO "(was $5.15)" ✅
-- `compare --items "birds eye frozen peas"` → `🟢 Woolworths  $5.42` — NO was ✅
+All 8 are stale Phase-1 tests in `tests/test_extractors.py`, failing
+identically at baseline (both files unchanged since commit `0942f81`):
 
-**Telegram E2E (`openclaw.mjs agent --deliver`):**
-1. First test — agent re-worded CLI output and re-injected "(was $4.00)".
-   Root causes found and fixed:
-   - **`claw-skills/grocery-price/SKILL.md` itself documented the OLD
-     bracket format** (`$4.51 (Home 9.75% off, was $5.00)`) — the agent
-     imitated it. Section rewritten: prices are printed PLAIN, "was" is
-     reserved for genuine specials. Also added: Raw column is NOT a "was"
-     price; concrete good/bad relay example; price lines must be kept
-     exactly as printed.
-   - Session memory of pre-fix turns reinforced the pattern → verified
-     with isolated sessions (`--session-id fresh-was-fix-test-*`).
-2. Isolated-session tests after the skill fix:
-   - Live-search path: clean relay, no fabricated was-annotations ✅
-   - Sheet path (fetta cheese): `Woolworths: $3.61` with discount
-     explained in prose — **no false "(was $x)" special price** ✅
+1. `TestSessionManager::test_get_headers_no_cookie` — environment-
+   dependent: passes only when no local cookie file exists; the session
+   manager loads real cookies from disk.
+2. `TestWoolworthsExtractor::test_parse_api_item` (+ alternate_keys,
+   empty_name, no_price) — imports `_parse_api_item`, which no longer
+   exists (refactored to `_parse_product_detail` in Phase 1).
+3. `TestColesExtractor::test_parse_search_result` (+ no_product_wrapper,
+   with_badges) — fixtures wrap payloads in `{"product": ...}` and use
+   keys the parser never unwrapped; current `_parse_search_result`
+   (and its committed callers) consume raw product dicts.
 
-Note: `claw-skills/` lives outside the git repo (parent dir is not a
-repo) — it is scp-synced only, per the README deployment workflow.
-
-## Final status: PASS — fixed, tested, deployed, verified on Telegram
-
----
-
-# Run 2 — discount narration removed + TEAM_DISCOUNT_ENABLED master switch
-
-- **Date:** 2026-08-28 (follow-up user request)
-- **Requests:** (1) agent must stop narrating "5% team discount…" in every
-  reply — it's known by default; (2) a central on/off switch so prices
-  automatically revert to original Woolworths prices when someone without
-  the team discount wants them.
-
-## Changes
-
-1. **`core/woolworths_discounts.py`** — new `TEAM_DISCOUNT_ENABLED = True`
-   master switch (single on/off point, documented inline). When `False`:
-   - `format_discounted_price()` returns the raw original price;
-   - `apply_woolworths_discounts()` flags everything unapplied;
-   - every surface (compare, search, recipe, specials, specials-scan,
-     rewards, map/lookup, Wednesday report) auto-reverts with zero other
-     code changes.
-2. **`core/price_comparator.py`** — `compare_basket(team_discount=None)`
-   now follows the switch; True/False still force per-call behaviour.
-3. **`grocery_price_cli.py`** — `--team-discount` default changed True→None
-   (None = follow switch; explicit flags override); recipe path follows the
-   switch; `search` cheapest-store math switches between discounted and raw.
-4. **`claw-skills/grocery-price/SKILL.md`** — new hard rule: NEVER narrate
-   or explain the team discount in replies; prices are relayed as printed.
-5. **`README.md`** — master switch documented.
-
-## Answer to "how many changes to toggle?"
-
-ONE line: set `TEAM_DISCOUNT_ENABLED = False` in
-`grocery-price-tracker/core/woolworths_discounts.py` (then scp that one
-file to the VPS if toggling in production). Everything reverts
-automatically; flip back to `True` to re-enable. Per-call CLI flags
-(`--no-team-discount` / `--team-discount`) work regardless.
-
-## Test runs
-
-| Run | Module(s) | Result |
-|---|---|---|
-| 1 | discount/comparator/cli/telegram_format/lookup/matcher/sync modules | **PASS — Ran 191 tests, OK** (incl. 4 new switch tests) |
-| 2 | Smoke (file-based, patch switch): OFF → raw $4.00 everywhere, no discount blocks; ON → $3.61 + discount tail | **SMOKE TEST PASS** |
-
-## Deployment
-
-scp to VPS: `core/woolworths_discounts.py`, `core/price_comparator.py`,
-`grocery_price_cli.py`, `claw-skills/grocery-price/SKILL.md` (md5-verified)
-→ `docker restart openclaw-core` → E2E Telegram check that discount
-narration is gone.
-
-## Status: PASS
-
----
-
-# Run 3 - restore TROPHY-style comparison emojis in Telegram replies
-
-- Date: 2026-08-28 (follow-up user request)
-- Observation: newest Telegram comparison replies lost the trophy emoji
-  styling the user liked. NO icons were stripped from the code - the CLI
-  still emits the full set (basket header, WW/Coles store icons, totals,
-  discounts, cheapest-trophy, warnings; verified by grep + smoke output).
-  The variation came from the OpenClaw agent re-wording replies.
-- Fix: SKILL.md new rule "ALWAYS keep the comparison icon vocabulary":
-  store icons on price lines, trophy NEVER dropped on the cheapest line
-  (preferred form: trophy + "Coles is cheaper by" + amount), home-brand/
-  specials/warning/totals icons kept; includes the exact preferred reply
-  template. Also removed a duplicated bullet block left in the discount
-  section by the previous edit.
-- Deployed: SKILL.md scp'd to VPS, openclaw-core restarted.
-- E2E verified (fresh session, delivered to Telegram):
-  bullet WW .61 (home brand) / bullet Coles .50
-  trophy line: Coles is cheaper by 1.11
-- Status: PASS
+Per the plan ("do NOT fix, do NOT skip — record"), these remain
+untouched and are handed to 04 Checker with this note.
