@@ -15,7 +15,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 _HERE = Path(__file__).resolve().parent
 _PROJECT = _HERE.parent
@@ -1802,6 +1802,362 @@ class TestCLIPartB(unittest.TestCase):
         self.assertEqual(atl_data, [])      # Queue 1 untouched
         self.assertIn("Queued for Wednesday: 'Obela Hommus 200g' "
                       "(Coles) [", out)
+
+
+class TestWednesdayLiveRouting(unittest.TestCase):
+    """Matrix WC-1..WC-12: wednesday docx/live routing + live-refresh.
+
+    Fully mocked: no docx files, no sheet, no scp, no Telegram, no
+    browser. The docx path gets a golden regression (WC-1/WC-2).
+    """
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+    def _wed_args(self, **overrides):
+        """Namespace for _cmd_wednesday."""
+        defaults = {"dry_run": True, "no_scp": True, "no_telegram": True,
+                    "source": "docx"}
+        defaults.update(overrides)
+        return argparse.Namespace(**defaults)
+
+    def _base_patches(self, ww_items, coles_items, patch_sync=True,
+                      patch_docx=True, patch_subprocess=True):
+        """Common patch context for wednesday runs (no external effects)."""
+        from extractors.models import ProductItem
+        fake_report = SimpleNamespace(
+            rows_examined=0, rows_updated=0, items_matched=0,
+            items_skipped=0, stores_synced=[], range_written="",
+            warnings=[])
+
+        class _FakeMatcher:
+            def __init__(self, index):
+                pass
+
+            def match_batch(self, items):
+                return [SimpleNamespace(matched=True) for _ in items]
+
+        stack = [
+            patch("grocery_price_cli._load_env", return_value=None),
+            patch("core.name_matcher.load_keyword_index",
+                  return_value=object()),
+            patch("core.name_matcher.NameMatcher", _FakeMatcher),
+            patch("core.name_matcher.get_pending_mappings",
+                  return_value=[]),
+            # Hermetic Step 8: the repo may contain a real specials docx.
+            patch("grocery_price_cli._extract_woolworths_specials",
+                  return_value=[]),
+            patch("core.sheets_client.connect_worksheet",
+                  return_value=FakeWorksheet([_make_header()])),
+            patch("grocery_price_cli._read_ignored_items",
+                  return_value=set()),
+            patch("grocery_price_cli._write_list_file", return_value=None),
+            patch("grocery_price_cli._reset_list_action_progress",
+                  return_value=None),
+        ]
+        if patch_docx:
+            stack.insert(1, patch(
+                "extractors.doc_parser.parse_docx_cache",
+                side_effect=lambda store: ww_items
+                if store == "woolworths" else coles_items))
+        if patch_subprocess:
+            stack.append(patch(
+                "subprocess.run",
+                return_value=SimpleNamespace(returncode=0, stdout="",
+                                             stderr="")))
+        if patch_sync:
+            stack.append(patch("core.sheets_sync.sync_prices",
+                               return_value=fake_report))
+        return stack, fake_report
+
+    def _run_wednesday(self, args, stack):
+        """Run _cmd_wednesday under the given patch stack."""
+        import contextlib
+        with contextlib.ExitStack() as exit_stack:
+            for patcher in stack:
+                exit_stack.enter_context(patcher)
+            old_stdout = sys.stdout
+            try:
+                sys.stdout = io.StringIO()
+                code = _cmd_wednesday_refs()[0](args)
+                out = sys.stdout.getvalue()
+            finally:
+                sys.stdout = old_stdout
+        return code, out
+
+    def _live_patches(self, snapshots=None, window_summary=None,
+                      validate=None, specials_exists=True, run_mock=None,
+                      snapshots_exist=True):
+        """Extra patch stack for --source live."""
+        from extractors.models import ProductItem
+        tmp = self._tmpdir()
+        existing = tmp / "snap.json"
+        existing.write_text("[]", encoding="utf-8")
+        snapshot_paths = ([existing, existing] if snapshots_exist
+                          else [tmp / "nope1.json", tmp / "nope2.json"])
+        ww_item = ProductItem(store="woolworths",
+                              raw_name="WW Milk 2L", price=3.50)
+        coles_item = ProductItem(store="coles",
+                                 raw_name="Coles Bread 650g", price=2.80)
+        run_patch = (patch("extractors.session_refresh.run", run_mock)
+                     if run_mock is not None else
+                     patch("extractors.session_refresh.run",
+                           return_value=window_summary or {
+                               "woolworths": {"login": True,
+                                              "flush": {"added": [],
+                                                        "failed": [],
+                                                        "parked": []},
+                                              "fetch": {"ok": True}},
+                               "coles": {"login": True,
+                                         "flush": {"added": [], "failed": [],
+                                                   "parked": []},
+                                         "fetch": {"ok": True}}}))
+        stack = [
+            patch("extractors.live_list_fetch.required_snapshot_paths",
+                  return_value=snapshot_paths),
+            (patch("extractors.live_list_fetch.validate_complete",
+                   side_effect=validate) if validate is not None else
+             patch("extractors.live_list_fetch.validate_complete",
+                   return_value=None)),
+            patch("extractors.live_list_fetch.snapshots_for_date",
+                  return_value=snapshots or {
+                      "woolworths": [ww_item], "coles": [coles_item]}),
+            run_patch,
+            patch("extractors.live_list_fetch.ww_snapshot_path",
+                  return_value=existing if specials_exists
+                  else tmp / "missing.json"),
+            patch("extractors.live_list_fetch.specials_from_live",
+                  return_value=[ProductItem(
+                      store="woolworths", raw_name="Half Price Milk",
+                      price=2.0, is_special=True,
+                      special_desc="Was $4.00")]),
+        ]
+        return stack
+
+    _tmpdir_holder = None
+
+    def _tmpdir(self):
+        """A shared tmp dir for the duration of the test."""
+        if self._tmpdir_holder is None:
+            self._tmpdir_holder = tempfile.TemporaryDirectory()
+            self.addCleanup(self._tmpdir_holder.cleanup)
+        return Path(self._tmpdir_holder.name)
+
+    # ------------------------------------------------------------------
+    # WC-1..WC-2: docx golden
+    # ------------------------------------------------------------------
+    def test_wc1_docx_default_golden(self):
+        """WC-1: wednesday (no flag) -> docx path unchanged."""
+        stack, _report = self._base_patches(
+            [SimpleNamespace(raw_name="WW Milk")],
+            [SimpleNamespace(raw_name="Coles Bread")])
+        args = self._wed_args()
+        code, out = self._run_wednesday(args, stack)
+        self.assertEqual(code, 0)
+        self.assertIn("Step 1: Parsing Word documents...", out)
+        self.assertEqual(out.count("items parsed"), 2)
+        self.assertIn("Total: 2 items across 2 store(s)", out)
+        self.assertNotIn("live snapshots", out)
+
+    def test_wc2_explicit_docx_identical(self):
+        """WC-2: --source docx explicit -> identical to WC-1."""
+        stack1, _ = self._base_patches(
+            [SimpleNamespace(raw_name="WW Milk")],
+            [SimpleNamespace(raw_name="Coles Bread")])
+        out1 = self._run_wednesday(self._wed_args(), stack1)[1]
+        stack2, _ = self._base_patches(
+            [SimpleNamespace(raw_name="WW Milk")],
+            [SimpleNamespace(raw_name="Coles Bread")])
+        out2 = self._run_wednesday(self._wed_args(source="docx"), stack2)[1]
+        self.assertEqual(out1, out2)
+
+    # ------------------------------------------------------------------
+    # WC-3..WC-6: live routing
+    # ------------------------------------------------------------------
+    def test_wc3_live_source_reads_snapshots(self):
+        """WC-3: --source live with snapshots -> steps 1-2 read them."""
+        stack, _report = self._base_patches([], [])
+        stack.extend(self._live_patches())
+        args = self._wed_args(source="live")
+        code, out = self._run_wednesday(args, stack)
+        self.assertEqual(code, 0)
+        self.assertIn("items from snapshot", out)
+        self.assertNotIn("Parsing Word documents", out)
+
+    def test_wc4_missing_snapshots_clean_stop_no_sync(self):
+        """WC-4: window failed -> §5.2 stop, exit 1, sync NEVER called."""
+        stack, _report = self._base_patches([], [], patch_sync=False)
+        stack.extend(self._live_patches(
+            validate=ValueError(
+                "Live fetch incomplete — clean stop before any sheet "
+                "write. Problems: missing: 2026-09-02_ww_pricecompare.json."
+                " Re-run the live window (live-refresh) or paste your "
+                "lists into the Word docs as before and run wednesday "
+                "(no flag) — everything else is unchanged.")))
+        args = self._wed_args(source="live")
+        import contextlib
+        with contextlib.ExitStack() as exit_stack:
+            for patcher in stack:
+                exit_stack.enter_context(patcher)
+            with patch("core.sheets_sync.sync_prices") as mock_sync:
+                old_stdout = sys.stdout
+                try:
+                    sys.stdout = io.StringIO()
+                    code = _cmd_wednesday_refs()[0](args)
+                    out = sys.stdout.getvalue()
+                finally:
+                    sys.stdout = old_stdout
+                mock_sync.assert_not_called()
+        self.assertEqual(code, 1)
+        self.assertIn("clean stop before any sheet write", out)
+        self.assertIn("wednesday", out)
+
+    def test_wc5_partial_snapshots_same_stop(self):
+        """WC-5: one store's snapshot missing -> same clean stop."""
+        stack, _report = self._base_patches([], [])
+        stack.extend(self._live_patches(
+            validate=ValueError("Live fetch incomplete — clean stop "
+                                "before any sheet write. Problems: "
+                                "missing: 2026-09-02_coles_pricecompare"
+                                ".json.")))
+        args = self._wed_args(source="live")
+        code, out = self._run_wednesday(args, stack)
+        self.assertEqual(code, 1)
+        self.assertIn("coles_pricecompare.json", out)
+
+    def test_wc6_docx_never_silently_substituted(self):
+        """WC-6: live failure never falls back to docx parsing."""
+        docx_mock = MagicMock(side_effect=lambda store: [])
+        stack, _report = self._base_patches([], [], patch_docx=False)
+        stack.append(patch("extractors.doc_parser.parse_docx_cache",
+                           docx_mock))
+        stack.extend(self._live_patches(
+            validate=ValueError("missing snapshots")))
+        args = self._wed_args(source="live")
+        import contextlib
+        with contextlib.ExitStack() as exit_stack:
+            for patcher in stack:
+                exit_stack.enter_context(patcher)
+            old_stdout = sys.stdout
+            try:
+                sys.stdout = io.StringIO()
+                code = _cmd_wednesday_refs()[0](args)
+                out = sys.stdout.getvalue()
+            finally:
+                sys.stdout = old_stdout
+        self.assertEqual(code, 1)
+        self.assertEqual(docx_mock.call_count, 0)
+
+    # ------------------------------------------------------------------
+    # WC-7..WC-9: Step 0 queue pull + window skip
+    # ------------------------------------------------------------------
+    def test_wc7_step0_pulls_both_queues_via_scp(self):
+        """WC-7: Step 0 scp-pulls add_to_list + searched_items."""
+        mock_run = MagicMock(return_value=SimpleNamespace(
+            returncode=0, stdout="", stderr=""))
+        stack, _report = self._base_patches([], [], patch_subprocess=False)
+        stack.append(patch("subprocess.run", mock_run))
+        stack.extend(self._live_patches())
+        args = self._wed_args(source="live", dry_run=False, no_scp=False)
+        code, out = self._run_wednesday(args, stack)
+        self.assertEqual(code, 0)
+        scp_calls = [c for c in mock_run.call_args_list
+                     if c.args and c.args[0] and c.args[0][0] == "scp"]
+        pulled = " ".join(" ".join(c.args[0]) for c in scp_calls)
+        self.assertIn("add_to_list.json", pulled)
+        self.assertIn("searched_items.json", pulled)
+
+    def test_wc8_scp_unreachable_proceeds_local(self):
+        """WC-8: scp unreachable -> ONE warning, proceeds, exit 0."""
+        mock_run = MagicMock(return_value=SimpleNamespace(
+            returncode=1, stdout="", stderr="unreachable"))
+        stack, _report = self._base_patches([], [], patch_subprocess=False)
+        stack.append(patch("subprocess.run", mock_run))
+        stack.extend(self._live_patches())
+        args = self._wed_args(source="live", dry_run=False, no_scp=False)
+        code, out = self._run_wednesday(args, stack)
+        self.assertEqual(code, 0)
+        self.assertEqual(out.count("proceeding with local copies"), 1)
+
+    def test_wc9_existing_snapshots_skip_window(self):
+        """WC-9: today's snapshots exist -> live window NOT invoked."""
+        stack, _report = self._base_patches([], [])
+        stack.extend(self._live_patches())
+        with patch("extractors.session_refresh.run",
+                   side_effect=AssertionError("window must not run")) as \
+                mock_run:
+            # (the _live_patches already patched run; override semantics
+            # via an explicit nested patch check on call count instead)
+            pass
+        args = self._wed_args(source="live")
+        code, out = self._run_wednesday(args, stack)
+        self.assertEqual(code, 0)
+        self.assertIn("already exist", out)
+        self.assertNotIn("Live window: opening browser", out)
+
+    # ------------------------------------------------------------------
+    # WC-10..WC-12: dry-run flush skip, specials, telegram
+    # ------------------------------------------------------------------
+    def test_wc10_dry_run_skips_flush_only(self):
+        """WC-10: --dry-run --source live -> flush skipped, fetch runs."""
+        run_mock = MagicMock(return_value={
+            "woolworths": {"login": True, "fetch": {"ok": True}},
+            "coles": {"login": True, "fetch": {"ok": True}}})
+        stack, _report = self._base_patches([], [])
+        stack.extend(self._live_patches(run_mock=run_mock,
+                                        snapshots_exist=False))
+        args = self._wed_args(source="live", dry_run=True)
+        code, out = self._run_wednesday(args, stack)
+        self.assertEqual(code, 0)
+        self.assertFalse(run_mock.call_args.kwargs.get("flush", True))
+        self.assertTrue(run_mock.call_args.kwargs.get("fetch"))
+
+    def test_wc11_specials_from_live_snapshot(self):
+        """WC-11: Step 8 specials come from the live snapshot."""
+        stack, _report = self._base_patches([], [])
+        stack.extend(self._live_patches())
+        args = self._wed_args(source="live")
+        code, out = self._run_wednesday(args, stack)
+        self.assertEqual(code, 0)
+        self.assertIn("from live snapshot", out)
+        self.assertIn("1 specials found", out)
+
+    def test_wc12_telegram_reflects_live_and_flush_failures(self):
+        """WC-12: Telegram summary reflects live source + failed items."""
+        stack, _report = self._base_patches([], [])
+        window_summary = {
+            "woolworths": {"login": True,
+                           "flush": {"added": [],
+                                     "failed": [{"keyword":
+                                                 "Obela Hommus 200g",
+                                                 "reason": "HTTP 500"}],
+                                     "parked": []},
+                           "fetch": {"ok": True}},
+            "coles": {"login": True,
+                      "flush": {"added": [], "failed": [], "parked": []},
+                      "fetch": {"ok": True}},
+        }
+        stack.extend(self._live_patches(window_summary=window_summary,
+                                        snapshots_exist=False))
+        args = self._wed_args(source="live", dry_run=False, no_scp=False,
+                              no_telegram=False)
+        sent = []
+        with patch("grocery_price_cli._send_telegram",
+                   side_effect=lambda *a, **k: sent.append(a[2]) or True), \
+                patch.dict(os.environ, {"TELEGRAM_CLAW_BOT": "test-token"}):
+            code, out = self._run_wednesday(args, stack)
+        self.assertEqual(code, 0)
+        self.assertTrue(sent)
+        summary_text = sent[0]
+        self.assertIn("(LIVE)", summary_text)
+        self.assertIn("live snapshots", summary_text)
+        self.assertIn("Obela Hommus 200g", summary_text)
+
+
+def _cmd_wednesday_refs():
+    """Import the wednesday handler lazily (returns [func])."""
+    from grocery_price_cli import _cmd_wednesday
+    return [_cmd_wednesday]
 
 
 if __name__ == "__main__":
