@@ -703,7 +703,8 @@ def _seed_login_cookies_from_real_chrome(target_dir: Path) -> str:
         return "seeding skipped (daily cookie store unreadable or locked)"
 
 
-def _open_browser(real_profile: bool = False):
+def _open_browser(real_profile: bool = False,
+                  cdp_port: int | None = None):
     """Launch headed Chrome with a persistent profile (LAZY import).
 
     Args:
@@ -713,6 +714,13 @@ def _open_browser(real_profile: bool = False):
             profile — the daily profile cannot be driven in place
             (Chrome >= 136 ignores the control channel on the default
             directory).
+        cdp_port (int | None): do not launch anything — attach to a
+            Chrome ALREADY running with ``--remote-debugging-port``
+            (e.g. a full clone of the daily profile on a non-default
+            --user-data-dir, which Chrome permits to be driven). The
+            attached browser stays PRISTINE: no automation masking,
+            because its real-profile consistency is exactly what gets
+            it past Akamai/PX.
 
     Returns:
         _LocalDriver: the live driver.
@@ -729,7 +737,7 @@ def _open_browser(real_profile: bool = False):
             "live-refresh requires a local desktop (Playwright) — "
             "run it on the Windows machine") from exc
     return _LocalDriver(sync_playwright, profile_dir=PROFILE_DIR,
-                        seed_from_real=real_profile)
+                        seed_from_real=real_profile, cdp_port=cdp_port)
 
 
 class _LocalDriver:
@@ -740,50 +748,67 @@ class _LocalDriver:
     refuse to guess and route the store through discovery."""
 
     def __init__(self, sync_playwright_factory, profile_dir: Path = None,
-                 seed_from_real: bool = False):
+                 seed_from_real: bool = False, cdp_port: int | None = None):
         self._factory = sync_playwright_factory
         self._profile_dir = (Path(profile_dir) if profile_dir
                              else PROFILE_DIR)
         self._seed_from_real = seed_from_real
+        self._cdp_port = cdp_port
         self._pw = None
         self._context = None
         self._pages = {}
 
     def start(self):
-        """Launch the persistent-profile browser context."""
-        if self._seed_from_real:
-            if _chrome_is_running():
-                raise RuntimeError(
-                    "Chrome is still running — close EVERY Chrome window "
-                    "(and the tray icon), then re-run with --real-profile. "
-                    "The daily-profile cookie files are locked while it "
-                    "runs.")
-            print(_seed_login_cookies_from_real_chrome(self._profile_dir))
-        self._pw = self._factory().start()
-        launch_kwargs = {
-            "headless": False,
-            # Fail loudly instead of hanging forever if Chrome ever
-            # fails to bring up its control channel.
-            "timeout": 60000,
-            # Hide the AutomationControlled blink flag (Akamai signal).
-            "args": ["--disable-blink-features=AutomationControlled"],
-        }
-        try:
-            # Real branded Chrome: the bundled-Chromium brand fingerprint
-            # is what Akamai denied on woolworths.com.au (M3 finding,
-            # 2026-08-30). Falls back to bundled Chromium when the
-            # channel is unavailable on this machine.
-            self._context = self._pw.chromium.launch_persistent_context(
-                str(self._profile_dir), channel="chrome", **launch_kwargs)
-        except Exception:
-            self._context = self._pw.chromium.launch_persistent_context(
-                str(self._profile_dir), **launch_kwargs)
-        try:
-            self._context.add_init_script(
-                "Object.defineProperty(navigator, 'webdriver', "
-                "{get: () => undefined});")
-        except Exception:
-            pass
+        """Acquire the browser context (CDP attach or fresh launch)."""
+        if self._cdp_port:
+            # Attach to an already-running Chrome. NO init script, NO
+            # launch args: the attached profile's real-world
+            # consistency is what passes the bot managers.
+            self._pw = self._factory().start()
+            browser = self._pw.chromium.connect_over_cdp(
+                f"http://localhost:{int(self._cdp_port)}")
+            contexts = list(browser.contexts)
+            self._context = (contexts[0] if contexts
+                             else browser.new_context())
+        else:
+            if self._seed_from_real:
+                if _chrome_is_running():
+                    raise RuntimeError(
+                        "Chrome is still running — close EVERY Chrome "
+                        "window (and the tray icon), then re-run with "
+                        "--real-profile. The daily-profile cookie files "
+                        "are locked while it runs.")
+                print(_seed_login_cookies_from_real_chrome(
+                    self._profile_dir))
+            self._pw = self._factory().start()
+            launch_kwargs = {
+                "headless": False,
+                # Fail loudly instead of hanging forever if Chrome ever
+                # fails to bring up its control channel.
+                "timeout": 60000,
+                # Hide the AutomationControlled blink flag (Akamai signal).
+                "args": ["--disable-blink-features=AutomationControlled"],
+            }
+            try:
+                # Real branded Chrome: the bundled-Chromium brand
+                # fingerprint is what Akamai denied on
+                # woolworths.com.au (M3 finding, 2026-08-30). Falls
+                # back to bundled Chromium when the channel is
+                # unavailable on this machine.
+                self._context = \
+                    self._pw.chromium.launch_persistent_context(
+                        str(self._profile_dir), channel="chrome",
+                        **launch_kwargs)
+            except Exception:
+                self._context = \
+                    self._pw.chromium.launch_persistent_context(
+                        str(self._profile_dir), **launch_kwargs)
+            try:
+                self._context.add_init_script(
+                    "Object.defineProperty(navigator, 'webdriver', "
+                    "{get: () => undefined});")
+            except Exception:
+                pass
         for store, url in (
             ("woolworths", "https://www.woolworths.com.au/"),
             ("coles", "https://www.coles.com.au/"),
@@ -963,26 +988,56 @@ def _inject_saved_cookies(driver, store: str) -> None:
 
 
 def _ww_logged_in(driver) -> bool:
-    """WW login check: in-page fetch of /apis/ui/mylists is non-empty."""
+    """WW login check (M3 hardening, 2026-08-30).
+
+    Anonymous /apis/ui/mylists returns an EMPTY 200 (the old check's
+    false positive), and /shop/myaccount only redirects client-side
+    (fetch probes see 200). Authoritative practical signal: the
+    mylists Response array is non-empty (this integration always
+    targets accounts owning lists), backed by the storefront header
+    offering "Log in or Sign up" as the logged-out tell.
+    """
     try:
         result = driver.evaluate(
             "woolworths",
-            "async () => { try { const r = await fetch('/apis/ui/mylists');"
-            " const t = await r.text(); return t && t !== 'null'; }"
-            " catch (e) { return false; } }")
-        return bool(result)
+            "async () => { try { const r = await fetch('/apis/ui/"
+            "mylists'); const d = await r.json(); const lists = "
+            "(d && d.Response) || []; const header = document.body."
+            "innerText || ''; return {lists: lists.length, "
+            "loggedOut: header.includes('Log in or Sign up')}; }"
+            " catch (e) { return null; } }")
+        if not isinstance(result, dict):
+            return False
+        if int(result.get("lists", 0) or 0) > 0:
+            return True
+        return False
     except Exception:
         return False
 
 
 def _coles_logged_in(driver) -> bool:
-    """Coles login check per the discovery capture (fallback: marker)."""
+    """Coles login check per the discovery capture (fallback: DOM).
+
+    M3 fix (2026-08-30): the old fallback endpoint
+    (/api/v1/security/user/information) is a dead 404 on the current
+    Coles site — the pre-capture fallback is now the storefront header
+    ("Log in / Sign up" link absent => logged in).
+    """
     capture = _read_json(CAPTURE_PATH, {})
     check_url = str((capture.get("coles", {}) or {}).get("check_url", "") or "")
+    if check_url:
+        expression = (
+            "async () => { try { const r = await fetch("
+            + json.dumps(check_url)
+            + "); return r.status === 200; } catch (e) { return false; } }")
+        try:
+            if bool(driver.evaluate("coles", expression)):
+                return True
+        except Exception:
+            pass
     expression = (
-        "async () => { try { const r = await fetch("
-        + json.dumps(check_url or "/api/v1/security/user/information")
-        + "); return r.status === 200; } catch (e) { return false; } }")
+        "async () => { try { return !(document.body.innerText || '')"
+        ".includes('Log in / Sign up'); } catch (e) { return false; } }")
     try:
         return bool(driver.evaluate("coles", expression))
     except Exception:
@@ -1289,7 +1344,8 @@ def _fetch_list_page(driver, store: str, capture: dict, list_name: str,
 # run(): Phase A -> B -> C
 # ============================================================================
 def run(flush: bool = True, fetch: bool = True, recapture: bool = False,
-        *, _driver=None, real_profile: bool = False) -> dict:
+        *, _driver=None, real_profile: bool = False,
+        cdp_port: int | None = None) -> dict:
     """Run the live window phases; each phase is independently
     fault-tolerant (W-15) and skippable (W-16).
 
@@ -1302,6 +1358,8 @@ def run(flush: bool = True, fetch: bool = True, recapture: bool = False,
         real_profile (bool): seed the dedicated profile with the user's
         daily-Chrome logins before launching (--real-profile; requires
         Chrome fully closed first).
+        cdp_port (int | None): attach to an already-running Chrome on
+        this debug port instead of launching one.
 
     Returns:
         dict: {store: {"login": bool, "flush": dict | None,
@@ -1313,7 +1371,8 @@ def run(flush: bool = True, fetch: bool = True, recapture: bool = False,
     own_driver = _driver is None
     try:
         driver = (_driver if _driver is not None
-                  else _open_browser(real_profile=real_profile))
+                  else _open_browser(real_profile=real_profile,
+                                     cdp_port=cdp_port))
         if own_driver:
             if hasattr(driver, "start"):
                 driver.start()
