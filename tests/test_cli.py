@@ -2266,7 +2266,11 @@ class TestTopicSplit(unittest.TestCase):
     def test_unset_ids_fall_back_to_dm_only(self):
         gpc = self.gpc
         calls = []
-        with patch.object(gpc, "_send_telegram",
+        # Post-M1 the constants hold real IDs; simulate the unset state
+        # (pre-M1 deployment) to keep the DM-only fallback covered.
+        with patch.object(gpc, "_WEEKLY_THREAD_ID", None), \
+             patch.object(gpc, "_SPECIALS_THREAD_ID", None), \
+             patch.object(gpc, "_send_telegram",
                           side_effect=lambda *a, **k: calls.append(
                               _Call(a, k)) or True):
             gpc._post_weekly_summary("tok", "summary", [("Unmatched", [])])
