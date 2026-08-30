@@ -60,10 +60,12 @@ CAPTURE_PATH = DATA_DIR / "live_api_capture.json"
 SNAPSHOTS_DIR = DATA_DIR / "live_snapshots"
 HEARTBEAT_LOG_PATH = DATA_DIR / "session_heartbeat.log"
 
-# Real-Chrome opt-in (--real-profile): the user's daily Chrome profile
-# (already logged into both stores). Chrome >= 136 refuses attaching to
-# a running default-profile browser, so this mode requires Chrome fully
-# closed; the tool relaunches it under its own control instead.
+# Real-Chrome opt-in (--real-profile): seed the tool's dedicated
+# profile with the logins from the user's daily Chrome. Chrome >= 136
+# ignores --remote-debugging-pipe when --user-data-dir IS the default
+# directory, so a real daily profile can never be driven in place
+# (launching on it hangs Playwright forever). We COPY the
+# login-bearing files over instead, then launch our own profile.
 REAL_CHROME_PROFILE_DIR = Path(
     os.environ.get("LOCALAPPDATA", "")) / "Google" / "Chrome" / "User Data"
 
@@ -564,8 +566,10 @@ def run_heartbeat(*, state_path: Path = None, log_path: Path = None,
 def _chrome_is_running() -> bool:
     """Whether a chrome.exe process is up (Windows-only check).
 
-    Used as a pre-flight guard for --real-profile: a locked daily
-    profile cannot be opened a second time by the tool.
+    Used as a pre-flight guard for --real-profile: the daily profile's
+    cookie files are locked while Chrome runs (and a clean Chrome
+    shutdown purges session cookies — seeding must happen while it is
+    fully closed).
     """
     if sys.platform != "win32":
         return False
@@ -579,14 +583,73 @@ def _chrome_is_running() -> bool:
         return False
 
 
+def _seed_login_cookies_from_real_chrome(target_dir: Path) -> str:
+    """Copy the login-bearing files from the user's daily Chrome
+    profile into ``target_dir`` (the tool's dedicated profile).
+
+    Why a copy (Chrome >= 136): Chrome ignores --remote-debugging-pipe
+    when --user-data-dir points at the DEFAULT profile directory, so
+    the daily profile can never be driven directly — launching on it
+    hangs Playwright forever. Seeding our own profile with
+    ``Local State`` (holds the os_crypt key; decryptable by the same
+    installed chrome.exe + same Windows user) plus the Cookies DB
+    carries the Woolworths/Coles logins over instead.
+
+    Args:
+        target_dir (Path): the persistent profile to seed (PROFILE_DIR).
+
+    Returns:
+        str: human-readable summary of what was seeded (no PII — file
+        names only). NEVER raises; on any failure Phase A simply falls
+        back to a normal in-window login.
+    """
+    import shutil
+    src_root = REAL_CHROME_PROFILE_DIR
+    if not (src_root / "Local State").exists():
+        return "no daily Chrome profile found — starting fresh"
+    # The daily logins may live in a non-Default profile dir
+    # ("Profile 1", ...). Local State records the last-used one.
+    profile_dir_name = "Default"
+    try:
+        state = _read_json(src_root / "Local State", {})
+        name = str(((state or {}).get("profile") or {}).get(
+            "last_used", "") or "")
+        if (name and name not in (".", "..")
+                and re.fullmatch(r"[\w][\w .-]*", name)):
+            profile_dir_name = name
+    except Exception:
+        pass
+    candidates = [
+        src_root / "Local State",
+        src_root / profile_dir_name / "Network" / "Cookies",
+        src_root / profile_dir_name / "Cookies",   # pre-130 layout
+    ]
+    copied: list = []
+    for src in candidates:
+        try:
+            if not src.exists():
+                continue
+            dst = target_dir / src.relative_to(src_root)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(src), str(dst))
+            copied.append(str(dst.relative_to(target_dir)))
+        except OSError:
+            pass  # locked/missing -> Phase A falls back to a login
+    if not copied:
+        return "nothing copied (Chrome still running or files locked)"
+    return "seeded: " + ", ".join(copied)
+
+
 def _open_browser(real_profile: bool = False):
     """Launch headed Chrome with a persistent profile (LAZY import).
 
     Args:
-        real_profile (bool): use the user's REAL daily Chrome profile
-            (already logged in). Requires Chrome fully closed; the tool
-            relaunches it (a running default-profile browser cannot be
-            attached to since Chrome 136).
+        real_profile (bool): seed the tool's dedicated profile with the
+            user's daily-Chrome logins first (requires Chrome fully
+            closed). The launch itself is ALWAYS on the dedicated
+            profile — the daily profile cannot be driven in place
+            (Chrome >= 136 ignores the control channel on the default
+            directory).
 
     Returns:
         _LocalDriver: the live driver.
@@ -594,7 +657,7 @@ def _open_browser(real_profile: bool = False):
     Raises:
         RuntimeError: with the user-facing guidance when playwright is
         unavailable (browser-less environment — VPS/CI/tests), or when
-        the real profile is locked (Chrome still running).
+        the daily profile is locked (Chrome still running).
     """
     try:
         from playwright.sync_api import sync_playwright
@@ -602,8 +665,8 @@ def _open_browser(real_profile: bool = False):
         raise RuntimeError(
             "live-refresh requires a local desktop (Playwright) — "
             "run it on the Windows machine") from exc
-    profile_dir = REAL_CHROME_PROFILE_DIR if real_profile else PROFILE_DIR
-    return _LocalDriver(sync_playwright, profile_dir=profile_dir)
+    return _LocalDriver(sync_playwright, profile_dir=PROFILE_DIR,
+                        seed_from_real=real_profile)
 
 
 class _LocalDriver:
@@ -613,25 +676,32 @@ class _LocalDriver:
     add/list API calls accurate — until a capture exists, Phase B/C
     refuse to guess and route the store through discovery."""
 
-    def __init__(self, sync_playwright_factory, profile_dir: Path = None):
+    def __init__(self, sync_playwright_factory, profile_dir: Path = None,
+                 seed_from_real: bool = False):
         self._factory = sync_playwright_factory
         self._profile_dir = (Path(profile_dir) if profile_dir
                              else PROFILE_DIR)
+        self._seed_from_real = seed_from_real
         self._pw = None
         self._context = None
         self._pages = {}
 
     def start(self):
         """Launch the persistent-profile browser context."""
-        if (self._profile_dir == REAL_CHROME_PROFILE_DIR
-                and _chrome_is_running()):
-            raise RuntimeError(
-                "Chrome is still running — close EVERY Chrome window "
-                "(and the tray icon), then re-run with --real-profile. "
-                "A running default-profile Chrome cannot be attached to.")
+        if self._seed_from_real:
+            if _chrome_is_running():
+                raise RuntimeError(
+                    "Chrome is still running — close EVERY Chrome window "
+                    "(and the tray icon), then re-run with --real-profile. "
+                    "The daily-profile cookie files are locked while it "
+                    "runs.")
+            print(_seed_login_cookies_from_real_chrome(self._profile_dir))
         self._pw = self._factory().start()
         launch_kwargs = {
             "headless": False,
+            # Fail loudly instead of hanging forever if Chrome ever
+            # fails to bring up its control channel.
+            "timeout": 60000,
             # Hide the AutomationControlled blink flag (Akamai signal).
             "args": ["--disable-blink-features=AutomationControlled"],
         }
@@ -697,9 +767,9 @@ class _LocalDriver:
     def cookies(self, store) -> list:
         """Export cookies for one store's origin ONLY.
 
-        Scoped on purpose: in --real-profile mode the context holds the
-        user's ENTIRE daily cookie jar; only the store's own cookies
-        are ever persisted to session_state.json.
+        Scoped on purpose (defence in depth): only the store's own
+        cookies are ever persisted to session_state.json, even if the
+        profile ever holds more than the store sessions.
         """
         url = ("https://www.woolworths.com.au"
                if store == "woolworths" else "https://www.coles.com.au")
@@ -1166,8 +1236,9 @@ def run(flush: bool = True, fetch: bool = True, recapture: bool = False,
         recapture (bool): force API discovery even when a capture exists.
         _driver: injected driver (tests); a real one is launched when
         None.
-        real_profile (bool): launch with the user's REAL daily Chrome
-        profile (--real-profile; requires Chrome fully closed first).
+        real_profile (bool): seed the dedicated profile with the user's
+        daily-Chrome logins before launching (--real-profile; requires
+        Chrome fully closed first).
 
     Returns:
         dict: {store: {"login": bool, "flush": dict | None,
