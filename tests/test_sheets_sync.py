@@ -306,8 +306,9 @@ class TestSheetsSync(unittest.TestCase):
         self.assertEqual(report.rows_updated, 1)
 
         updated = ws.get_all_values()
-        # Coles_Specials is at index 14 (N)
-        self.assertEqual(updated[1][14], "Half Price")
+        # Coles_Specials is at index 14 (N) — D25 vocabulary: a flagged
+        # item with a non-pattern desc classifies as "discount".
+        self.assertEqual(updated[1][14], "discount")
 
     # ------------------------------------------------------------------ #
     # Test 7: Specials cleared when not special
@@ -340,8 +341,8 @@ class TestSheetsSync(unittest.TestCase):
         self.assertEqual(report.rows_updated, 1)
 
         updated = ws.get_all_values()
-        # Stale specials cleared
-        self.assertEqual(updated[1][14], "")
+        # Stale specials overwritten with the D25 "no" marker
+        self.assertEqual(updated[1][14], "no")
 
     # ------------------------------------------------------------------ #
     # Test 8: Missing specials columns warns
@@ -862,6 +863,119 @@ class TestSheetsSync(unittest.TestCase):
         )
         self.assertFalse(result["found"])
         self.assertIn("product not found", result["error"])
+
+
+class TestSpecialsFlagWrites(unittest.TestCase):
+    """D25/WP3: M/N cells hold exactly no/discount/multi-buy."""
+
+    HEADER = [
+        "Product_Name", "Category", "Size", "Woolworths_Price",
+        "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+        "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+        "Search_Keyword_Aldi", "Aldi_Refresh",
+        "Woolworths_Specials", "Coles_Specials", "Rewards_Points",
+    ]
+
+    # sync_prices ------------------------------------------------------- #
+
+    def test_sync_prices_writes_multi_buy_and_no(self):
+        rows = [
+            self.HEADER,
+            ["Oat Milk", "Dairy", "1L", "", "", "", "", "", "", "", "",
+             "", "", "", ""],
+            ["Full Cream", "Dairy", "2L", "", "", "", "", "", "", "", "",
+             "", "", "", ""],
+            ["Cheese", "Dairy", "500g", "", "", "", "", "", "", "", "",
+             "", "", "50% off", ""],
+        ]
+        ws = FakeWorksheet(rows)
+        results = [
+            MatchResult(True, 2, "Oat Milk", "coles",
+                        "Coles Oat Milk 1L", "exact_keyword"),
+            MatchResult(True, 3, "Full Cream", "coles",
+                        "Coles Full Cream 2L", "exact_keyword"),
+            MatchResult(False, None, "", "coles",
+                        "Coles Cheese 500g", "none"),
+        ]
+        items = [
+            ProductItem("coles", "Coles Oat Milk 1L", 3.50,
+                        is_special=True, special_desc="Any 2 | $9"),
+            ProductItem("coles", "Coles Full Cream 2L", 4.20,
+                        is_special=False),
+            ProductItem("coles", "Coles Cheese 500g", 5.00,
+                        is_special=True, special_desc="Half Price"),
+        ]
+        report = sync_prices(results, items, worksheet=ws)
+        self.assertEqual(report.items_matched, 2)
+        self.assertEqual(report.items_skipped, 1)
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][13], "multi-buy")   # N: Any 2 | $9
+        self.assertEqual(updated[2][13], "no")          # N: not special
+        self.assertEqual(updated[3][13], "50% off")     # unmatched: kept
+
+    # add_product_row --------------------------------------------------- #
+
+    def test_add_product_row_default_writes_no(self):
+        ws = FakeWorksheet([self.HEADER])
+        res = add_product_row(
+            "New Milk", "woolworths", 2.50, worksheet=ws)
+        self.assertTrue(res["wrote"])
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][12], "no")          # M
+
+    def test_add_product_row_special_writes_discount(self):
+        ws = FakeWorksheet([self.HEADER])
+        res = add_product_row(
+            "New Bread", "coles", 2.00, worksheet=ws,
+            is_special=True, special_desc="Was $2.00")
+        self.assertTrue(res["wrote"])
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][13], "discount")    # N
+
+    def test_add_product_row_without_specials_cols_no_crash(self):
+        header = self.HEADER[:12]
+        ws = FakeWorksheet([header])
+        res = add_product_row(
+            "New Eggs", "woolworths", 4.00, worksheet=ws,
+            is_special=True, special_desc="Was $5.00")
+        self.assertTrue(res["wrote"])
+        updated = ws.get_all_values()
+        self.assertEqual(len(updated[1]), len(header))  # nothing added
+
+    # update_single_price ----------------------------------------------- #
+
+    def _ws(self):
+        return FakeWorksheet([
+            self.HEADER,
+            ["Oat Milk", "Dairy", "1L", "$3.00", "", "", "", "2026-01-01",
+             "", "", "", "", "", "Old Special", ""],
+        ])
+
+    def test_update_single_price_no_special_args_leaves_cell(self):
+        ws = self._ws()
+        res = update_single_price("Oat Milk", "coles", 3.50, worksheet=ws)
+        self.assertTrue(res["wrote"])
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][13], "Old Special")  # untouched
+        self.assertEqual(res["range_written"], "A2:H2")  # no M/N widening
+
+    def test_update_single_price_false_writes_no_and_widens(self):
+        ws = self._ws()
+        res = update_single_price(
+            "Oat Milk", "coles", 3.50, worksheet=ws, is_special=False)
+        self.assertTrue(res["wrote"])
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][13], "no")
+        self.assertEqual(res["range_written"], "A2:N2")
+
+    def test_update_single_price_multi_buy(self):
+        ws = self._ws()
+        res = update_single_price(
+            "Oat Milk", "coles", 3.50, worksheet=ws,
+            is_special=True, special_desc="2 for $4")
+        self.assertTrue(res["wrote"])
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][13], "multi-buy")
 
 
 if __name__ == "__main__":

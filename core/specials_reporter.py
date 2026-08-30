@@ -46,7 +46,7 @@ def get_active_specials(store=None, worksheet=None) -> list:
     Returns:
         list[dict], each: {name, store, special_desc, price, brand,
         row_index}. A product is "on special" if its store specials cell
-        (M for woolworths, N for coles) is non-empty.
+        (M for woolworths, N for coles) is non-empty and not "no" (D25/A6).
     """
     store_lower = store.lower() if store else None
 
@@ -94,28 +94,35 @@ def get_active_specials(store=None, worksheet=None) -> list:
         sheet_row = row_idx + 2  # 1-based
 
         for store_key, col_idx in specials_col.items():
-            if col_idx < len(row) and row[col_idx].strip():
-                # Parse price
-                price = None
-                price_col = PRICE_COL.get(store_key)
-                if price_col is not None and price_col < len(row):
-                    cell = str(row[price_col])
-                    m = re.search(r"(?:A\$|\$)\s*(\d+\.?\d*)", cell)
-                    if m:
-                        price = float(m.group(1))
-                    else:
-                        try:
-                            price = float(cell)
-                        except (ValueError, TypeError):
-                            pass
-                results.append({
-                    "name": name,
-                    "store": store_key,
-                    "special_desc": str(row[col_idx]).strip(),
-                    "price": price,
-                    "brand": brand,
-                    "row_index": sheet_row,
-                })
+            if col_idx >= len(row):
+                continue
+            cell = str(row[col_idx]).strip()
+            # A6 back-compat: empty/"no" -> not on special; "multi-buy"
+            # reports as multi-buy; ANY other non-empty cell (incl.
+            # legacy free text) reports as a special (discount).
+            if not cell or cell.lower() == "no":
+                continue
+            # Parse price
+            price = None
+            price_col = PRICE_COL.get(store_key)
+            if price_col is not None and price_col < len(row):
+                pcell = str(row[price_col])
+                m = re.search(r"(?:A\$|\$)\s*(\d+\.?\d*)", pcell)
+                if m:
+                    price = float(m.group(1))
+                else:
+                    try:
+                        price = float(pcell)
+                    except (ValueError, TypeError):
+                        pass
+            results.append({
+                "name": name,
+                "store": store_key,
+                "special_desc": cell,
+                "price": price,
+                "brand": brand,
+                "row_index": sheet_row,
+            })
 
     return results
 

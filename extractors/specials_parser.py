@@ -34,6 +34,22 @@ FOR_RE = re.compile(
     r"(\d+)\s*for\s+\$?\s*([\d]+(?:\.[\d]{1,2})?)", re.IGNORECASE
 )
 
+# D25 Coles markers:
+#   ``Was $X`` — dollar-off special (same style as SAVE_RE).
+WAS_RE = re.compile(
+    r"was[\s\xa0]+\$?\s*([\d]+(?:\.[\d]{1,2})?)", re.IGNORECASE
+)
+
+#   ``Any N | $X`` — multi-buy (e.g. ``Any 2 | $9``); spacing/case tolerant.
+ANY_RE = re.compile(
+    r"any\s+(\d+)\s*\|\s*\$?\s*([\d]+(?:\.[\d]{1,2})?)", re.IGNORECASE
+)
+
+#   Bare ``SPECIAL`` flag line (Coles layout places it ABOVE the name).
+#   Surrounding whitespace tolerated (the doc_parser call site strips
+#   too; a line must contain ONLY the word to count).
+SPECIAL_FLAG_RE = re.compile(r"^\s*special\s*$", re.IGNORECASE)
+
 # A *clean* price line is a bare amount like ``$1.52`` (matched start to
 # end) — unit-price lines such as ``$10.00 / 1KG`` are rejected by also
 # checking the line has no ``/``.
@@ -140,3 +156,26 @@ def detect_special(
             detail = f"{qty} for ${bundle:.2f}"
 
     return name, price, detail, discount_pct
+
+
+def classify_special(is_special: bool, special_desc: str) -> str:
+    """Classify a specials observation into the D25 sheet vocabulary.
+
+    Precedence (decision 25, binding):
+        1. ``Any N | $X`` (or ``N for $X``) in desc -> "multi-buy";
+        2. Save/Was in desc, or ``is_special`` flag -> "discount";
+        3. otherwise -> "no".
+
+    Args:
+        is_special: the item's specials flag (docx marker or live API).
+        special_desc: the item's specials text ("" when none).
+
+    Returns:
+        str: exactly one of "multi-buy" | "discount" | "no".
+    """
+    desc = special_desc or ""
+    if ANY_RE.search(desc) or FOR_RE.search(desc):
+        return "multi-buy"
+    if WAS_RE.search(desc) or SAVE_RE.search(desc) or is_special:
+        return "discount"
+    return "no"

@@ -350,7 +350,10 @@ Runtime state files (not in git; synced between local↔VPS):
 | `test_extractors.py` | Extractor unit tests |
 | `test_sheets_conn.py` | Sheets connection tests |
 
-**Total: 430+ tests passing** (8 pre-existing Phase-1 failures in `test_extractors.py` are documented in `test.md` — stale tests predating this change, not touched).
+**Total: 446 tests passing, 0 failed** (the 8 stale Phase-1 failures in
+`test_extractors.py` were repaired by the 04 Checker on 2026-08-29 — see
+`test.md`; the repaired test files were synced to the VPS on 2026-08-30.
+Testing runs locally — the VPS/container has no pytest).
 
 ### Google Sheet schema
 
@@ -724,3 +727,82 @@ AI Studio (VPS):   cd /home/ubuntu/openclaw/tasks/aistudio/ai-studio && docker c
 - **Secrets:** `.env` only — never hardcoded, never logged, never committed.
 - **Testing:** TDD where practical; test boundaries (empty, null, invalid types).
 - **Dependencies:** Pinned versions; minimize third-party deps.
+- **Plain-language map:** [`PROJECT-MAP.md`](PROJECT-MAP.md) documents every list, command, and scenario in simple language. **Update it in the same change whenever a list, command, flag, or flow changes.**
+
+---
+
+## D23–D27 + B4/B5 completion (2026-08-30)
+
+Completion of the remaining open decisions from the architecture spec.
+
+### D23 — compare add-reminder
+
+`format_report` (core/price_comparator.py) now ends with the same queue
+reminder `search` prints — `💬 Reply 'add item N' to queue a result for
+Wednesday.` — exactly once, and only when a DISPLAYED item (top 25) shows
+a live product: a live-sourced price or a found-block. Sheet-only and
+empty reports are unchanged.
+
+### D24 — Wednesday Telegram topic split
+
+Wednesday output no longer posts to the retired `grocery-sync-sheet`
+topic (thread 151 — **no code may ever post to it again**):
+
+- summary + resolve lists → `weekly-lists` topic (resolve lists chunked
+  at ≤ 4000 chars/part with `(part N/M)` suffixes; empty lists post a
+  single `📋 <title>: none`);
+- Woolworths specials report → `specials-wool` topic;
+- user DMs keep exactly the previous content.
+
+Topic IDs are placeholders (`None`) until manual step M1; env overrides
+`TELEGRAM_WEEKLY_TOPIC_ID` / `TELEGRAM_SPECIALS_TOPIC_ID` always win
+(A8). With IDs unset, sends fall back to DM-only with a console note —
+nothing crashes. The new read-only `topics-check` subcommand lists the
+forum topic names → thread IDs visible to the bot (M1 helper, local
+machine only). The Wednesday reminder also targets `weekly-lists` with
+refreshed instructions.
+
+### D25 — sheet specials vocabulary `no` / `discount` / `multi-buy`
+
+Sheet specials columns M/N now hold exactly one of `no` / `discount` /
+`multi-buy` (classifier: `classify_special` in
+extractors/specials_parser.py; precedence: `Any N | $X` / `N for $X` →
+multi-buy, then `Was $X` / `Save $X` / flag → discount, else `no`).
+Coles docx markers `Was $X`, `Any N | $X` (below the price) and a bare
+`SPECIAL` flag line (above the name) are parsed by
+extractors/doc_parser.py; a below-line marker wins over an above-line
+flag, and a bare Save/Was above a product is never attached to it (A7
+guard). The specials reporter treats empty/`no` as not-on-special and
+still reports legacy free-text cells. All live add paths (`search --add`,
+`map --add`, Telegram adds) pass the specials flag/desc through.
+
+### D26/D27 — real discovery recording + loud status
+
+`_LocalDriver.capture_add_to_list` (extractors/session_refresh.py)
+records the REAL add-to-list API call: the request listener attaches
+before the prompt; the first same-origin non-GET request mentioning a
+list wins; its JSON body shape is stored (P4c). Coles additionally
+resolves and verifies `lists_url` in page context — an unverified
+capture fails discovery instead of saving something broken (P4d).
+Discovery is now automatic on a true first run (`live-refresh` prompts
+when any store lacks a capture) and `--recapture` genuinely forces
+re-training (P4b). Flush is per-store isolated: a missing capture fails
+only that store, with a `reason` printed. Both `live-refresh` and the
+Wednesday live window print `Discovery: captured` / `Discovery: failed —
+run 'live-refresh --recapture' to train` per store, plus any flush
+`reason`.
+
+### B4 — Scrape.do retries on 5xx/timeout only
+
+The Coles Scrape.do chain retries ONLY 5xx responses and network
+exceptions (fresh session, sleep 3 then 6, exactly 3 attempts). Every
+4xx (404, 429, …) fails immediately after ONE attempt — stderr note,
+breaker failure recorded, store marked unavailable (Woolworths-only
++ ⚠️ line path). 401/403 keep their dedicated branch.
+
+### B5 — never browse the store sites
+
+SKILL.md hard rule: the agent NEVER uses `web_search`/`web_fetch` (or
+any browsing tool) on `woolworths.com.au` / `coles.com.au` — all price,
+special, and discount questions for these stores go through the grocery
+CLI. Ordinary web search stays allowed for everything else.

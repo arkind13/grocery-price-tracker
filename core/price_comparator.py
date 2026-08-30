@@ -829,6 +829,20 @@ def format_report(report: ComparisonReport) -> str:
     for w in report.warnings:
         lines.append(warn(w))
 
+    # D23: queue reminder — same line `search` prints (grocery_price_cli
+    # :656-657), once per report, only when a DISPLAYED item shows a live
+    # product (live-sourced price or a found-block). Sheet-only reports
+    # show nothing (A1/A2).
+    has_live_product = any(
+        "live" in item.sources.values() or item.closest
+        for item in report.items[:25]
+    )
+    if has_live_product:
+        lines.append("")
+        lines.append(
+            "💬 Reply 'add item N' to queue a result for Wednesday."
+        )
+
     return "\n".join(lines)
 
 

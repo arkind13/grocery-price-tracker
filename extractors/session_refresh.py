@@ -130,6 +130,15 @@ def _write_json_atomic(path: Path, data) -> None:
         raise
 
 
+def _parse_json_body(text) -> dict:
+    """Best-effort JSON request-body parse; {} when missing/invalid (P4c)."""
+    try:
+        data = json.loads(text or "")
+        return data if isinstance(data, dict) else {}
+    except (ValueError, TypeError):
+        return {}
+
+
 def _rotate_log_if_large(path: Path, max_bytes: int = FLUSH_LOG_MAX_BYTES) -> bool:
     """Rotate a JSON log aside when it exceeds max_bytes (keeps .1).
 
@@ -623,6 +632,104 @@ class _LocalDriver:
         except Exception:
             pass
 
+    def capture_add_to_list(self, store: str):
+        """Record the real add-to-list API call (D26 discovery, §4.5).
+
+        Attaches a Playwright request listener BEFORE prompting, prints
+        the guided prompt, then polls up to TWO_FA_WAIT_S (3 min) for the
+        FIRST same-origin non-GET request whose URL or body mentions a
+        list. Coles additionally resolves + verifies `lists_url` (and
+        sets `check_url`); a failed verification returns None so no
+        broken capture is saved.
+
+        Args:
+            store: "woolworths" | "coles".
+
+        Returns:
+            dict: {"method", "url", "body_shape"} (+ "lists_url",
+            "check_url" for coles), or None when nothing was captured.
+        """
+        page = self._pages[store]
+        origin = ("https://www.woolworths.com.au"
+                  if store == "woolworths"
+                  else "https://www.coles.com.au")
+        add_candidates: list = []
+        list_gets: list = []
+
+        def _on_request(request):
+            try:
+                method = str(request.method).upper()
+                url = str(request.url)
+                if not url.startswith(origin):
+                    return
+                if method != "GET":
+                    body = request.post_data or ""
+                    if "list" in url.lower() or "list" in body.lower():
+                        add_candidates.append({
+                            "method": method,
+                            "url": url,
+                            "body_shape": _parse_json_body(body),
+                        })
+                elif "list" in url.lower():
+                    list_gets.append(url)
+            except Exception:
+                pass  # listener must never break the page
+
+        page.on("request", _on_request)
+        print(f"Add ONE item to your Price Compare list in the open "
+              f"window ({store})…")
+        deadline = time.monotonic() + TWO_FA_WAIT_S
+        while time.monotonic() < deadline and not add_candidates:
+            time.sleep(1.0)
+        try:
+            page.remove_listener("request", _on_request)
+        except Exception:
+            pass
+        if not add_candidates:
+            return None
+        capture = dict(add_candidates[0])  # FIRST candidate wins
+        if store == "coles":
+            lists_url = self._verify_coles_lists_url(list_gets)
+            if not lists_url:
+                return None  # broken capture — discovery FAILED
+            capture["lists_url"] = lists_url
+            capture["check_url"] = lists_url
+        return capture
+
+    def _verify_coles_lists_url(self, list_gets: list):
+        """Resolve + verify the Coles saved-lists URL (P4d).
+
+        Candidates: observed same-origin GETs containing "list" (most
+        recent first), then the current page URL when it contains
+        "list". A candidate verifies when an in-page fetch returns ok
+        AND a JSON array. Returns the verified URL or "".
+        """
+        page = self._pages["coles"]
+        candidates: list = []
+        seen = set()
+        for url in reversed(list_gets):
+            if url not in seen:
+                seen.add(url)
+                candidates.append(url)
+        try:
+            current = str(page.url)
+            if "list" in current.lower() and current not in seen:
+                candidates.append(current)
+        except Exception:
+            pass
+        expression = (
+            "async ([url]) => { try { const r = await fetch(url);"
+            " if (!r.ok) return null; const data = await r.json();"
+            " return Array.isArray(data) ? url : null; }"
+            " catch (e) { return null; } }")
+        for url in candidates:
+            try:
+                if self.evaluate("coles", expression, [url]) == url:
+                    return url
+            except Exception:
+                continue
+        return ""
+
 
 def _inject_saved_cookies(driver, store: str) -> None:
     """Inject the store's saved cookies (never printed, never logged)."""
@@ -785,16 +892,34 @@ def _phase_b_flush(driver, summary: dict) -> None:
                 "session_died": False,
                 "reason": "not logged in — nothing attempted"}
             continue
-        add_item = _make_add_item(store, driver, capture)
-        result = _flush_store(
-            store, to_flush,
-            add_item=add_item,
-            consume_entry=_consume_queue_entry,
-            log_append=lambda rec: _append_flush_log(FLUSH_LOG_PATH, rec),
-            sleep=time.sleep, clock=time.monotonic,
-            jitter=lambda: random.uniform(0, FLUSH_JITTER_S))
-        result["parked"] = parked
-        summary[store]["flush"] = result
+        # D26: per-store isolation — a missing capture (or any per-store
+        # failure) fails ONLY this store's flush; the other proceeds.
+        try:
+            add_item = _make_add_item(store, driver, capture)
+            result = _flush_store(
+                store, to_flush,
+                add_item=add_item,
+                consume_entry=_consume_queue_entry,
+                log_append=lambda rec: _append_flush_log(FLUSH_LOG_PATH, rec),
+                sleep=time.sleep, clock=time.monotonic,
+                jitter=lambda: random.uniform(0, FLUSH_JITTER_S))
+            result["parked"] = parked
+            summary[store]["flush"] = result
+        except RuntimeError as exc:
+            summary[store]["flush"] = {
+                "added": [], "failed": to_flush, "parked": parked,
+                "session_died": False,
+                "reason": "no API capture — run live-refresh --recapture",
+            }
+            print(f"[session_refresh] flush skipped for {store}: {exc}",
+                  file=sys.stderr)
+        except Exception as exc:
+            summary[store]["flush"] = {
+                "added": [], "failed": to_flush, "parked": parked,
+                "session_died": False, "reason": str(exc),
+            }
+            print(f"[session_refresh] flush failed for {store}: {exc}",
+                  file=sys.stderr)
 
 
 def _make_add_item(store: str, driver, capture: dict):
@@ -983,9 +1108,11 @@ def run(flush: bool = True, fetch: bool = True, recapture: bool = False,
             _safe_close(driver)
         return summary
 
-    if recapture:
+    # D26: auto-discovery — run when forced OR when any store lacks a
+    # capture (a true FIRST run must prompt, not fail wholesale).
+    if recapture or any(_needs_capture(s) for s in STORES):
         try:
-            _run_discovery(driver, summary)
+            _run_discovery(driver, summary, force=recapture)
         except Exception as exc:
             print(f"[session_refresh] discovery failed: {exc}",
                   file=sys.stderr)
@@ -1021,19 +1148,18 @@ def _safe_close(driver) -> None:
         pass
 
 
-def _run_discovery(driver, summary: dict) -> None:
-    """Guided API discovery (§4.5): once per store, user adds ONE item."""
+def _run_discovery(driver, summary: dict, force: bool = False) -> None:
+    """Guided API discovery (§4.5): once per store, user adds ONE item.
+
+    The driver prints the prompt itself AFTER attaching the request
+    listener (P4a). ``force`` re-trains even when a capture exists
+    (--recapture, P4b).
+    """
     for store in STORES:
-        if not _needs_capture(store):
+        if not force and not _needs_capture(store):
             continue
-        print(f"Add ONE item to your Price Compare list in the open "
-              f"window ({store})…")
-        # The real recording driver is configured by the caller through
-        # driver.start(); this phase waits for the network event that
-        # matches the saved-list mutation and records its shape.
         try:
-            capture = driver.capture_add_to_list(store) if hasattr(
-                driver, "capture_add_to_list") else None
+            capture = driver.capture_add_to_list(store)
         except Exception as exc:
             capture = {"error": str(exc)}
         if isinstance(capture, dict) and capture.get("url"):

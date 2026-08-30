@@ -351,5 +351,46 @@ class TestParseAndWrappers(ColesRecipeTestCase):
             ce._parse_search_result(dict(base)).product_id, "")
 
 
+class TestB4RetryTightening(ColesRecipeTestCase):
+    """B4/WP2: retry on 5xx/timeout ONLY; 4xx fails after ONE attempt."""
+
+    def _run_status(self, responses):
+        seq = iter(responses)
+        with patch.object(
+            ce.requests, "get",
+            side_effect=lambda *a, **k: next(seq),
+        ):
+            _items, status = ce._search_via_scrapedo_status("milk")
+            return status
+
+    def test_404_not_retried(self):
+        status = self._run_status([FakeResponse(404, "")])
+        self.assertEqual(status, "unavailable")
+        self.assertEqual(ce._calls_this_run, 1)
+        self.assertEqual(self.sleeps, [])
+
+    def test_429_not_retried(self):
+        status = self._run_status([FakeResponse(429, "")])
+        self.assertEqual(status, "unavailable")
+        self.assertEqual(ce._calls_this_run, 1)
+        self.assertEqual(self.sleeps, [])
+
+    def test_502_retries_three_times(self):
+        status = self._run_status([FakeResponse(502, "")] * 3)
+        self.assertEqual(status, "unavailable")
+        self.assertEqual(ce._calls_this_run, 3)
+        self.assertEqual(self.sleeps, [3, 6])
+
+    def test_timeout_retries_three_times(self):
+        import requests as _rq
+        with patch.object(
+            ce.requests, "get",
+            side_effect=_rq.RequestException("timeout"),
+        ):
+            _items, status = ce._search_via_scrapedo_status("milk")
+        self.assertEqual(status, "unavailable")
+        self.assertEqual(ce._calls_this_run, 3)
+
+
 if __name__ == "__main__":
     unittest.main()

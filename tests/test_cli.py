@@ -5,6 +5,7 @@ No network, no live sheet. Uses FakeWorksheet mock pattern.
 """
 from __future__ import annotations
 import argparse
+import contextlib
 import io
 import json
 import os
@@ -15,7 +16,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 _HERE = Path(__file__).resolve().parent
 _PROJECT = _HERE.parent
@@ -1171,7 +1172,8 @@ class TestAddToListCLI(unittest.TestCase):
         mock_kw.assert_not_called()
         mock_na.assert_not_called()
         mock_update.assert_called_once_with(
-            "Beef Mince 500g", "woolworths", 8.20)
+            "Beef Mince 500g", "woolworths", 8.20,
+            is_special=False, special_desc="")
 
     @patch("core.sheets_sync.update_single_price")
     @patch("grocery_price_cli._search_store_with_fallback")
@@ -2158,6 +2160,208 @@ def _cmd_wednesday_refs():
     """Import the wednesday handler lazily (returns [func])."""
     from grocery_price_cli import _cmd_wednesday
     return [_cmd_wednesday]
+
+
+class TestDiscoveryStatusPrints(unittest.TestCase):
+    """D27/WP4: live-refresh prints per-store Discovery status lines."""
+
+    def test_discovery_lines_printed(self):
+        import contextlib
+        import grocery_price_cli
+        summary = {
+            "woolworths": {"login": True, "flush": None, "fetch": None},
+            "coles": {"login": True, "flush": None, "fetch": None},
+            "discovery": {"woolworths": "captured", "coles": "failed"},
+        }
+        args = SimpleNamespace(recapture=False, flush_only=False,
+                               fetch_only=False)
+        buf = io.StringIO()
+        with patch("extractors.session_refresh.run",
+                   return_value=summary), \
+             contextlib.redirect_stdout(buf):
+            code = grocery_price_cli._cmd_live_refresh(args)
+        out = buf.getvalue()
+        self.assertEqual(code, 0)
+        self.assertIn(grocery_price_cli.kv("Discovery", "captured"), out)
+        self.assertIn(grocery_price_cli.kv(
+            "Discovery",
+            "failed — run 'live-refresh --recapture' to train"), out)
+
+
+class TestTopicSplit(unittest.TestCase):
+    """D24/WP5: routing, chunking, fallback, topics-check, reminder."""
+
+    def setUp(self):
+        import grocery_price_cli as gpc
+        self.gpc = gpc
+        self._env = {}
+        self._env_patch = patch.dict(os.environ, {}, clear=False)
+        self._env_patch.start()
+        self.addCleanup(self._env_patch.stop)
+        for var in ("TELEGRAM_WEEKLY_TOPIC_ID",
+                    "TELEGRAM_SPECIALS_TOPIC_ID"):
+            os.environ.pop(var, None)
+
+    def test_int_env_matrix(self):
+        gpc = self.gpc
+        with patch.dict(os.environ, {"TELEGRAM_WEEKLY_TOPIC_ID": "777"}):
+            self.assertEqual(
+                gpc._int_env("TELEGRAM_WEEKLY_TOPIC_ID", None), 777)
+        self.assertIsNone(gpc._int_env("TELEGRAM_WEEKLY_TOPIC_ID", None))
+        with patch.dict(os.environ, {"TELEGRAM_WEEKLY_TOPIC_ID": "abc"}):
+            self.assertEqual(
+                gpc._int_env("TELEGRAM_WEEKLY_TOPIC_ID", 5), 5)
+
+    def test_chunk_list_message(self):
+        gpc = self.gpc
+        self.assertEqual(gpc._chunk_list_message("Unmatched", []),
+                         ["📋 Unmatched: none"])
+        one = gpc._chunk_list_message("Unmatched", ["milk"])
+        self.assertEqual(len(one), 1)
+        self.assertIn("• milk", one[0])
+        big = gpc._chunk_list_message(
+            "Woolworths missing", [f"item {i} " * 8 for i in range(600)])
+        self.assertGreater(len(big), 1)
+        for n, part in enumerate(big, 1):
+            self.assertLessEqual(len(part), 4000)
+            self.assertIn(f"(part {n}/{len(big)})", part)
+
+    def _posted(self, calls):
+        return [
+            (c.kwargs.get("message_thread_id"), c.args[1])
+            for c in calls
+        ]
+
+    def test_post_weekly_summary_routes_to_weekly_topic_never_151(self):
+        gpc = self.gpc
+        calls = []
+        with patch.dict(os.environ,
+                        {"TELEGRAM_WEEKLY_TOPIC_ID": "777"}), \
+             patch.object(gpc, "_send_telegram",
+                          side_effect=lambda *a, **k: calls.append(
+                              _Call(a, k)) or True):
+            gpc._post_weekly_summary("tok", "summary", [
+                ("Unmatched", ["a"]), ("Woolworths missing", []),
+                ("Coles missing", ["b", "c"]),
+            ])
+        threads = [c.thread for c in calls]
+        self.assertIn(777, threads)
+        self.assertNotIn(151, threads)
+        dm = [c for c in calls if c.chat == gpc._TELEGRAM_USER_ID]
+        self.assertEqual(len(dm), 1)  # DMs keep exactly the summary
+
+    def test_post_specials_routes_to_specials_topic_never_151(self):
+        gpc = self.gpc
+        calls = []
+        with patch.dict(os.environ,
+                        {"TELEGRAM_SPECIALS_TOPIC_ID": "888"}), \
+             patch.object(gpc, "_send_telegram",
+                          side_effect=lambda *a, **k: calls.append(
+                              _Call(a, k)) or True):
+            gpc._post_specials_report("tok", "specials text")
+        threads = [c.thread for c in calls]
+        self.assertIn(888, threads)
+        self.assertNotIn(151, threads)
+
+    def test_unset_ids_fall_back_to_dm_only(self):
+        gpc = self.gpc
+        calls = []
+        with patch.object(gpc, "_send_telegram",
+                          side_effect=lambda *a, **k: calls.append(
+                              _Call(a, k)) or True):
+            gpc._post_weekly_summary("tok", "summary", [("Unmatched", [])])
+            gpc._post_specials_report("tok", "spec")
+        for c in calls:
+            self.assertIsNone(c.thread)
+            self.assertEqual(c.chat, gpc._TELEGRAM_USER_ID)
+
+
+class _Call:
+    """Tiny record of one _send_telegram invocation."""
+
+    def __init__(self, args, kwargs):
+        self.args = args
+        self.kwargs = kwargs
+        self.chat = args[1]
+        self.thread = kwargs.get("message_thread_id")
+
+
+class TestTopicsCheck(unittest.TestCase):
+    """WP5: topics-check parses a mocked getUpdates payload."""
+
+    def test_parses_topic_creation_and_messages(self):
+        import grocery_price_cli as gpc
+        payload = {
+            "ok": True,
+            "result": [
+                {"message": {
+                    "message_thread_id": 543,
+                    "forum_topic_created": {"name": "specials-wool"},
+                    "text": "",
+                }},
+                {"message": {
+                    "message_thread_id": 544,
+                    "text": "@ClawArkindBot id",
+                }},
+            ],
+        }
+        fake_urlopen = mock_open(
+            read_data=json.dumps(payload).encode("utf-8"))
+        with patch("urllib.request.urlopen", fake_urlopen), \
+             patch.dict(os.environ, {"TELEGRAM_CLAW_BOT": "tok"}):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = gpc._cmd_topics_check(argparse.Namespace())
+        self.assertEqual(rc, 0)
+        out = buf.getvalue()
+        self.assertIn("specials-wool → 543", out)
+        self.assertIn("544 · @ClawArkindBot id", out)
+
+
+class TestWednesdayReminderRouting(unittest.TestCase):
+    """WP5: reminder routes to the weekly ID via env/patchable constant."""
+
+    _PATH = Path(__file__).resolve().parents[2] / \
+        "telegram_gateway" / "wednesday_reminder.py"
+
+    def _load(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "wednesday_reminder_test", str(self._PATH))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_env_override_routes_topic(self):
+        mod = self._load()
+        sent = []
+
+        def fake_send(token, chat_id, text, message_thread_id=None):
+            sent.append((chat_id, message_thread_id))
+
+        with patch.dict(os.environ,
+                        {"TELEGRAM_WEEKLY_TOPIC_ID": "777"}), \
+             patch.object(mod, "send_message", fake_send), \
+             patch.object(mod, "user_ids", lambda: [1]):
+            mod.fire("tok")
+        topic_calls = [c for c in sent if c[0] == mod.CHAT_ID]
+        self.assertEqual(topic_calls, [(mod.CHAT_ID, 777)])
+
+    def test_unset_id_dm_only_no_crash(self):
+        mod = self._load()
+        sent = []
+
+        def fake_send(token, chat_id, text, message_thread_id=None):
+            sent.append((chat_id, message_thread_id))
+
+        os.environ.pop("TELEGRAM_WEEKLY_TOPIC_ID", None)
+        with patch.object(mod, "WEEKLY_THREAD_ID", None), \
+             patch.object(mod, "send_message", fake_send), \
+             patch.object(mod, "user_ids", lambda: [1]):
+            results = mod.fire("tok")
+        self.assertEqual(
+            [c for c in sent if c[0] == mod.CHAT_ID], [])
+        self.assertTrue(results["topic"]["skipped"])
 
 
 if __name__ == "__main__":

@@ -25,7 +25,9 @@ import re
 import sys
 from typing import Optional
 
-from extractors.specials_parser import SAVE_RE, FOR_RE
+from extractors.specials_parser import (
+    SAVE_RE, FOR_RE, WAS_RE, ANY_RE, SPECIAL_FLAG_RE,
+)
 
 # ---------------------------------------------------------------------------
 # Path setup
@@ -261,11 +263,14 @@ def parse_docx(
                 continue
             seen.add(name_lower)
 
-            # Specials detection: check the line directly below the price
-            # for a SAVE $X.XX or N FOR $XXX marker (3-line layout:
-            # name, price, detail). Uses the shared regexes from
-            # specials_parser so the sheet-sync path and the Telegram
-            # specials-report path stay in lockstep.
+            # Specials detection (D25):
+            #   below the price (i+2): SAVE $X / N FOR $X (existing) plus
+            #     the Coles markers `Was $X` and `Any N | $X` (desc kept
+            #     exactly as found in the doc).
+            #   above the name (i-1): ONLY a bare `SPECIAL` flag line. A
+            #     bare Save/Was above a product is the PREVIOUS product's
+            #     marker in the WW layout — checking it would attach the
+            #     wrong special (A7 misfire guard).
             is_special = False
             special_desc = ""
             if i + 2 < len(lines):
@@ -288,6 +293,17 @@ def parse_docx(
                     bundle = float(for_m.group(2))
                     is_special = True
                     special_desc = f"{qty} for ${bundle:.2f}"
+                elif WAS_RE.search(detail_line) or ANY_RE.search(
+                        detail_line):
+                    is_special = True
+                    special_desc = detail_line  # kept as found
+            if (
+                not is_special
+                and i >= 1
+                and SPECIAL_FLAG_RE.match(lines[i - 1].strip())
+            ):
+                is_special = True
+                special_desc = "SPECIAL"
 
             items.append(
                 ProductItem(

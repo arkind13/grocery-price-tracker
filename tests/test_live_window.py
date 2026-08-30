@@ -763,5 +763,235 @@ class TestAutomationAssets(unittest.TestCase):
                           encoding="utf-8"))
 
 
+class FakeReq:
+    """Playwright Request stand-in."""
+
+    def __init__(self, method, url, post_data=None):
+        self.method = method
+        self.url = url
+        self.post_data = post_data
+
+
+class FakePage:
+    """Playwright page stand-in: on()/remove_listener()/evaluate()/url.
+
+    Requests fired BEFORE any listener is attached are buffered and
+    replayed to the first subscriber (the tests fire request fixtures,
+    then call capture_add_to_list which subscribes). Clearing
+    ``listeners["request"]`` stops delivery — the poll loop then exits
+    on its already-buffered candidates.
+    """
+
+    def __init__(self, url=""):
+        self.url = url
+        self.listeners = {}
+        self._unheard = []
+        self.eval_fn = lambda expr, arg: None
+
+    def on(self, event, handler):
+        self.listeners.setdefault(event, []).append(handler)
+        pending, self._unheard = self._unheard, []
+        for req in pending:  # late-subscription replay
+            handler(req)
+
+    def remove_listener(self, event, handler):
+        if event in self.listeners:
+            self.listeners[event] = [
+                h for h in self.listeners[event] if h is not handler]
+
+    def fire(self, request):
+        handlers = self.listeners.get("request", [])
+        if not handlers:
+            self._unheard.append(request)
+            return
+        for h in handlers:
+            h(request)
+
+    def evaluate(self, expression, arg=None):
+        return self.eval_fn(expression, arg)
+
+
+class TestCaptureAddToList(unittest.TestCase):
+    """D26/WP4: _LocalDriver.capture_add_to_list via a fake page."""
+
+    def _driver(self, store, page):
+        drv = sr._LocalDriver(lambda: None)
+        drv._pages = {store: page}
+        return drv
+
+    def setUp(self):
+        self._mono = None  # each test sets a monotonic() value sequence
+
+        def fake_monotonic():
+            vals = self._mono
+            if not vals:
+                return 0.0
+            return vals.pop(0)
+        patches = [
+            patch.object(sr.time, "monotonic", side_effect=fake_monotonic),
+            patch.object(sr.time, "sleep", side_effect=lambda s: None),
+        ]
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_first_candidate_wins(self):
+        page = FakePage()
+        drv = self._driver("woolworths", page)
+        page.fire(FakeReq("POST",
+                          "https://www.woolworths.com.au/apis/ui/mylists/items",
+                          '{"listId": 1}'))
+        # second (later) request must NOT replace the first capture
+        page.fire(FakeReq("PUT",
+                          "https://www.woolworths.com.au/apis/ui/other",
+                          '{"listId": 2}'))
+        page.listeners["request"] = []  # stop buffering; poll exits at once
+        # monotonic(): deadline base (0), loop check (0 < 180 -> exit)
+        self._mono = [0, 0]
+        capture = drv.capture_add_to_list("woolworths")
+        self.assertIsNotNone(capture)
+        self.assertEqual(capture["method"], "POST")
+        self.assertTrue(capture["url"].endswith("/mylists/items"))
+        self.assertEqual(capture["body_shape"], {"listId": 1})
+
+    def test_timeout_returns_none(self):
+        page = FakePage()
+        drv = self._driver("woolworths", page)
+        self._mono = [0, 1, 2, 200]  # deadline exceeded, nothing fired
+        self.assertIsNone(drv.capture_add_to_list("woolworths"))
+
+    def test_foreign_origin_ignored(self):
+        page = FakePage()
+        drv = self._driver("woolworths", page)
+        page.fire(FakeReq("POST", "https://evil.example.com/add-list", "{}"))
+        self._mono = [0, 1, 2, 200]
+        self.assertIsNone(drv.capture_add_to_list("woolworths"))
+
+    def test_coles_lists_url_verified(self):
+        page = FakePage("https://www.coles.com.au/shop/lists")
+        drv = self._driver("coles", page)
+        ok_url = "https://www.coles.com.au/api/v1/lists"
+        page.eval_fn = (
+            lambda expr, arg: arg[0] if arg and arg[0] == ok_url else None)
+        page.fire(FakeReq("GET", ok_url))
+        page.fire(FakeReq(
+            "POST", "https://www.coles.com.au/api/v1/lists/items",
+            '{"name": "x"}'))
+        page.listeners["request"] = []  # stop buffering; poll exits at once
+        self._mono = [0, 0]  # deadline base, loop check
+        capture = drv.capture_add_to_list("coles")
+        self.assertIsNotNone(capture)
+        self.assertEqual(capture["lists_url"], ok_url)
+        self.assertEqual(capture["check_url"], ok_url)
+
+    def test_coles_lists_url_unverified_fails_discovery(self):
+        page = FakePage("https://www.coles.com.au/shop/other")
+        drv = self._driver("coles", page)
+        page.eval_fn = lambda expr, arg: None  # nothing verifies
+        page.fire(FakeReq(
+            "POST", "https://www.coles.com.au/api/v1/lists/items",
+            '{"name": "x"}'))
+        page.listeners["request"] = []  # stop buffering; poll exits at once
+        self._mono = [0, 0]  # deadline base, loop check
+        self.assertIsNone(drv.capture_add_to_list("coles"))
+
+
+class TestAutoDiscoveryAndIsolation(unittest.TestCase):
+    """D26/WP4: auto-discovery gating + per-store flush isolation."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.capture_path = Path(self._tmp.name) / "capture.json"
+        self._cap_patch = patch.object(
+            sr, "CAPTURE_PATH", self.capture_path)
+        self._cap_patch.start()
+        self.addCleanup(self._cap_patch.stop)
+
+    def test_auto_discovery_runs_when_capture_missing(self):
+        calls = []
+
+        class FakeDriver:
+            def capture_add_to_list(self_, store):
+                calls.append(store)
+                return {"method": "POST", "url": "https://x/api",
+                        "body_shape": {}}
+
+        summary = {"woolworths": {}, "coles": {}}
+        sr._run_discovery(FakeDriver(), summary, force=False)
+        self.assertEqual(calls, ["woolworths", "coles"])
+        self.assertEqual(summary["discovery"]["woolworths"], "captured")
+
+    def test_no_discovery_when_captures_exist(self):
+        self.capture_path.write_text(json.dumps({
+            "woolworths": {"url": "https://x/api"},
+            "coles": {"url": "https://y/api"},
+        }), encoding="utf-8")
+
+        class FakeDriver:
+            def capture_add_to_list(self_, store):
+                raise AssertionError("must not be called")
+
+        summary = {"woolworths": {}, "coles": {}}
+        sr._run_discovery(FakeDriver(), summary, force=False)
+        self.assertNotIn("discovery", summary)
+
+    def test_force_recaptures_even_when_captures_exist(self):
+        self.capture_path.write_text(json.dumps({
+            "woolworths": {"url": "https://x/api"},
+            "coles": {"url": "https://y/api"},
+        }), encoding="utf-8")
+
+        class FakeDriver:
+            def capture_add_to_list(self_, store):
+                return {"method": "POST", "url": "https://z/api",
+                        "body_shape": {}}
+
+        summary = {"woolworths": {}, "coles": {}}
+        sr._run_discovery(FakeDriver(), summary, force=True)
+        self.assertEqual(summary["discovery"]["woolworths"], "captured")
+
+    def test_run_auto_discovers_on_first_run(self):
+        # run() gates on any(_needs_capture) — verify via a driver fake
+        # whose capture works; login/flush/fetch disabled.
+        class FakeDriver:
+            def capture_add_to_list(self_, store):
+                return {"method": "POST", "url": "https://x/api",
+                        "body_shape": {}}
+
+        with patch.object(sr, "_phase_a_login", lambda d, s: None):
+            summary = sr.run(flush=False, fetch=False, _driver=FakeDriver())
+        self.assertEqual(
+            summary.get("discovery", {}).get("woolworths"), "captured")
+
+    def test_phase_b_flush_isolates_missing_capture(self):
+        capture = {"woolworths": {"method": "POST",
+                                  "url": "https://ww/api",
+                                  "body_shape": {}}}
+        entries = [
+            {"store": "woolworths", "keyword": "milk",
+             "generic_name": "milk", "queue": "searched_items"},
+            {"store": "coles", "keyword": "bread",
+             "generic_name": "bread", "queue": "searched_items"},
+        ]
+        summary = {s: {"login": True, "flush": None, "fetch": None}
+                   for s in sr.STORES}
+        with patch.object(sr, "_load_both_queues", return_value=entries), \
+             patch.object(sr, "_load_attempt_history", return_value={}), \
+             patch.object(sr, "_read_json", return_value=capture), \
+             patch.object(sr, "_flush_store") as flush_store, \
+             patch.object(sr, "_append_flush_log"):
+            flush_store.return_value = {"added": entries[:1], "failed": [],
+                                        "session_died": False}
+            sr._phase_b_flush(object(), summary)
+        self.assertEqual(
+            summary["woolworths"]["flush"]["added"][0]["keyword"], "milk")
+        self.assertEqual(summary["coles"]["flush"]["failed"][0]
+                         ["keyword"], "bread")
+        self.assertEqual(
+            summary["coles"]["flush"]["reason"],
+            "no API capture — run live-refresh --recapture")
+
+
 if __name__ == "__main__":
     unittest.main()

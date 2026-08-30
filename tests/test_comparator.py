@@ -16,7 +16,9 @@ _PROJECT = _HERE.parent
 if str(_PROJECT) not in sys.path:
     sys.path.insert(0, str(_PROJECT))
 
-from core.price_comparator import compare_basket, format_report  # noqa: E402
+from core.price_comparator import (  # noqa: E402
+    BasketItem, ComparisonReport, compare_basket, format_report,
+)
 
 
 # ============================================================================
@@ -1120,6 +1122,60 @@ class TestUomReportMatrix(unittest.TestCase):
         for banned in ("/L", "/kg", "/100", "per 100", "per L", "per kg",
                        "per litre", "per kilo"):
             self.assertNotIn(banned, text)
+
+
+class TestCompareAddReminder(unittest.TestCase):
+    """D23 (WP1): the queue reminder in format_report — presence matrix."""
+
+    REMINDER = "💬 Reply 'add item N' to queue a result for Wednesday."
+
+    def _report(self, items):
+        return ComparisonReport(items=items)
+
+    def test_live_price_report_ends_with_reminder(self):
+        item = BasketItem(
+            name="milk",
+            prices={"woolworths": 4.5, "coles": 4.2},
+            sources={"woolworths": "live", "coles": "live"},
+        )
+        out = format_report(self._report([item]))
+        self.assertTrue(out.rstrip().endswith(self.REMINDER))
+
+    def test_found_block_only_report_ends_with_reminder(self):
+        item = BasketItem(
+            name="flour",
+            closest={"woolworths": {"name": "WW Flour 2kg"}},
+        )
+        out = format_report(self._report([item]))
+        self.assertTrue(out.rstrip().endswith(self.REMINDER))
+
+    def test_sheet_only_report_has_no_reminder(self):
+        item = BasketItem(
+            name="milk",
+            prices={"woolworths": 4.5, "coles": 4.2},
+            sources={"woolworths": "sheet", "coles": "sheet"},
+        )
+        out = format_report(self._report([item]))
+        self.assertNotIn(self.REMINDER, out)
+
+    def test_mixed_report_reminder_appears_exactly_once(self):
+        sheet_item = BasketItem(
+            name="bread",
+            prices={"woolworths": 3.0, "coles": 3.2},
+            sources={"woolworths": "sheet", "coles": "sheet"},
+        )
+        live_item = BasketItem(
+            name="milk",
+            prices={"woolworths": 4.5},
+            sources={"woolworths": "live"},
+        )
+        out = format_report(self._report([sheet_item, live_item]))
+        self.assertEqual(out.count(self.REMINDER), 1)
+
+    def test_empty_report_unchanged(self):
+        out = format_report(ComparisonReport(items=[]))
+        self.assertIn("No items provided.", out)
+        self.assertNotIn(self.REMINDER, out)
 
 
 if __name__ == "__main__":

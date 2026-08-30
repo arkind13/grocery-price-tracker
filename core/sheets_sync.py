@@ -231,9 +231,12 @@ def sync_prices(
         row[PRICE_COL[result.store]] = item.price
 
         if result.store in specials_col:
-            row[specials_col[result.store]] = (
-                item.special_desc if item.is_special else ""
-            )
+            # D25: M/N hold exactly one of no/discount/multi-buy; "no"
+            # overwrites stale free text on every matched row. Unmatched
+            # rows keep their old cells (same semantics as prices).
+            from extractors.specials_parser import classify_special
+            row[specials_col[result.store]] = classify_special(
+                bool(item.is_special), str(item.special_desc or ""))
 
         if rewards_col is not None:
             row[rewards_col] = item.rewards_points or ""
@@ -305,6 +308,8 @@ def update_single_price(
     price: float,
     *,
     dry_run: bool = False,
+    is_special: Optional[bool] = None,
+    special_desc: str = "",
     worksheet=None,
 ) -> dict:
     """Update ONE price cell by generic name (Col A) or store keyword (Col I/J/K).
@@ -316,6 +321,9 @@ def update_single_price(
         store: "woolworths"|"coles".
         price: new price (float). Must be > 0.
         dry_run: if True, report old/new without writing.
+        is_special: None = leave the specials cell untouched (P3a);
+            True/False = write classify_special(...) to M/N (D25).
+        special_desc: the live item's specials text (default "").
         worksheet: optional pre-connected worksheet.
 
     Returns:
@@ -436,13 +444,23 @@ def update_single_price(
     # --- live write ---
     ts = _sydney_now_str()
     full_row = list(row_data)  # make mutable copy
+    header = all_values[0] if all_values else []
+    specials_col = _find_col(
+        header, SPECIALS_HEADER_BY_STORE.get(store_lower, ""))
+    write_specials = is_special is not None and specials_col is not None
     target_width = max(price_col + 1, LAST_UPDATED_COL + 1)
+    if write_specials:
+        # Widen past M/N so the flag cell is inside the written range.
+        target_width = max(target_width, specials_col + 1)
     while len(full_row) < target_width:
         full_row.append("")
     full_row[price_col] = price
     full_row[LAST_UPDATED_COL] = ts
-    # Truncate to target_width — the sheet row has 16 cols (A-P) but we only
-    # write up to LAST_UPDATED_COL; gspread rejects writing past the range.
+    if write_specials:
+        from extractors.specials_parser import classify_special
+        full_row[specials_col] = classify_special(is_special, special_desc)
+    # Truncate to target_width — the sheet row has 16 cols (A-P); gspread
+    # rejects writing past the range.
     full_row = full_row[:target_width]
 
     range_name = f"A{sheet_row}:{_col_letter(target_width - 1)}{sheet_row}"
@@ -667,6 +685,8 @@ def add_product_row(
     category: str = "",
     store_keyword: str = "",
     alias: str = "",
+    is_special: bool = False,
+    special_desc: str = "",
     dry_run: bool = False,
     worksheet=None,
 ) -> dict:
@@ -689,6 +709,8 @@ def add_product_row(
             (default "" — leave the keyword cell empty).
         alias: the user's original query to persist as a Col P alias
             (default "" — no alias written).
+        is_special: the live item's specials flag (D25; default False).
+        special_desc: the live item's specials text (default "").
         dry_run: if True, report the planned row without writing.
         worksheet: optional pre-connected worksheet.
 
@@ -726,6 +748,8 @@ def add_product_row(
     price_col = PRICE_COL[store_lower]
     kw_col = STORE_KEYWORD_COL.get(store_lower)
     keywords_col = _find_col(header, KEYWORDS_HEADER)
+    specials_col = _find_col(
+        header, SPECIALS_HEADER_BY_STORE.get(store_lower, ""))
 
     # Build the new row
     target_width = max(
@@ -733,6 +757,7 @@ def add_product_row(
         LAST_UPDATED_COL + 1,
         (kw_col + 1) if kw_col is not None else 0,
         (keywords_col + 1) if keywords_col is not None else 0,
+        (specials_col + 1) if specials_col is not None else 0,
         len(header),
     )
     new_row: list = [""] * target_width
@@ -755,6 +780,9 @@ def add_product_row(
         new_row[kw_col] = store_keyword            # Col I/J
     if keywords_col is not None and alias:
         new_row[keywords_col] = alias              # Col P
+    if specials_col is not None:
+        from extractors.specials_parser import classify_special
+        new_row[specials_col] = classify_special(is_special, special_desc)
 
     if dry_run:
         return {

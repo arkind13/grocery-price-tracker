@@ -257,7 +257,8 @@ def _search_via_scrapedo_status(
         - run cap hit   -> zero HTTP, status "cap_exceeded"
         - 5xx / RequestException -> silent retry with a NEW session,
           sleep(3) then sleep(6), exactly SCRAPEDO_MAX_ATTEMPTS attempts
-        - 401/403 -> NEVER retried (fail immediately)
+        - 401/403 AND every other 4xx (404, 429, ...) -> NEVER retried
+          (fail immediately; B4: retry on 5xx/timeout ONLY)
         - 200 + __NEXT_DATA__ -> success (resets the breaker streak)
 
     Returns:
@@ -316,8 +317,19 @@ def _search_via_scrapedo_status(
             _breaker_record_failure()
             return [], "unavailable"
         if resp.status_code != 200:
-            _backoff_sleep(attempt)
-            continue
+            if resp.status_code >= 500:
+                # B4: retry on 5xx/timeout ONLY — fresh session, backoff.
+                _backoff_sleep(attempt)
+                continue
+            # 4xx (incl. 404/429): permanent for this run — no retry,
+            # store marked unavailable (Woolworths-only + ⚠️ line path).
+            print(
+                f"[coles_extractor] Scrape.do returned HTTP "
+                f"{resp.status_code} — not retrying",
+                file=sys.stderr,
+            )
+            _breaker_record_failure()
+            return [], "unavailable"
 
         next_match = re.search(
             r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>',
