@@ -60,6 +60,13 @@ CAPTURE_PATH = DATA_DIR / "live_api_capture.json"
 SNAPSHOTS_DIR = DATA_DIR / "live_snapshots"
 HEARTBEAT_LOG_PATH = DATA_DIR / "session_heartbeat.log"
 
+# Real-Chrome opt-in (--real-profile): the user's daily Chrome profile
+# (already logged into both stores). Chrome >= 136 refuses attaching to
+# a running default-profile browser, so this mode requires Chrome fully
+# closed; the tool relaunches it under its own control instead.
+REAL_CHROME_PROFILE_DIR = Path(
+    os.environ.get("LOCALAPPDATA", "")) / "Google" / "Chrome" / "User Data"
+
 STORES = ("woolworths", "coles")
 
 # EXACT list names targeted per store (never guessed; mismatches print
@@ -554,15 +561,40 @@ def run_heartbeat(*, state_path: Path = None, log_path: Path = None,
 # ============================================================================
 # Browser session (Phase A) — lazy playwright
 # ============================================================================
-def _open_browser():
-    """Launch headed Chromium with a persistent profile (LAZY import).
+def _chrome_is_running() -> bool:
+    """Whether a chrome.exe process is up (Windows-only check).
+
+    Used as a pre-flight guard for --real-profile: a locked daily
+    profile cannot be opened a second time by the tool.
+    """
+    if sys.platform != "win32":
+        return False
+    try:
+        import subprocess
+        out = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq chrome.exe"],
+            capture_output=True, text=True, timeout=15).stdout or ""
+        return "chrome.exe" in out.lower()
+    except Exception:
+        return False
+
+
+def _open_browser(real_profile: bool = False):
+    """Launch headed Chrome with a persistent profile (LAZY import).
+
+    Args:
+        real_profile (bool): use the user's REAL daily Chrome profile
+            (already logged in). Requires Chrome fully closed; the tool
+            relaunches it (a running default-profile browser cannot be
+            attached to since Chrome 136).
 
     Returns:
         _LocalDriver: the live driver.
 
     Raises:
         RuntimeError: with the user-facing guidance when playwright is
-        unavailable (browser-less environment — VPS/CI/tests).
+        unavailable (browser-less environment — VPS/CI/tests), or when
+        the real profile is locked (Chrome still running).
     """
     try:
         from playwright.sync_api import sync_playwright
@@ -570,7 +602,8 @@ def _open_browser():
         raise RuntimeError(
             "live-refresh requires a local desktop (Playwright) — "
             "run it on the Windows machine") from exc
-    return _LocalDriver(sync_playwright)
+    profile_dir = REAL_CHROME_PROFILE_DIR if real_profile else PROFILE_DIR
+    return _LocalDriver(sync_playwright, profile_dir=profile_dir)
 
 
 class _LocalDriver:
@@ -580,30 +613,78 @@ class _LocalDriver:
     add/list API calls accurate — until a capture exists, Phase B/C
     refuse to guess and route the store through discovery."""
 
-    def __init__(self, sync_playwright_factory):
+    def __init__(self, sync_playwright_factory, profile_dir: Path = None):
         self._factory = sync_playwright_factory
+        self._profile_dir = (Path(profile_dir) if profile_dir
+                             else PROFILE_DIR)
         self._pw = None
         self._context = None
         self._pages = {}
 
     def start(self):
         """Launch the persistent-profile browser context."""
+        if (self._profile_dir == REAL_CHROME_PROFILE_DIR
+                and _chrome_is_running()):
+            raise RuntimeError(
+                "Chrome is still running — close EVERY Chrome window "
+                "(and the tray icon), then re-run with --real-profile. "
+                "A running default-profile Chrome cannot be attached to.")
         self._pw = self._factory().start()
-        self._context = self._pw.chromium.launch_persistent_context(
-            str(PROFILE_DIR), headless=False)
+        launch_kwargs = {
+            "headless": False,
+            # Hide the AutomationControlled blink flag (Akamai signal).
+            "args": ["--disable-blink-features=AutomationControlled"],
+        }
+        try:
+            # Real branded Chrome: the bundled-Chromium brand fingerprint
+            # is what Akamai denied on woolworths.com.au (M3 finding,
+            # 2026-08-30). Falls back to bundled Chromium when the
+            # channel is unavailable on this machine.
+            self._context = self._pw.chromium.launch_persistent_context(
+                str(self._profile_dir), channel="chrome", **launch_kwargs)
+        except Exception:
+            self._context = self._pw.chromium.launch_persistent_context(
+                str(self._profile_dir), **launch_kwargs)
+        try:
+            self._context.add_init_script(
+                "Object.defineProperty(navigator, 'webdriver', "
+                "{get: () => undefined});")
+        except Exception:
+            pass
         for store, url in (
             ("woolworths", "https://www.woolworths.com.au/"),
             ("coles", "https://www.coles.com.au/"),
         ):
             page = self._context.new_page()
-            for _attempt in range(PAGE_LOAD_ATTEMPTS):   # §5.1 cap of 2
-                try:
-                    page.goto(url, timeout=60000, wait_until="domcontentloaded")
-                    break
-                except Exception:
-                    continue
+            self._goto_store(page, url)
             self._pages[store] = page
         return self
+
+    def _goto_store(self, page, url: str) -> None:
+        """Navigate with the §5.1 two-attempt cap; a CDN denial page
+        (woolworths 'unauthorisederror' / Akamai 'Access Denied')
+        counts as a failed attempt and is retried once."""
+        for _attempt in range(PAGE_LOAD_ATTEMPTS):
+            try:
+                page.goto(url, timeout=60000, wait_until="domcontentloaded")
+            except Exception:
+                continue
+            if not self._is_denied(page):
+                return
+            time.sleep(2.0)          # brief cooldown before the retry
+
+    @staticmethod
+    def _is_denied(page) -> bool:
+        """Whether the page landed on a CDN/bot-manager denial page."""
+        try:
+            url = str(page.url).lower()
+            if ("unauthorisederror" in url
+                    or "errors.edgesuite" in url
+                    or "/accessdenied" in url):
+                return True
+            return "access denied" in str(page.title()).strip().lower()
+        except Exception:
+            return False
 
     def page(self, store):
         """The live page object for one store."""
@@ -614,8 +695,15 @@ class _LocalDriver:
         return self.page(store).evaluate(expression, arg)
 
     def cookies(self, store) -> list:
-        """Export cookies for one store's origin."""
-        return self.page(store).context.cookies()
+        """Export cookies for one store's origin ONLY.
+
+        Scoped on purpose: in --real-profile mode the context holds the
+        user's ENTIRE daily cookie jar; only the store's own cookies
+        are ever persisted to session_state.json.
+        """
+        url = ("https://www.woolworths.com.au"
+               if store == "woolworths" else "https://www.coles.com.au")
+        return self._context.cookies([url])
 
     def set_cookies(self, cookies):
         """Inject previously saved cookies into the context."""
@@ -1068,7 +1156,7 @@ def _fetch_list_page(driver, store: str, capture: dict, list_name: str,
 # run(): Phase A -> B -> C
 # ============================================================================
 def run(flush: bool = True, fetch: bool = True, recapture: bool = False,
-        *, _driver=None) -> dict:
+        *, _driver=None, real_profile: bool = False) -> dict:
     """Run the live window phases; each phase is independently
     fault-tolerant (W-15) and skippable (W-16).
 
@@ -1078,6 +1166,8 @@ def run(flush: bool = True, fetch: bool = True, recapture: bool = False,
         recapture (bool): force API discovery even when a capture exists.
         _driver: injected driver (tests); a real one is launched when
         None.
+        real_profile (bool): launch with the user's REAL daily Chrome
+        profile (--real-profile; requires Chrome fully closed first).
 
     Returns:
         dict: {store: {"login": bool, "flush": dict | None,
@@ -1088,7 +1178,8 @@ def run(flush: bool = True, fetch: bool = True, recapture: bool = False,
     driver = None
     own_driver = _driver is None
     try:
-        driver = _driver if _driver is not None else _open_browser()
+        driver = (_driver if _driver is not None
+                  else _open_browser(real_profile=real_profile))
         if own_driver:
             if hasattr(driver, "start"):
                 driver.start()
