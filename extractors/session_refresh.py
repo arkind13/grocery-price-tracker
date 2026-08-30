@@ -583,35 +583,85 @@ def _chrome_is_running() -> bool:
         return False
 
 
-def _seed_login_cookies_from_real_chrome(target_dir: Path) -> str:
-    """Copy the login-bearing files from the user's daily Chrome
-    profile into ``target_dir`` (the tool's dedicated profile).
+# Bot-manager cookies are device-fingerprint-bound: replaying them from
+# a different profile is what Akamai's protected paths (e.g. WW
+# /auth/login) deny. They are EXCLUDED from the transplant so the tool
+# profile mints its own.
+_BOT_COOKIE_NAMES = ("_abck", "ak_bmsc", "bm_sv", "bm_sz", "AKA_A2")
 
-    Why a copy (Chrome >= 136): Chrome ignores --remote-debugging-pipe
-    when --user-data-dir points at the DEFAULT profile directory, so
-    the daily profile can never be driven directly — launching on it
-    hangs Playwright forever. Seeding our own profile with
-    ``Local State`` (holds the os_crypt key; decryptable by the same
-    installed chrome.exe + same Windows user) plus the Cookies DB
-    carries the Woolworths/Coles logins over instead.
+_STORE_COOKIE_KEEP = ("host_key LIKE '%woolworths.com.au'"
+                      " OR host_key LIKE '%coles.com.au'")
+
+
+def _filter_cookie_db(src_db: Path, dst_db: Path) -> int:
+    """Copy a Chrome Cookies DB keeping ONLY the two stores' rows,
+    minus bot-manager cookies; VACUUM the result.
+
+    Args:
+        src_db (Path): the daily profile's Cookies SQLite file (Chrome
+            closed).
+        dst_db (Path): the tool profile's Cookies file (replaced).
+
+    Returns:
+        int: number of store cookie rows kept.
+
+    Raises:
+        OSError/sqlite3.Error: caller treats any failure as "skip
+        seeding" (Phase A falls back to a normal in-window login).
+    """
+    import shutil
+    import sqlite3
+    dst_db.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(str(src_db), str(dst_db))
+    con = sqlite3.connect(str(dst_db))
+    try:
+        cur = con.cursor()
+        cur.execute(f"DELETE FROM cookies WHERE NOT ({_STORE_COOKIE_KEEP})")
+        bots = ",".join("?" * len(_BOT_COOKIE_NAMES))
+        cur.execute(
+            f"DELETE FROM cookies WHERE ({_STORE_COOKIE_KEEP}) "
+            f"AND name IN ({bots})", _BOT_COOKIE_NAMES)
+        kept = int(cur.execute(
+            f"SELECT COUNT(*) FROM cookies WHERE {_STORE_COOKIE_KEEP}"
+        ).fetchone()[0])
+        con.commit()
+        cur.execute("VACUUM")
+        return kept
+    finally:
+        con.close()
+
+
+def _seed_login_cookies_from_real_chrome(target_dir: Path) -> str:
+    """Transplant the user's daily-Chrome Woolworths/Coles login
+    cookies into ``target_dir`` (the tool's dedicated profile).
+
+    Why FILTERED (M3 lesson, 2026-08-30): transplanting the daily
+    profile's bot-manager cookies replays a device fingerprint that
+    does not match this profile -> Akamai tolerates the homepage but
+    denies the protected /auth/login path. Only the two stores' cookie
+    rows are copied (privacy: the rest of the daily jar never leaves
+    it); bot-manager cookies are excluded so this profile earns its
+    own. ``Local State`` is overwritten with the daily one (same
+    installed chrome.exe + Windows user -> the os_crypt key still
+    decrypts the transplanted rows) ONLY when store cookies were found.
 
     Args:
         target_dir (Path): the persistent profile to seed (PROFILE_DIR).
 
     Returns:
-        str: human-readable summary of what was seeded (no PII — file
-        names only). NEVER raises; on any failure Phase A simply falls
-        back to a normal in-window login.
+        str: human-readable summary (counts only, no PII). NEVER
+        raises; on any failure Phase A falls back to a normal login.
     """
     import shutil
     src_root = REAL_CHROME_PROFILE_DIR
-    if not (src_root / "Local State").exists():
+    local_state = src_root / "Local State"
+    if not local_state.exists():
         return "no daily Chrome profile found — starting fresh"
     # The daily logins may live in a non-Default profile dir
     # ("Profile 1", ...). Local State records the last-used one.
     profile_dir_name = "Default"
     try:
-        state = _read_json(src_root / "Local State", {})
+        state = _read_json(local_state, {})
         name = str(((state or {}).get("profile") or {}).get(
             "last_used", "") or "")
         if (name and name not in (".", "..")
@@ -619,25 +669,38 @@ def _seed_login_cookies_from_real_chrome(target_dir: Path) -> str:
             profile_dir_name = name
     except Exception:
         pass
-    candidates = [
-        src_root / "Local State",
-        src_root / profile_dir_name / "Network" / "Cookies",
-        src_root / profile_dir_name / "Cookies",   # pre-130 layout
-    ]
-    copied: list = []
-    for src in candidates:
+    src_db = None
+    for candidate in (src_root / profile_dir_name / "Network" / "Cookies",
+                      src_root / profile_dir_name / "Cookies"):
+        if candidate.exists():
+            src_db = candidate
+            break
+    if src_db is None:
+        return ("no daily cookie store found — keeping the tool "
+                "profile as-is")
+    try:
+        # Sanity-check the source first: no store cookies -> a merge
+        # would only WIPE the tool profile's own logins. Skip instead.
+        import sqlite3
+        con = sqlite3.connect(str(src_db))
         try:
-            if not src.exists():
-                continue
-            dst = target_dir / src.relative_to(src_root)
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(str(src), str(dst))
-            copied.append(str(dst.relative_to(target_dir)))
-        except OSError:
-            pass  # locked/missing -> Phase A falls back to a login
-    if not copied:
-        return "nothing copied (Chrome still running or files locked)"
-    return "seeded: " + ", ".join(copied)
+            n = int(con.execute(
+                f"SELECT COUNT(*) FROM cookies WHERE "
+                f"{_STORE_COOKIE_KEEP}").fetchone()[0])
+        finally:
+            con.close()
+        if n == 0:
+            return ("no Woolworths/Coles cookies in the daily profile "
+                    "— keeping the tool profile as-is")
+        kept = _filter_cookie_db(src_db, target_dir / "Cookies")
+        shutil.copy2(str(local_state),
+                     str(target_dir / "Local State"))
+        return (f"seeded {kept} store cookie(s) "
+                f"(bot-manager cookies excluded, other sites untouched)")
+    except Exception:
+        # Contract: never raise — surface the skip; Phase A falls back
+        # to a normal in-window login (locked DB, schema change, ...).
+        return "seeding skipped (daily cookie store unreadable or locked)"
 
 
 def _open_browser(real_profile: bool = False):
