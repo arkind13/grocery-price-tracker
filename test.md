@@ -337,3 +337,42 @@ Nothing posts to retired thread 151.
 - `read.me`: same two diagrams mirrored under "How the current system
   works — visual map (2026-08-31)", per user request.
 - No product code touched; suite re-run green (504/0/0, see table).
+
+---
+
+# 04 Architect Checker — sync audit (2026-08-31, light check)
+
+No arch/plan modes; scope: verify test.md claims + local/git/VPS sync.
+No product code changed; suite green.
+
+1. **test.md claims** — independent full-suite run: `504 passed in
+   7.86s` (0 failed, 0 skipped). Matches the closeout record.
+2. **Sync gaps found and fixed (tracker repo, 2 commits, pushed
+   `b4dc191..5696ee5`)**:
+   - `core/add_to_list.py` + `tests/test_add_to_list.py` were
+     UNTRACKED while tracked code (`extractors/session_refresh.py`,
+     `tests/test_cli.py`) imports the module — a fresh clone was
+     broken. Now committed (d6be422).
+   - Finish-line spec/plan (D23–D27+B4/B5), `pre-arch.md`,
+     `PROJECT-MAP.md`, `old md/` archive, token xlsx v10 committed;
+     `LEGACY_AUDIT.md` deletion committed with the stale README tree
+     line removed (5696ee5).
+   - `.gitignore` hardened: `data/ww_coles_profile_full/` (~1 GB
+     browser profile with cookies — secret, never commit),
+     `data/forget_list.json`, `data/price_unavailable.json` (runtime
+     state from parent-repo Plan B modules).
+3. **Parent repo** — M3 Plan B session (rounds 18–19: pc_agent chat
+   waiters, visual_grocery open CLI, price_unavailable tracker,
+   driver CDP refactor, userscript, README rewrite) + housekeeping
+   committed (2 commits) and pushed (`6124b58..b1a0c39`), 25
+   pre-existing unpushed commits included. `kilo.jsonc` (contains a
+   live API key) gitignored, never committed.
+4. **VPS** — MD5 comparison of all 24 deploy-manifest files found 5
+   stale: `grocery_price_cli.py`, `SKILL.md`,
+   `extractors/session_refresh.py`, tracker `README.md`, `.gitignore`.
+   `deploy_vps.py` run: 24/24 scp OK, ONE `docker restart
+   openclaw-core` (required — container code changed), smoke
+   `searched-items show` OK. Re-verify: **ALL 24 FILES IN SYNC**;
+   container Up.
+5. **No lostbattle.md** — no unresolved failures; nothing to record
+   there.
