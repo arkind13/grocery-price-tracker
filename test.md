@@ -376,3 +376,22 @@ No product code changed; suite green.
    container Up.
 5. **No lostbattle.md** — no unresolved failures; nothing to record
    there.
+
+---
+
+# 04 Architect Checker — lostbattle.md created (2026-08-31, user request)
+
+The Plan A failure history IS a lost battle (user: "7 hours trying to
+automate but was unsuccessful"). Recorded in
+`grocery-price-tracker/lostbattle.md`:
+
+- Campaign 0: cookie/API war (9 approaches, 2026-08-24 —
+  `old md/COOKIE_INVESTIGATION.md`, archived from Development
+  Workflow).
+- Campaigns 1–7: Playwright login-refresh, chunked-typed-JS bridge,
+  Tampermonkey+CDP, pyautogui/OpenCV, Ctrl+F match-cycling, stockcode
+  direct PDP (the win), and the final click war (diff-clicker →
+  false positives → WW 500s → round-17 surrender).
+- Plan B (open-pages, human clicks) documented as the settled model.
+- `create_env.py` (one-time conda helper, command-registry REMOVED)
+  archived to `old md/` alongside it.
