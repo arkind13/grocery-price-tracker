@@ -1,0 +1,220 @@
+# Future Plan — High-Level Roadmap
+
+> **Note:** This document is a HIGH-LEVEL future roadmap. It does NOT
+> include the current project (Wool vs Coles Wednesday pipeline, which
+> is in active development). It exists to capture the longer arc the
+> project is heading toward.
+
+## The full project arc, mapped
+
+| Phase | Scope | Where it runs | Why |
+|-------|-------|---------------|-----|
+| **1. Now** | Wool vs Coles Wednesday pipeline (compare, 3 lists, add to lists) | **Local PC** (open-pages + your one click) + **VPS** (sheet, data, Claw brain) | WW + Coles are Akamai-protected, login-required → needs your real Chrome + saved creds. The script opens the exact product page; you click save-to-list. |
+| **2. Next** | Add Aldi (once-monthly update) | **VPS only** | Aldi's site is public, no login, no anti-bot. Direct fetch/parse — no visual driving, no local PC. |
+| **3. Extension** | Location search: mall shops ↔ shopping list | **VPS only** | All public data: Google Places (mall shop list), shop websites (scrape), FB business pages (download flyer + OCR). No login, no anti-bot. |
+| **4. Output** | Natural-language specials tied to location | **VPS** (LLM) | Claw already lives there; it turns structured matches into the sentences you described. |
+
+## Your VPS question — answered directly
+
+**Yes. Phases 2, 3, and 4 run entirely on the VPS.** All those pages are
+public (Aldi, shop websites, FB business pages, Google Places). No
+logged-in session, no Akamai, no 2FA, no real-browser fingerprinting needed.
+The VPS can fetch, scrape, OCR flyers, and match against your shopping list
+(the sheet is already VPS-accessible) all on its own.
+
+**The local PC is needed for exactly one thing: WW + Coles.** They're the
+only stores that lock down with Akamai + login + 2FA. Everything else is
+open.
+
+So the architecture splits cleanly:
+
+```
+LOCAL PC (SikuliX/pyautogui)        VPS (Claw brain + scrapers)
+┌──────────────────────────┐        ┌─────────────────────────────┐
+│ WW + Coles logged-in      │  chat  │ Sheet read/write             │
+│ flows: read lists,        │◄──────►│ Wednesday compare pipeline   │
+│ add items to lists        │ ntfy/  │ Aldi monthly scrape          │
+│ (2FA prompt relayed)      │  TG    │ Mall/shop location search    │
+└──────────────────────────┘        │ FB flyer download + OCR      │
+                                     │ LLM: "Oranges on special at   │
+                                     │  Fruit World, 2 steps from WW"│
+                                     └─────────────────────────────┘
+```
+
+The two example outputs you gave are pure VPS+LLM work:
+- *"Oranges on super special at Fruit World, 2 steps from Woolworths"* ←
+  VPS scrapes Fruit World's specials, matches "oranges" against your list,
+  knows Fruit World is near WW (Google Places proximity), Claw writes the
+  sentence.
+- *"Beef stir fry on special at Marjaan butchery, walk over and save $$$"* ←
+  same pattern: VPS scrapes/OCRs the butcher's flyer, matches, Claw writes.
+
+None of that touches your local PC.
+
+## What's already built (reusable across all phases)
+
+- `sheet_lookup.py` — exact WW name resolution (col A + col P → col I).
+  Feeds the visual add-to-list **and** the VPS matching.
+- The queue system (`searched_items` / `add_to_list`) — your to-do list +
+  searched list. Already the bridge between the sheet and the visual layer.
+- `specials_parser` / `doc_parser` / `specials_reporter` / `sheets_sync` —
+  the Wednesday compare + Word output.
+- `pc_agent.py` + `pc_cmd.py` — the local↔VPS chat bridge (ntfy/Telegram).
+  2FA prompts flow through `chat_waiter`.
+- `grocery_price_cli.py` + the deployed VPS gateway — already the Claw
+  command surface.
+
+## Phase 1 execution model — SETTLED (Plan B, 2026-08-31)
+
+After extensive testing (chunked-typing, CDP, userscript, image
+matching, diff-clicking — all documented in `test.md`), the settled
+architecture is **"script opens product pages one by one, you click
+save-to-list"**:
+
+1. **Wednesday**: reminder arrives → you copy the 3 WW lists into the
+   sheet manually → the script updates the sheet and sends you:
+   - **Unmatched** (skip / add / forget)
+   - **Wool missing** + **Coles missing** (add / forget)
+   - **Price-unavailable list** — items with a sheet price that
+     returned "price unavailable" this week; week-count per item;
+     every item has a 3-letter code; `delete code aaa,bbb` removes;
+     unmentioned items stay tracked; recovered items auto-leave.
+2. **"Add"** → price into the sheet + item joins the **to-do list**.
+3. **To-do run** (`/run-todo` in Claw): the script opens each item's
+   exact product page (stockcode URL, title-verified) one by one —
+   no clicking, no scrolling — you add it and reply per item:
+   - `/done` → added → consumed from the queue
+   - `/skip` → stays in the queue for next run
+   - `/wrong` → not the right item → choose:
+     - `manual` → moves to the **manual list** (you handle it)
+     - `forget` → **permanent forget list** (never appears on any
+       list again)
+4. **Searched/compare run** (`/run-searched`, mid-week or Wednesday
+   morning before the sync): same open-pages loop over the searched
+   queue.
+5. **Shopping-list automation**: scrapped for now.
+
+## Time to a working Phase 1
+
+- Data layer + Plan B engine: done (open-pages loop, price-unavailable
+  tracker, manual/forget lists, chat commands).
+- Remaining: Wednesday-pipeline integration (feed unavailable items to
+  the tracker after the compare) + first live Wednesday run.
+
+## How the current system works — visual map (2026-08-31)
+
+The full picture of the CURRENT project (Wool vs Coles Wednesday
+pipeline) — same diagrams as the README's "How everything works"
+section, mirrored here so the roadmap starts from a common map.
+
+```mermaid
+flowchart TB
+    USER["👤 User<br/>Telegram DM · Web UI · openclaw CLI"]
+
+    subgraph TG["💬 Telegram — Claw Command Center (supergroup)"]
+        direction TB
+        DM["📩 User DM<br/>summaries · reminders · specials"]
+        WEEKLY["📋 weekly-lists — 208<br/>Wednesday summary + resolve lists"]
+        SPECIALS["🏷️ specials-wool — 206<br/>Woolworths specials report"]
+        RETIRED["🚫 151 grocery-sync-sheet<br/>RETIRED — nothing posts here"]
+    end
+
+    subgraph VPS["🖥️ VPS 169.58.107.0 — docker: openclaw-core"]
+        CLAW["🤖 Claw agent (OpenClaw)<br/>grocery-price skill — ALL WW/Coles<br/>price questions route to the CLI (B5)"]
+        GW["📨 telegram_gateway<br/>handlers · topics · allowlist"]
+        CRON["⏰ wednesday_reminder.py<br/>cron — Wed 05:00 Sydney"]
+    end
+
+    subgraph LOCAL["💻 Local Windows machine (Anaconda) — pipeline runs here"]
+        CLI["🛒 grocery_price_cli.py<br/>compare · search · recipe · specials · map<br/>sync · wednesday · live-refresh · topics-check"]
+        subgraph CORE["core/ — brain"]
+            LOOKUP["lookup.py<br/>exact → alias → partial → live"]
+            UOM["uom.py — 20% size gate<br/>(no per-unit prices, ever)"]
+            COMP["price_comparator.py<br/>provenance lines · found-blocks · 🏆"]
+            SYNC["sheets_sync.py<br/>batch · update_single_price<br/>add_product_row"]
+            DISC["woolworths_discounts.py<br/>5% + home-brand 5%<br/>(display-only)"]
+            QUEUES["searched_items.py · add_to_list.py<br/>3-letter codes · 7-day tombstones"]
+        end
+        subgraph EXT["extractors/ — muscle"]
+            WWX["woolworths_extractor<br/>curl_cffi Chrome-131<br/>impersonation"]
+            COLES["coles_extractor<br/>Scrape.do + credit guard<br/>retries 5xx/timeout ONLY (B4)"]
+            WIN["session_refresh — live window<br/>real Chrome · login · flush · snapshots<br/>discovery capture · per-store isolation"]
+            LLF["live_list_fetch<br/>snapshot loader + completeness gate"]
+            DOCP["doc_parser · specials_parser<br/>.docx lists · Was $X · Any-N · SPECIAL"]
+        end
+        DATA["🗂️ data/ — runtime state<br/>searched_items · add_to_list<br/>live_snapshots/ · scrapedo_health"]
+    end
+
+    SHEET["📊 Google Sheet — master price DB<br/>A name · D/E/F RAW prices · I/J/K keywords<br/>M/N no · discount · multi-buy · O rewards · P aliases"]
+    STORES["🏬 woolworths.com.au · coles.com.au<br/>Akamai/Incapsula protected"]
+    GH["🐙 GitHub — arkind13/AI-Development-Environment"]
+
+    USER -->|"asks in chat"| CLAW
+    CLAW -->|"skill → CLI commands<br/>(sheet mode, in container)"| CLI
+    CRON -->|"Wed reminder"| DM
+    CRON -->|"reminder copy"| WEEKLY
+    GW -->|"done ack"| WEEKLY
+    CLI -->|"compare / search /<br/>recipe answers"| DM
+    CLI -->|"summary + resolve lists<br/>(chunked ≤ 4000 chars)"| WEEKLY
+    CLI -->|"specials report"| SPECIALS
+    CLI --> LOOKUP
+    CLI --> SYNC
+    CLI --> QUEUES
+    LOOKUP --> UOM
+    LOOKUP --> COMP
+    DISC --> COMP
+    SYNC <-->|"read + write"| SHEET
+    CLI -->|"live search"| WWX
+    CLI -->|"live search"| COLES
+    CLI -->|"--source live"| WIN
+    WIN -->|"per-page snapshots"| DATA
+    LLF <--> DATA
+    DOCP -->|"docx mode"| SYNC
+    QUEUES -->|"drained by flush"| WIN
+    WWX -->|"HTTPS APIs"| STORES
+    COLES -->|"via Scrape.do proxy"| STORES
+    WIN -->|"logged-in real Chrome"| STORES
+    DATA <-->|"scp — queue pull / list push"| VPS
+    LOCAL -.->|"git push"| GH
+
+    classDef vps fill:#e8f0fe,stroke:#1a73e8,color:#202124
+    classDef local fill:#fef7e0,stroke:#f9ab00,color:#202124
+    classDef tg fill:#e6f4ea,stroke:#34a853,color:#202124
+    classDef cloud fill:#f3e8fd,stroke:#a142f4,color:#202124
+    classDef store fill:#fce8e6,stroke:#d93025,color:#202124
+    class CLAW,GW,CRON vps
+    class CLI,LOOKUP,UOM,COMP,SYNC,DISC,QUEUES,WWX,COLES,WIN,LLF,DOCP,DATA local
+    class DM,WEEKLY,SPECIALS,RETIRED tg
+    class SHEET,GH cloud
+    class STORES store
+```
+
+The Wednesday rhythm — the weekly loop that drives the whole pipeline:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as ⏰ VPS cron
+    participant U as 👤 User
+    participant L as 💻 Local CLI
+    participant S as 🏬 WW + Coles
+    participant G as 📊 Google Sheet
+    participant T as 💬 Telegram
+
+    C->>T: Wed 05:00 reminder → DM + weekly-lists (208)
+    U->>L: wednesday --source live
+    L->>L: pull queues from VPS (scp)
+    L->>S: live window — login once (2FA wait)
+    L->>S: flush searched-items + add-to-list queues
+    L->>S: fetch every Price-Compare list page → snapshots
+    L->>L: completeness gate — clean stop before any write
+    L->>G: sync snapshot prices + specials flags (M/N vocabulary)
+    L->>T: summary + resolve lists → DM + weekly-lists (208)
+    L->>T: WW specials report → DM + specials-wool (206)
+    Note over U,L: docx fallback — paste lists into the .docx files,<br/>then run plain wednesday (byte-identical old path)
+```
+
+---
+
+**Status:** Future roadmap. Current project (Wool vs Coles Wednesday
+pipeline) is in active development and tracked separately in `test.md`.

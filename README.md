@@ -49,7 +49,7 @@ grocery-price-tracker/                      ← ULTIMATE PROJECT ROOT (this fold
 ├── extractors/                             ← Woolworths/Coles/Aldi live extractors + doc parser
 ├── components/                             ← (reserved, currently empty)
 ├── data/                                   ← runtime state (unmatched lists, progress, queues)
-├── tests/                                  ← 137+ tests (lookup, live search, sync, comparator, cli)
+├── tests/                                  ← 500+ tests (lookup, live search, sync, comparator, cli, uom, queues, live window)
 │
 ├── Aldi.docx  Coles.docx  Woolworths.docx ← saved-list source files (pasted by user, parsed by doc_parser)
 ├── Woolworths_Specials.docx                ← specials source file
@@ -102,6 +102,119 @@ grocery-price-tracker/                      ← ULTIMATE PROJECT ROOT (this fold
 │  GITHUB  arkind13/AI-Development-Environment  (private)         │
 │  main = local dev HEAD.  master = VPS HEAD (diverged).           │
 └──────────────────────────────────────────────────────────────────┘
+```
+
+### How everything works — visual map (2026-08-31)
+
+The same architecture, rendered. Colors: blue = VPS, amber = local
+machine, green = Telegram topics, purple = cloud (sheet/GitHub),
+red = the protected store sites.
+
+```mermaid
+flowchart TB
+    USER["👤 User<br/>Telegram DM · Web UI · openclaw CLI"]
+
+    subgraph TG["💬 Telegram — Claw Command Center (supergroup)"]
+        direction TB
+        DM["📩 User DM<br/>summaries · reminders · specials"]
+        WEEKLY["📋 weekly-lists — 208<br/>Wednesday summary + resolve lists"]
+        SPECIALS["🏷️ specials-wool — 206<br/>Woolworths specials report"]
+        RETIRED["🚫 151 grocery-sync-sheet<br/>RETIRED — nothing posts here"]
+    end
+
+    subgraph VPS["🖥️ VPS 169.58.107.0 — docker: openclaw-core"]
+        CLAW["🤖 Claw agent (OpenClaw)<br/>grocery-price skill — ALL WW/Coles<br/>price questions route to the CLI (B5)"]
+        GW["📨 telegram_gateway<br/>handlers · topics · allowlist"]
+        CRON["⏰ wednesday_reminder.py<br/>cron — Wed 05:00 Sydney"]
+    end
+
+    subgraph LOCAL["💻 Local Windows machine (Anaconda) — pipeline runs here"]
+        CLI["🛒 grocery_price_cli.py<br/>compare · search · recipe · specials · map<br/>sync · wednesday · live-refresh · topics-check"]
+        subgraph CORE["core/ — brain"]
+            LOOKUP["lookup.py<br/>exact → alias → partial → live"]
+            UOM["uom.py — 20% size gate<br/>(no per-unit prices, ever)"]
+            COMP["price_comparator.py<br/>provenance lines · found-blocks · 🏆"]
+            SYNC["sheets_sync.py<br/>batch · update_single_price<br/>add_product_row"]
+            DISC["woolworths_discounts.py<br/>5% + home-brand 5%<br/>(display-only)"]
+            QUEUES["searched_items.py · add_to_list.py<br/>3-letter codes · 7-day tombstones"]
+        end
+        subgraph EXT["extractors/ — muscle"]
+            WWX["woolworths_extractor<br/>curl_cffi Chrome-131<br/>impersonation"]
+            COLES["coles_extractor<br/>Scrape.do + credit guard<br/>retries 5xx/timeout ONLY (B4)"]
+            WIN["session_refresh — live window<br/>real Chrome · login · flush · snapshots<br/>discovery capture · per-store isolation"]
+            LLF["live_list_fetch<br/>snapshot loader + completeness gate"]
+            DOCP["doc_parser · specials_parser<br/>.docx lists · Was $X · Any-N · SPECIAL"]
+        end
+        DATA["🗂️ data/ — runtime state<br/>searched_items · add_to_list<br/>live_snapshots/ · scrapedo_health"]
+    end
+
+    SHEET["📊 Google Sheet — master price DB<br/>A name · D/E/F RAW prices · I/J/K keywords<br/>M/N no · discount · multi-buy · O rewards · P aliases"]
+    STORES["🏬 woolworths.com.au · coles.com.au<br/>Akamai/Incapsula protected"]
+    GH["🐙 GitHub — arkind13/AI-Development-Environment"]
+
+    USER -->|"asks in chat"| CLAW
+    CLAW -->|"skill → CLI commands<br/>(sheet mode, in container)"| CLI
+    CRON -->|"Wed reminder"| DM
+    CRON -->|"reminder copy"| WEEKLY
+    GW -->|"done ack"| WEEKLY
+    CLI -->|"compare / search /<br/>recipe answers"| DM
+    CLI -->|"summary + resolve lists<br/>(chunked ≤ 4000 chars)"| WEEKLY
+    CLI -->|"specials report"| SPECIALS
+    CLI --> LOOKUP
+    CLI --> SYNC
+    CLI --> QUEUES
+    LOOKUP --> UOM
+    LOOKUP --> COMP
+    DISC --> COMP
+    SYNC <-->|"read + write"| SHEET
+    CLI -->|"live search"| WWX
+    CLI -->|"live search"| COLES
+    CLI -->|"--source live"| WIN
+    WIN -->|"per-page snapshots"| DATA
+    LLF <--> DATA
+    DOCP -->|"docx mode"| SYNC
+    QUEUES -->|"drained by flush"| WIN
+    WWX -->|"HTTPS APIs"| STORES
+    COLES -->|"via Scrape.do proxy"| STORES
+    WIN -->|"logged-in real Chrome"| STORES
+    DATA <-->|"scp — queue pull / list push"| VPS
+    LOCAL -.->|"git push"| GH
+
+    classDef vps fill:#e8f0fe,stroke:#1a73e8,color:#202124
+    classDef local fill:#fef7e0,stroke:#f9ab00,color:#202124
+    classDef tg fill:#e6f4ea,stroke:#34a853,color:#202124
+    classDef cloud fill:#f3e8fd,stroke:#a142f4,color:#202124
+    classDef store fill:#fce8e6,stroke:#d93025,color:#202124
+    class CLAW,GW,CRON vps
+    class CLI,LOOKUP,UOM,COMP,SYNC,DISC,QUEUES,WWX,COLES,WIN,LLF,DOCP,DATA local
+    class DM,WEEKLY,SPECIALS,RETIRED tg
+    class SHEET,GH cloud
+    class STORES store
+```
+
+And the Wednesday rhythm — the weekly loop that produces everything above:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as ⏰ VPS cron
+    participant U as 👤 User
+    participant L as 💻 Local CLI
+    participant S as 🏬 WW + Coles
+    participant G as 📊 Google Sheet
+    participant T as 💬 Telegram
+
+    C->>T: Wed 05:00 reminder → DM + weekly-lists (208)
+    U->>L: wednesday --source live
+    L->>L: pull queues from VPS (scp)
+    L->>S: live window — login once (2FA wait)
+    L->>S: flush searched-items + add-to-list queues
+    L->>S: fetch every Price-Compare list page → snapshots
+    L->>L: completeness gate — clean stop before any write
+    L->>G: sync snapshot prices + specials flags (M/N vocabulary)
+    L->>T: summary + resolve lists → DM + weekly-lists (208)
+    L->>T: WW specials report → DM + specials-wool (206)
+    Note over U,L: docx fallback — paste lists into the .docx files,<br/>then run plain wednesday (byte-identical old path)
 ```
 
 ---
@@ -350,9 +463,10 @@ Runtime state files (not in git; synced between local↔VPS):
 | `test_extractors.py` | Extractor unit tests |
 | `test_sheets_conn.py` | Sheets connection tests |
 
-**Total: 446 tests passing, 0 failed** (the 8 stale Phase-1 failures in
+**Total: 504 tests passing, 0 failed** (the 8 stale Phase-1 failures in
 `test_extractors.py` were repaired by the 04 Checker on 2026-08-29 — see
-`test.md`; the repaired test files were synced to the VPS on 2026-08-30.
+`test.md`; the D23–D27/B4/B5 additions brought the suite from 446 to 504
+on 2026-08-30, and the repaired + new test files were synced to the VPS.
 Testing runs locally — the VPS/container has no pytest).
 
 ### Google Sheet schema
@@ -472,7 +586,9 @@ Deployed outside the git tree (`/home/ubuntu/scripts/`) to avoid git-pull clobbe
 
 - **Cron:** `*/5 * * * * /usr/bin/python3 /home/ubuntu/scripts/wednesday_reminder.py >> .../wednesday_reminder.log 2>&1`
 - **Self-gating:** Sydney time Wed 05:00–05:30 AEST/AEDT (DST-correct via `zoneinfo`; VPS host tz is Europe/Berlin but doesn't affect delivery)
-- **Delivery:** user DM + `grocery-sync-sheet` topic (thread 151 in the Claw Command Center supergroup)
+- **Delivery:** user DM + `weekly-lists` topic (thread 208 in the Claw
+  Command Center supergroup; the old `grocery-sync-sheet` topic 151 is
+  RETIRED — D24, nothing posts to it)
 - **Test:** `ssh myvps 'python3 /home/ubuntu/scripts/wednesday_reminder.py --test'`
 - **Status:** `... --status` (prints Sydney now, last sent, next fire)
 

@@ -289,3 +289,51 @@ Audit performed:
 **Final suite (after checker fixes):**
 `446 passed, 0 failed, 0 skipped` —
 `C:\Users\USER~1.DES\anaconda3\python.exe -m pytest grocery-price-tracker/tests/ -q`
+
+---
+
+# 03 Code — closeout session (2026-08-31)
+
+State on entry: the entire `implementation-plan.md` (WP1–WP5, M1 fill
+with `specials-wool = 206` / `weekly-lists = 208`, docs, VPS deploy +
+gateway restart) was already committed (`058ee96`, `c468720`) and the
+root `test.md` records the full per-step log. Remaining work this
+session: live verification of the two D24 Telegram topics, the visual
+architecture chart for README.md / read.me, and stale-doc fixes.
+
+## Telegram live topic test (weekly-lists 208 + specials-wool 206)
+
+Script: temp `tg_topic_test.py` — raw Bot API `sendMessage` per topic
+(definitive ok + message_id), the production Wednesday helpers
+(`_post_weekly_summary` / `_post_specials_report` with env unset so the
+filled constants route), and resolver consistency checks. Bot token
+loaded from `.env` via `core.sheets_client._load_env`; never printed.
+
+| Result | Test | Command | Output / Error logs |
+|--------|------|---------|---------------------|
+| PASS | raw sendMessage specials-wool | `anaconda3\python.exe tg_topic_test.py` | `ok=True message_id=229` (thread 206) |
+| PASS | raw sendMessage weekly-lists | same | `ok=True message_id=230` (thread 208) |
+| PASS | production weekly path | same (`_post_weekly_summary`) | helper printed `Weekly-lists topic: OK`, `DM: OK` |
+| PASS | production specials path | same (`_post_specials_report`) | helper printed `Specials Topic: OK`, `DM: OK` |
+| PASS | resolver consistency | inline `thread_id_for` / `weekly_thread_id` | `206 / 208 / 208` |
+| PASS | full suite re-run (post-doc changes) | `& "$env:USERPROFILE\anaconda3\python.exe" -m pytest grocery-price-tracker/tests/ -q` | `504 passed in 9.71s` |
+
+Note: first script run hit a cosmetic `UnicodeEncodeError` (cp1252
+console) printing the helper output's `→` char — after all checks had
+already passed; resolvers were re-verified inline. No product code
+involved.
+
+Conclusion: **both channel groups are live and correctly routed.**
+Nothing posts to retired thread 151.
+
+## Docs — visual architecture chart + stale-fact fixes
+
+- `README.md`: new section "How everything works — visual map
+  (2026-08-31)" — colour-coded mermaid flowchart (user / Telegram
+  topics / VPS / local / sheet / stores / GitHub) + a Wednesday
+  sequence diagram. Also fixed stale facts: Wednesday-reminder delivery
+  now documents `weekly-lists` (208) instead of retired 151; test total
+  updated 446 → 504; folder listing test count updated.
+- `read.me`: same two diagrams mirrored under "How the current system
+  works — visual map (2026-08-31)", per user request.
+- No product code touched; suite re-run green (504/0/0, see table).
