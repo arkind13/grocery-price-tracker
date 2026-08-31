@@ -274,3 +274,8 @@ data/searched_item_code_tombstones.json
 data/scrapedo_health.json
 # Heartbeat log (runtime state)
 data/session_heartbeat.log
+# Full browser profile (~1 GB, contains cookies/login state = SECRETS)
+data/ww_coles_profile_full/
+# Runtime state (parent-repo modules: forget list + price-unavailable tracker)
+data/forget_list.json
+data/price_unavailable.json

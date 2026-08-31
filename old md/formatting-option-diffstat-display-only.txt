@@ -1,0 +1,12 @@
+ README.md                          |  32 [32m+[m[31m-[m
+ core/price_comparator.py           | 149 [32m++++++[m[31m----[m
+ core/specials_reporter.py          |  44 [32m+[m[31m--[m
+ core/telegram_format.py            | 421 [32m+++++++++++++++++++++++++++[m
+ core/woolworths_discounts.py       |  99 [32m++++[m[31m---[m
+ implementation-plan.md             | 582 [32m++++++++++++++++++++[m[31m-----------------[m
+ test.md                            | 187 [32m+++++++[m[31m-----[m
+ tests/test_cli.py                  |  27 [32m+[m[31m-[m
+ tests/test_comparator.py           |  22 [32m+[m[31m-[m
+ tests/test_telegram_format.py      | 374 [32m++++++++++++++++++++++++[m
+ tests/test_woolworths_discounts.py |  51 [32m+++[m[31m-[m
+ 11 files changed, 1517 insertions(+), 471 deletions(-)

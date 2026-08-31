@@ -39,7 +39,6 @@ grocery-price-tracker/                      ← ULTIMATE PROJECT ROOT (this fold
 ├── requirements.txt                        ← Python deps (gspread, google-auth, python-docx, curl_cffi, etc.)
 ├── runtime.txt                             ← runtime version pin
 ├── packages.txt                            ← system packages
-├── LEGACY_AUDIT.md                         ← audit of legacy/superseded modules
 ├── LICENSE
 ├── .gitignore
 ├── .git/                                   ← nested git repo (Phase 9 work)
