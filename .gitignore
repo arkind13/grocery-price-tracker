@@ -246,7 +246,6 @@ daily-models-digest/
 directory_tree.txt
 discounts_cli.py
 env.template
-grocery_price_cli.py
 my-budget-tracker/
 openrouter model costs/
 openrouter_usage/
