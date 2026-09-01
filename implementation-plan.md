@@ -1,488 +1,1465 @@
-# Implementation Plan — Finish Line: D23–D27 + B4/B5 Completion
+# Implementation Plan — Units Always Visible (Col C = the single unit source)
 
-- **Date:** 2026-08-30
+- **Date:** 2026-09-01
 - **Pipeline stage:** 02 Plan (this doc) → 03 Code → 04 Architect Checker
-- **Source spec:** `grocery-price-tracker/architecture-spec.md` (CONFIRMED by
-  user 2026-08-29/30). Every decision below is carried from the spec §3/§4.
-  Do not re-litigate binding decisions D23–D27, B4/B5, A1–A8, or the REJECTED
-  umbrella command (§1). 03 Code executes this plan literally.
-- **Baseline:** full suite **446 passed / 0 failed** (2026-08-29 repair,
-  verified by 01 Architect §9). Regression bar for this project: full suite
-  green, 0 failed, count ≥ 446 + new tests. No carve-outs.
-- **Python:** Anaconda interpreter only. `python` is NOT on PATH — always:
-  `& "$env:USERPROFILE\anaconda3\python.exe"` (PowerShell). **Never `pip install`**
-  (no new dependencies; stdlib + existing only).
-- **Working directory for ALL commands:** `C:\Users\User.DESKTOP-R2G441H\Documents\AI related`
-  (the workspace root; referred to below as `<ROOT>`). pytest resolves the
-  tracker package because the test files bootstrap `sys.path` themselves.
-- **Repos:** `grocery-price-tracker/` is its own git repo; `grocery_price_cli.py`,
-  `telegram_gateway/`, `claw-skills/`, `Development Workflow/` are siblings in
-  `<ROOT>` (mirroring the VPS `tasks/ai-tools/` layout).
-- **Build order (fixed):** WP1 → WP2 → WP3 → WP4 → WP5 → docs → deploy.
-  WP5 ships with placeholder `None` constants + env overrides; the constant
-  fill is gated on manual step M1 (§8).
+- **Source spec:** `grocery-price-tracker/architecture-spec.md` (LOCKED,
+  user-confirmed 2026-09-01). Rules A/B/C and decisions D-U1…D-U4 are
+  BINDING. 03 Code executes this plan literally; do not re-litigate.
+- **Baseline:** full suite **504 passed / 0 failed / 0 skipped**
+  (`test.md` closeout 2026-08-31, independently re-verified twice).
+  Regression bar: full suite green, 0 failed, 0 skipped, count ≥ 504
+  + new tests.
+- **Python:** Anaconda interpreter only. `python` is NOT on PATH. In
+  PowerShell always invoke as `& "$env:USERPROFILE\anaconda3\python.exe"`
+  (shorthand `$PY` below). **Never `pip install`** — stdlib + existing
+  deps only; this cycle adds ZERO new dependencies.
+- **Working directory for ALL commands (Local Terminal):**
+  `C:\Users\User.DESKTOP-R2G441H\Documents\AI related` (referred to as
+  `<ROOT>`). Tests bootstrap `sys.path` themselves, so pytest resolves
+  both `grocery-price-tracker` and the sibling `grocery_price_cli.py`.
+- **Command shorthand:** `$PY = & "$env:USERPROFILE\anaconda3\python.exe"`.
 
 ---
 
-## 0. Plan-level resolutions (where the spec was silent; binding for 03 Code)
+## 0. Repo layout + the CLI location mismatch (spec §7 NOTE — binding)
+
+```
+<ROOT>/                                        ← working dir for ALL commands
+├── grocery_price_cli.py                       ← IN SCOPE, lives OUTSIDE the
+│                                                 repo root (3201 lines today)
+├── telegram_gateway/                          ← frozen (separate repo)
+└── grocery-price-tracker/                     ← the git repo
+    ├── architecture-spec.md                   ← binding spec
+    ├── implementation-plan.md                 ← THIS FILE (overwrites prior cycle)
+    ├── core/                                  ← telegram_format, price_comparator,
+    │                                             sheets_sync, searched_items,
+    │                                             add_to_list, missing_items_tracker,
+    │                                             specials_reporter (all in scope)
+    ├── extractors/                            ← frozen (already return .size)
+    ├── tests/                                 ← all test files in scope
+    └── data/                                  ← JSON queues (runtime)
+```
+
+**Mismatch flag (spec §7 NOTE):** `deploy_vps.py:45` expects
+`grocery_price_cli.py` in the repo root, but the file lives at `<ROOT>`.
+This cycle modifies it AT ITS CURRENT PATH ONLY (README §9 "pending
+migration" zone). The repo root has NO copy today (verified by glob).
+Deploy implication is recorded in §7 (Ops) — no copy is made as part of
+the code steps.
+
+**Frozen (MUST NOT modify — spec §7):** `core/uom.py`, `core/lookup.py`
+(verify-only), `core/extractors/*`, `core/name_matcher.py`, sheet schema,
+`.env` handling, `telegram_gateway/`, `app.py`, `local_sync.py`.
+
+---
+
+## 1. Plan-level resolutions (spec-silent points; binding for 03 Code)
 
 | # | Question | Resolution |
 |---|----------|------------|
-| P1a | D23 condition scope | Reminder computed over the **displayed** items only (`report.items[:25]`, A2 "ANY displayed item"), checking `"live" in item.sources.values()` OR non-empty `item.closest`. |
-| P1b | Reminder formatting | Mirrors `search`: one blank line, then the verbatim reminder as the final line of the report. |
-| P2a | 4xx breaker semantics | The new 4xx no-retry branch mirrors the existing 401/403 branch exactly: stderr note + `_breaker_record_failure()` + `return [], "unavailable"` (a 4xx chain is a failed chain; consistent with the breaker's "consecutive failed chains" definition). |
-| P3a | `update_single_price` optional specials | `is_special: Optional[bool] = None` — `None` = caller provided nothing → specials cell untouched (existing callers unaffected); `True`/`False` → write `classify_special(...)` and widen `target_width` past M/N. (`add_product_row` uses `is_special: bool = False` per the spec and ALWAYS writes one of the three values on a new row.) |
-| P3b | Below-line vs above-line tie | When both a below-line marker (`Was`/`Any`/`Save`/`For`) and an above-line bare `SPECIAL` exist, the **below-line desc wins** (richer data); the above-line flag applies only when nothing was found below. |
-| P3c | Coles `promotionType` classification | Actual value produced today is `promotion_type.replace("_", " ").title()` → e.g. `"Multi Buy"` (coles_extractor.py:427-429). It matches none of the D25 desc patterns → classifies `"discount"` (spec §4 WP3 test line sanctions "else discount"). Recorded; no extra pattern invented. |
-| P4a | Prompt ownership | The "Add ONE item…" prompt moves from `_run_discovery` INTO `_LocalDriver.capture_add_to_list` (listener attached BEFORE the print so no request is missed). Wording unchanged. Fake drivers replace the whole method, so no double print. |
-| P4b | `--recapture` force | `_run_discovery(driver, summary, force=recapture)` — `force=True` bypasses the `_needs_capture` skip (today `--recapture` is a no-op when captures exist, contradicting "forces re-training"). |
-| P4c | 4xx body shape | `body_shape` = the observed request JSON body parsed as a dict; `{}` when missing/invalid (flush overrides `name`/`productId` anyway, `_make_add_item` :817-839). |
-| P4d | Coles `lists_url` candidates | Candidates = observed same-origin GETs containing `list` (most recent first), then the current `page.url` if it contains `list`. Each is verified in page context (`fetch` → ok AND JSON array); first pass wins; none → discovery FAILED for coles (no capture saved). `check_url` := `lists_url`. |
-| P5a | Topic-ID plumbing | Placeholders are `None` (never a fake integer — "nothing ships with fake IDs"). Helper `_int_env(env_var, fallback)` reads `TELEGRAM_SPECIALS_TOPIC_ID` / `TELEGRAM_WEEKLY_TOPIC_ID`; unset/invalid → fallback; `None` → DM-only + console note. No code path can post to 151 (constant deleted everywhere). |
-| P5b | Resolve-list messages | Empty lists post a single `📋 <title>: none` message (the topic stays informative); non-empty lists are chunked at ≤ 4000 chars with `(part N/M)` suffix when > 1 part. Lists go to the topic ONLY (DMs keep exactly today's content: summary + specials). |
-| P5c | Reminder skipped-topic shape | `fire()` records `results["topic"] = {"thread_id": None, "ok": True, "skipped": True}` when the weekly ID is unset (DM-only, no crash; `all_ok` unaffected). |
+| P1 | How does `item_block` know a caller wants no unit segment (search flow shows units on store lines, A1)? | `item_block(..., unit: str \| None = None)`. `None` (default) → NO segment appended (legacy callers unchanged). ANY string — including `""` — appends `unit_suffix(unit)` AFTER truncation. The comparator (A3) ALWAYS passes a string, so compare titles always show unit or marker. |
+| P2 | A2 says ` — <name> <unit_tag> (<source>)` — with ⚠️? | No. A2's formula uses plain `unit_tag` (no ⚠️, no `·`). The ` · ⚠️ unit unavailable` form (spec §3 formatting rule) applies to the inline ` · `-separated surfaces: A1, A4, A5, A6, A7, A8, A9 and the A3 title tag. |
+| P3 | Non-interactive add with no resolvable unit: fail fast — but how does the user ever supply the unit one-shot? | NEW optional `--unit UNIT` flag on BOTH `search` and `map` parsers (mechanism behind the spec's error text "pass a size or the marker"). Interactive TTY sessions get the ask-once prompt (D-U4) instead; Claw relays the question when it sees the fail-fast error, then re-runs with `--unit`. |
+| P4 | B6 wants missing-queue entries to copy size from the source store's sheet row, but `MatchResult` has no size field and `core/name_matcher.py` is frozen. | `update_missing_items(..., *, sizes_by_generic: dict \| None = None)`. Callers pass `{generic_name: Col C value}` built from the sheet. New entries get `"size"` (may be `""`, which displays as the note). No migration of old entries (read-as-blank per spec §2). |
+| P5 | A9: the Wednesday txt files (`unmatched.txt`, `wool_missing.txt`, `coles_missing.txt`) are MACHINE-parsed by the `map` flows — appending units there would corrupt `map wool`/`map coles` searches. | txt files keep their exact current line format. Units are appended ONLY on the Telegram resolve-list display lines (parallel `*_display` lists passed to `_post_weekly_summary`). This is the single correctness trap of A9; do not "simplify" it. |
+| P6 | Queue `add_entry` defaults when the caller passes no size. | Blank → canonical marker normalization INSIDE `add_entry` (entries ALWAYS carry `"size"`). Fail-fast applies only to `add_product_row` (sheet writes), exactly as spec B1 states. |
+| P7 | A7 scope. | `format_specials_report` sheet lines + the `_cmd_specials` live saved-list block. `get_active_specials` dicts gain a `"size"` key (read Col C). The separate `rewards` report is NOT in spec A7's anchor list — untouched. |
+| P8 | Marker case-insensitivity. | `unit_tag` treats the marker phrase case-insensitively as input; the OUTPUT marker is always exact lowercase `unit unavailable` (spec §2). |
 
 ---
 
-## 1. WP1 — D23: compare add-reminder (1 code file + 1 test file)
+## 2. Data contract (spec §2 — implemented once, in S1)
 
-### Step 1.1 — `format_report` reminder (core/price_comparator.py)
+| Item | Value |
+|---|---|
+| Canonical marker | `unit unavailable` (exact lowercase) |
+| `core/telegram_format.py : UNIT_UNAVAILABLE` | `str` constant |
+| `core/telegram_format.py : unit_tag(size: str \| None) -> str` | trimmed size, or marker when blank/whitespace/marker |
+| `core/telegram_format.py : unit_suffix(size: str \| None) -> str` | `" · 1L"` or `" · ⚠️ unit unavailable"` (single composition over `unit_tag`) |
+| Col C states | real size = known; marker = assessed-unknown; blank = legacy (displays identically to marker) |
+| UOM gate | UNCHANGED — verified in S0.2: `parse_size("unit unavailable") is None` |
+| Sheet column constant | `core/sheets_sync.py : SIZE_COL = 2` (Col C, 0-based) |
 
-**File:** `<ROOT>\grocery-price-tracker\core\price_comparator.py`
-(current anchor: lines 829-832, the tail of `format_report`).
+---
 
-**Search anchor (exact):**
-```python
-    for w in report.warnings:
-        lines.append(warn(w))
+## 3. Build order (fixed)
 
-    return "\n".join(lines)
+```
+S0 baseline → S1 → S2 (foundation)
+→ S3 → S4 → S5 → S6 → S7 → S8 (Rule A display)
+→ S9 → S10 → S11 → S12 → S13 → S14 → S15 → S16 (Rule B writes + A9)
+→ S17 (Rule C heal) → S18 (docs) → S19 (closeout verification)
 ```
 
-**Replace with (exact):**
-```python
-    for w in report.warnings:
-        lines.append(warn(w))
+Each step: 1–2 files, ≤ 50 modified lines, its own mandatory tests and
+deterministic verify command. If a verify fails, FIX BEFORE MOVING ON.
+Never batch steps.
 
-    # D23: queue reminder — same line `search` prints (grocery_price_cli
-    # :656-657), once per report, only when a DISPLAYED item shows a live
-    # product (live-sourced price or a found-block). Sheet-only reports
-    # show nothing (A1/A2).
-    has_live_product = any(
-        "live" in item.sources.values() or item.closest
-        for item in report.items[:25]
-    )
-    if has_live_product:
-        lines.append("")
-        lines.append(
-            "💬 Reply 'add item N' to queue a result for Wednesday."
-        )
+**Edit mechanics for 03 Code:** the ANCHOR blocks below are quoted from
+the 2026-09-01 file state. Line numbers are informational — they DRIFT as
+edits land. Always locate edits by the quoted anchor TEXT (unique in
+file), not by line number. After each edit, run the step's verify command.
 
-    return "\n".join(lines)
-```
+---
 
-**Error boundaries:** none needed — pure formatting over dataclass fields;
-`item.sources` / `item.closest` are always dicts (dataclass defaults). The
-early-return branch for empty reports (line 680-681) is untouched.
+## S0 — Baseline (no modifications)
 
-**No other output changes.** Do not touch `compare_basket`, totals, 🏆 logic.
-
-### Step 1.2 — WP1 tests (tests/test_comparator.py)
-
-**File:** `<ROOT>\grocery-price-tracker\tests\test_comparator.py`
-(append one new test class at end of file; reuse existing imports — the file
-already imports `compare_basket`, `format_report`; add
-`from core.price_comparator import BasketItem, ComparisonReport` to the
-existing import line 19).
-
-```python
-class TestCompareAddReminder(unittest.TestCase):
-    """D23 (WP1): the queue reminder in format_report — presence matrix."""
-
-    REMINDER = "💬 Reply 'add item N' to queue a result for Wednesday."
-
-    def _report(self, items):
-        return ComparisonReport(items=items)
-
-    def test_live_price_report_ends_with_reminder(self):
-        item = BasketItem(
-            name="milk",
-            prices={"woolworths": 4.5, "coles": 4.2},
-            sources={"woolworths": "live", "coles": "live"},
-        )
-        out = format_report(self._report([item]))
-        self.assertTrue(out.rstrip().endswith(self.REMINDER))
-
-    def test_found_block_only_report_ends_with_reminder(self):
-        item = BasketItem(
-            name="flour",
-            closest={"woolworths": {"name": "WW Flour 2kg"}},
-        )
-        out = format_report(self._report([item]))
-        self.assertTrue(out.rstrip().endswith(self.REMINDER))
-
-    def test_sheet_only_report_has_no_reminder(self):
-        item = BasketItem(
-            name="milk",
-            prices={"woolworths": 4.5, "coles": 4.2},
-            sources={"woolworths": "sheet", "coles": "sheet"},
-        )
-        out = format_report(self._report([item]))
-        self.assertNotIn(self.REMINDER, out)
-
-    def test_mixed_report_reminder_appears_exactly_once(self):
-        sheet_item = BasketItem(
-            name="bread",
-            prices={"woolworths": 3.0, "coles": 3.2},
-            sources={"woolworths": "sheet", "coles": "sheet"},
-        )
-        live_item = BasketItem(
-            name="milk",
-            prices={"woolworths": 4.5},
-            sources={"woolworths": "live"},
-        )
-        out = format_report(self._report([sheet_item, live_item]))
-        self.assertEqual(out.count(self.REMINDER), 1)
-
-    def test_empty_report_unchanged(self):
-        out = format_report(ComparisonReport(items=[]))
-        self.assertIn("No items provided.", out)
-        self.assertNotIn(self.REMINDER, out)
-```
-
-**Verification (mandatory, Local Terminal):**
+**S0.1 Full suite green.**
 ```powershell
-& "$env:USERPROFILE\anaconda3\python.exe" -m py_compile grocery-price-tracker\core\price_comparator.py
-& "$env:USERPROFILE\anaconda3\python.exe" -m pytest grocery-price-tracker\tests\test_comparator.py -q
-& "$env:USERPROFILE\anaconda3\python.exe" -m pytest grocery-price-tracker\tests\test_comparator.py -k TestCompareAddReminder -q
+$PY = & "$env:USERPROFILE\anaconda3\python.exe"
+$PY -m pytest grocery-price-tracker/tests/ -q
 ```
-All green, zero skipped. If any existing comparator test breaks, the change
-left its surgical boundary — fix the change, not the tests.
+Expected: `504 passed`, 0 failed, 0 skipped. Record the number.
 
----
-
-## 2. WP2 — B4 retry tightening + B5 hard rule (1 code file, 1 doc file, 1 test file)
-
-### Step 2.1 — Retry on 5xx/timeout only (extractors/coles_extractor.py)
-
-**File:** `<ROOT>\grocery-price-tracker\extractors\coles_extractor.py`
-
-**Anchor A — docstring chain semantics (current lines 255-262).**
-Replace the two bullet lines:
-```python
-        - 5xx / RequestException -> silent retry with a NEW session,
-          sleep(3) then sleep(6), exactly SCRAPEDO_MAX_ATTEMPTS attempts
-        - 401/403 -> NEVER retried (fail immediately)
-```
-with:
-```python
-        - 5xx / RequestException -> silent retry with a NEW session,
-          sleep(3) then sleep(6), exactly SCRAPEDO_MAX_ATTEMPTS attempts
-        - 401/403 AND every other 4xx (404, 429, ...) -> NEVER retred
-          (fail immediately; B4: retry on 5xx/timeout ONLY)
-```
-(typo guard: write `NEVER retried` — correct spelling.)
-
-**Anchor B — the retry decision (current lines 318-320).**
-**Search anchor (exact):**
-```python
-        if resp.status_code != 200:
-            _backoff_sleep(attempt)
-            continue
-```
-**Replace with (exact):**
-```python
-        if resp.status_code != 200:
-            if resp.status_code >= 500:
-                # B4: retry on 5xx/timeout ONLY — fresh session, backoff.
-                _backoff_sleep(attempt)
-                continue
-            # 4xx (incl. 404/429): permanent for this run — no retry,
-            # store marked unavailable (Woolworths-only + ⚠️ line path).
-            print(
-                f"[coles_extractor] Scrape.do returned HTTP "
-                f"{resp.status_code} — not retrying",
-                file=sys.stderr,
-            )
-            _breaker_record_failure()
-            return [], "unavailable"
-```
-(P2a: mirrors the 401/403 branch above it. 401/403 keep their existing
-dedicated branch — do not merge.) Search path only; the legacy
-`_search_via_scrapedo` wrapper and list path are untouched.
-
-### Step 2.2 — B5 hard rule (claw-skills/grocery-price/SKILL.md)
-
-**File:** `<ROOT>\claw-skills\grocery-price\SKILL.md`
-
-**Anchor — "## Hard rules" section (current line 223).** Append one bullet at
-the END of the bullet list (after the "**Nothing is auto-queued.**" bullet,
-line 231):
-```markdown
-- **Never browse the store sites (B5).** NEVER use `web_search`/`web_fetch`
-  (or any browsing tool) on `woolworths.com.au` / `coles.com.au` — they block
-  bots. ALL price, special, and discount questions about these stores go
-  through the grocery CLI. Ordinary web search stays allowed for everything
-  else.
-```
-
-### Step 2.3 — WP2 tests (tests/test_coles_recipe.py)
-
-**File:** `<ROOT>\grocery-price-tracker\tests\test_coles_recipe.py`
-(append a new class; reuse `FakeResponse`, `next_data_html`, and the
-`ColesRecipeTestCase` isolation base).
-
-```python
-class TestB4RetryTightening(ColesRecipeTestCase):
-    """B4/WP2: retry on 5xx/timeout ONLY; 4xx fails after ONE attempt."""
-
-    def _run_status(self, responses):
-        seq = iter(responses)
-        with patch.object(
-            ce.requests, "get",
-            side_effect=lambda *a, **k: next(seq),
-        ):
-            return ce._search_via_scrapedo_status("milk")
-
-    def test_404_not_retried(self):
-        status = self._run_status([FakeResponse(404, "")])
-        self.assertEqual(status, "unavailable")
-        self.assertEqual(ce._calls_this_run, 1)
-        self.assertEqual(self.sleeps, [])
-
-    def test_429_not_retried(self):
-        status = self._run_status([FakeResponse(429, "")])
-        self.assertEqual(status, "unavailable")
-        self.assertEqual(ce._calls_this_run, 1)
-        self.assertEqual(self.sleeps, [])
-
-    def test_502_retries_three_times(self):
-        status = self._run_status([FakeResponse(502, "")] * 3)
-        self.assertEqual(status, "unavailable")
-        self.assertEqual(ce._calls_this_run, 3)
-        self.assertEqual(self.sleeps, [3, 6])
-
-    def test_timeout_retries_three_times(self):
-        import requests as _rq
-        with patch.object(
-            ce.requests, "get",
-            side_effect=_rq.RequestException("timeout"),
-        ):
-            status = ce._search_via_scrapedo_status("milk")
-        self.assertEqual(status, "unavailable")
-        self.assertEqual(ce._calls_this_run, 3)
-```
-
-**Audit (mandatory):** grep `test_coles_recipe.py` for any existing test that
-asserts retries on a NON-5xx status (e.g. a 404/429 expecting 3 attempts).
-Update those expectations to the new semantics (one attempt). Do not weaken
-any 5xx/timeout/401/403 case.
-
+**S0.2 UOM gate invariant (spec §2, frozen).**
 ```powershell
-& "$env:USERPROFILE\anaconda3\python.exe" -m py_compile grocery-price-tracker\extractors\coles_extractor.py
-& "$env:USERPROFILE\anaconda3\python.exe" -m pytest grocery-price-tracker\tests\test_coles_recipe.py -q
+$PY -c "import sys; sys.path.insert(0, 'grocery-price-tracker'); from core.uom import parse_size; assert parse_size('unit unavailable') is None; print('gate-ok')"
 ```
+Expected stdout: `gate-ok`.
+
+**S0.3 Both entry files compile.**
+```powershell
+$PY -m py_compile grocery_price_cli.py; $PY -m py_compile grocery-price-tracker/core/telegram_format.py
+```
+Expected: no output, exit 0.
 
 ---
 
-## 3. WP3 — D25: specials flags `no`/`discount`/`multi-buy` (4 code files, 2 callers, 2 test files)
+## S1 — Foundation: `UNIT_UNAVAILABLE`, `unit_tag`, `unit_suffix`
 
-### Step 3.1 — Regexes + `classify_special` (extractors/specials_parser.py)
+**Files:** `grocery-price-tracker/core/telegram_format.py` (edit),
+`grocery-price-tracker/tests/test_telegram_format.py` (append tests).
 
-**File:** `<ROOT>\grocery-price-tracker\extractors\specials_parser.py`
+**Edit 1 — insert after the `kv()` function (anchor: the full `kv` block
+ending `return f"{label} {SEP} {value}"`):**
 
-**Anchor A — after the `FOR_RE` block (current lines 33-35).** Insert:
 ```python
-# D25 Coles markers:
-#   ``Was $X`` — dollar-off special (same style as SAVE_RE).
-WAS_RE = re.compile(
-    r"was[\s\xa0]+\$?\s*([\d]+(?:\.[\d]{1,2})?)", re.IGNORECASE
-)
-
-#   ``Any N | $X`` — multi-buy (e.g. ``Any 2 | $9``); spacing/case tolerant.
-ANY_RE = re.compile(
-    r"any\s+(\d+)\s*\|\s*\$?\s*([\d]+(?:\.[\d]{1,2})?)", re.IGNORECASE
-)
-
-#   Bare ``SPECIAL`` flag line (Coles layout places it ABOVE the name).
-SPECIAL_FLAG_RE = re.compile(r"^special$", re.IGNORECASE)
-```
-
-**Anchor B — end of file (after `detect_special`).** Append:
-```python
+# Canonical Col C marker for "unit assessed, unknown" (architecture-spec
+# §2 — the user's own words, exact lowercase phrase). Blank Col C means
+# "legacy, not yet assessed"; both DISPLAY identically via unit_tag().
+UNIT_UNAVAILABLE = "unit unavailable"
 
 
-def classify_special(is_special: bool, special_desc: str) -> str:
-    """Classify a specials observation into the D25 sheet vocabulary.
-
-    Precedence (decision 25, binding):
-        1. ``Any N | $X`` (or ``N for $X``) in desc -> "multi-buy";
-        2. Save/Was in desc, or ``is_special`` flag -> "discount";
-        3. otherwise -> "no".
+def unit_tag(size: str | None) -> str:
+    """Return the display text for a package size (Rule A, spec §2).
 
     Args:
-        is_special: the item's specials flag (docx marker or live API).
-        special_desc: the item's specials text ("" when none).
+        size: raw size string (Col C value, live listing size, or a
+            queue entry's "size" key). None-safe.
 
     Returns:
-        str: exactly one of "multi-buy" | "discount" | "no".
+        str: the trimmed size when one is known; else the canonical
+        marker "unit unavailable". Blank, whitespace-only, and the
+        marker itself (any case) all map to the marker.
     """
-    desc = special_desc or ""
-    if ANY_RE.search(desc) or FOR_RE.search(desc):
-        return "multi-buy"
-    if WAS_RE.search(desc) or SAVE_RE.search(desc) or is_special:
-        return "discount"
-    return "no"
+    text = str(size or "").strip()
+    if not text or text.lower() == UNIT_UNAVAILABLE:
+        return UNIT_UNAVAILABLE
+    return text
+
+
+def unit_suffix(size: str | None) -> str:
+    """Return the inline unit segment for a product-mention line.
+
+    Single composition over unit_tag (DRY — one source for the marker).
+
+    Args:
+        size: raw size string (None-safe).
+
+    Returns:
+        str: " · 1L" for a known size; " · ⚠️ unit unavailable" for an
+        unknown one (spec §3 formatting rule — silent omission banned).
+    """
+    if unit_tag(size) == UNIT_UNAVAILABLE:
+        return f" {SEP} ⚠️ {UNIT_UNAVAILABLE}"
+    return f" {SEP} {unit_tag(size)}"
 ```
 
-### Step 3.2 — docx marker detection (extractors/doc_parser.py)
+**Tests — append to `tests/test_telegram_format.py` (new class after
+`TestHeaderAndDividers`):**
 
-**File:** `<ROOT>\grocery-price-tracker\extractors\doc_parser.py`
-
-**Anchor A — the specials_parser import (find the existing
-`from extractors.specials_parser import ...` line near the top of the file).**
-Extend it to:
 ```python
-from extractors.specials_parser import (
-    SAVE_RE, FOR_RE, WAS_RE, ANY_RE, SPECIAL_FLAG_RE,
+class TestUnitTag(unittest.TestCase):
+    """unit_tag / unit_suffix — the Rule A data contract (spec §2)."""
+
+    def test_unit_tag_real_sizes_pass_through_trimmed(self):
+        self.assertEqual(tf.unit_tag("1L"), "1L")
+        self.assertEqual(tf.unit_tag("  250g "), "250g")
+        self.assertEqual(tf.unit_tag("6 x 170g"), "6 x 170g")
+
+    def test_unit_tag_empty_none_and_marker_map_to_marker(self):
+        for raw in ("", "   ", None, "unit unavailable",
+                    "Unit Unavailable", "UNIT UNAVAILABLE"):
+            self.assertEqual(tf.unit_tag(raw), "unit unavailable")
+
+    def test_unit_suffix_known_and_unknown_exact_strings(self):
+        self.assertEqual(tf.unit_suffix("1L"), " · 1L")
+        self.assertEqual(tf.unit_suffix(""), " · ⚠️ unit unavailable")
+        self.assertEqual(tf.unit_suffix(None), " · ⚠️ unit unavailable")
+
+    def test_unit_suffix_marker_input_shows_warning_note(self):
+        self.assertEqual(
+            tf.unit_suffix("unit unavailable"),
+            " · ⚠️ unit unavailable",
+        )
+```
+
+**Verify:**
+```powershell
+$PY -m pytest grocery-price-tracker/tests/test_telegram_format.py -q
+$PY -m py_compile grocery-price-tracker/core/telegram_format.py
+```
+
+---
+
+## S2 — `item_block` gains the `unit` param (A3 groundwork)
+
+**Files:** `grocery-price-tracker/core/telegram_format.py` (edit),
+`grocery-price-tracker/tests/test_telegram_format.py` (append tests).
+
+**Edit — replace the `item_block` signature + body head. ANCHOR (old):**
+
+```python
+def item_block(
+    index: int,
+    name: str,
+    prices: list[str],
+    home_brand: bool = False,
+) -> str:
+    """Build one numbered list-style item with indented store lines.
+
+    Args:
+        index: 1-based item number.
+        name: product name (truncated to MAX_NAME_WIDTH cells).
+        prices: pre-rendered store_line() strings, one per store.
+        home_brand: append the 🏠 Woolworths home-brand marker.
+
+    Returns:
+        str: multi-line block, e.g.
+        "2. Full Cream Milk 2L  🏠\\n   🟢 Woolworths  $3.32".
+    """
+    title = truncate(str(name or ""), MAX_NAME_WIDTH)
+    first = f"{index}. {title}"
+    if home_brand:
+        first += "  🏠"
+    lines = [first]
+```
+
+**NEW:**
+
+```python
+def item_block(
+    index: int,
+    name: str,
+    prices: list[str],
+    home_brand: bool = False,
+    unit: str | None = None,
+) -> str:
+    """Build one numbered list-style item with indented store lines.
+
+    Args:
+        index: 1-based item number.
+        name: product name (truncated to MAX_NAME_WIDTH cells).
+        prices: pre-rendered store_line() strings, one per store.
+        home_brand: append the 🏠 Woolworths home-brand marker.
+        unit: package size for the unit tag (Rule A, spec A3/D-U2).
+            None = caller manages units elsewhere (NO segment appended);
+            any string — including "" — appends unit_suffix(unit) AFTER
+            truncation so the tag is never cut off.
+
+    Returns:
+        str: multi-line block, e.g.
+        "2. Full Cream Milk 2L  🏠 · 1L\\n   🟢 Woolworths  $3.32".
+    """
+    title = truncate(str(name or ""), MAX_NAME_WIDTH)
+    first = f"{index}. {title}"
+    if home_brand:
+        first += "  🏠"
+    if unit is not None:
+        first += unit_suffix(unit)
+    lines = [first]
+```
+
+**Tests — append:**
+
+```python
+class TestItemBlockUnit(unittest.TestCase):
+    """item_block unit param — appended after truncation (A3/D-U2)."""
+
+    def test_unit_appended_after_truncation_never_cut(self):
+        long_name = "Full Cream Milk Chocolate Organic Supreme"  # > 24 cells
+        block = tf.item_block(1, long_name, [], unit="200g")
+        first_line = block.split("\n")[0]
+        self.assertTrue(first_line.endswith(" · 200g"))
+        self.assertIn("…", first_line)  # name was truncated, unit was not
+
+    def test_unit_empty_string_shows_marker_note(self):
+        block = tf.item_block(2, "Milk", [], unit="")
+        self.assertIn(" · ⚠️ unit unavailable", block.split("\n")[0])
+
+    def test_unit_none_appends_nothing(self):
+        self.assertEqual(
+            tf.item_block(3, "Milk", []).split("\n")[0], "3. Milk")
+```
+
+**Verify:**
+```powershell
+$PY -m pytest grocery-price-tracker/tests/test_telegram_format.py -q
+```
+
+---
+
+## S3 — A2: `_identity_suffix` size segment ALWAYS present
+
+**Files:** `grocery-price-tracker/core/price_comparator.py` (edit),
+`grocery-price-tracker/tests/test_comparator.py` (append + update).
+
+**Edit — replace the whole `_identity_suffix` body. ANCHOR (old):**
+
+```python
+    matched_name = item.matched_names.get(store, "")
+    if not matched_name:
+        return ""
+    size = item.matched_sizes.get(store, "")
+    source = item.sources.get(store, "sheet")
+    if size:
+        return f" — {matched_name} {size} ({source})"
+    return f" — {matched_name} ({source})"
+```
+
+**NEW:**
+
+```python
+    from core.telegram_format import unit_tag
+    matched_name = item.matched_names.get(store, "")
+    if not matched_name:
+        return ""
+    # Rule A: the size segment is ALWAYS present — real size or the
+    # explicit marker (plain text here; the ⚠️ form is reserved for
+    # the ·-separated surfaces, spec §3 / plan P2).
+    size = unit_tag(item.matched_sizes.get(store, ""))
+    source = item.sources.get(store, "sheet")
+    return f" — {matched_name} {size} ({source})"
+```
+
+Also update the function docstring line `The size segment is omitted
+when the matched product has no size.` → `The size segment is ALWAYS
+present (Rule A): real size via unit_tag, else "unit unavailable".`
+
+**Existing-test update (mandatory):** grep the file for
+`_identity_suffix` and for exact suffix strings like
+`f" — {name} ({source})"` expectations — every no-size branch assertion
+gains ` unit unavailable` before ` ({source})`.
+```
+Grep pattern "_identity_suffix|unit unavailable" in tests/test_comparator.py
+```
+
+**Tests — append:**
+
+```python
+class TestIdentitySuffixAlwaysUnit(unittest.TestCase):
+    """A2: the size segment is always present (Rule A)."""
+
+    def _item(self, sizes, names=None):
+        from core.price_comparator import BasketItem
+        return BasketItem(
+            name="milk",
+            prices={"woolworths": 3.0, "coles": 3.5},
+            sources={"woolworths": "sheet", "coles": "sheet"},
+            matched_names=names or {
+                "woolworths": "Milk 1L", "coles": "Milk 1L"},
+            matched_sizes=sizes,
+        )
+
+    def test_size_present_when_known(self):
+        from core.price_comparator import _identity_suffix
+        suffix = _identity_suffix(self._item({"woolworths": "1L"}),
+                                  "woolworths")
+        self.assertEqual(suffix, " — Milk 1L 1L (sheet)")
+
+    def test_marker_present_when_missing(self):
+        from core.price_comparator import _identity_suffix
+        suffix = _identity_suffix(self._item({}), "woolworths")
+        self.assertEqual(suffix, " — Milk 1L unit unavailable (sheet)")
+
+    def test_empty_when_no_matched_name(self):
+        from core.price_comparator import _identity_suffix
+        suffix = _identity_suffix(self._item({}, names={}), "woolworths")
+        self.assertEqual(suffix, "")
+```
+
+(Note: R3 accepted — names that embed the size may show it twice.)
+
+**Verify:**
+```powershell
+$PY -m pytest grocery-price-tracker/tests/test_comparator.py -q
+```
+
+---
+
+## S4 — A3 + A4: compare title tag + found-block size
+
+**Files:** `grocery-price-tracker/core/price_comparator.py` (edit),
+`grocery-price-tracker/tests/test_comparator.py` (append + update).
+
+**Edit 1 (A4) — `_found_block_lines` store line. ANCHOR (old):**
+
+```python
+    from core.telegram_format import warn
+    lines = [warn("No matching product — sizes don't compare.")]
+    for store in ("woolworths", "coles"):
+        found = item.closest.get(store)
+        if not found:
+            continue
+        label = _FOUND_LABELS.get(store, f"{store.capitalize()}:")
+        pad = " " * max(0, _FOUND_LABEL_WIDTH - len(label))
+        lines.append(f"   {label}{pad}{found.get('name', '')}")
+```
+
+**NEW:**
+
+```python
+    from core.telegram_format import unit_suffix, warn
+    lines = [warn("No matching product — sizes don't compare.")]
+    for store in ("woolworths", "coles"):
+        found = item.closest.get(store)
+        if not found:
+            continue
+        label = _FOUND_LABELS.get(store, f"{store.capitalize()}:")
+        pad = " " * max(0, _FOUND_LABEL_WIDTH - len(label))
+        # A4: closest[store]["size"] exists — always surface it (Rule A).
+        lines.append(
+            f"   {label}{pad}{found.get('name', '')}"
+            f"{unit_suffix(found.get('size', ''))}")
+```
+
+**Edit 2 (A3) — `format_report` item_block call. ANCHOR (old):**
+
+```python
+        lines.append(item_block(
+            i, item.name, store_lines,
+            home_brand=item.is_woolworths_home_brand,
+        ))
+```
+
+**NEW:**
+
+```python
+        # A3: title shows Woolworths' size when present, else Coles'
+        # (store lines in A2 show each store's own). Always a string →
+        # the tag (or the ⚠️ marker note) is NEVER omitted.
+        unit = (
+            item.matched_sizes.get("woolworths")
+            or item.matched_sizes.get("coles")
+            or ""
+        )
+        lines.append(item_block(
+            i, item.name, store_lines,
+            home_brand=item.is_woolworths_home_brand,
+            unit=unit,
+        ))
+```
+
+**Existing-test update:** grep `test_comparator.py` for
+`item_block|format_report` exact-string assertions — compare report
+titles now carry ` · <unit>` / ` · ⚠️ unit unavailable`.
+
+**Tests — append:**
+
+```python
+class TestReportUnitSurfaces(unittest.TestCase):
+    """A3/A4: title tag survives truncation; found-block shows size."""
+
+    def test_found_block_shows_store_size_and_marker(self):
+        from core.price_comparator import BasketItem, _found_block_lines
+        item = BasketItem(
+            name="flour", prices={}, sources={}, closest={
+                "woolworths": {"name": "Flour Plain", "size": "1kg"},
+                "coles": {"name": "Coles Flour", "size": ""},
+            })
+        lines = _found_block_lines(item)
+        self.assertTrue(any(ln.endswith(" · 1kg") for ln in lines))
+        self.assertTrue(
+            any(" · ⚠️ unit unavailable" in ln for ln in lines))
+
+    def test_format_report_title_tag_survives_truncation(self):
+        from core.price_comparator import BasketItem, ComparisonReport,
+        ...
+```
+
+(03 Code: implement the second test concretely — build a
+`ComparisonReport` with one `BasketItem` whose `name` is 30+ cells and
+`matched_sizes={"woolworths": "200g"}`; assert the rendered first line
+of its block `endswith(" · 200g")` and contains `…`. Follow the
+existing `ComparisonReport(...)` construction pattern already used in
+`test_comparator.py`.)
+
+**Verify:**
+```powershell
+$PY -m pytest grocery-price-tracker/tests/test_comparator.py -q
+$PY -m py_compile grocery-price-tracker/core/price_comparator.py
+```
+
+---
+
+## S5 — A7: specials report unit tags
+
+**Files:** `grocery-price-tracker/core/specials_reporter.py` (edit),
+`grocery-price-tracker/tests/test_specials_flags.py` (append).
+
+**Edit 1 — `get_active_specials` result dict carries size. ANCHOR (old):**
+
+```python
+            results.append({
+                "name": name,
+                "store": store_key,
+                "special_desc": cell,
+                "price": price,
+                "brand": brand,
+                "row_index": sheet_row,
+            })
+```
+
+**NEW (same block plus one key):**
+
+```python
+            results.append({
+                "name": name,
+                "store": store_key,
+                "special_desc": cell,
+                "price": price,
+                "brand": brand,
+                "row_index": sheet_row,
+                "size": str(row[2]).strip() if len(row) > 2 else "",
+            })
+```
+
+**Edit 2 — `format_specials_report` item name line. ANCHOR (old):**
+
+```python
+        lines.append(f"{i}. {s['name']}")
+```
+
+**NEW:**
+
+```python
+        # A7 (Rule A): every item line carries the unit tag.
+        lines.append(f"{i}. {s['name']}{unit_suffix(s.get('size', ''))}")
+```
+
+**Edit 3 — extend the local import. ANCHOR (old):**
+`    from core.telegram_format import header`
+**NEW:**
+`    from core.telegram_format import header, unit_suffix`
+
+**Tests — append to `test_specials_flags.py` (uses its existing
+FakeWorksheet pattern; if absent, mirror the one in `test_cli.py`):**
+
+```python
+class TestSpecialsUnitTags(unittest.TestCase):
+    """A7: specials lines always carry the unit tag (Rule A)."""
+
+    def test_format_specials_report_appends_unit_and_marker(self):
+        from core.specials_reporter import format_specials_report
+        out = format_specials_report([
+            {"name": "Oat Milk", "store": "coles", "price": 2.0,
+             "special_desc": "was $3", "brand": "", "size": "1L"},
+            {"name": "Bread", "store": "coles", "price": 1.0,
+             "special_desc": "", "brand": "", "size": ""},
+        ])
+        self.assertIn("1. Oat Milk · 1L", out)
+        self.assertIn("2. Bread · ⚠️ unit unavailable", out)
+
+    def test_get_active_specials_carries_col_c_size(self):
+        from core.specials_reporter import get_active_specials
+        ws = _FakeSpecialsWorksheet(...)  # rows: A=name, C=size, N=flag
+        rows = get_active_specials(worksheet=ws)
+        assert rows and rows[0]["size"] == "1L"
+```
+
+(03 Code: build the fake worksheet rows so Col C=index 2 holds `"1L"`
+and one row holds `""`; assert both the `"size"` key and the rendered
+` ⚠️ unit unavailable` line.)
+
+**Verify:**
+```powershell
+$PY -m pytest grocery-price-tracker/tests/test_specials_flags.py -q
+$PY -m py_compile grocery-price-tracker/core/specials_reporter.py
+```
+
+---
+
+## S6 — B5 + A8: `searched_items` always carries + shows size
+
+**Files:** `grocery-price-tracker/core/searched_items.py` (edit),
+`grocery-price-tracker/tests/test_searched_items.py` (append + update).
+
+**Edit 1 — import. ANCHOR (old):**
+`from core.telegram_format import header, subheader`
+**NEW:**
+`from core.telegram_format import UNIT_UNAVAILABLE, header, subheader, unit_suffix`
+
+**Edit 2 — module docstring line. ANCHOR (old):**
+`The "size" key is present only when a size was captured at add time.`
+**NEW:**
+`Every NEW entry carries "size" (real value or the "unit unavailable"
+marker); legacy entries without the key read as blank and display the
+note (Rule A/B).`
+
+**Edit 3 — `add_entry` always stores size. ANCHOR (old):**
+
+```python
+    size_clean = str(size or "").strip()
+    if size_clean:
+        entry["size"] = size_clean
+    entries = load_pending()
+```
+
+**NEW:**
+
+```python
+    # B5: every NEW entry carries "size" — blank normalises to the
+    # canonical marker (add paths resolve beforehand; this is the
+    # last-resort backstop, plan P6).
+    entry["size"] = str(size or "").strip() or UNIT_UNAVAILABLE
+    entries = load_pending()
+```
+
+**Edit 4 — `render_show` entry line. ANCHOR (old):**
+
+```python
+        for entry in store_entries:
+            segments = [store, entry.get("keyword", "")]
+            size = entry.get("size", "")
+            if size:
+                segments.append(size)
+            segments.append(f"[{entry.get('code', '')}]")
+            blocks.append(" · ".join(segments))
+```
+
+**NEW:**
+
+```python
+        for entry in store_entries:
+            # A8 (Rule A): unit segment ALWAYS present; legacy entries
+            # without a "size" key read as blank -> the ⚠️ note.
+            blocks.append(
+                " · ".join([store, entry.get("keyword", "")])
+                + unit_suffix(entry.get("size", ""))
+                + f" [{entry.get('code', '')}]")
+```
+
+**Existing-test update:** grep `test_searched_items.py` for
+`"size"` assertions expecting the key to be ABSENT after `add_entry`
+with `size=""` — now expect `"size": "unit unavailable"`. Also update
+`render_show` exact-line assertions.
+
+**Tests — append:**
+
+```python
+class TestSearchedItemsSizeContract(unittest.TestCase):
+    """B5/A8: size always stored; show always renders the tag."""
+
+    def test_add_entry_blank_size_stores_marker(self):
+        # patch si.SEARCHED_ITEMS_PATH to a tmp file first (existing
+        # setUp pattern in this file)
+        result = si.add_entry("coles", "Beans 400g", "Beans 400g")
+        self.assertEqual(result["entry"]["size"], "unit unavailable")
+
+    def test_show_renders_unit_and_marker(self):
+        # seed the patched queue file with:
+        #   {"store": "coles", "keyword": "Beans 400g", "code": "AAA",
+        #    "generic_name": "Beans 400g", "size": "400g", ...}
+        #   {"store": "woolworths", "keyword": "Milk", "code": "BBB",
+        #    "generic_name": "Milk"}                      # legacy: no key
+        out = si.render_show()
+        self.assertIn(" · 400g [AAA]", out)
+        self.assertIn(" · ⚠️ unit unavailable [BBB]", out)
+```
+
+(03 Code: reuse the file's existing tmp-path patching fixture for
+`SEARCHED_ITEMS_PATH` / tombstones; the tests above are behavioural
+specs, wire them to that fixture.)
+
+**Verify:**
+```powershell
+$PY -m pytest grocery-price-tracker/tests/test_searched_items.py -q
+```
+
+---
+
+## S7 — B4 + A8: `add_to_list` entry schema + show rendering
+
+**Files:** `grocery-price-tracker/core/add_to_list.py` (edit),
+`grocery-price-tracker/tests/test_add_to_list.py` (append + update).
+
+**Edit 1 — import. ANCHOR (old):**
+`from core.telegram_format import header, subheader`
+**NEW:**
+`from core.telegram_format import UNIT_UNAVAILABLE, header, subheader, unit_suffix`
+
+**Edit 2 — module docstring entry shape. ANCHOR (old):**
+
+```
+    Entry shape (JSON list, insertion order preserved):
+        {"store": "woolworths", "keyword": "Woolworths Beef Mince 500g",
+         "generic_name": "Woolworths Beef Mince 500g",
+         "added_at": "2026-08-28T02:00:00.000000+00:00"}
+```
+
+**NEW (adds the size key to the documented shape):**
+
+```
+    Entry shape (JSON list, insertion order preserved):
+        {"store": "woolworths", "keyword": "Woolworths Beef Mince 500g",
+         "generic_name": "Woolworths Beef Mince 500g", "size": "500g",
+         "added_at": "2026-08-28T02:00:00.000000+00:00"}
+
+    Every NEW entry carries "size" (real value or the "unit
+    unavailable" marker, Rule B); legacy entries without the key read
+    as blank and display the note (Rule A).
+```
+
+**Edit 3 — `add_entry` signature + entry dict. ANCHOR (old):**
+
+```python
+def add_entry(store: str, keyword: str, generic_name: str) -> dict:
+```
+
+**NEW:**
+
+```python
+def add_entry(store: str, keyword: str, generic_name: str,
+              size: str = "") -> dict:
+```
+
+And inside, ANCHOR (old):
+
+```python
+    entry = {
+        "store": store_key,
+        "keyword": kw,
+        "generic_name": gn,
+        "added_at": datetime.now(timezone.utc).isoformat(),
+    }
+```
+
+**NEW:**
+
+```python
+    entry = {
+        "store": store_key,
+        "keyword": kw,
+        "generic_name": gn,
+        # B4: always present; blank normalises to the marker (P6).
+        "size": str(size or "").strip() or UNIT_UNAVAILABLE,
+        "added_at": datetime.now(timezone.utc).isoformat(),
+    }
+```
+
+(Also extend the `Args:` docstring with
+`size (str): package size (real value or marker; "" → marker).`)
+
+**Edit 4 — `render_show` entry line. ANCHOR (old):**
+`            blocks.append(f"{counter}) {entry.get('keyword', '')}")`
+**NEW:**
+```python
+            blocks.append(
+                f"{counter}) {entry.get('keyword', '')}"
+                f"{unit_suffix(entry.get('size', ''))}")
+```
+
+**Edit 5 — `render_remaining_flat` line. ANCHOR (old):**
+`        lines.append(f"{i}) {entry.get('keyword', '')} ({store})")`
+**NEW:**
+```python
+        lines.append(
+            f"{i}) {entry.get('keyword', '')}"
+            f"{unit_suffix(entry.get('size', ''))} ({store})")
+```
+
+**Existing-test update:** grep `test_add_to_list.py` for
+`add_entry(` and entry-shape/assertEqual-dict assertions — new entries
+now include `"size"`. Positional 3-arg calls keep working (default).
+
+**Tests — append:**
+
+```python
+class TestAddToListSizeContract(unittest.TestCase):
+    """B4/A8: size param always stored; renders tag / marker note."""
+
+    def test_add_entry_stores_real_and_marker_size(self):
+        r1 = atl.add_entry("coles", "Beans 400g", "Beans", size="400g")
+        r2 = atl.add_entry("woolworths", "Milk", "Milk")  # no size
+        self.assertEqual(r1["entry"]["size"], "400g")
+        self.assertEqual(r2["entry"]["size"], "unit unavailable")
+
+    def test_render_show_and_remaining_show_unit(self):
+        # seed patched ADD_TO_LIST_PATH with one entry carrying
+        # "size": "500g" and one legacy entry with no "size" key
+        show = atl.render_show()
+        self.assertIn(") Beans · 500g", show)
+        flat = atl.render_remaining_flat(atl.ordered_entries())
+        self.assertIn(" · ⚠️ unit unavailable", flat)
+```
+
+(Wire to the file's existing tmp-path fixture as in S6.)
+
+**Verify:**
+```powershell
+$PY -m pytest grocery-price-tracker/tests/test_add_to_list.py -q
+```
+
+---
+
+## S8 — CLI display surfaces: A1, A5, A6
+
+**Files:** `grocery_price_cli.py` (edit),
+`grocery-price-tracker/tests/test_cli.py` (append + update).
+
+**Edit 1 — extend the module-level style-kit import. ANCHOR (old):**
+
+```python
+from core.telegram_format import (                  # noqa: E402
+    header, subheader, fenced_table, item_block, store_line,
+    kv, money, warn, ok, fail, tail, truncate, divider,
+    HEAVY_DIVIDER, HEAVY_DIVIDER_WIDTH,
 )
 ```
-(Keep whatever names it already imports; add the four new ones. If the file
-imports differently, add a second import line — both are fine.)
 
-**Anchor B — the specials detection block inside `parse_docx`
-(current lines 264-290).**
-**Search anchor (exact):**
+**NEW:**
+
 ```python
-            is_special = False
-            special_desc = ""
-            if i + 2 < len(lines):
-                detail_line = lines[i + 2]
-                save_m = SAVE_RE.search(detail_line)
-                for_m = FOR_RE.search(detail_line)
-                if save_m:
+from core.telegram_format import (                  # noqa: E402
+    header, subheader, fenced_table, item_block, store_line,
+    kv, money, warn, ok, fail, tail, truncate, divider,
+    unit_tag, unit_suffix, UNIT_UNAVAILABLE,
+    HEAVY_DIVIDER, HEAVY_DIVIDER_WIDTH,
+)
 ```
-**Replace the WHOLE block from `is_special = False` through the
-`special_desc = f"{qty} for ${bundle:.2f}"` line (current 269-290) with:**
+
+**Edit 2 (A1) — `_size_suffix` inside `_cmd_search`. ANCHOR (old):**
+
 ```python
-            # Specials detection (D25):
-            #   below the price (i+2): SAVE $X / N FOR $X (existing) plus
-            #     the Coles markers `Was $X` and `Any N | $X` (desc kept
-            #     exactly as found in the doc).
-            #   above the name (i-1): ONLY a bare `SPECIAL` flag line. A
-            #     bare Save/Was above a product is the PREVIOUS product's
-            #     marker in the WW layout — checking it would attach the
-            #     wrong special (A7 misfire guard).
-            is_special = False
-            special_desc = ""
-            if i + 2 < len(lines):
-                detail_line = lines[i + 2]
-                save_m = SAVE_RE.search(detail_line)
-                for_m = FOR_RE.search(detail_line)
-                if save_m:
-                    save_amt = float(save_m.group(1))
-                    original = price + save_amt
-                    discount_pct = (
-                        (save_amt / original * 100.0)
-                        if original > 0 else 0.0
-                    )
-                    is_special = True
-                    special_desc = (
-                        f"save ${save_amt:.2f} ({discount_pct:.0f}% off)"
-                    )
-                elif for_m:
-                    qty = int(for_m.group(1))
-                    bundle = float(for_m.group(2))
-                    is_special = True
-                    special_desc = f"{qty} for ${bundle:.2f}"
-                elif WAS_RE.search(detail_line) or ANY_RE.search(
-                        detail_line):
-                    is_special = True
-                    special_desc = detail_line  # kept as found
-            if (
-                not is_special
-                and i >= 1
-                and SPECIAL_FLAG_RE.match(lines[i - 1].strip())
-            ):
-                is_special = True
-                special_desc = "SPECIAL"
+    def _size_suffix(item) -> str:
+        return f" · {item.size}" if getattr(item, "size", "") else ""
 ```
-(P3b: below-line wins when both exist.) Name/price matching semantics,
-ignore-list, dedup (`seen`) — **unchanged** (do not touch lines 246-263).
 
-### Step 3.3 — `sync_prices` flag write (core/sheets_sync.py)
+**NEW:**
 
-**File:** `<ROOT>\grocery-price-tracker\core\sheets_sync.py`
-
-**Search anchor (exact, current lines 233-236):**
 ```python
-        if result.store in specials_col:
-            row[specials_col[result.store]] = (
-                item.special_desc if item.is_special else ""
-            )
+    def _size_suffix(item) -> str:
+        # A1 (Rule A): never silently omit — unit_suffix yields
+        # " · 1L" or " · ⚠️ unit unavailable".
+        return unit_suffix(getattr(item, "size", "") or "")
 ```
-**Replace with (exact):**
+
+**Edit 3 (A5) — interactive candidate lines in `_map_unmatched_item`.
+ANCHOR (old):**
+
 ```python
-        if result.store in specials_col:
-            # D25: M/N hold exactly one of no/discount/multi-buy; "no"
-            # overwrites stale free text on every matched row. Unmatched
-            # rows keep their old cells (same semantics as prices).
-            from extractors.specials_parser import classify_special
-            row[specials_col[result.store]] = classify_special(
-                bool(item.is_special), str(item.special_desc or ""))
+        for i, c in enumerate(result.candidates, 1):
+            brand = f" ({c.brand})" if c.brand else ""
+            print(f"    {i}) {c.generic_name}{brand} [score {c.score}]")
 ```
 
-### Step 3.4 — `add_product_row` specials params (core/sheets_sync.py)
+**NEW:**
 
-**Anchor A — signature (current lines 660-672).** Add two keyword-only
-params after `alias`:
 ```python
-def add_product_row(
-    generic_name: str,
-    store: str,
-    price: float,
-    *,
-    brand: str = "",
-    size: str = "",
-    category: str = "",
-    store_keyword: str = "",
-    alias: str = "",
-    is_special: bool = False,
-    special_desc: str = "",
-    dry_run: bool = False,
-    worksheet=None,
-) -> dict:
-```
-Also extend the docstring Args block with:
-```
-        is_special: the live item's specials flag (D25; default False).
-        special_desc: the live item's specials text (default "").
+        for i, c in enumerate(result.candidates, 1):
+            brand = f" ({c.brand})" if c.brand else ""
+            print(f"    {i}) {c.generic_name}{brand}"
+                  f"{unit_suffix(getattr(c, 'size', '') or '')} "
+                  f"[score {c.score}]")
 ```
 
-**Anchor B — after `keywords_col = _find_col(header, KEYWORDS_HEADER)`
-(current line 728).** Insert:
+**Edit 4 (A5) — non-interactive candidate lines in
+`_resolve_and_print_unmatched`. ANCHOR (old):**
+
 ```python
-    specials_col = _find_col(
-        header, SPECIALS_HEADER_BY_STORE.get(store_lower, ""))
+        for i, c in enumerate(result.candidates or [], 1):
+            brand = f" ({c.brand})" if c.brand else ""
+            print(f"    {i}) {c.generic_name}{brand} [score {c.score}]")
 ```
 
-**Anchor C — the `target_width` computation (current lines 731-737).** Add
-one entry to the `max(...)` call:
+**NEW:**
+
 ```python
-        (specials_col + 1) if specials_col is not None else 0,
+        for i, c in enumerate(result.candidates or [], 1):
+            brand = f" ({c.brand})" if c.brand else ""
+            print(f"    {i}) {c.generic_name}{brand}"
+                  f"{unit_suffix(getattr(c, 'size', '') or '')} "
+                  f"[score {c.score}]")
 ```
 
-**Anchor D — after the alias write (current lines 756-757).** Insert:
+**Edit 5 (A6) — `_print_queue_confirmation`. ANCHOR (old):**
+
 ```python
-    if specials_col is not None:
-        from extractors.specials_parser import classify_special
-        new_row[specials_col] = classify_special(is_special, special_desc)
+    store = str(entry.get("store", "")).strip().capitalize()
+    code = entry.get("code", "")
+    print(f"Queued for Wednesday: '{entry.get('keyword', '')}' "
+          f"({store}) [{code}]")
 ```
 
-### Step 3.5 — `update_single_price` specials params (core/sheets_sync.py)
+**NEW:**
 
-**Anchor A — signature (current lines 302-309).** Add two keyword-only
-params (P3a):
+```python
+    store = str(entry.get("store", "")).strip().capitalize()
+    code = entry.get("code", "")
+    # A6: ack shows the unit — 'X' · 200g (Coles) [KAT]; legacy
+    # entries without "size" show the ⚠️ note.
+    print(f"Queued for Wednesday: '{entry.get('keyword', '')}'"
+          f"{unit_suffix(entry.get('size', ''))} ({store}) [{code}]")
+```
+
+**Existing-test update:** grep `test_cli.py` for
+`Queued for Wednesday|_size_suffix|score ` exact-output assertions and
+update expected strings.
+
+**Tests — append:**
+
+```python
+class TestCliUnitSurfaces(unittest.TestCase):
+    """A1/A5/A6 CLI display units."""
+
+    def test_print_queue_confirmation_with_and_without_size(self):
+        import grocery_price_cli as gpc
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            gpc._print_queue_confirmation(
+                {"store": "coles", "keyword": "Beans", "code": "KAT",
+                 "size": "400g"})
+            gpc._print_queue_confirmation(
+                {"store": "coles", "keyword": "Milk", "code": "RUM"})
+        out = buf.getvalue()
+        self.assertIn("Queued for Wednesday: 'Beans' · 400g (Coles) [KAT]",
+                      out)
+        self.assertIn(
+            "Queued for Wednesday: 'Milk' · ⚠️ unit unavailable "
+            "(Coles) [RUM]", out)
+```
+
+**Verify:**
+```powershell
+$PY -m pytest grocery-price-tracker/tests/test_cli.py -q
+$PY -m py_compile grocery_price_cli.py
+```
+
+---
+
+## S9 — Rule B resolver `_resolve_add_unit` + `--unit` flags
+
+**Files:** `grocery_price_cli.py` (edit),
+`grocery-price-tracker/tests/test_cli.py` (append).
+
+**Edit 1 — insert the resolver directly AFTER the `_queue_searched_item`
+function (anchor: its final lines
+`    return entry` + blank line before `def _cmd_search`):**
+
+```python
+_UNIT_REQUIRED_ERROR = "unit is required: pass a size or the marker"
+
+
+def _resolve_add_unit(name: str, live_size: str = "", *,
+                      override: str = "", interactive: bool | None = None,
+                      _input=input) -> str:
+    """Resolve the unit for an add (Rule B chain, spec §4).
+
+    Order: (1) explicit override (--unit flag), (2) live listing size,
+    (3) size parsed from the product name via _SIZE_PATTERN, (4) ask
+    the user once (D-U4; blank or 'unknown' -> marker), else fail fast
+    (non-interactive one-shot runs, spec R1).
+
+    Args:
+        name (str): the product name being added.
+        live_size (str): the live listing's size field ("" when absent).
+        override (str): explicit --unit value ("" when not given).
+        interactive (bool | None): force interactive mode; None =
+            auto-detect via stdin TTY.
+        _input: injectable input() for tests.
+
+    Returns:
+        str: a real size ("1L") or the canonical marker
+        "unit unavailable".
+
+    Raises:
+        ValueError: _UNIT_REQUIRED_ERROR when nothing resolved and the
+        session is non-interactive.
+    """
+    for candidate in (str(override or "").strip(),
+                      str(live_size or "").strip()):
+        if candidate:
+            return candidate
+    from core.name_matcher import _SIZE_PATTERN
+    m = _SIZE_PATTERN.search(name or "")
+    if m:
+        return m.group(1).strip()
+    if interactive is None:
+        try:
+            interactive = sys.stdin.isatty()
+        except (ValueError, OSError):
+            interactive = False
+    if not interactive:
+        raise ValueError(_UNIT_REQUIRED_ERROR)
+    answer = str(_input(
+        f"What unit is {name}? e.g. 1L / 250g / 5 pack — "
+        f"reply, or 'unknown': ")).strip()
+    if not answer or answer.lower() == "unknown":
+        return UNIT_UNAVAILABLE
+    return answer
+```
+
+**Edit 2 — `search` parser gains `--unit`. ANCHOR (old):**
+
+```python
+    sp2.add_argument("--add-item", type=int, default=None, metavar="N",
+                     help="Queue the Nth displayed result for Wednesday "
+                          "(sheet row + searched-items queue; explicit add)")
+    sp2.set_defaults(func=_cmd_search)
+```
+
+**NEW:**
+
+```python
+    sp2.add_argument("--add-item", type=int, default=None, metavar="N",
+                     help="Queue the Nth displayed result for Wednesday "
+                          "(sheet row + searched-items queue; explicit add)")
+    sp2.add_argument("--unit", default=None, metavar="UNIT",
+                     help="Unit for --add-item when the result has none "
+                          "(e.g. 1L / 250g / 5 pack, or the literal "
+                          "'unit unavailable')")
+    sp2.set_defaults(func=_cmd_search)
+```
+
+**Edit 3 — `map` parser gains `--unit`. ANCHOR (old):**
+
+```python
+    mp.add_argument("--keyword", type=str, default=None, metavar="STORE_NAME",
+                    help="Non-interactive: save STORE_NAME as store keyword (wool/coles only), advance")
+    mp.set_defaults(func=_cmd_map)
+```
+
+**NEW:**
+
+```python
+    mp.add_argument("--keyword", type=str, default=None, metavar="STORE_NAME",
+                    help="Non-interactive: save STORE_NAME as store keyword (wool/coles only), advance")
+    mp.add_argument("--unit", default=None, metavar="UNIT",
+                    help="Unit for --add when the result has none "
+                         "(e.g. 1L / 250g / 5 pack, or the literal "
+                         "'unit unavailable')")
+    mp.set_defaults(func=_cmd_map)
+```
+
+**Tests — append:**
+
+```python
+class TestResolveAddUnit(unittest.TestCase):
+    """Rule B unit resolution chain (spec §4, D-U4, R1)."""
+
+    def test_override_then_live_size_win(self):
+        r = gpc._resolve_add_unit("Milk", "1L", override="2L")
+        self.assertEqual(r, "2L")
+        self.assertEqual(gpc._resolve_add_unit("Milk", "1L"), "1L")
+
+    def test_name_parse_falls_through(self):
+        self.assertEqual(
+            gpc._resolve_add_unit("Devondale Milk 2L", ""), "2L")
+
+    def test_noninteractive_fails_fast_with_exact_error(self):
+        with self.assertRaises(ValueError) as ctx:
+            gpc._resolve_add_unit("Milk", "", interactive=False)
+        self.assertEqual(
+            str(ctx.exception),
+            "unit is required: pass a size or the marker")
+
+    def test_interactive_ask_once_unknown_and_blank_write_marker(self):
+        replies = iter(["unknown", "  "])
+        fake_input = lambda prompt: next(replies)  # noqa: E731
+        self.assertEqual(
+            gpc._resolve_add_unit(
+                "Milk", "", interactive=True, _input=fake_input),
+            "unit unavailable")
+        self.assertEqual(
+            gpc._resolve_add_unit(
+                "Milk", "", interactive=True, _input=fake_input),
+            "unit unavailable")
+
+    def test_interactive_answer_returned_verbatim(self):
+        self.assertEqual(
+            gpc._resolve_add_unit(
+                "Milk", "", interactive=True,
+                _input=lambda prompt: "5 pack"),
+            "5 pack")
+```
+
+**Verify:**
+```powershell
+$PY -m pytest grocery-price-tracker/tests/test_cli.py -k resolve_add_unit -q
+$PY -m py_compile grocery_price_cli.py
+```
+
+---
+
+## S10 — B1 (sheet side): `add_product_row` size becomes REQUIRED
+
+**Files:** `grocery-price-tracker/core/sheets_sync.py` (edit),
+`grocery-price-tracker/tests/test_sheets_sync.py` (update + append).
+
+**Edit 1 — module import. ANCHOR (old):**
+`from core.name_matcher import KeywordIndex  # for _normalize reuse`
+**NEW:**
+`from core.name_matcher import KeywordIndex, _SIZE_PATTERN  # _normalize reuse + size parse`
+
+**Edit 2 — Section A constant. ANCHOR (old):**
+
+```python
+PRICE_COL = {"woolworths": 3, "coles": 4}   # D, E
+LAST_UPDATED_COL = 7                                     # H
+```
+
+**NEW:**
+
+```python
+PRICE_COL = {"woolworths": 3, "coles": 4}   # D, E
+SIZE_COL = 2                                             # C (unit column)
+LAST_UPDATED_COL = 7                                     # H
+```
+
+**Edit 3 — signature. ANCHOR (old, inside `add_product_row` params):**
+`    size: str = "",`
+**NEW:**
+`    size: str,`
+
+**Edit 4 — docstring arg line. ANCHOR (old):**
+`        size: size string for Col C (default "").`
+**NEW:**
+```python
+        size: REQUIRED Col C value — a real size ("1L") or the
+            canonical marker "unit unavailable" (Rule B, spec B1).
+```
+
+**Edit 5 — fail-fast validation. ANCHOR (old):**
+
+```python
+    if price <= 0:
+        return {
+            "wrote": False, "row_index": None, "range_written": "",
+            "error": "price must be > 0",
+        }
+```
+
+**NEW (append a size check immediately after this block):**
+
+```python
+    if price <= 0:
+        return {
+            "wrote": False, "row_index": None, "range_written": "",
+            "error": "price must be > 0",
+        }
+    size_clean = str(size or "").strip()
+    if not size_clean:
+        return {
+            "wrote": False, "row_index": None, "range_written": "",
+            "error": "unit is required: pass a size or the marker",
+        }
+```
+
+**Edit 6 — row build. ANCHOR (old):**
+
+```python
+    new_row[0] = generic_name.strip()             # Col A
+    if category:
+        new_row[1] = category                      # Col B
+    if size:
+        new_row[2] = size                          # Col C
+```
+
+**NEW:**
+
+```python
+    new_row[0] = generic_name.strip()             # Col A
+    if category:
+        new_row[1] = category                      # Col B
+    new_row[SIZE_COL] = size_clean                 # Col C (always set)
+```
+
+**Existing-test update (mandatory before running the suite):**
+```
+Grep "add_product_row(" in tests/test_sheets_sync.py and in
+grocery_price_cli.py — every call site needs an explicit size=
+argument (use a real size like "1L" or the marker string).
+```
+In tests: calls that previously relied on the default `size=""` now
+pass `size="1L"` (or `"unit unavailable"` where a marker case is
+asserted). No behavioural expectation changes other than Col C being
+populated.
+
+**Tests — append to `test_sheets_sync.py`:**
+
+```python
+class TestAddProductRowRequiredSize(unittest.TestCase):
+    """B1: empty size is rejected; marker is accepted (fail-fast)."""
+
+    def test_blank_size_rejected_with_exact_error(self):
+        from core.sheets_sync import add_product_row
+        res = add_product_row("Milk", "coles", 3.0, size="   ",
+                              worksheet=FakeWorksheet([...]))
+        self.assertFalse(res["wrote"])
+        self.assertEqual(
+            res["error"], "unit is required: pass a size or the marker")
+
+    def test_marker_accepted_and_written_to_col_c(self):
+        from core.sheets_sync import add_product_row
+        ws = FakeWorksheet([...])
+        res = add_product_row("Milk", "coles", 3.0,
+                              size="unit unavailable", worksheet=ws)
+        self.assertTrue(res["wrote"])
+        written = ws.updates[0][0][0]
+        self.assertEqual(written[2], "unit unavailable")
+```
+
+(03 Code: give `FakeWorksheet` the same header/rows the file's existing
+`add_product_row` tests use.)
+
+**Verify:**
+```powershell
+$PY -m pytest grocery-price-tracker/tests/test_sheets_sync.py -q
+```
+
+---
+
+## S11 — B1/B2 (CLI side): resolve-before-write in both add routes
+
+**Files:** `grocery_price_cli.py` (edit),
+`grocery-price-tracker/tests/test_cli.py` (append + update).
+
+**Edit 1 (B1) — `_search_add_item`. ANCHOR (old):**
+
+```python
+    chosen = displayed[n - 1]
+    store = chosen.store.lower()
+
+    # Sheet row first; Col I/J stays EMPTY (interpretation 0.4).
+    _load_env()
+```
+
+**NEW:**
+
+```python
+    chosen = displayed[n - 1]
+    store = chosen.store.lower()
+
+    # Rule B: resolve the unit BEFORE any write (live size -> name
+    # parse -> --unit -> ask -> fail-fast; spec §4).
+    try:
+        unit = _resolve_add_unit(
+            chosen.raw_name,
+            getattr(chosen, "size", "") or "",
+            override=getattr(args, "unit", None) or "")
+    except ValueError as exc:
+        print(f"Error: {exc} — re-run with --unit \"1L\" or "
+              f"--unit \"unit unavailable\"", file=sys.stderr)
+        return 1
+
+    # Sheet row first; Col I/J stays EMPTY (interpretation 0.4).
+    _load_env()
+```
+
+Then in the same function, ANCHOR (old):
+
+```python
+            brand=chosen.brand,
+            size=chosen.size,
+```
+
+**NEW:**
+
+```python
+            brand=chosen.brand,
+            size=unit,
+```
+
+And ANCHOR (old):
+
+```python
+    _queue_searched_item(
+        store, chosen.raw_name, chosen.raw_name,
+        store_product_id=getattr(chosen, "product_id", "") or "",
+        size=getattr(chosen, "size", "") or "")
+    return 0
+```
+
+**NEW:**
+
+```python
+    _queue_searched_item(
+        store, chosen.raw_name, chosen.raw_name,
+        store_product_id=getattr(chosen, "product_id", "") or "",
+        size=unit)
+    return 0
+```
+
+**Edit 2 (B2) — `_add_from_live_search` signature + resolution. ANCHOR
+(old):**
+
+```python
+def _add_from_live_search(result, original_query: str) -> None:
+    """Explicit add of a live-search result to the sheet + Queue 2.
+```
+
+**NEW:**
+
+```python
+def _add_from_live_search(result, original_query: str,
+                          unit_override: str = "") -> bool:
+    """Explicit add of a live-search result to the sheet + Queue 2.
+```
+
+(Extend the docstring: `Returns: bool — True when the row was written
+and queued; False on any failure (error already printed).`)
+
+Then ANCHOR (old):
+
+```python
+    # Use the live result's store for the price column
+    store = best.store.lower()
+    try:
+        res = add_product_row(
+            generic_name=best.raw_name,
+            store=store,
+            price=best.price,
+            brand=best.brand,
+            size=best.size,
+```
+
+**NEW:**
+
+```python
+    # Use the live result's store for the price column
+    store = best.store.lower()
+    # Rule B: resolve the unit BEFORE the write (B2). Non-interactive
+    # callers pass unit_override (--unit); interactive sessions ask.
+    try:
+        unit = _resolve_add_unit(
+            best.raw_name, getattr(best, "size", "") or "",
+            override=unit_override)
+    except ValueError as exc:
+        print(f"  {exc} — re-run with --unit \"1L\" or "
+              f"--unit \"unit unavailable\"")
+        return False
+    try:
+        res = add_product_row(
+            generic_name=best.raw_name,
+            store=store,
+            price=best.price,
+            brand=best.brand,
+            size=unit,
+```
+
+And the queue + failure tails of the same function, ANCHOR (old):
+
+```python
+            _queue_searched_item(
+                store, best.raw_name, best.raw_name,
+                store_product_id=getattr(best, "product_id", "") or "",
+                size=getattr(best, "size", "") or "")
+        else:
+            print(f"  Add failed: {res.get('error', 'unknown')}")
+    except Exception as exc:
+        print(f"  add_product_row failed: {exc}")
+```
+
+**NEW:**
+
+```python
+            _queue_searched_item(
+                store, best.raw_name, best.raw_name,
+                store_product_id=getattr(best, "product_id", "") or "",
+                size=unit)
+            return True
+        else:
+            print(f"  Add failed: {res.get('error', 'unknown')}")
+    except Exception as exc:
+        print(f"  add_product_row failed: {exc}")
+    return False
+```
+
+**Edit 3 — non-interactive `map unmatched --add` call site. ANCHOR
+(old):**
+
+```python
+            _add_from_live_search(result, name)
+        else:
+```
+
+**NEW:**
+
+```python
+            if not _add_from_live_search(
+                    result, name,
+                    unit_override=getattr(args, "unit", None) or ""):
+                return 1
+        else:
+```
+
+(The interactive call site `_add_from_live_search(result, name)` in
+`_map_unmatched_item` stays as-is: TTY sessions ask via the resolver.)
+
+**Existing-test update:** grep `test_cli.py` for
+`_search_add_item|_add_from_live_search` — fake chosen/live items now
+need a size, a size-bearing name, `--unit`, or an expected fail-fast.
+
+**Tests — append:**
+
+```python
+class TestAddRoutesResolveUnit(unittest.TestCase):
+    """B1/B2: add routes resolve the unit before any write."""
+
+    def test_search_add_item_fails_fast_without_unit(self):
+        args = argparse.Namespace(add_item=1, expand=False, unit=None)
+        chosen = SimpleNamespace(
+            store="Coles", raw_name="Milk", price=3.0, brand="",
+            size="", category="", is_special=False, special_desc="",
+            product_id="")
+        rc = gpc._search_add_item(args, "milk", [chosen])
+        self.assertEqual(rc, 1)  # non-TTY under pytest -> fail fast
+
+    def test_search_add_item_uses_flag_unit(self):
+        # patch gpc.add_product_row (module: core.sheets_sync) and
+        # gpc._queue_searched_item; assert both received size="2L"
+        args = argparse.Namespace(add_item=1, expand=False, unit="2L")
+        chosen = SimpleNamespace(
+            store="Coles", raw_name="Milk", price=3.0, brand="",
+            size="", category="", is_special=False, special_desc="",
+            product_id="")
+        with patch("core.sheets_sync.add_product_row") as apr, \
+             patch.object(gpc, "_queue_searched_item") as qsi:
+            apr.return_value = {"wrote": True, "row_index": 9}
+            rc = gpc._search_add_item(args, "milk", [chosen])
+        self.assertEqual(rc, 0)
+        self.assertEqual(apr.call_args.kwargs["size"], "2L")
+        self.assertEqual(qsi.call_args.kwargs["size"], "2L")
+```
+
+(03 Code: `_load_env()` runs inside `_search_add_item`; keep the
+existing env-patching pattern this file already uses for search tests.)
+
+**Verify:**
+```powershell
+$PY -m pytest grocery-price-tracker/tests/test_cli.py -q
+$PY -m py_compile grocery_price_cli.py
+```
+
+---
+
+## S12 — B3/C.1: `update_single_price` gains `size` + blank-Col C backfill
+
+**Files:** `grocery-price-tracker/core/sheets_sync.py` (edit),
+`grocery-price-tracker/tests/test_sheets_sync.py` (append).
+
+**Edit 1 — signature. ANCHOR (old):**
+
 ```python
 def update_single_price(
     product_name: str,
@@ -495,30 +1472,30 @@ def update_single_price(
     worksheet=None,
 ) -> dict:
 ```
-Docstring: add the two params (`None` = leave the specials cell untouched).
 
-**Anchor B — the live-write block (current lines 436-449).**
-**Search anchor (exact):**
+**NEW:**
+
 ```python
-    ts = _sydney_now_str()
-    full_row = list(row_data)  # make mutable copy
-    target_width = max(price_col + 1, LAST_UPDATED_COL + 1)
-    while len(full_row) < target_width:
-        full_row.append("")
-    full_row[price_col] = price
-    full_row[LAST_UPDATED_COL] = ts
-    # Truncate to target_width — the sheet row has 16 cols (A-P) but we only
-    # write up to LAST_UPDATED_COL; gspread rejects writing past the range.
-    full_row = full_row[:target_width]
+def update_single_price(
+    product_name: str,
+    store: str,
+    price: float,
+    *,
+    dry_run: bool = False,
+    is_special: Optional[bool] = None,
+    special_desc: str = "",
+    size: str = "",
+    worksheet=None,
+) -> dict:
 ```
-**Replace with (exact):**
+
+(Extend the docstring Args with:
+`size: Rule B resolved unit — written to a BLANK Col C in the same
+row write; a non-empty Col C is never modified (spec §5.3).`)
+
+**Edit 2 — backfill block + width. ANCHOR (old):**
+
 ```python
-    ts = _sydney_now_str()
-    full_row = list(row_data)  # make mutable copy
-    header = all_values[0] if all_values else []
-    specials_col = _find_col(
-        header, SPECIALS_HEADER_BY_STORE.get(store_lower, ""))
-    write_specials = is_special is not None and specials_col is not None
     target_width = max(price_col + 1, LAST_UPDATED_COL + 1)
     if write_specials:
         # Widen past M/N so the flag cell is inside the written range.
@@ -527,1651 +1504,982 @@ Docstring: add the two params (`None` = leave the specials cell untouched).
         full_row.append("")
     full_row[price_col] = price
     full_row[LAST_UPDATED_COL] = ts
+```
+
+**NEW:**
+
+```python
+    target_width = max(price_col + 1, LAST_UPDATED_COL + 1, SIZE_COL + 1)
     if write_specials:
-        from extractors.specials_parser import classify_special
-        full_row[specials_col] = classify_special(is_special, special_desc)
-    # Truncate to target_width — the sheet row has 16 cols (A-P); gspread
-    # rejects writing past the range.
-    full_row = full_row[:target_width]
+        # Widen past M/N so the flag cell is inside the written range.
+        target_width = max(target_width, specials_col + 1)
+    while len(full_row) < target_width:
+        full_row.append("")
+    # Rule B/C.1: fill a BLANK Col C in the same row write (atomic,
+    # no extra API call). Explicit size (marker allowed) wins;
+    # otherwise parse from the matched name. Non-empty Col C is
+    # NEVER modified (spec §5.3). Parse-based writes are real sizes
+    # only — no marker is ever guessed here (D-U3).
+    size_clean = str(size or "").strip()
+    if not size_clean:
+        m = _SIZE_PATTERN.search(product_name or "")
+        size_clean = m.group(1).strip() if m else ""
+    col_c = (str(full_row[SIZE_COL]).strip()
+             if len(full_row) > SIZE_COL else "")
+    if size_clean and not col_c:
+        full_row[SIZE_COL] = size_clean
+    full_row[price_col] = price
+    full_row[LAST_UPDATED_COL] = ts
 ```
-(The `dry_run` early-return above is untouched — it never wrote cells.)
 
-### Step 3.6 — CLI callers pass specials (grocery_price_cli.py; 3 sites)
+**Tests — append:**
 
-**File:** `<ROOT>\grocery_price_cli.py` (workspace root, NOT inside the tracker).
+```python
+class TestUpdateSinglePriceBackfill(unittest.TestCase):
+    """C.1: blank Col C healed in the same write; never overwritten."""
 
-1. `_search_add_item` (anchor: the `add_product_row(` call, current lines
-   691-700). Add after `alias=product,`:
-```python
-            is_special=chosen.is_special,
-            special_desc=chosen.special_desc,
+    def test_blank_col_c_backfilled_once_from_explicit_size(self):
+        ws = FakeWorksheet([
+            ["Name", "Cat", "Size", "WW", "Coles", "", "Brand", "TS"],
+            ["Milk", "", "", "", "", "", "", ""],
+        ])
+        from core.sheets_sync import update_single_price
+        res = update_single_price("Milk", "coles", 3.0,
+                                  size="1L", worksheet=ws)
+        self.assertTrue(res["wrote"])
+        row = ws.updates[0][0][0]
+        self.assertEqual(row[2], "1L")
+
+    def test_second_run_writes_nothing_new_to_col_c(self):
+        ws = FakeWorksheet([
+            ["Name", "Cat", "Size", "WW", "Coles", "", "Brand", "TS"],
+            ["Milk", "", "1L", "", "", "", "", ""],
+        ])
+        from core.sheets_sync import update_single_price
+        update_single_price("Milk", "coles", 3.5,
+                            size="unit unavailable", worksheet=ws)
+        row = ws.updates[0][0][0]
+        self.assertEqual(row[2], "1L")  # non-empty Col C untouched
+
+    def test_name_parse_backfills_when_no_size_param(self):
+        ws = FakeWorksheet([
+            ["Name", "Cat", "Size", "WW", "Coles", "", "Brand", "TS"],
+            ["Milk 2L", "", "", "", "", "", "", ""],
+        ])
+        from core.sheets_sync import update_single_price
+        update_single_price("Milk 2L", "coles", 3.0, worksheet=ws)
+        self.assertEqual(ws.updates[0][0][0][2], "2L")
 ```
-2. `_add_from_live_search` (anchor: the `add_product_row(` call, current
-   lines 2109-2118). Add after `alias=original_query,`:
-```python
-            is_special=best.is_special,
-            special_desc=best.special_desc,
+
+**Verify:**
+```powershell
+$PY -m pytest grocery-price-tracker/tests/test_sheets_sync.py -q
 ```
-3. `map wool/coles --add` path (anchor, current line 2593):
+
+---
+
+## S13 — B3 (CLI side): map wool/coles add paths carry size
+
+**Files:** `grocery_price_cli.py` (edit),
+`grocery-price-tracker/tests/test_cli.py` (append).
+
+**Edit 1 — `_queue_add_to_list` size param. ANCHOR (old):**
+
 ```python
-                res = update_single_price(item, store, best.price)
+def _queue_add_to_list(store: str, generic_name: str, keyword: str) -> None:
 ```
-→
+
+**NEW:**
+
 ```python
+def _queue_add_to_list(store: str, generic_name: str, keyword: str,
+                       size: str = "") -> None:
+```
+
+(Extend the docstring Args with
+`size (str): Rule B resolved unit (stored on the queue entry).`)
+And ANCHOR (old): `        result = atl.add_entry(store, keyword, generic_name)`
+**NEW:** `        result = atl.add_entry(store, keyword, generic_name, size=size)`
+
+**Edit 2 — interactive `_map_store_item` add branch. ANCHOR (old):**
+
+```python
+    if action in ("a", "add"):
+        # Update the price for this generic name in the sheet
+        from core.sheets_sync import update_single_price
+        best = results[0]
+        try:
+            res = update_single_price(item, store, best.price)
+            if res.get("found"):
+                print(ok(f"Updated {store} price for '{item}' "
+                         f"(row {res.get('row_index')}): ${best.price:.2f}"))
+                _queue_add_to_list(store, item, best.raw_name)
+```
+
+**NEW:**
+
+```python
+    if action in ("a", "add"):
+        # Update the price for this generic name in the sheet
+        from core.sheets_sync import update_single_price
+        best = results[0]
+        # Rule B: resolve the unit (live size -> name parse -> ask).
+        try:
+            unit = _resolve_add_unit(
+                best.raw_name, getattr(best, "size", "") or "")
+        except ValueError as exc:
+            print(f"  {exc}")
+            return _prompt_action(
+                "[a]dd [na] [keyword] [s]kip [stop] [done]")
+        try:
+            res = update_single_price(item, store, best.price, size=unit)
+            if res.get("found"):
+                print(ok(f"Updated {store} price for '{item}' "
+                         f"(row {res.get('row_index')}): ${best.price:.2f}"))
+                _queue_add_to_list(store, item, best.raw_name, size=unit)
+```
+
+**Edit 3 — non-interactive `map wool/coles --add` branch. ANCHOR
+(old):**
+
+```python
+            best = results[0]
+            from core.sheets_sync import update_single_price
+            try:
                 res = update_single_price(
                     item, store, best.price,
                     is_special=best.is_special,
                     special_desc=best.special_desc)
+                if res.get("found"):
+                    print(ok(f"Updated {store} price for '{item}' "
+                             f"(row {res.get('row_index')}): ${best.price:.2f}"))
+                    _queue_add_to_list(store, item, best.raw_name)
 ```
-The `_cmd_update` call (line 414) and the interactive `_prompt_action` path
-(line 2064) are deliberately NOT changed (no specials data / outside spec).
 
-### Step 3.7 — Telegram gateway callers (telegram_gateway/handlers.py; 2 sites)
+**NEW:**
 
-**File:** `<ROOT>\telegram_gateway\handlers.py`
-
-1. `_add_from_live_search` (anchor: `add_product_row(` call, current lines
-   663-671). Add after `alias=original_query,`:
 ```python
-            is_special=best.is_special,
-            special_desc=best.special_desc,
-```
-2. Map add path (anchor, current line 926):
-```python
-                    res = update_single_price(session["query"], store, best.price)
-```
-→
-```python
-                    res = update_single_price(
-                        session["query"], store, best.price,
-                        is_special=best.is_special,
-                        special_desc=best.special_desc)
-```
-(Args-only; logic lives in sheets_sync per the spec.)
-
-### Step 3.8 — Reporter vocabulary (core/specials_reporter.py)
-
-**File:** `<ROOT>\grocery-price-tracker\core\specials_reporter.py`
-
-**Anchor A — docstring (lines 47-49).** Change the last sentence to:
-`A product is "on special" if its store specials cell (M for woolworths,
-N for coles) is non-empty and not "no" (D25/A6).`
-
-**Anchor B — the row loop (current lines 96-118).**
-**Search anchor (exact):**
-```python
-        for store_key, col_idx in specials_col.items():
-            if col_idx < len(row) and row[col_idx].strip():
-```
-**Replace with (exact):**
-```python
-        for store_key, col_idx in specials_col.items():
-            if col_idx >= len(row):
-                continue
-            cell = str(row[col_idx]).strip()
-            # A6 back-compat: empty/"no" -> not on special; "multi-buy"
-            # reports as multi-buy; ANY other non-empty cell (incl.
-            # legacy free text) reports as a special (discount).
-            if not cell or cell.lower() == "no":
-                continue
-```
-And in the `results.append({...})` below it, change
-`"special_desc": str(row[col_idx]).strip(),` to `"special_desc": cell,`.
-`format_specials_report` and the Wednesday step-8 specials report are NOT
-touched.
-
-### Step 3.9 — WP3 tests (NEW tests/test_specials_flags.py + test_sheets_sync.py additions)
-
-**File (create):** `<ROOT>\grocery-price-tracker\tests\test_specials_flags.py`
-```python
-#!/usr/bin/env python3
-"""D25/WP3: classifier matrix, Coles docx markers, sheet writes, reporter.
-
-No network. Docx fixtures are written with python-docx into a temp dir.
-"""
-from __future__ import annotations
-import sys
-import tempfile
-import unittest
-from pathlib import Path
-
-_HERE = Path(__file__).resolve().parent
-_PROJECT = _HERE.parent
-if str(_PROJECT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT))
-
-from extractors.specials_parser import (  # noqa: E402
-    WAS_RE, ANY_RE, SPECIAL_FLAG_RE, classify_special,
-)
-from extractors.doc_parser import parse_docx  # noqa: E402
-from core.specials_reporter import get_active_specials  # noqa: E402
-
-
-class FakeWorksheet:
-    """Minimal gspread Worksheet mock (get_all_values only)."""
-
-    def __init__(self, rows):
-        self._values = [list(r) for r in rows]
-
-    def get_all_values(self):
-        return [list(r) for r in self._values]
-
-
-def _write_docx(paragraphs):
-    """Write a temp .docx with the given paragraph strings; return path."""
-    from docx import Document
-    tmp = tempfile.TemporaryDirectory()
-    path = Path(tmp.name) / "list.docx"
-    doc = Document()
-    for p in paragraphs:
-        doc.add_paragraph(p)
-    doc.save(str(path))
-    return path, tmp
-
-
-class TestClassifySpecial(unittest.TestCase):
-    """Full precedence matrix (decision 25)."""
-
-    def test_empty_and_not_special_is_no(self):
-        self.assertEqual(classify_special(False, ""), "no")
-
-    def test_flag_only_is_discount(self):
-        self.assertEqual(classify_special(True, ""), "discount")
-
-    def test_save_desc_is_discount(self):
-        self.assertEqual(classify_special(True, "save $1.53 (35% off)"),
-                         "discount")
-
-    def test_was_desc_is_discount_even_without_flag(self):
-        self.assertEqual(classify_special(False, "Was $13.20"), "discount")
-
-    def test_for_desc_is_multi_buy(self):
-        self.assertEqual(classify_special(True, "2 for $4.50"), "multi-buy")
-        self.assertEqual(classify_special(True, "6 for $10"), "multi-buy")
-
-    def test_any_desc_is_multi_buy(self):
-        self.assertEqual(classify_special(True, "Any 2 | $9"), "multi-buy")
-
-    def test_any_desc_spacing_case_tolerant(self):
-        self.assertEqual(classify_special(False, "any 2|$9.00"), "multi-buy")
-        self.assertEqual(classify_special(False, "ANY 2 |  $9"), "multi-buy")
-
-    def test_any_beats_save(self):
-        self.assertEqual(
-            classify_special(True, "Any 2 | $9 and Save $2"), "multi-buy")
-
-    def test_special_flag_desc_is_discount(self):
-        self.assertEqual(classify_special(True, "SPECIAL"), "discount")
-
-    def test_half_price_is_discount(self):
-        self.assertEqual(classify_special(True, "Half Price"), "discount")
-
-    def test_coles_promotion_type_multi_buy_is_discount(self):
-        # P3c: promotionType MULTI_BUY renders as "Multi Buy" — no D25
-        # desc pattern matches -> spec-sanctioned "else discount".
-        self.assertEqual(classify_special(True, "Multi Buy"), "discount")
-
-
-class TestMarkerRegexes(unittest.TestCase):
-    def test_was_re(self):
-        self.assertIsNotNone(WAS_RE.search("Was $13.20"))
-        self.assertIsNotNone(WAS_RE.search("was\xa0$9"))
-        self.assertIsNone(WAS_RE.search("save $1"))
-
-    def test_any_re(self):
-        self.assertIsNotNone(ANY_RE.search("Any 2 | $9"))
-        self.assertIsNotNone(ANY_RE.search("ANY 2 | $9.00"))
-        self.assertIsNone(ANY_RE.search("Any 2"))
-        self.assertIsNone(ANY_RE.search("Any | $9"))
-
-    def test_special_flag_re(self):
-        self.assertIsNotNone(SPECIAL_FLAG_RE.match("SPECIAL"))
-        self.assertIsNotNone(SPECIAL_FLAG_RE.match(" special "))
-        self.assertIsNone(SPECIAL_FLAG_RE.match("SPECIAL OFFER"))
-        self.assertIsNone(SPECIAL_FLAG_RE.match("Was $1"))
-
-
-class TestDocxColesMarkers(unittest.TestCase):
-    def _parse(self, paragraphs):
-        path, tmp = _write_docx(paragraphs)
-        self.addCleanup(tmp.cleanup)
-        return parse_docx(str(path), store="coles")
-
-    def test_special_flag_above_name(self):
-        items = self._parse(
-            ["SPECIAL", "Coles Milk 2L", "$3.20"])
-        self.assertTrue(items[0].is_special)
-        self.assertEqual(items[0].special_desc, "SPECIAL")
-
-    def test_was_below_price(self):
-        items = self._parse(
-            ["Coles Bread Loaf", "$2.50", "Was $3.20"])
-        self.assertTrue(items[0].is_special)
-        self.assertEqual(items[0].special_desc, "Was $3.20")
-
-    def test_any_below_price(self):
-        items = self._parse(
-            ["Coles Chips 175g", "$4.00", "Any 2 | $9"])
-        self.assertTrue(items[0].is_special)
-        self.assertEqual(items[0].special_desc, "Any 2 | $9")
-
-    def test_below_line_wins_over_flag_above(self):
-        items = self._parse(
-            ["SPECIAL", "Coles Yogurt 700g", "$5.00", "Was $6.00"])
-        self.assertTrue(items[0].is_special)
-        self.assertEqual(items[0].special_desc, "Was $6.00")
-
-    def test_a7_misfire_save_above_next_product_not_attached(self):
-        items = self._parse(
-            ["WW Product A", "$5.00", "save $1.00", "WW Product B", "$4.00"])
-        by_name = {i.raw_name: i for i in items}
-        self.assertTrue(by_name["WW Product A"].is_special)
-        self.assertFalse(by_name["WW Product B"].is_special)
-
-    def test_plain_item_not_special(self):
-        items = self._parse(["Coles Milk 2L", "$3.20"])
-        self.assertFalse(items[0].is_special)
-        self.assertEqual(items[0].special_desc, "")
-
-
-class TestReporterVocabulary(unittest.TestCase):
-    HEADER = ["Product_Name", "Category", "Size", "Woolworths_Price",
-              "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
-              "Search_Keyword_Woolworths", "Search_Keyword_Coles",
-              "Search_Keyword_Aldi", "Aldi_Refresh",
-              "Woolworths_Specials", "Coles_Specials", "Rewards_Points"]
-
-    def _rows(self, ww_cell, coles_cell):
-        return [
-            self.HEADER,
-            ["Milk 2L", "", "", "$4.50", "$4.20", "", "", "",
-             "", "", "", "", ww_cell, coles_cell, ""],
-        ]
-
-    def test_no_and_empty_excluded(self):
-        ws = FakeWorksheet(self._rows("no", ""))
-        self.assertEqual(get_active_specials(worksheet=ws), [])
-
-    def test_vocabulary_included_with_cell_as_desc(self):
-        ws = FakeWorksheet(self._rows("discount", "multi-buy"))
-        result = get_active_specials(worksheet=ws)
-        descs = sorted(r["special_desc"] for r in result)
-        self.assertEqual(descs, ["discount", "multi-buy"])
-
-    def test_legacy_free_text_reports_as_discount_special(self):
-        ws = FakeWorksheet(self._rows("50% off", ""))
-        result = get_active_specials(worksheet=ws)
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["special_desc"], "50% off")
-
-
-if __name__ == "__main__":
-    unittest.main()
-```
-
-**File (edit):** `<ROOT>\grocery-price-tracker\tests\test_sheets_sync.py` —
-append a class `TestSpecialsFlagWrites` covering, against the existing
-FakeWorksheet pattern (copy the class if this file lacks one):
-- `sync_prices`: matched item `is_special=True, special_desc="Any 2 | $9"` →
-  M/N cell `"multi-buy"`; matched not-special item → cell `"no"`; unmatched
-  row keeps its legacy cell (e.g. `"50% off"` stays).
-- `add_product_row`: default call → specials cell `"no"`; with
-  `is_special=True, special_desc="Was $2.00"` → `"discount"`; header without
-  M/N → no specials write, no crash.
-- `update_single_price`: no specials args → M/N cell untouched; with
-  `is_special=False` → `"no"` written and `range_written` extends to M/N;
-  with `is_special=True, special_desc="2 for $4"` → `"multi-buy"`.
-
-**Verification (mandatory):**
-```powershell
-& "$env:USERPROFILE\anaconda3\python.exe" -m py_compile grocery-price-tracker\extractors\specials_parser.py grocery-price-tracker\extractors\doc_parser.py grocery-price-tracker\core\sheets_sync.py grocery-price-tracker\core\specials_reporter.py
-& "$env:USERPROFILE\anaconda3\python.exe" -m pytest grocery-price-tracker\tests\test_specials_flags.py -q
-& "$env:USERPROFILE\anaconda3\python.exe" -m pytest grocery-price-tracker\tests\test_sheets_sync.py -q
-```
-Then run the FULL suite. Existing tests that assert the OLD M/N write
-semantics (`special_desc` or `""`) are the only ones allowed to be updated —
-grep `test_sheets_sync.py`, `test_extractors.py`, `test_cli.py` for
-`specials` cell assertions and align them with the vocabulary.
-
----
-
-## 4. WP4 — D26/D27: real discovery recording + loud status (1 code file, 1 CLI file, 2 test files)
-
-### Step 4.1 — `_parse_json_body` helper (extractors/session_refresh.py)
-
-**File:** `<ROOT>\grocery-price-tracker\extractors\session_refresh.py`
-
-Insert after `_write_json_atomic` (after current line ~127):
-```python
-def _parse_json_body(text) -> dict:
-    """Best-effort JSON request-body parse; {} when missing/invalid (P4c)."""
-    try:
-        data = json.loads(text or "")
-        return data if isinstance(data, dict) else {}
-    except (ValueError, TypeError):
-        return {}
-```
-
-### Step 4.2 — `_LocalDriver.capture_add_to_list` + `_verify_coles_lists_url`
-
-**Anchor — inside `class _LocalDriver`, after the `close` method (current
-line 624).** Insert:
-```python
-    def capture_add_to_list(self, store: str):
-        """Record the real add-to-list API call (D26 discovery, §4.5).
-
-        Attaches a Playwright request listener BEFORE prompting, prints
-        the guided prompt, then polls up to TWO_FA_WAIT_S (3 min) for the
-        FIRST same-origin non-GET request whose URL or body mentions a
-        list. Coles additionally resolves + verifies `lists_url` (and
-        sets `check_url`); a failed verification returns None so no
-        broken capture is saved.
-
-        Args:
-            store: "woolworths" | "coles".
-
-        Returns:
-            dict: {"method", "url", "body_shape"} (+ "lists_url",
-            "check_url" for coles), or None when nothing was captured.
-        """
-        page = self._pages[store]
-        origin = ("https://www.woolworths.com.au"
-                  if store == "woolworths"
-                  else "https://www.coles.com.au")
-        add_candidates: list = []
-        list_gets: list = []
-
-        def _on_request(request):
+            best = results[0]
+            # Rule B: resolve the unit (--unit -> live size -> name
+            # parse -> fail-fast; interactive sessions ask instead).
             try:
-                method = str(request.method).upper()
-                url = str(request.url)
-                if not url.startswith(origin):
-                    return
-                if method != "GET":
-                    body = request.post_data or ""
-                    if "list" in url.lower() or "list" in body.lower():
-                        add_candidates.append({
-                            "method": method,
-                            "url": url,
-                            "body_shape": _parse_json_body(body),
-                        })
-                elif "list" in url.lower():
-                    list_gets.append(url)
-            except Exception:
-                pass  # listener must never break the page
-
-        page.on("request", _on_request)
-        print(f"Add ONE item to your Price Compare list in the open "
-              f"window ({store})…")
-        deadline = time.monotonic() + TWO_FA_WAIT_S
-        while time.monotonic() < deadline and not add_candidates:
-            time.sleep(1.0)
-        try:
-            page.remove_listener("request", _on_request)
-        except Exception:
-            pass
-        if not add_candidates:
-            return None
-        capture = dict(add_candidates[0])  # FIRST candidate wins
-        if store == "coles":
-            lists_url = self._verify_coles_lists_url(list_gets)
-            if not lists_url:
-                return None  # broken capture — discovery FAILED
-            capture["lists_url"] = lists_url
-            capture["check_url"] = lists_url
-        return capture
-
-    def _verify_coles_lists_url(self, list_gets: list):
-        """Resolve + verify the Coles saved-lists URL (P4d).
-
-        Candidates: observed same-origin GETs containing "list" (most
-        recent first), then the current page URL when it contains
-        "list". A candidate verifies when an in-page fetch returns ok
-        AND a JSON array. Returns the verified URL or "".
-        """
-        page = self._pages["coles"]
-        candidates: list = []
-        seen = set()
-        for url in reversed(list_gets):
-            if url not in seen:
-                seen.add(url)
-                candidates.append(url)
-        try:
-            current = str(page.url)
-            if "list" in current.lower() and current not in seen:
-                candidates.append(current)
-        except Exception:
-            pass
-        expression = (
-            "async ([url]) => { try { const r = await fetch(url);"
-            " if (!r.ok) return null; const data = await r.json();"
-            " return Array.isArray(data) ? url : null; }"
-            " catch (e) { return null; } }")
-        for url in candidates:
+                unit = _resolve_add_unit(
+                    best.raw_name,
+                    getattr(best, "size", "") or "",
+                    override=getattr(args, "unit", None) or "")
+            except ValueError as exc:
+                print(f"Error: {exc} — re-run with --unit \"1L\" or "
+                      f"--unit \"unit unavailable\"", file=sys.stderr)
+                return 1
+            from core.sheets_sync import update_single_price
             try:
-                if self.evaluate("coles", expression, [url]) == url:
-                    return url
-            except Exception:
-                continue
-        return ""
+                res = update_single_price(
+                    item, store, best.price,
+                    is_special=best.is_special,
+                    special_desc=best.special_desc,
+                    size=unit)
+                if res.get("found"):
+                    print(ok(f"Updated {store} price for '{item}' "
+                             f"(row {res.get('row_index')}): ${best.price:.2f}"))
+                    _queue_add_to_list(store, item, best.raw_name,
+                                       size=unit)
 ```
 
-### Step 4.3 — `_run_discovery`: prompt move + hasattr removal + force
-
-**Search anchor (exact, current lines 1024-1043):**
-```python
-def _run_discovery(driver, summary: dict) -> None:
-    """Guided API discovery (§4.5): once per store, user adds ONE item."""
-    for store in STORES:
-        if not _needs_capture(store):
-            continue
-        print(f"Add ONE item to your Price Compare list in the open "
-              f"window ({store})…")
-        # The real recording driver is configured by the caller through
-        # driver.start(); this phase waits for the network event that
-        # matches the saved-list mutation and records its shape.
-        try:
-            capture = driver.capture_add_to_list(store) if hasattr(
-                driver, "capture_add_to_list") else None
-        except Exception as exc:
-            capture = {"error": str(exc)}
-        if isinstance(capture, dict) and capture.get("url"):
-            _write_discovery_capture(store, capture)
-            summary.setdefault("discovery", {})[store] = "captured"
-        else:
-            summary.setdefault("discovery", {})[store] = "failed"
-```
-**Replace with (exact):**
-```python
-def _run_discovery(driver, summary: dict, force: bool = False) -> None:
-    """Guided API discovery (§4.5): once per store, user adds ONE item.
-
-    The driver prints the prompt itself AFTER attaching the request
-    listener (P4a). ``force`` re-trains even when a capture exists
-    (--recapture, P4b).
-    """
-    for store in STORES:
-        if not force and not _needs_capture(store):
-            continue
-        try:
-            capture = driver.capture_add_to_list(store)
-        except Exception as exc:
-            capture = {"error": str(exc)}
-        if isinstance(capture, dict) and capture.get("url"):
-            _write_discovery_capture(store, capture)
-            summary.setdefault("discovery", {})[store] = "captured"
-        else:
-            summary.setdefault("discovery", {})[store] = "failed"
-```
-
-### Step 4.4 — Auto-discovery gate in `run()`
-
-**Search anchor (exact, current lines 986-991):**
-```python
-    if recapture:
-        try:
-            _run_discovery(driver, summary)
-        except Exception as exc:
-            print(f"[session_refresh] discovery failed: {exc}",
-                  file=sys.stderr)
-```
-**Replace with (exact):**
-```python
-    # D26: auto-discovery — run when forced OR when any store lacks a
-    # capture (a true FIRST run must prompt, not fail wholesale).
-    if recapture or any(_needs_capture(s) for s in STORES):
-        try:
-            _run_discovery(driver, summary, force=recapture)
-        except Exception as exc:
-            print(f"[session_refresh] discovery failed: {exc}",
-                  file=sys.stderr)
-```
-
-### Step 4.5 — Per-store flush isolation in `_phase_b_flush`
-
-**Search anchor (exact, current lines 788-797):**
-```python
-        add_item = _make_add_item(store, driver, capture)
-        result = _flush_store(
-            store, to_flush,
-            add_item=add_item,
-            consume_entry=_consume_queue_entry,
-            log_append=lambda rec: _append_flush_log(FLUSH_LOG_PATH, rec),
-            sleep=time.sleep, clock=time.monotonic,
-            jitter=lambda: random.uniform(0, FLUSH_JITTER_S))
-        result["parked"] = parked
-        summary[store]["flush"] = result
-```
-**Replace with (exact):**
-```python
-        # D26: per-store isolation — a missing capture (or any per-store
-        # failure) fails ONLY this store's flush; the other proceeds.
-        try:
-            add_item = _make_add_item(store, driver, capture)
-            result = _flush_store(
-                store, to_flush,
-                add_item=add_item,
-                consume_entry=_consume_queue_entry,
-                log_append=lambda rec: _append_flush_log(FLUSH_LOG_PATH, rec),
-                sleep=time.sleep, clock=time.monotonic,
-                jitter=lambda: random.uniform(0, FLUSH_JITTER_S))
-            result["parked"] = parked
-            summary[store]["flush"] = result
-        except RuntimeError as exc:
-            summary[store]["flush"] = {
-                "added": [], "failed": to_flush, "parked": parked,
-                "session_died": False,
-                "reason": "no API capture — run live-refresh --recapture",
-            }
-            print(f"[session_refresh] flush skipped for {store}: {exc}",
-                  file=sys.stderr)
-        except Exception as exc:
-            summary[store]["flush"] = {
-                "added": [], "failed": to_flush, "parked": parked,
-                "session_died": False, "reason": str(exc),
-            }
-            print(f"[session_refresh] flush failed for {store}: {exc}",
-                  file=sys.stderr)
-```
-
-### Step 4.6 — D27 CLI status prints (grocery_price_cli.py; 2 blocks)
-
-**Block A — `_cmd_live_refresh` summary loop.** Search anchor (exact):
-```python
-        print(kv("Login", "OK" if login_ok else "FAILED"))
-        if not login_ok:
-            ok_all = False
-```
-Insert immediately AFTER `print(kv("Login", ...))` and BEFORE `if not
-login_ok:`:
-```python
-        discovery = (summary.get("discovery") or {}).get(store)
-        if discovery == "captured":
-            print(kv("Discovery", "captured"))
-        elif discovery is not None:
-            print(kv(
-                "Discovery",
-                "failed — run 'live-refresh --recapture' to train"))
-```
-
-**Block B — wednesday live window block (current lines 1226-1229).**
-Search anchor (exact):
-```python
-            for store in ("woolworths", "coles"):
-                store_summary = window_summary.get(store, {})
-                login = "OK" if store_summary.get("login") else "FAILED"
-                print(f"  {store.capitalize()}: login {login}")
-```
-Insert immediately after the login print (before `flush_result =`):
-```python
-                discovery = (window_summary.get("discovery") or {}).get(store)
-                if discovery == "captured":
-                    print(f"    discovery: captured")
-                elif discovery is not None:
-                    print(f"    discovery: failed — run "
-                          f"'live-refresh --recapture' to train")
-```
-Also in BOTH blocks, when a flush dict carries a `reason`, print it after
-the counts (keep the existing failed-item lines):
-- Block A, inside the `if phase == "flush":` branch, after the
-  `Parked` kv line:
-```python
-                        if phase_result.get("reason"):
-                            print(kv("Reason", phase_result["reason"]))
-```
-- Block B, after the flush counts print:
-```python
-                    if flush_result.get("reason"):
-                        print(f"      reason: {flush_result['reason']}")
-```
-
-### Step 4.7 — WP4 tests (test_live_window.py + test_cli.py additions)
-
-**File:** `<ROOT>\grocery-price-tracker\tests\test_live_window.py` — append:
+**Tests — append:**
 
 ```python
-class FakeReq:
-    """Playwright Request stand-in."""
+class TestMapAddCarriesUnit(unittest.TestCase):
+    """B3: wool/coles add passes size to the row write and the queue."""
 
-    def __init__(self, method, url, post_data=None):
-        self.method = method
-        self.url = url
-        self.post_data = post_data
-
-
-class FakePage:
-    """Playwright page stand-in: on()/remove_listener()/evaluate()/url."""
-
-    def __init__(self, url=""):
-        self.url = url
-        self.listeners = {}
-        self.eval_fn = lambda expr, arg: None
-
-    def on(self, event, handler):
-        self.listeners.setdefault(event, []).append(handler)
-
-    def remove_listener(self, event, handler):
-        if event in self.listeners:
-            self.listeners[event] = [
-                h for h in self.listeners[event] if h is not handler]
-
-    def fire(self, request):
-        for h in self.listeners.get("request", []):
-            h(request)
-
-    def evaluate(self, expression, arg=None):
-        return self.eval_fn(expression, arg)
-
-
-class TestCaptureAddToList(unittest.TestCase):
-    """D26/WP4: _LocalDriver.capture_add_to_list via a fake page."""
-
-    def _driver(self, store, page):
-        drv = sr._LocalDriver(lambda: None)
-        drv._pages = {store: page}
-        return drv
-
-    def setUp(self):
-        self._mono = None  # each test sets a monotonic() value sequence
-
-        def fake_monotonic():
-            vals = self._mono
-            if not vals:
-                return 0.0
-            return next(vals)
-        patches = [
-            patch.object(sr.time, "monotonic", side_effect=fake_monotonic),
-            patch.object(sr.time, "sleep", side_effect=lambda s: None),
-        ]
-        for p in patches:
-            p.start()
-            self.addCleanup(p.stop)
-
-    def test_first_candidate_wins(self):
-        page = FakePage()
-        drv = self._driver("woolworths", page)
-        page.fire(FakeReq("POST",
-                          "https://www.woolworths.com.au/apis/ui/mylists/items",
-                          '{"listId": 1}'))
-        # second (later) request must NOT replace the first capture
-        page.fire(FakeReq("PUT",
-                          "https://www.woolworths.com.au/apis/ui/other",
-                          '{"listId": 2}'))
-        page.listeners["request"] = []  # stop buffering; poll exits at once
-        # monotonic(): deadline base (0), loop check (0 < 180 -> exit)
-        self._mono = [0, 0]
-        capture = drv.capture_add_to_list("woolworths")
-        self.assertIsNotNone(capture)
-        self.assertEqual(capture["method"], "POST")
-        self.assertTrue(capture["url"].endswith("/mylists/items"))
-        self.assertEqual(capture["body_shape"], {"listId": 1})
-
-    def test_timeout_returns_none(self):
-        page = FakePage()
-        drv = self._driver("woolworths", page)
-        self._mono = [0, 1, 2, 200]  # deadline exceeded, nothing fired
-        self.assertIsNone(drv.capture_add_to_list("woolworths"))
-
-    def test_foreign_origin_ignored(self):
-        page = FakePage()
-        drv = self._driver("woolworths", page)
-        page.fire(FakeReq("POST", "https://evil.example.com/add-list", "{}"))
-        self._mono = [0, 1, 2, 200]
-        self.assertIsNone(drv.capture_add_to_list("woolworths"))
-
-    def test_coles_lists_url_verified(self):
-        page = FakePage("https://www.coles.com.au/shop/lists")
-        drv = self._driver("coles", page)
-        ok_url = "https://www.coles.com.au/api/v1/lists"
-        page.eval_fn = (
-            lambda expr, arg: arg[0] if arg and arg[0] == ok_url else None)
-        page.fire(FakeReq("GET", ok_url))
-        page.fire(FakeReq(
-            "POST", "https://www.coles.com.au/api/v1/lists/items",
-            '{"name": "x"}'))
-        page.listeners["request"] = []  # stop buffering; poll exits at once
-        self._mono = [0, 0]  # deadline base, loop check
-        capture = drv.capture_add_to_list("coles")
-        self.assertIsNotNone(capture)
-        self.assertEqual(capture["lists_url"], ok_url)
-        self.assertEqual(capture["check_url"], ok_url)
-
-    def test_coles_lists_url_unverified_fails_discovery(self):
-        page = FakePage("https://www.coles.com.au/shop/other")
-        drv = self._driver("coles", page)
-        page.eval_fn = lambda expr, arg: None  # nothing verifies
-        page.fire(FakeReq(
-            "POST", "https://www.coles.com.au/api/v1/lists/items",
-            '{"name": "x"}'))
-        page.listeners["request"] = []  # stop buffering; poll exits at once
-        self._mono = [0, 0]  # deadline base, loop check
-        self.assertIsNone(drv.capture_add_to_list("coles"))
-
-
-class TestAutoDiscoveryAndIsolation(unittest.TestCase):
-    """D26/WP4: auto-discovery gating + per-store flush isolation."""
-
-    def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self._tmp.cleanup)
-        self.capture_path = Path(self._tmp.name) / "capture.json"
-        self._cap_patch = patch.object(
-            sr, "CAPTURE_PATH", self.capture_path)
-        self._cap_patch.start()
-        self.addCleanup(self._cap_patch.stop)
-
-    def test_auto_discovery_runs_when_capture_missing(self):
-        calls = []
-
-        class FakeDriver:
-            def capture_add_to_list(self_, store):
-                calls.append(store)
-                return {"method": "POST", "url": "https://x/api",
-                        "body_shape": {}}
-
-        summary = {"woolworths": {}, "coles": {}}
-        sr._run_discovery(FakeDriver(), summary, force=False)
-        self.assertEqual(calls, ["woolworths", "coles"])
-        self.assertEqual(summary["discovery"]["woolworths"], "captured")
-
-    def test_no_discovery_when_captures_exist(self):
-        self.capture_path.write_text(json.dumps({
-            "woolworths": {"url": "https://x/api"},
-            "coles": {"url": "https://y/api"},
-        }), encoding="utf-8")
-
-        class FakeDriver:
-            def capture_add_to_list(self_, store):
-                raise AssertionError("must not be called")
-
-        summary = {"woolworths": {}, "coles": {}}
-        sr._run_discovery(FakeDriver(), summary, force=False)
-        self.assertNotIn("discovery", summary)
-
-    def test_force_recaptures_even_when_captures_exist(self):
-        self.capture_path.write_text(json.dumps({
-            "woolworths": {"url": "https://x/api"},
-            "coles": {"url": "https://y/api"},
-        }), encoding="utf-8")
-
-        class FakeDriver:
-            def capture_add_to_list(self_, store):
-                return {"method": "POST", "url": "https://z/api",
-                        "body_shape": {}}
-
-        summary = {"woolworths": {}, "coles": {}}
-        sr._run_discovery(FakeDriver(), summary, force=True)
-        self.assertEqual(summary["discovery"]["woolworths"], "captured")
-
-    def test_run_auto_discovers_on_first_run(self):
-        # run() gates on any(_needs_capture) — verify via a driver fake
-        # whose capture works; login/flush/fetch disabled.
-        class FakeDriver:
-            def capture_add_to_list(self_, store):
-                return {"method": "POST", "url": "https://x/api",
-                        "body_shape": {}}
-
-        with patch.object(sr, "_phase_a_login", lambda d, s: None):
-            summary = sr.run(flush=False, fetch=False, _driver=FakeDriver())
+    def test_noninteractive_add_passes_unit_to_write_and_queue(self):
+        # patch _search_store_with_fallback -> [SimpleNamespace(
+        #   raw_name="Milk 2L", price=3.0, size="", is_special=False,
+        #   special_desc="", brand="")],
+        # patch core.sheets_sync.update_single_price -> {"found": True,
+        #   "row_index": 5}, patch gpc._queue_add_to_list,
+        # patch gpc._advance_and_show -> 0; feed a minimal args
+        # Namespace + items/progress fixtures as existing map tests do.
+        ...
         self.assertEqual(
-            summary.get("discovery", {}).get("woolworths"), "captured")
-
-    def test_phase_b_flush_isolates_missing_capture(self):
-        capture = {"woolworths": {"method": "POST",
-                                  "url": "https://ww/api",
-                                  "body_shape": {}}}
-        entries = [
-            {"store": "woolworths", "keyword": "milk",
-             "generic_name": "milk", "queue": "searched_items"},
-            {"store": "coles", "keyword": "bread",
-             "generic_name": "bread", "queue": "searched_items"},
-        ]
-        summary = {s: {"login": True, "flush": None, "fetch": None}
-                   for s in sr.STORES}
-        with patch.object(sr, "_load_both_queues", return_value=entries), \
-             patch.object(sr, "_load_attempt_history", return_value={}), \
-             patch.object(sr, "_read_json", return_value=capture), \
-             patch.object(sr, "_flush_store") as flush_store, \
-             patch.object(sr, "_append_flush_log"):
-            flush_store.return_value = {"added": entries[:1], "failed": [],
-                                        "session_died": False}
-            sr._phase_b_flush(object(), summary)
-        self.assertEqual(
-            summary["woolworths"]["flush"]["added"][0]["keyword"], "milk")
-        self.assertEqual(summary["coles"]["flush"]["failed"][0]
-                         ["keyword"], "bread")
-        self.assertEqual(
-            summary["coles"]["flush"]["reason"],
-            "no API capture — run live-refresh --recapture")
+            usp.call_args.kwargs["size"], "2L")  # name-parsed
+        self.assertEqual(qal.call_args.kwargs["size"], "2L")
 ```
 
-**File:** `<ROOT>\grocery-price-tracker\tests\test_cli.py` — append a class
-`TestDiscoveryStatusPrints`: patch
-`extractors.session_refresh.run` (as imported inside `_cmd_live_refresh`) to
-return a fixed summary dict `{"woolworths": {"login": True, "flush": None,
-"fetch": None}, "coles": {...}, "discovery": {"woolworths": "captured",
-"coles": "failed"}}`, invoke `grocery_price_cli._cmd_live_refresh` with a
-`SimpleNamespace(recapture=False, flush_only=False, fetch_only=False)`,
-capture stdout, and assert `"Discovery: captured"` and
-`"Discovery: failed — run 'live-refresh --recapture' to train"` appear.
-(Reuse the module import pattern at the top of test_cli.py:
-`import grocery_price_cli` — the file already bootstraps `_ROOT`.)
+(03 Code: wire this following the existing `_cmd_map_noninteractive`
+test fixtures in `test_cli.py`; assert via the patched call kwargs as
+sketched.)
 
-**Audit (mandatory):** existing `test_live_window.py` W-matrix tests that
-call `sr.run(_driver=fake)` now also traverse the auto-discovery gate (their
-temp/patched CAPTURE_PATH state decides). Run the suite; any fake driver
-without `capture_add_to_list` records `"failed"` in
-`summary["discovery"]` (caught by the `except` — never crashes). Only update
-existing assertions that explicitly break; never delete a test.
-
-**Verification (mandatory):**
+**Verify:**
 ```powershell
-& "$env:USERPROFILE\anaconda3\python.exe" -m py_compile grocery-price-tracker\extractors\session_refresh.py grocery_price_cli.py
-& "$env:USERPROFILE\anaconda3\python.exe" -m pytest grocery-price-tracker\tests\test_live_window.py -q
-& "$env:USERPROFILE\anaconda3\python.exe" -m pytest grocery-price-tracker\tests\test_cli.py -q
+$PY -m pytest grocery-price-tracker/tests/test_cli.py -q
+$PY -m py_compile grocery_price_cli.py
 ```
 
 ---
 
-## 5. WP5 — D24: Telegram topic split + `topics-check` (4 code files, 2 docs)
+## S14 — B7/C.1: `sync_prices` heals blank Col C in the batch write
 
-> All WP5 code ships with `None` placeholders + env overrides (P5a). The
-> integer fill happens ONLY in Step 5.9 after manual step M1 (§8). Nothing
-> ever posts to thread 151 again.
+**Files:** `grocery-price-tracker/core/sheets_sync.py` (edit),
+`grocery-price-tracker/tests/test_sheets_sync.py` (append).
 
-### Step 5.1 — topics.py: two new topics, retire 151
+**Edit — inside the matched-row loop. ANCHOR (old):**
 
-**File:** `<ROOT>\telegram_gateway\topics.py`
-**Full replacement of the constants + resolver (keep the docstring, updating
-it):**
 ```python
-"""
-Telegram Gateway - Forum Topics
-
-Canonical source of thread IDs: TELEGRAM_TOPICS.md at the workspace root
-("Claw Command Center" supergroup, verified via getUpdates on 2026-08-09;
-D24 topics verified via `topics-check` after M1).
-
-Keep THREAD_IDS in sync with TELEGRAM_TOPICS.md whenever topics change.
-A duplicate morning-digest topic exists at thread_id 13 (created later);
-the active digest target is thread_id 2.
-"""
-
-import os
-
-CHAT_ID = -1004394070843  # Claw Command Center supergroup
-
-# D24 (2026-08-30): Wednesday output split into two topics. IDs are filled
-# from manual step M1 (user-reported via `topics-check`); the env overrides
-# below always win (A8). Until filled, senders fall back to DM-only.
-SPECIALS_WOOL_TOPIC_ID = None   # env: TELEGRAM_SPECIALS_TOPIC_ID
-WEEKLY_LISTS_TOPIC_ID = None    # env: TELEGRAM_WEEKLY_TOPIC_ID
-
-THREAD_IDS = {
-    "morning-digest": 2,
-    "llm-costs": 3,
-    "finance": 4,
-    "retail-deals": 5,
-    "content-creation": 6,
-    "video-projects": 7,   # DEPRECATED (Phase 8 audit, 2026-08-24): video pipeline retired in Phase 3.5.6
-    "sysadmin": 8,
-    "sports": 9,   # DEPRECATED (Phase 8 audit, 2026-08-24): only used by pl27_poster (REMOVED, Phase 3.5.6)
-    "email-control": 10,   # DEPRECATED (Phase 8 audit, 2026-08-24): no COMMANDS entry references this topic
-    "woolworths": 11,   # DEPRECATED (Phase 8 audit, 2026-08-24): no COMMANDS entry references this topic
-    "nrma-giftcards": 12,   # DEPRECATED (Phase 8 audit, 2026-08-24): no COMMANDS entry references this topic
-    "specials-wool": SPECIALS_WOOL_TOPIC_ID,    # D24: Wednesday specials report
-    "weekly-lists": WEEKLY_LISTS_TOPIC_ID,      # D24: Wednesday summary + resolve lists
-    # "grocery-sync-sheet" (151) RETIRED 2026-08-30 (D24): topic deleted by
-    # the user after cutover. NO code may post to thread 151.
-}
-
-_ENV_OVERRIDE = {
-    "specials-wool": "TELEGRAM_SPECIALS_TOPIC_ID",
-    "weekly-lists": "TELEGRAM_WEEKLY_TOPIC_ID",
-}
-
-
-def thread_id_for(topic_key):
-    """
-    Returns the message_thread_id for a topic key, or None if unknown.
-
-    Env overrides (A8) win over the table for the two D24 topics.
-
-    Args:
-        topic_key (str): Key from THREAD_IDS (e.g. "sysadmin").
-
-    Returns:
-        int | None: The thread ID, or None when the key is not mapped.
-    """
-    env_var = _ENV_OVERRIDE.get(topic_key)
-    if env_var:
-        raw = (os.environ.get(env_var) or "").strip()
-        if raw.lstrip("-").isdigit():
-            return int(raw)
-    return THREAD_IDS.get(topic_key)
-```
-(`send_to_topic` already handles `None` gracefully — warning + 0 messages.)
-
-### Step 5.2 — CLI constants + resolver + posting helpers (grocery_price_cli.py)
-
-**Anchor A — replace the Telegram routing constants (current lines
-975-978).**
-**Search anchor (exact):**
-```python
-# Telegram routing (mirror telegram_gateway/topics.py + allowlist.py constants).
-_TELEGRAM_CHAT_ID = -1004394070843
-_TELEGRAM_THREAD_ID = 151  # grocery-sync-sheet topic
-_TELEGRAM_USER_ID = 1594431983
-```
-**Replace with (exact):**
-```python
-# Telegram routing (mirror telegram_gateway/topics.py + allowlist.py constants).
-_TELEGRAM_CHAT_ID = -1004394070843
-# D24: 151 (grocery-sync-sheet) RETIRED — never post to it. The two new
-# topics are filled from manual step M1; env overrides win (A8). Until
-# then senders fall back to DM-only with a console note.
-_SPECIALS_THREAD_ID = None   # specials-wool topic; env TELEGRAM_SPECIALS_TOPIC_ID
-_WEEKLY_THREAD_ID = None     # weekly-lists topic; env TELEGRAM_WEEKLY_TOPIC_ID
-_TELEGRAM_USER_ID = 1594431983
-
-
-def _int_env(env_var: str, fallback):
-    """Integer env override (A8): valid digits win, else the fallback.
-
-    Args:
-        env_var: environment variable name.
-        fallback: int | None returned when the env var is unset/invalid.
-
-    Returns:
-        int | None
-    """
-    raw = (os.environ.get(env_var) or "").strip()
-    if raw.lstrip("-").isdigit():
-        return int(raw)
-    return fallback
+        row = rows[list_idx]
+        row[PRICE_COL[result.store]] = item.price
 ```
 
-**Anchor B — after `_send_telegram` (current line 1016).** Insert:
+**NEW:**
+
 ```python
-def _chunk_list_message(title: str, items: list, limit: int = 4000) -> list:
-    """Build resolve-list message bodies, chunked to <= limit chars (A4).
+        row = rows[list_idx]
+        row[PRICE_COL[result.store]] = item.price
 
-    Args:
-        title: list title (e.g. "Unmatched").
-        items: item strings (may be empty).
-        limit: max chars per message part.
-
-    Returns:
-        list[str]: message bodies; >1 part each carries "(part N/M)".
-    """
-    if not items:
-        return [f"📋 {title}: none"]
-    lines = [f"📋 {title} ({len(items)}):", ""]
-    lines.extend(f"• {name}" for name in items)
-    text = "\n".join(lines)
-    parts = [text[i:i + limit] for i in range(0, len(text), limit)]
-    total = len(parts)
-    out = []
-    for n, part in enumerate(parts, 1):
-        suffix = f"\n(part {n}/{total})" if total > 1 else ""
-        out.append(part + suffix)
-    return out
-
-
-def _post_weekly_summary(bot_token: str, summary_text: str,
-                         resolve_lists: list) -> None:
-    """Step 7 (D24): summary DM + weekly-lists; lists to weekly-lists only.
-
-    resolve_lists: list of (title, items) tuples. Unset weekly topic ID ->
-    DM-only with a console note (never posts, never crashes).
-    """
-    weekly_topic = _int_env("TELEGRAM_WEEKLY_TOPIC_ID", _WEEKLY_THREAD_ID)
-    dm_ok = _send_telegram(bot_token, _TELEGRAM_USER_ID, summary_text)
-    if weekly_topic is None:
-        print("  weekly-lists topic ID unset — summary DM-only "
-              "(set TELEGRAM_WEEKLY_TOPIC_ID or fill the M1 IDs)")
-    else:
-        topic_ok = _send_telegram(
-            bot_token, _TELEGRAM_CHAT_ID, summary_text,
-            message_thread_id=weekly_topic)
-        print(f"  Weekly-lists topic: {'OK' if topic_ok else 'FAILED'}")
-        for title, items in resolve_lists:
-            bodies = _chunk_list_message(title, items)
-            for body in bodies:
-                _send_telegram(
-                    bot_token, _TELEGRAM_CHAT_ID, body,
-                    message_thread_id=weekly_topic)
-            print(f"  {title} list → weekly-lists: "
-                  f"{len(bodies)} message(s)")
-    print(f"  DM: {'OK' if dm_ok else 'FAILED'}")
-
-
-def _post_specials_report(bot_token: str, spec_text: str) -> None:
-    """Step 8 (D24): specials report DM + specials-wool topic."""
-    specials_topic = _int_env(
-        "TELEGRAM_SPECIALS_TOPIC_ID", _SPECIALS_THREAD_ID)
-    spec_dm = _send_telegram(bot_token, _TELEGRAM_USER_ID, spec_text)
-    if specials_topic is None:
-        print("  specials-wool topic ID unset — specials DM-only "
-              "(set TELEGRAM_SPECIALS_TOPIC_ID or fill the M1 IDs)")
-    else:
-        spec_topic = _send_telegram(
-            bot_token, _TELEGRAM_CHAT_ID, spec_text,
-            message_thread_id=specials_topic)
-        print(f"  Specials Topic: {'OK' if spec_topic else 'FAILED'}")
-    print(f"  Specials DM: {'OK' if spec_dm else 'FAILED'}")
+        # Rule B/C.1: heal a blank Col C in the same batch write —
+        # live item size first, then parse from the item's raw name.
+        # NEVER writes the marker; a non-empty Col C is untouched
+        # (D-U3 / spec §5.3). Rows are pre-padded to width >= 8, so
+        # Col C (index 2) is always inside the written range.
+        col_c = (str(row[SIZE_COL]).strip()
+                 if len(row) > SIZE_COL else "")
+        if not col_c:
+            live_size = str(getattr(item, "size", "") or "").strip()
+            if not live_size:
+                m = _SIZE_PATTERN.search(
+                    str(getattr(item, "raw_name", "") or ""))
+                live_size = m.group(1).strip() if m else ""
+            if live_size:
+                row[SIZE_COL] = live_size
 ```
 
-### Step 5.3 — Step 7 wiring (grocery_price_cli.py)
+**Tests — append (spec §8.6):**
 
-**Search anchor (exact, current lines 1540-1551):**
 ```python
-        # Send to user DM + grocery-sync-sheet topic
-        bot_token = os.environ.get("TELEGRAM_CLAW_BOT", "")
-        if bot_token:
-            dm_ok = _send_telegram(bot_token, _TELEGRAM_USER_ID, summary_text)
-            topic_ok = _send_telegram(
-                bot_token, _TELEGRAM_CHAT_ID, summary_text,
-                message_thread_id=_TELEGRAM_THREAD_ID,
-            )
-            print(f"  DM: {'OK' if dm_ok else 'FAILED'}")
-            print(f"  Topic: {'OK' if topic_ok else 'FAILED'}")
+class TestSyncPricesColCHeal(unittest.TestCase):
+    """B7/C.1: sync heals blank Col C; never overwrites, no marker."""
+
+    def _run(self, ws, item, result):
+        from core.sheets_sync import sync_prices
+        return sync_prices([result], [item], worksheet=ws)
+
+    def test_blank_col_c_healed_from_item_size(self):
+        # header + one row with blank Col C; MatchResult matched to
+        # row 2; ProductItem(size="600g") -> written row[2] == "600g"
+        ...
+
+    def test_blank_col_c_healed_from_raw_name_parse(self):
+        # ProductItem(size="", raw_name="Bread 650g") -> "650g"
+        ...
+
+    def test_nonempty_col_c_untouched_and_no_marker_written(self):
+        # row Col C "1L"; item size "2L" -> stays "1L";
+        # unparseable item (size="", raw_name="Herbs") -> stays ""
+        ...
+```
+
+(03 Code: reuse the existing `sync_prices` FakeWorksheet fixtures in
+this file; assert on `ws.updates[0][0]` rows. All three cases are
+mandatory.)
+
+**Verify:**
+```powershell
+$PY -m pytest grocery-price-tracker/tests/test_sheets_sync.py -q
+```
+
+---
+
+## S15 — B6: missing-items queues carry `"size"`
+
+**Files:** `grocery-price-tracker/core/missing_items_tracker.py` (edit),
+`grocery-price-tracker/tests/test_cli.py` (append — the tracker tests
+live there).
+
+**Edit 1 — signature + docstring. ANCHOR (old):**
+
+```python
+def update_missing_items(
+    woolworths_results: list,
+    coles_results: list,
+) -> dict:
+```
+
+**NEW:**
+
+```python
+def update_missing_items(
+    woolworths_results: list,
+    coles_results: list,
+    *,
+    sizes_by_generic: dict | None = None,
+) -> dict:
+```
+
+(Extend the docstring: `sizes_by_generic (dict | None): optional map
+of generic_name (Col A) -> Col C size, built from the source store's
+sheet rows. New entries copy it into "size" (may be ""). Plan P4 —
+MatchResult itself has no size field and name_matcher is frozen.`)
+
+**Edit 2 — Woolworths-missing new entry. ANCHOR (old):**
+
+```python
         else:
-            print("  TELEGRAM_CLAW_BOT not set — skipping Telegram")
+            entry = {
+                "product_name": rn,
+                "normalized_key": key,
+                "source_store": "coles",
+                "first_seen": now,
+                "last_seen": now,
+                "count": 1,
+            }
+            ww_queue.append(entry)
 ```
-**Replace with (exact):**
+
+**NEW:**
+
 ```python
-        # Send to user DM + weekly-lists topic; resolve lists to the topic
-        bot_token = os.environ.get("TELEGRAM_CLAW_BOT", "")
-        if bot_token:
+        else:
+            entry = {
+                "product_name": rn,
+                "normalized_key": key,
+                "source_store": "coles",
+                # B6: copy the source store's Col C size ("" reads as
+                # the note downstream — spec §2).
+                "size": str(
+                    (sizes_by_generic or {}).get(gn, "")).strip(),
+                "first_seen": now,
+                "last_seen": now,
+                "count": 1,
+            }
+            ww_queue.append(entry)
+```
+
+**Edit 3 — Coles-missing new entry. Same pattern; ANCHOR (old):**
+
+```python
+        else:
+            entry = {
+                "product_name": rn,
+                "normalized_key": key,
+                "source_store": "woolworths",
+                "first_seen": now,
+                "last_seen": now,
+                "count": 1,
+            }
+            coles_queue.append(entry)
+```
+
+**NEW:**
+
+```python
+        else:
+            entry = {
+                "product_name": rn,
+                "normalized_key": key,
+                "source_store": "woolworths",
+                "size": str(
+                    (sizes_by_generic or {}).get(gn, "")).strip(),
+                "first_seen": now,
+                "last_seen": now,
+                "count": 1,
+            }
+            coles_queue.append(entry)
+```
+
+**Tests — append to `test_cli.py` (next to the existing
+`update_missing_items` tests; reuse their fixture):**
+
+```python
+class TestMissingTrackerCarriesSize(unittest.TestCase):
+    """B6: new queue entries copy size from sizes_by_generic."""
+
+    def test_new_entries_carry_size_and_blank(self):
+        # existing MatchResult fixture: one coles-only + one
+        # woolworths-only matched item
+        sizes = {"Beef Mince": "500g", "Oat Milk": ""}
+        result = mit.update_missing_items(
+            ww_results, coles_results, sizes_by_generic=sizes)
+        ...
+        # assert the new entries' "size" values match the map
+```
+
+(03 Code: mirror `test_update_missing_items_symmetric_disjoint`
+fixtures; patch the queue paths to tmp files as that test does.)
+
+**Verify:**
+```powershell
+$PY -m pytest grocery-price-tracker/tests/test_cli.py -k missing -q
+$PY -m py_compile grocery-price-tracker/core/missing_items_tracker.py
+```
+
+---
+
+## S16 — A9: Wednesday displays + unmatched queue display
+
+**Files:** `grocery_price_cli.py` (edit),
+`grocery-price-tracker/tests/test_cli.py` (append).
+
+> **P5 TRAP:** txt files keep their machine format. Units are added
+> ONLY to the Telegram display lines.
+
+**Edit 1 — display helpers, inserted after `_chunk_list_message`
+(anchor: its final lines `    return out` + blank line before
+`def _post_weekly_summary`):**
+
+```python
+def _unmatched_display_line(entry: dict) -> str:
+    """Telegram resolve-list line for one pending unmapped entry (A9)."""
+    size = (entry.get("classification") or {}).get("size", "")
+    return (f"{entry.get('raw_name', '')} [{entry.get('store', '')}]"
+            f"{unit_suffix(size)}")
+
+
+def _unmatched_display_lines(pending: list) -> list:
+    """Telegram resolve-list lines for pending unmapped entries (A9)."""
+    return [_unmatched_display_line(e) for e in pending]
+
+
+def _missing_display_line(generic: str, size: str) -> str:
+    """Telegram resolve-list line for one wool/coles-missing row (A9)."""
+    return f"{generic}{unit_suffix(size)}"
+```
+
+**Edit 2 — unmatched block rebuild (keeps the forgotten-items print).
+ANCHOR (old):**
+
+```python
+    pending = get_pending_mappings()
+    unmatched_lines = [
+        f"{e.get('raw_name', '')} [{e.get('store', '')}]"
+        for e in pending
+    ]
+    # Exclude items the user permanently forgot via `map unmatched --forget`.
+    ignored = _read_ignored_items(data_dir)
+    if ignored:
+        before = len(unmatched_lines)
+        unmatched_lines = [ln for ln in unmatched_lines if ln not in ignored]
+        if before != len(unmatched_lines):
+            print(f"  (excluded {before - len(unmatched_lines)} forgotten items)")
+```
+
+**NEW:**
+
+```python
+    pending = get_pending_mappings()
+    # Exclude items the user permanently forgot via `map unmatched --forget`.
+    ignored = set(_read_ignored_items(data_dir))
+
+    def _machine_line(e: dict) -> str:
+        return f"{e.get('raw_name', '')} [{e.get('store', '')}]"
+
+    pending_visible = [e for e in pending
+                       if _machine_line(e) not in ignored]
+    if len(pending_visible) != len(pending):
+        print(f"  (excluded {len(pending) - len(pending_visible)} "
+              f"forgotten items)")
+    # Machine lines feed unmatched.txt (parsed by `map unmatched`);
+    # display lines carry units for Telegram only (plan P5).
+    unmatched_lines = [_machine_line(e) for e in pending_visible]
+    unmatched_display = _unmatched_display_lines(pending_visible)
+```
+
+**Edit 3 — wool/coles missing build loop. ANCHOR (old):**
+
+```python
+    wool_missing_lines = []
+    coles_missing_lines = []
+    if not args.dry_run:
+        # Re-read the sheet to compare keyword columns I and J per row
+        ws = connect_worksheet()
+        all_values = ws.get_all_values()
+        rows = all_values[1:] if len(all_values) > 1 else []
+        for row in rows:
+            generic = row[0].strip() if row else ""
+            if not generic:
+                continue
+            ww_kw = row[_WW_KW_COL].strip() if len(row) > _WW_KW_COL else ""
+            coles_kw = row[_COLES_KW_COL].strip() if len(row) > _COLES_KW_COL else ""
+            # "NA" (set by the `na` action) counts as populated -> excluded.
+            if coles_kw and not ww_kw:
+                wool_missing_lines.append(generic)
+            if ww_kw and not coles_kw:
+                coles_missing_lines.append(generic)
+```
+
+**NEW:**
+
+```python
+    wool_missing_lines = []
+    coles_missing_lines = []
+    wool_missing_display = []   # Telegram-only lines with units (P5)
+    coles_missing_display = []
+    if not args.dry_run:
+        # Re-read the sheet to compare keyword columns I and J per row
+        ws = connect_worksheet()
+        all_values = ws.get_all_values()
+        rows = all_values[1:] if len(all_values) > 1 else []
+        for row in rows:
+            generic = row[0].strip() if row else ""
+            if not generic:
+                continue
+            size_c = row[2].strip() if len(row) > 2 else ""
+            ww_kw = row[_WW_KW_COL].strip() if len(row) > _WW_KW_COL else ""
+            coles_kw = row[_COLES_KW_COL].strip() if len(row) > _COLES_KW_COL else ""
+            # "NA" (set by the `na` action) counts as populated -> excluded.
+            if coles_kw and not ww_kw:
+                wool_missing_lines.append(generic)
+                wool_missing_display.append(
+                    _missing_display_line(generic, size_c))
+            if ww_kw and not coles_kw:
+                coles_missing_lines.append(generic)
+                coles_missing_display.append(
+                    _missing_display_line(generic, size_c))
+```
+
+**Edit 4 — pass display lists to Telegram. ANCHOR (old):**
+
+```python
             _post_weekly_summary(bot_token, summary_text, [
                 ("Unmatched", unmatched_lines),
                 ("Woolworths missing", wool_missing_lines),
                 ("Coles missing", coles_missing_lines),
-            ])
-        else:
-            print("  TELEGRAM_CLAW_BOT not set — skipping Telegram")
 ```
 
-### Step 5.4 — Step 8 specials wiring (grocery_price_cli.py)
+**NEW:**
 
-**Search anchor (exact, current lines 1615-1627):**
 ```python
-            spec_text = "\n".join(spec_lines)
-            bot_token = os.environ.get("TELEGRAM_CLAW_BOT", "")
-            if bot_token:
-                spec_dm = _send_telegram(
-                    bot_token, _TELEGRAM_USER_ID, spec_text
-                )
-                spec_topic = _send_telegram(
-                    bot_token, _TELEGRAM_CHAT_ID, spec_text,
-                    message_thread_id=_TELEGRAM_THREAD_ID,
-                )
-                print(f"  Specials DM: {'OK' if spec_dm else 'FAILED'}")
-                print(f"  Specials Topic: {'OK' if spec_topic else 'FAILED'}")
-            else:
-                print("  TELEGRAM_CLAW_BOT not set — skipping specials report")
-```
-**Replace with (exact):**
-```python
-            spec_text = "\n".join(spec_lines)
-            bot_token = os.environ.get("TELEGRAM_CLAW_BOT", "")
-            if bot_token:
-                _post_specials_report(bot_token, spec_text)
-            else:
-                print("  TELEGRAM_CLAW_BOT not set — skipping specials report")
+            _post_weekly_summary(bot_token, summary_text, [
+                ("Unmatched", unmatched_display),
+                ("Woolworths missing", wool_missing_display),
+                ("Coles missing", coles_missing_display),
 ```
 
-### Step 5.5 — `topics-check` subcommand (grocery_price_cli.py)
+**Edit 5 — flush failed/parked lines carry the queue entry's unit.
+ANCHOR (old):**
 
-**Anchor A — handler.** Insert a new handler immediately BEFORE
-`# ====== Handler: _cmd_map` (current line ~1728):
 ```python
-# ============================================================================
-# Handler: _cmd_topics_check — M1 helper (read-only, LOCAL machine only)
-# ============================================================================
+                    for failed_item in failed:
+                        summary_lines.append(
+                            fail(f"- {failed_item.get('keyword', '')}"))
+                    for parked_item in parked:
+                        summary_lines.append(
+                            fail(f"- {parked_item.get('keyword', '')} "
+                                 f"(parked)"))
+```
 
-def _cmd_topics_check(args) -> int:
-    """List forum topic names → thread IDs visible to the bot.
+**NEW:**
 
-    Calls getUpdates ONCE and prints every forum-topic creation event
-    (name → message_thread_id) plus every recent topic message
-    (thread id · text head). Read-only: never posts. This is how the
-    D24 topic IDs are discovered (M1 step 7).
+```python
+                    for failed_item in failed:
+                        summary_lines.append(
+                            fail(f"- {failed_item.get('keyword', '')}"
+                                 f"{unit_suffix(failed_item.get('size', ''))}"))
+                    for parked_item in parked:
+                        summary_lines.append(
+                            fail(f"- {parked_item.get('keyword', '')} "
+                                 f"(parked)"
+                                 f"{unit_suffix(parked_item.get('size', ''))}"))
+```
 
-    Args:
-        args: parsed argparse Namespace (no options).
+**Edit 6 — `_cmd_unmatched` detail join always shows the size tag.
+ANCHOR (old):**
 
-    Returns:
-        int: 0 on success, 1 when the bot token is missing or the API
-        call fails.
+```python
+        detail = " · ".join(
+            str(v) for v in (
+                cls.get("brand", ""),
+                cls.get("size", ""),
+                cls.get("category", ""),
+            ) if v
+        )
+```
+
+**NEW:**
+
+```python
+        # A9: unit_tag never returns "" -> the size segment ALWAYS
+        # shows (real size or the marker note, Rule A).
+        detail = " · ".join(
+            str(v) for v in (
+                cls.get("brand", ""),
+                unit_tag(cls.get("size", "")),
+                cls.get("category", ""),
+            ) if v
+        )
+```
+
+**Tests — append:**
+
+```python
+class TestWednesdayDisplayUnits(unittest.TestCase):
+    """A9: display lines carry units; machine lines stay clean (P5)."""
+
+    def test_missing_display_line_known_and_unknown(self):
+        self.assertEqual(
+            gpc._missing_display_line("Milk", "1L"), "Milk · 1L")
+        self.assertEqual(
+            gpc._missing_display_line("Herbs", ""),
+            "Herbs · ⚠️ unit unavailable")
+
+    def test_unmatched_display_lines_use_classification_size(self):
+        pending = [{"raw_name": "Beans 400g",
+                    "store": "coles",
+                    "classification": {"brand": "", "size": "400g",
+                                       "category": ""}},
+                   {"raw_name": "Herbs",
+                    "store": "woolworths",
+                    "classification": {}}]
+        lines = gpc._unmatched_display_lines(pending)
+        self.assertEqual(lines[0], "Beans 400g [coles] · 400g")
+        self.assertEqual(lines[1],
+                         "Herbs [woolworths] · ⚠️ unit unavailable")
+```
+
+**Existing-test update:** grep `test_cli.py` for wednesday-summary
+assertions touching `unmatched_lines|wool_missing_lines` — counts and
+machine formats are unchanged; only `_post_weekly_summary` inputs
+change (display variants).
+
+**Verify:**
+```powershell
+$PY -m pytest grocery-price-tracker/tests/test_cli.py -q
+$PY -m py_compile grocery_price_cli.py
+```
+
+---
+
+## S17 — Rule C.2: `backfill-sizes` command
+
+**Files:** `grocery_price_cli.py` (edit),
+`grocery-price-tracker/tests/test_cli.py` (append).
+
+**Edit 1 — parser entry, inserted after the `backfill-home-brands`
+block (anchor: `bh.set_defaults(func=_cmd_backfill_home_brands)`):**
+
+```python
+    bsz = sub.add_parser(
+        "backfill-sizes",
+        help="One-time Col C (size) backfill parsed from Col A/I/J "
+             "names; fills only blank cells, never overwrites",
+    )
+    bsz.add_argument("--dry-run", action="store_true",
+                     help="Print planned writes; no sheet mutation")
+    bsz.set_defaults(func=_cmd_backfill_sizes)
+```
+
+**Edit 2 — size column constant, next to the backfill constants.
+ANCHOR (old):**
+
+```python
+# Column indices in Products_Master (0-based) for the backfill.
+_KEYWORDS_COL = 15      # P (Keywords — user-query aliases)
+```
+
+**NEW:**
+
+```python
+# Column indices in Products_Master (0-based) for the backfill.
+_SIZE_COL_BF = 2        # C (size — the unit column)
+_KEYWORDS_COL = 15      # P (Keywords — user-query aliases)
+```
+
+**Edit 3 — handler, inserted between `_cmd_backfill_keywords` and
+`_cmd_backfill_home_brands` (anchor: the comment banner line
+`# Handler: _cmd_backfill_home_brands — Col G home-brand classifier
+backfill`):**
+
+```python
+def _cmd_backfill_sizes(args) -> int:
+    """One-time Col C (size) backfill parsed from Col A/I/J (spec §5.2).
+
+    Fills ONLY blank Col C cells whose size is parseable via
+    name_matcher._SIZE_PATTERN from Col A, then Col I, then Col J.
+    Non-empty Col C cells are NEVER modified (Rule C.3); unparseable
+    rows stay blank and display the note (D-U3 — no guessed sizes, no
+    bulk marker write). ONE batched update for all planned cells.
     """
     _load_env()
-    bot_token = os.environ.get("TELEGRAM_CLAW_BOT", "")
-    if not bot_token:
-        print("Error: TELEGRAM_CLAW_BOT not set in env/.env",
-              file=sys.stderr)
-        return 1
-    import json as _json
-    import urllib.request as _req
-    url = f"https://api.telegram.org/bot{bot_token}/getUpdates"
-    try:
-        with _req.urlopen(_req.Request(url), timeout=15) as resp:
-            body = _json.loads(resp.read().decode("utf-8", errors="replace"))
-    except Exception as exc:
-        print(f"Error: getUpdates failed: {exc}", file=sys.stderr)
-        return 1
-    if not body.get("ok"):
-        print(f"Error: getUpdates not ok: "
-              f"{body.get('description', '')}", file=sys.stderr)
-        return 1
-    seen = set()
-    found = 0
-    for upd in body.get("result", []):
-        msg = upd.get("message") or upd.get("edited_message") or {}
-        thread_id = msg.get("message_thread_id")
-        if thread_id is None:
+    from core.sheets_client import connect_worksheet
+    from core.name_matcher import _SIZE_PATTERN
+
+    ws = connect_worksheet()
+    all_values = ws.get_all_values()
+    rows = all_values[1:] if len(all_values) > 1 else []
+
+    planned = []          # (row_index_1based, generic, size)
+    skipped_set = 0       # Col C already non-empty
+    left_blank = 0        # blank Col C, nothing parseable
+    for i, row in enumerate(rows):
+        row_index = i + 2
+        generic = row[0].strip() if len(row) > 0 else ""
+        current = (row[_SIZE_COL_BF].strip()
+                   if len(row) > _SIZE_COL_BF else "")
+        if current:
+            skipped_set += 1
             continue
-        ftc = msg.get("forum_topic_created") or {}
-        name = ftc.get("name")
-        key = (thread_id, name or (msg.get("text") or "")[:40])
-        if key in seen:
-            continue
-        seen.add(key)
-        if name:
-            print(f"{name} → {thread_id}")
+        size = ""
+        for col in (0, 8, 9):  # Col A, Col I, Col J
+            if len(row) > col:
+                m = _SIZE_PATTERN.search(row[col])
+                if m:
+                    size = m.group(1).strip()
+                    break
+        if generic and size:
+            planned.append((row_index, generic, size))
         else:
-            print(f"{thread_id} · {(msg.get('text') or '')[:40]}")
-        found += 1
-    if not found:
-        print("No topic messages visible. Send '@ClawArkindBot id' in "
-              "each topic, then re-run.")
+            left_blank += 1
+
+    print(header("Backfill Sizes (Col C)", "📋"))
+    print()
+    print(kv("Rows examined", str(len(rows))))
+    print(kv("Planned writes", str(len(planned))))
+    print(kv("Skipped (Col C already set)", str(skipped_set)))
+    print(kv("Left blank (no parseable size)", str(left_blank)))
+    print()
+    for row_index, generic, size in planned:
+        print(f"{row_index}. {truncate(generic, 30)} · {EM_DASH} → {size}")
+
+    if args.dry_run:
+        print()
+        print(warn("[DRY RUN] no sheet write"))
+        return 0
+    if not planned:
+        print()
+        print("Nothing to write.")
+        return 0
+    ws.batch_update([
+        {"range": f"C{row_index}", "values": [[size]]}
+        for row_index, _generic, size in planned
+    ])
+    print()
+    print(f"Wrote {len(planned)} Col C cell(s) in one batched update.")
     return 0
 ```
 
-**Anchor B — parser registration.** In `build_parser`, after the `analyze`
-block (after current line 200, before `return p`):
-```python
-    tch = sub.add_parser(
-        "topics-check",
-        help="List forum topic names → thread IDs (read-only, local)",
-    )
-    tch.set_defaults(func=_cmd_topics_check)
-```
-
-### Step 5.6 — wednesday_reminder.py: weekly topic + refreshed text
-
-**File:** `<ROOT>\telegram_gateway\wednesday_reminder.py`
-
-**Anchor A — constants (current lines 44-49).**
-**Search anchor (exact):**
-```python
-CHAT_ID = -1004394070843
-# "grocery-sync-sheet" topic (topics.py::THREAD_IDS), created for Phase 9 routing.
-GROCERY_THREAD_ID = 151
-```
-**Replace with (exact):**
-```python
-CHAT_ID = -1004394070843
-# D24: reminder posts to the weekly-lists topic (thread 151 RETIRED —
-# never post to it). Placeholder until M1; env override wins (A8).
-WEEKLY_THREAD_ID = None  # env: TELEGRAM_WEEKLY_TOPIC_ID
-```
-
-**Anchor B — add the resolver after `user_ids()` (after current
-line 136):**
-```python
-def weekly_thread_id():
-    """Returns the weekly-lists topic ID (env override wins; None=unset).
-
-    Returns:
-        int | None
-    """
-    raw = (os.environ.get("TELEGRAM_WEEKLY_TOPIC_ID") or "").strip()
-    if raw.lstrip("-").isdigit():
-        return int(raw)
-    return WEEKLY_THREAD_ID
-```
-
-**Anchor C — `REMINDER_TEXT` (current lines 73-87).** Replace body:
-```python
-REMINDER_TEXT = (
-    "📅 WEDNESDAY GROCERY SYNC\n"
-    "━━━━━━━━━━━━━━━━━━━━\n"
-    "\n"
-    "1. On the Windows machine, run the live Wednesday sync (one "
-    "Chrome window, 2FA once) from the workspace root:\n"
-    "    python grocery_price_cli.py wednesday --source live\n"
-    "\n"
-    "It logs in, flushes your queues, fetches both Price Compare "
-    "lists, syncs the sheet, and posts the summary + resolve lists to "
-    "#weekly-lists and the specials report to #specials-wool.\n"
-    "\n"
-    "Fallback: paste the lists into Woolworths.docx / Coles.docx and "
-    "run plain `wednesday` (docx mode).\n"
-    "\n"
-    "No need to reply 'done'."
-)
-```
-
-**Anchor D — `fire()` topic send (current lines 281-285).**
-**Search anchor (exact):**
-```python
-    try:
-        send_message(bot_token, CHAT_ID, REMINDER_TEXT, message_thread_id=GROCERY_THREAD_ID)
-        results["topic"] = {"thread_id": GROCERY_THREAD_ID, "ok": True}
-    except RuntimeError as exc:
-        results["topic"] = {"thread_id": GROCERY_THREAD_ID, "ok": False, "error": str(exc)}
-    return results
-```
-**Replace with (exact):**
-```python
-    tid = weekly_thread_id()
-    if tid is None:
-        # A8/P5c: unset ID -> DM-only with a note; never crash, never 151.
-        print("weekly-lists topic ID unset — reminder DM-only "
-              "(set TELEGRAM_WEEKLY_TOPIC_ID or fill the M1 IDs)")
-        results["topic"] = {"thread_id": None, "ok": True, "skipped": True}
-    else:
-        try:
-            send_message(bot_token, CHAT_ID, REMINDER_TEXT,
-                         message_thread_id=tid)
-            results["topic"] = {"thread_id": tid, "ok": True}
-        except RuntimeError as exc:
-            results["topic"] = {"thread_id": tid, "ok": False,
-                                "error": str(exc)}
-    return results
-```
-(Keep `all_ok` computation as-is — `skipped` rows are `ok: True`.)
-
-### Step 5.7 — handlers.py: `handle_done` routing + current texts
-
-**File:** `<ROOT>\telegram_gateway\handlers.py`
-
-**Search anchor (exact, current lines 256-269):**
-```python
-    reply(
-        bot_url,
-        update,
-        "Thanks — Wednesday grocery sync acknowledged. "
-        "The local pipeline (name_importer -> local_sync) will process your "
-        "Word docs and update the sheet. Watch the #grocery-sync-sheet topic.",
-    )
-    send_to_topic(
-        bot_url,
-        "grocery-sync-sheet",
-        "<b>Wednesday sync requested</b>\n"
-        "User replied 'done' — Word docs are ready. "
-        "Awaiting local pipeline run (name_importer -> local_sync -> sheet update).",
-    )
-    return True
-```
-**Replace with (exact):**
-```python
-    reply(
-        bot_url,
-        update,
-        "Thanks — Wednesday grocery sync acknowledged. "
-        "The Wednesday live pipeline (wednesday --source live) will post "
-        "the summary and resolve lists to #weekly-lists and the specials "
-        "report to #specials-wool.",
-    )
-    send_to_topic(
-        bot_url,
-        "weekly-lists",
-        "<b>Wednesday sync requested</b>\n"
-        "User replied 'done' — awaiting the Wednesday live pipeline run "
-        "(wednesday --source live → summary + resolve lists in "
-        "#weekly-lists, specials in #specials-wool).",
-    )
-    return True
-```
-Also update the `handle_done` docstring's "grocery-sync-sheet topic"
-mentions to "weekly-lists topic". No handler removal; `name_importer` /
-`local_sync` references in this function are replaced by the wording above.
-
-### Step 5.8 — WP5 tests (test_cli.py additions)
-
-Append to `<ROOT>\grocery-price-tracker\tests\test_cli.py`:
+**Tests — append (FakeWorksheet needs a `batch_update` method — extend
+the local fake or subclass it in the test):**
 
 ```python
-class TestTopicSplit(unittest.TestCase):
-    """D24/WP5: routing, chunking, fallback, topics-check, reminder."""
+class _BatchFakeWorksheet(FakeWorksheet):
+    def batch_update(self, updates):
+        self.batch_updates = updates
 
-    def setUp(self):
-        import grocery_price_cli as gpc
-        self.gpc = gpc
-        self._env = {}
-        self._env_patch = patch.dict(os.environ, {}, clear=False)
-        self._env_patch.start()
-        self.addCleanup(self._env_patch.stop)
-        for var in ("TELEGRAM_WEEKLY_TOPIC_ID",
-                    "TELEGRAM_SPECIALS_TOPIC_ID"):
-            os.environ.pop(var, None)
+class TestBackfillSizes(unittest.TestCase):
+    """C.2: fills only parseable blanks; never touches non-empty C."""
 
-    def test_int_env_matrix(self):
-        gpc = self.gpc
-        with patch.dict(os.environ, {"TELEGRAM_WEEKLY_TOPIC_ID": "777"}):
-            self.assertEqual(
-                gpc._int_env("TELEGRAM_WEEKLY_TOPIC_ID", None), 777)
-        self.assertIsNone(gpc._int_env("TELEGRAM_WEEKLY_TOPIC_ID", None))
-        with patch.dict(os.environ, {"TELEGRAM_WEEKLY_TOPIC_ID": "abc"}):
-            self.assertEqual(
-                gpc._int_env("TELEGRAM_WEEKLY_TOPIC_ID", 5), 5)
+    def _args(self, dry_run):
+        return argparse.Namespace(dry_run=dry_run)
 
-    def test_chunk_list_message(self):
-        gpc = self.gpc
-        self.assertEqual(gpc._chunk_list_message("Unmatched", []),
-                         ["📋 Unmatched: none"])
-        one = gpc._chunk_list_message("Unmatched", ["milk"])
-        self.assertEqual(len(one), 1)
-        self.assertIn("• milk", one[0])
-        big = gpc._chunk_list_message(
-            "Woolworths missing", [f"item {i} " * 8 for i in range(600)])
-        self.assertGreater(len(big), 1)
-        for n, part in enumerate(big, 1):
-            self.assertLessEqual(len(part), 4000)
-            self.assertIn(f"(part {n}/{len(big)})", part)
-
-    def _posted(self, calls):
-        return [
-            (c.kwargs.get("message_thread_id"), c.args[1])
-            for c in calls
-        ]
-
-    def test_post_weekly_summary_routes_to_weekly_topic_never_151(self):
-        gpc = self.gpc
-        calls = []
-        with patch.dict(os.environ,
-                        {"TELEGRAM_WEEKLY_TOPIC_ID": "777"}), \
-             patch.object(gpc, "_send_telegram",
-                          side_effect=lambda *a, **k: calls.append(
-                              _Call(a, k)) or True):
-            gpc._post_weekly_summary("tok", "summary", [
-                ("Unmatched", ["a"]), ("Woolworths missing", []),
-                ("Coles missing", ["b", "c"]),
-            ])
-        threads = [c.thread for c in calls]
-        self.assertIn(777, threads)
-        self.assertNotIn(151, threads)
-        dm = [c for c in calls if c.chat == gpc._TELEGRAM_USER_ID]
-        self.assertEqual(len(dm), 1)  # DMs keep exactly the summary
-
-    def test_post_specials_routes_to_specials_topic_never_151(self):
-        gpc = self.gpc
-        calls = []
-        with patch.dict(os.environ,
-                        {"TELEGRAM_SPECIALS_TOPIC_ID": "888"}), \
-             patch.object(gpc, "_send_telegram",
-                          side_effect=lambda *a, **k: calls.append(
-                              _Call(a, k)) or True):
-            gpc._post_specials_report("tok", "specials text")
-        threads = [c.thread for c in calls]
-        self.assertIn(888, threads)
-        self.assertNotIn(151, threads)
-
-    def test_unset_ids_fall_back_to_dm_only(self):
-        gpc = self.gpc
-        calls = []
-        with patch.object(gpc, "_send_telegram",
-                          side_effect=lambda *a, **k: calls.append(
-                              _Call(a, k)) or True):
-            gpc._post_weekly_summary("tok", "summary", [("Unmatched", [])])
-            gpc._post_specials_report("tok", "spec")
-        for c in calls:
-            self.assertIsNone(c.thread)
-            self.assertEqual(c.chat, gpc._TELEGRAM_USER_ID)
-
-
-class _Call:
-    """Tiny record of one _send_telegram invocation."""
-
-    def __init__(self, args, kwargs):
-        self.args = args
-        self.kwargs = kwargs
-        self.chat = args[1]
-        self.thread = kwargs.get("message_thread_id")
-
-
-class TestTopicsCheck(unittest.TestCase):
-    """WP5: topics-check parses a mocked getUpdates payload."""
-
-    def test_parses_topic_creation_and_messages(self):
-        import grocery_price_cli as gpc
-        payload = {
-            "ok": True,
-            "result": [
-                {"message": {
-                    "message_thread_id": 543,
-                    "forum_topic_created": {"name": "specials-wool"},
-                    "text": "",
-                }},
-                {"message": {
-                    "message_thread_id": 544,
-                    "text": "@ClawArkindBot id",
-                }},
-            ],
-        }
-        fake_resp = SimpleNamespace(
-            read=lambda: json.dumps(payload).encode("utf-8"),
-            __enter__=lambda s: s,
-            __exit__=lambda s, *a: None,
-        )
-        with patch("urllib.request.urlopen", return_value=fake_resp), \
-             patch.dict(os.environ, {"TELEGRAM_CLAW_BOT": "tok"}):
-            buf = io.StringIO()
-            with contextlib.redirect_stdout(buf):
-                rc = gpc._cmd_topics_check(argparse.Namespace())
+    def test_plans_only_blank_parseable_rows(self):
+        ws = _BatchFakeWorksheet([
+            ["Name", "Cat", "Size", "WW", "Coles", "", "Brand", "TS",
+             "", "", "", "", "", "", "", ""],
+            ["Milk 2L", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+            ["Herbs", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+            ["Bread", "", "650g", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+        ])
+        with patch("core.sheets_client.connect_worksheet",
+                   return_value=ws), \
+             patch.object(gpc, "_load_env"):
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                rc = gpc._cmd_backfill_sizes(self._args(dry_run=True))
         self.assertEqual(rc, 0)
-        out = buf.getvalue()
-        self.assertIn("specials-wool → 543", out)
-        self.assertIn("544 · @ClawArkindBot id", out)
+        self.assertIn("Planned writes · 1", out.getvalue())
+        self.assertIn("Left blank (no parseable size) · 1",
+                      out.getvalue())
+        self.assertIn("Skipped (Col C already set) · 1", out.getvalue())
 
-
-class TestWednesdayReminderRouting(unittest.TestCase):
-    """WP5: reminder routes to the weekly ID via env/patchable constant."""
-
-    _PATH = Path(__file__).resolve().parents[2] / \
-        "telegram_gateway" / "wednesday_reminder.py"
-
-    def _load(self):
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "wednesday_reminder_test", str(self._PATH))
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        return mod
-
-    def test_env_override_routes_topic(self):
-        mod = self._load()
-        sent = []
-
-        def fake_send(token, chat_id, text, message_thread_id=None):
-            sent.append((chat_id, message_thread_id))
-
-        with patch.dict(os.environ,
-                        {"TELEGRAM_WEEKLY_TOPIC_ID": "777"}), \
-             patch.object(mod, "send_message", fake_send), \
-             patch.object(mod, "user_ids", lambda: [1]):
-            mod.fire("tok")
-        topic_calls = [c for c in sent if c[0] == mod.CHAT_ID]
-        self.assertEqual(topic_calls, [(mod.CHAT_ID, 777)])
-
-    def test_unset_id_dm_only_no_crash(self):
-        mod = self._load()
-        sent = []
-
-        def fake_send(token, chat_id, text, message_thread_id=None):
-            sent.append((chat_id, message_thread_id))
-
-        os.environ.pop("TELEGRAM_WEEKLY_TOPIC_ID", None)
-        with patch.object(mod, "WEEKLY_THREAD_ID", None), \
-             patch.object(mod, "send_message", fake_send), \
-             patch.object(mod, "user_ids", lambda: [1]):
-            results = mod.fire("tok")
+    def test_live_run_batches_single_cell_ranges(self):
+        ws = _BatchFakeWorksheet([...same rows...])
+        with patch("core.sheets_client.connect_worksheet",
+                   return_value=ws), \
+             patch.object(gpc, "_load_env"):
+            with contextlib.redirect_stdout(io.StringIO()):
+                rc = gpc._cmd_backfill_sizes(self._args(dry_run=False))
+        self.assertEqual(rc, 0)
         self.assertEqual(
-            [c for c in sent if c[0] == mod.CHAT_ID], [])
-        self.assertTrue(results["topic"]["skipped"])
+            ws.batch_updates,
+            [{"range": "C2", "values": [["2L"]]}])
 ```
-Add `import contextlib` to test_cli.py's imports. Audit test_cli.py for any
-reference to `_TELEGRAM_THREAD_ID` / 151 and update to the new constants.
 
-**Verification (mandatory):**
+(03 Code: pad the fake rows to 16 columns exactly as sketched; the
+`_load_env` import site in the handler is `core.sheets_client` — patch
+accordingly, matching how existing backfill tests in this file handle
+env, if they exist; otherwise the pattern above is authoritative.)
+
+**Verify:**
 ```powershell
-& "$env:USERPROFILE\anaconda3\python.exe" -m py_compile grocery_price_cli.py telegram_gateway\topics.py telegram_gateway\wednesday_reminder.py telegram_gateway\handlers.py
-& "$env:USERPROFILE\anaconda3\python.exe" -m pytest grocery-price-tracker\tests\test_cli.py -q
+$PY -m pytest grocery-price-tracker/tests/test_cli.py -k backfill_sizes -q
+$PY -m py_compile grocery_price_cli.py
 ```
-
-### Step 5.9 — M1-gated constant fill (AFTER manual step M1 only)
-
-When the user reports the two IDs (e.g. `specials-wool → 543`,
-`weekly-lists → 544`), fill the four placeholders with the REAL integers —
-and nothing else changes:
-1. `telegram_gateway/topics.py`: `SPECIALS_WOOL_TOPIC_ID = <id>`,
-   `WEEKLY_LISTS_TOPIC_ID = <id>`.
-2. `grocery_price_cli.py`: `_SPECIALS_THREAD_ID = <id>`,
-   `_WEEKLY_THREAD_ID = <id>`.
-3. `telegram_gateway/wednesday_reminder.py`: `WEEKLY_THREAD_ID = <id>`.
-4. `Development Workflow\TELEGRAM_TOPICS.md`: both topics + IDs, and the
-   151 RETIRED record (see Step 6.1).
-Re-run the WP5 tests + full suite after the fill (env unset in tests → the
-constants are exercised).
 
 ---
 
-## 6. Documentation
+## S18 — Docs sync
 
-### Step 6.1 — TELEGRAM_TOPICS.md
+**Files:** `grocery-price-tracker/PROJECT-MAP.md`, `grocery-price-tracker/README.md`
+(behaviour notes only — the architect already updated them 2026-09-01).
 
-**File:** `<ROOT>\Development Workflow\TELEGRAM_TOPICS.md`
-Add to the Thread IDs list:
-```
-specials-wool: <ID — filled after M1>
-weekly-lists: <ID — filled after M1>
-```
-Add to Notes:
-```
-- D24 (2026-08-30): Wednesday output split — specials report →
-  `specials-wool`, summary + resolve lists → `weekly-lists`. IDs verified
-  via `python grocery_price_cli.py topics-check` (M1).
-- `grocery-sync-sheet` (151) RETIRED 2026-08-30: topic deleted by the user
-  after cutover; no code may post to thread 151.
-```
+Add/adjust (≤ 15 lines each file):
+1. `backfill-sizes` command in the command list (one line, next to
+   `backfill-keywords`).
+2. `--unit` flag on `search --add-item` and `map --add` (one line).
+3. Col C contract sentence: "Col C is the unit column; every add path
+   fills it (real size or the literal `unit unavailable`); blank =
+   legacy — displays as ` · ⚠️ unit unavailable` everywhere."
 
-### Step 6.2 — SKILL.md (WP5 rows + D25 vocabulary)
-
-**File:** `<ROOT>\claw-skills\grocery-price\SKILL.md`
-1. NL mapping table (after the live-refresh row, line ~152):
-```
-| "check telegram topics" / "list topic ids" | **Local-only:** tell the user to run `topics-check` on the Windows machine |
-```
-2. Sheet-semantics section (near "The Google Sheet ALWAYS stores **raw**
-prices", line ~70), add:
-```
-- Sheet specials columns M/N hold exactly one of `no` / `discount` /
-  `multi-buy` (D25). Legacy free-text cells still report as a special.
-```
-
-### Step 6.3 — README.md
-
-**File:** `<ROOT>\grocery-price-tracker\README.md` — add a "D23–D27 +
-B4/B5 completion (2026-08-30)" section documenting: compare/recipe
-add-reminder (D23); Wednesday topic split `specials-wool` / `weekly-lists`
-with 151 retired + `topics-check` helper (D24); M/N vocabulary
-`no`/`discount`/`multi-buy` + Coles `Was`/`Any N | $X`/`SPECIAL` docx
-markers (D25); real discovery recording + auto-discovery + per-store flush
-isolation + `Discovery: captured/failed` status (D26/D27); Scrape.do retries
-5xx/timeout only (B4) and the SKILL.md never-browse rule (B5). Do NOT
-create or reference `PROJECT-MAP.md` (spec §5 note).
-
----
-
-## 7. Deployment (automated — standing user directive 2026-08-29)
-
-All automated; Local Terminal unless marked **Remote VPS**. Perform only
-after the full suite is green.
-
-1. **Sync changed files to the VPS** (mirrors `tasks/ai-tools/`):
+**Verify (deterministic):**
 ```powershell
-scp "grocery_price_cli.py" "ubuntu@169.58.107.0:/home/ubuntu/openclaw/tasks/ai-tools/grocery_price_cli.py"
-scp "telegram_gateway/topics.py" "telegram_gateway/wednesday_reminder.py" "telegram_gateway/handlers.py" "ubuntu@169.58.107.0:/home/ubuntu/openclaw/tasks/ai-tools/telegram_gateway/"
-scp "grocery-price-tracker/core/price_comparator.py" "grocery-price-tracker/core/sheets_sync.py" "grocery-price-tracker/core/specials_reporter.py" "ubuntu@169.58.107.0:/home/ubuntu/openclaw/tasks/ai-tools/grocery-price-tracker/core/"
-scp "grocery-price-tracker/extractors/specials_parser.py" "grocery-price-tracker/extractors/doc_parser.py" "grocery-price-tracker/extractors/coles_extractor.py" "grocery-price-tracker/extractors/session_refresh.py" "ubuntu@169.58.107.0:/home/ubuntu/openclaw/tasks/ai-tools/grocery-price-tracker/extractors/"
-scp "claw-skills/grocery-price/SKILL.md" "ubuntu@169.58.107.0:/home/ubuntu/openclaw/tasks/ai-tools/claw-skills/grocery/SKILL.md"
+$PY -c "from pathlib import Path; r = Path('grocery-price-tracker/README.md').read_text(encoding='utf-8'); assert 'backfill-sizes' in r and '--unit' in r; print('docs-ok')"
 ```
-2. **Restart the gateway container** — **Remote VPS**:
-```bash
-ssh ubuntu@169.58.107.0 "docker restart openclaw-core"
-```
-3. **Post-deploy smoke check** (VPS, read-only):
-```bash
-ssh ubuntu@169.58.107.0 "cd /home/ubuntu/openclaw/tasks/ai-tools && python3 -m py_compile grocery_price_cli.py telegram_gateway/topics.py telegram_gateway/wednesday_reminder.py telegram_gateway/handlers.py grocery-price-tracker/core/price_comparator.py"
-```
-4. Git commits (each repo, concise messages matching repo style; inspect
-   `git status` / `git diff` first; never commit secrets):
-   - `grocery-price-tracker/`: WP1–WP4 code + tests + README.
-   - `<ROOT>` siblings (`grocery_price_cli.py`, `telegram_gateway/`,
-     `claw-skills/`, `Development Workflow/`): WP2/WP3/WP5 changes.
-   Test files do NOT need VPS sync for pytest (VPS has no pytest) but sync
-   them anyway per §9 housekeeping so the deployed tree is not stale:
-   add `grocery-price-tracker/tests/` changed files to step 1.
 
 ---
 
-## 8. Manual user steps (NOT automatable — external human actions)
+## S19 — Closeout verification (all mandatory, zero-skip)
 
-- **M1 — create the two topics + report IDs** (before Step 5.9): follow
-  architecture-spec §6 M1 verbatim (Telegram Desktop → Claw Command Center →
-  ⊕ Create Topic `specials-wool`, repeat `weekly-lists`; send
-  `@ClawArkindBot id` in each; run
-  `python grocery_price_cli.py topics-check` locally; report the two
-  numbers). 03 Code then executes Step 5.9.
-- **M2 — after cutover:** delete the old "Grocery: Sync & Sheet" topic in
-  Telegram (the system no longer posts to it).
-- **M3 — D26 acceptance (user present, once):** run
-  `python grocery_price_cli.py live-refresh --recapture` locally; add ONE
-  item to the "Price Compare" list per store; summary must print
-  `Discovery: captured` for both stores; next flush must succeed. Any
-  `failed` line carries its recovery command.
+```powershell
+# 19.1 Full suite (regression bar: >= 504 + new, 0 failed, 0 skipped)
+$PY -m pytest grocery-price-tracker/tests/ -q
 
----
+# 19.2 Spec §8 verification matrix, targeted
+$PY -m pytest grocery-price-tracker/tests/test_telegram_format.py -k "unit" -q
+$PY -m pytest grocery-price-tracker/tests/test_comparator.py -q
+$PY -m pytest grocery-price-tracker/tests/test_sheets_sync.py -q
+$PY -m pytest grocery-price-tracker/tests/test_searched_items.py -q
+$PY -m pytest grocery-price-tracker/tests/test_add_to_list.py -q
+$PY -m pytest grocery-price-tracker/tests/test_cli.py -q
 
-## 9. Verification matrix (ALL mandatory; zero skips; no network)
+# 19.3 UOM gate still frozen (spec §2)
+$PY -c "import sys; sys.path.insert(0, 'grocery-price-tracker'); from core.uom import parse_size; assert parse_size('unit unavailable') is None; print('gate-ok')"
 
-Per-step commands are in §§1-5. Program-level gates:
+# 19.4 Frozen files untouched (git, from the repo dir)
+git -C grocery-price-tracker status --porcelain
+git -C grocery-price-tracker diff --stat -- core/uom.py core/lookup.py core/name_matcher.py core/extractors
+# Expected: empty diff for the frozen paths.
 
-| Gate | Command (Local Terminal, `<ROOT>`) | Expectation |
-|------|------------------------------------|-------------|
-| Compile | `& "$env:USERPROFILE\anaconda3\python.exe" -m py_compile <every edited .py>` | exit 0 |
-| WP1 | `... -m pytest grocery-price-tracker\tests\test_comparator.py -q` | all pass |
-| WP2 | `... -m pytest grocery-price-tracker\tests\test_coles_recipe.py -q` | all pass |
-| WP3 | `... -m pytest grocery-price-tracker\tests\test_specials_flags.py grocery-price-tracker\tests\test_sheets_sync.py -q` | all pass |
-| WP4 | `... -m pytest grocery-price-tracker\tests\test_live_window.py grocery-price-tracker\tests\test_cli.py -q` | all pass |
-| WP5 | `... -m pytest grocery-price-tracker\tests\test_cli.py -q` | all pass |
-| Full regression | `... -m pytest grocery-price-tracker\tests -q` | **0 failed**, count ≥ 446 + new; any failure is a regression to fix |
-| No-151 grep | `rg -n "151" grocery_price_cli.py telegram_gateway\topics.py telegram_gateway\wednesday_reminder.py telegram_gateway\handlers.py` | only comments mention 151; no routing constant |
-| Local run smoke (optional, read-only) | `... grocery_price_cli.py --help` | `topics-check` listed |
+# 19.5 CLI compiles + smoke (help text lists backfill-sizes)
+$PY -m py_compile grocery_price_cli.py
+$PY grocery_price_cli.py --help
+```
 
-Acceptance (spec §7): all suites green locally with Anaconda Python; M1/M3
-succeed; first live Wednesday after cutover posts summary + resolve lists to
-`weekly-lists` and specials to `specials-wool`, nothing to 151.
+**Optional git checkpoint (ONLY if the user/pipeline requests commits —
+never commit unprompted):**
+```powershell
+git -C grocery-price-tracker add -A
+git -C grocery-price-tracker commit -m "Units always visible: unit_tag everywhere, force Col C on adds, backfill-sizes"
+```
+(Note: `grocery_price_cli.py` lives OUTSIDE this git repo — see §7 Ops.)
 
 ---
 
-## 10. Boundaries (spec §5 — hard)
+## 4. Mandatory test matrix (spec §8 → steps; zero-skip enforcement)
 
-- **Must NOT touch:** `core/lookup.py`, `core/uom.py`, `core/searched_items.py`,
-  `core/add_to_list.py`, `core/missing_items_tracker.py`,
-  `core/name_matcher.py`, `core/telegram_format.py`,
-  `core/woolworths_discounts.py`, `core/schema_upgrade.py`,
-  `extractors/woolworths_extractor.py`, `extractors/live_list_fetch.py`,
-  `extractors/models.py`, any `.docx`, `.env`,
-  `telegram_gateway/bot.py`/`commands.py`/`budget_sheets.py`/`allowlist.py`,
-  `scripts/session_heartbeat_entry.py`, docx name/price matching semantics,
-  and everything in spec §2 (regression-protect only).
-- **No new files except** `grocery-price-tracker/tests/test_specials_flags.py`
-  and `implementation-plan.md` (this doc). **No new dependencies.** No data
-  migrations. **Never post to thread 151. Never invent topic IDs.**
-- Revert guarantee: WP1/WP3/WP4 are additive or call-site-level; WP5 reverts
-  by restoring the single 151 constant pair; WP2 reverts to the previous
-  retry branch.
+| Spec §8 check | Implemented by | Test location |
+|---|---|---|
+| 1. unit_tag: real / blank / None / marker / whitespace | S1 | `test_telegram_format.py::TestUnitTag` |
+| 2. Search display: ` · 200g` / ` · ⚠️ unit unavailable` exact | S1 (helper) + S8 (surface) | TestUnitTag + TestCliUnitSurfaces |
+| 3. Title tag survives 24-cell truncation; no no-size branch in `_identity_suffix`; found-block shows `closest` size | S2, S3, S4 | TestItemBlockUnit, TestIdentitySuffixAlwaysUnit, TestReportUnitSurfaces |
+| 4. `add_product_row` rejects empty size; accepts marker | S10 | TestAddProductRowRequiredSize |
+| 5. Queue round-trip: entry JSON has `"size"`; show prints tag; legacy entry prints note | S6, S7, S11 | TestSearchedItemsSizeContract, TestAddToListSizeContract, TestAddRoutesResolveUnit |
+| 6. `update_single_price` backfills blank Col C exactly once | S12 | TestUpdateSinglePriceBackfill (3 cases) |
+| 7. Full suite green | S19.1 | — |
+
+Additional mandatory coverage beyond §8 (plan-required):
+resolver chain + fail-fast + ask-once (S9), map add pass-through
+(S13), sync heal no-marker/no-overwrite (S14), tracker size copy
+(S15), Wednesday display vs machine lines (S16), backfill-sizes
+plan/batch/idempotence (S17).
+
+**Zero-skip rule:** no `unittest.skip`, no `pytest.mark.skip`, no
+`-k` exclusions in S19.1. Every test added above MUST run and pass.
+
+---
+
+## 5. Error boundaries & edge cases (binding)
+
+1. `_resolve_add_unit` NEVER guesses: no name-parse hit and no
+   interactive answer → exact error `unit is required: pass a size or
+   the marker` (spec B1 text). Wrapper prints add the `--unit` hint.
+2. `add_product_row` with blank/whitespace `size` → returns
+   `{"wrote": False, "error": "unit is required: pass a size or the
+   marker"}` — does NOT raise (callers already handle the dict shape).
+3. Marker in Col C: accepted everywhere (writes, backfill param);
+   NEVER written by an automated parse path (sync/backfill parse only
+   real sizes — D-U3).
+4. Non-empty Col C is NEVER modified by `update_single_price`,
+   `sync_prices`, or `backfill-sizes` (Rule C.3).
+5. Queue writes stay non-fatal after a successful price write
+   (`_queue_add_to_list` / `_queue_searched_item` print errors, never
+   raise) — preserved from current behaviour.
+6. Legacy queue entries without `"size"`: `.get("size", "")` → blank →
+   ⚠️ note. No migration scripts.
+7. Wednesday txt file formats are UNCHANGED (machine-parsed by map
+   flows); only Telegram display lines gain units (P5).
+8. `unit_tag(None)` and `unit_suffix(None)` are safe (str-cast first).
+
+---
+
+## 6. File-by-file change budget
+
+| File (absolute path) | Steps | Approx. lines changed |
+|---|---|---|
+| `<ROOT>\grocery-price-tracker\core\telegram_format.py` | S1, S2 | +55 |
+| `<ROOT>\grocery-price-tracker\core\price_comparator.py` | S3, S4 | ~25 |
+| `<ROOT>\grocery-price-tracker\core\specials_reporter.py` | S5 | ~8 |
+| `<ROOT>\grocery-price-tracker\core\searched_items.py` | S6 | ~20 |
+| `<ROOT>\grocery-price-tracker\core\add_to_list.py` | S7 | ~18 |
+| `<ROOT>\grocery-price-tracker\core\sheets_sync.py` | S10, S12, S14 | ~45 |
+| `<ROOT>\grocery-price-tracker\core\missing_items_tracker.py` | S15 | ~12 |
+| `<ROOT>\grocery_price_cli.py` | S8, S9, S11, S13, S16, S17 | ~150 total (6 visits, each ≤ 50) |
+| `<ROOT>\grocery-price-tracker\tests\*` (7 files) | alongside each step | tests only |
+| `<ROOT>\grocery-price-tracker\PROJECT-MAP.md`, `README.md` | S18 | ≤ 15 each |
+
+Frozen and untouched (verified in S19.4): `core/uom.py`,
+`core/lookup.py`, `core/name_matcher.py` (import-only usage of
+`_SIZE_PATTERN`), `core/extractors/*`, `telegram_gateway/`, `app.py`,
+`local_sync.py`, sheet schema, `.env` handling.
+
+---
+
+## 7. Ops / deployment notes
+
+**Local Terminal only (all steps above).** Nothing in this cycle
+touches the VPS directly. After 03/04 complete:
+
+1. **CLI copy-to-root mismatch (spec §7 NOTE):** `deploy_vps.py:45`
+   expects `grocery_price_cli.py` inside the repo root. Before any
+   VPS deploy, the updated CLI must be copied there (deterministic,
+   Local Terminal, user-initiated deploy only):
+   ```powershell
+   Copy-Item "grocery_price_cli.py" "grocery-price-tracker\grocery_price_cli.py"
+   ```
+   This is a DEPLOY-time step, not part of S1–S18 (the working copy
+   stays at `<ROOT>` per README §9 "pending migration").
+2. **Live-sheet `backfill-sizes` run (manual, user-confirmed):**
+   mutates the real sheet; requires `.env`. Run dry-run first, review
+   the plan, then run live:
+   ```powershell
+   $PY grocery_price_cli.py backfill-sizes --dry-run
+   $PY grocery_price_cli.py backfill-sizes
+   ```
+3. **Remote VPS:** no commands this cycle. Wednesday sync/scp flows
+   pick up the new behaviour on the next local run automatically.
+
+---
+
+## 8. Risks tracked (carried from spec §9)
+
+- **R1:** `--add-item` / `map --add` one-shot runs without a resolvable
+  unit now FAIL FAST with an actionable `--unit` hint (deliberate;
+  D-U4 ask-once covers interactive sessions; Claw relays the question).
+- **R2:** size strings are display-only text; `1L` vs `1 L` drift is
+  acceptable — `parse_size` normalises where comparability matters.
+- **R3:** Col A names that embed the unit plus a Col C unit show the
+  unit twice on compare titles — accepted this cycle.
+- **R-new (this plan):** Wednesday txt formats are load-bearing for the
+  map flows — guarded by P5 and the S16 machine/display split.
+
+**Rollback:** every step is a small forward edit in one git repo +
+one sibling file; `git -C grocery-price-tracker checkout -- <path>`
+reverts repo files; the CLI is reverted from its git history only if
+it has been committed outside this cycle — otherwise keep the S-step
+edits inverted manually per the ANCHOR/NEW pairs above.

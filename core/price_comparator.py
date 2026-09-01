@@ -616,7 +616,8 @@ def _identity_suffix(item: BasketItem, store: str) -> str:
     """Build the " — <name> <size> (<source>)" identity suffix.
 
     Provenance is factual: the tag is the actual source of the price.
-    The size segment is omitted when the matched product has no size.
+    The size segment is ALWAYS present (Rule A): real size via unit_tag,
+    else "unit unavailable".
 
     Args:
         item: the BasketItem being rendered.
@@ -625,14 +626,16 @@ def _identity_suffix(item: BasketItem, store: str) -> str:
     Returns:
         str: suffix, or "" when no matched name is known for the store.
     """
+    from core.telegram_format import unit_tag
     matched_name = item.matched_names.get(store, "")
     if not matched_name:
         return ""
-    size = item.matched_sizes.get(store, "")
+    # Rule A: the size segment is ALWAYS present — real size or the
+    # explicit marker (plain text here; the ⚠️ form is reserved for
+    # the ·-separated surfaces, spec §3 / plan P2).
+    size = unit_tag(item.matched_sizes.get(store, ""))
     source = item.sources.get(store, "sheet")
-    if size:
-        return f" — {matched_name} {size} ({source})"
-    return f" — {matched_name} ({source})"
+    return f" — {matched_name} {size} ({source})"
 
 
 # Found-block store labels padded to equal width (spec §3.3 example:
@@ -651,7 +654,7 @@ def _found_block_lines(item: BasketItem) -> list[str]:
         list[str]: the ⚠️ header, one padded store line per returning
         store, and the 💬 expand hint.
     """
-    from core.telegram_format import warn
+    from core.telegram_format import unit_suffix, warn
     lines = [warn("No matching product — sizes don't compare.")]
     for store in ("woolworths", "coles"):
         found = item.closest.get(store)
@@ -659,7 +662,10 @@ def _found_block_lines(item: BasketItem) -> list[str]:
             continue
         label = _FOUND_LABELS.get(store, f"{store.capitalize()}:")
         pad = " " * max(0, _FOUND_LABEL_WIDTH - len(label))
-        lines.append(f"   {label}{pad}{found.get('name', '')}")
+        # A4: closest[store]["size"] exists — always surface it (Rule A).
+        lines.append(
+            f"   {label}{pad}{found.get('name', '')}"
+            f"{unit_suffix(found.get('size', ''))}")
     lines.append("💬 Reply 'expand' to see more results.")
     return lines
 
@@ -725,9 +731,18 @@ def format_report(report: ComparisonReport) -> str:
         for store in item.store_unavailable:
             store_lines.append(warn(
                 f"{store.capitalize()} not checked (unavailable)"))
+        # A3: title shows Woolworths' size when present, else Coles'
+        # (store lines in A2 show each store's own). Always a string →
+        # the tag (or the ⚠️ marker note) is NEVER omitted.
+        unit = (
+            item.matched_sizes.get("woolworths")
+            or item.matched_sizes.get("coles")
+            or ""
+        )
         lines.append(item_block(
             i, item.name, store_lines,
             home_brand=item.is_woolworths_home_brand,
+            unit=unit,
         ))
         lines.append("")
 

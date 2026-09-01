@@ -103,7 +103,7 @@ class TestLoadAndAdd(SearchedItemsTestCase):
         entry = data[0]
         self.assertEqual(set(entry.keys()), {
             "store", "keyword", "store_product_id", "generic_name",
-            "code", "added_at"})
+            "code", "size", "added_at"})
         self.assertEqual(entry["store"], "coles")
         self.assertEqual(entry["keyword"], "Obela Classic Hommus 200g")
         self.assertEqual(entry["store_product_id"], "123456")
@@ -326,14 +326,17 @@ class TestRenderAndOrder(SearchedItemsTestCase):
     """S-19, S-20, S-23: render + ordering + since_label."""
 
     def test_s19_render_show_format(self):
-        """S-19: 'store · name · size · [CODE]' lines; empty friendly."""
+        """S-19: 'store · name · unit tag [CODE]' lines; empty friendly."""
         self.assertEqual(self.si.render_show(), "searched_items is empty ✅")
         self.add_two()
         rendered = self.si.render_show()
-        self.assertIn("coles · Obela Classic Hommus 200g · 200g · [KAT]",
+        # B5: the RUM entry was added with no size -> it now carries the
+        # canonical marker and renders the ⚠️ note (Rule A, no omission).
+        self.assertIn("coles · Obela Classic Hommus 200g · 200g [KAT]",
                       rendered)
-        self.assertIn("woolworths · Woolworths Rum & Raisin 1L · [RUM]",
-                      rendered)
+        self.assertIn(
+            "woolworths · Woolworths Rum & Raisin 1L · ⚠️ unit "
+            "unavailable [RUM]", rendered)
 
     def test_s20_ordered_entries_coles_first(self):
         """S-20: ordered_entries = Coles section first, then Woolworths."""
@@ -379,6 +382,33 @@ class TestAtomicWrites(SearchedItemsTestCase):
             self.assertFalse(Path(path).exists())
         self.assertEqual(self.read_queue(), [])
         _ = real_replace  # silence unused warning
+
+
+class TestSearchedItemsSizeContract(SearchedItemsTestCase):
+    """B5/A8: size always stored; show always renders the tag."""
+
+    def test_add_entry_blank_size_stores_marker(self):
+        result = self.si.add_entry("coles", "Beans 400g", "Beans 400g")
+        self.assertEqual(result["entry"]["size"], "unit unavailable")
+
+    def test_add_entry_real_size_stored_trimmed(self):
+        result = self.si.add_entry(
+            "coles", "Beans 400g", "Beans 400g", size="  400g ")
+        self.assertEqual(result["entry"]["size"], "400g")
+
+    def test_show_renders_unit_and_marker(self):
+        self.seed([
+            {"store": "coles", "keyword": "Beans 400g", "code": "AAA",
+             "generic_name": "Beans 400g", "store_product_id": "",
+             "size": "400g", "added_at": "2026-08-29T02:00:00+00:00"},
+            # legacy entry: no "size" key at all
+            {"store": "woolworths", "keyword": "Milk", "code": "BBB",
+             "generic_name": "Milk", "store_product_id": "",
+             "added_at": "2026-08-29T02:00:00+00:00"},
+        ])
+        out = self.si.render_show()
+        self.assertIn(" · 400g [AAA]", out)
+        self.assertIn(" · ⚠️ unit unavailable [BBB]", out)
 
 
 if __name__ == "__main__":

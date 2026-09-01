@@ -946,14 +946,14 @@ class TestAddToListCLI(unittest.TestCase):
         """Namespace for _cmd_map_noninteractive with all action flags."""
         defaults = {"next": False, "pick": None, "add": False,
                     "skip": False, "na": False, "forget": False,
-                    "keyword": None}
+                    "keyword": None, "unit": None}
         defaults.update(overrides)
         return argparse.Namespace(**defaults)
 
-    def _fake_prod(self, raw_name, price):
+    def _fake_prod(self, raw_name, price, size=""):
         """Duck-typed live-search result covering the print path attrs."""
         return SimpleNamespace(raw_name=raw_name, price=price, brand="",
-                               is_special=False, special_desc="")
+                               is_special=False, special_desc="", size=size)
 
     def _seed_four(self, atl):
         """Seed 2 Coles + 2 Woolworths entries."""
@@ -1042,8 +1042,12 @@ class TestAddToListCLI(unittest.TestCase):
         self.assertIn("Removed: Coles Item One (Coles)", output)
         self.assertIn("Removed: Woolies Item Three (Woolworths)", output)
         self.assertIn("2 still pending:", output)
-        self.assertIn("1) Coles Item Two (Coles)", output)
-        self.assertIn("2) Woolies Item Four (Woolworths)", output)
+        # Remaining render lines carry the ⚠️ note (legacy entries).
+        self.assertIn("1) Coles Item Two · ⚠️ unit unavailable (Coles)",
+                      output)
+        self.assertIn(
+            "2) Woolies Item Four · ⚠️ unit unavailable (Woolworths)",
+            output)
         self.assertEqual(remaining, ["Coles Item Two", "Woolies Item Four"])
 
     def test_done_out_of_range_removes_nothing_exit_1(self):
@@ -1171,9 +1175,11 @@ class TestAddToListCLI(unittest.TestCase):
         self.assertEqual(code, 0)
         mock_kw.assert_not_called()
         mock_na.assert_not_called()
+        # B3: the Rule B resolved unit rides on the price write
+        # (name-parsed "500g" from "Beef Mince 500g").
         mock_update.assert_called_once_with(
             "Beef Mince 500g", "woolworths", 8.20,
-            is_special=False, special_desc="")
+            is_special=False, special_desc="", size="500g")
 
     @patch("core.sheets_sync.update_single_price")
     @patch("grocery_price_cli._search_store_with_fallback")
@@ -1186,7 +1192,7 @@ class TestAddToListCLI(unittest.TestCase):
             with self._atl_ctx(tmpdir):
                 from core import add_to_list as atl
                 mock_search.return_value = (
-                    [self._fake_prod("WW Item", 1.0)], "q")
+                    [self._fake_prod("WW Item", 1.0, size="1kg")], "q")
                 mock_update.return_value = {"found": False,
                                             "error": "product not found"}
                 args = self._map_args(add=True)
@@ -1208,7 +1214,7 @@ class TestAddToListCLI(unittest.TestCase):
             with self._atl_ctx(tmpdir):
                 from core import add_to_list as atl
                 mock_search.return_value = (
-                    [self._fake_prod("WW Item", 1.0)], "q")
+                    [self._fake_prod("WW Item", 1.0, size="1kg")], "q")
                 mock_update.side_effect = RuntimeError("sheet down")
                 args = self._map_args(add=True)
                 code, _out = self._capture_stdout(
@@ -1279,7 +1285,7 @@ class TestAddToListCLI(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             with self._atl_ctx(tmpdir):
                 mock_search.return_value = (
-                    [self._fake_prod("WW Item", 1.0)], "q")
+                    [self._fake_prod("WW Item", 1.0, size="1kg")], "q")
                 mock_update.return_value = {"found": True, "row_index": 7}
                 args = self._map_args(add=True)
                 code, output = self._capture_stdout(
@@ -1414,16 +1420,16 @@ class TestCLIPartB(unittest.TestCase):
         return patch.object(atl, "ADD_TO_LIST_PATH",
                             Path(tmpdir) / "add_to_list.json")
 
-    def _fake_prod(self, raw_name, price):
+    def _fake_prod(self, raw_name, price, size=""):
         """Duck-typed live-search result covering the print path attrs."""
         return SimpleNamespace(raw_name=raw_name, price=price, brand="",
-                               is_special=False, special_desc="")
+                               is_special=False, special_desc="", size=size)
 
     def _map_args(self, **overrides):
         """Namespace for _cmd_map_noninteractive with all action flags."""
         defaults = {"next": False, "pick": None, "add": False,
                     "skip": False, "na": False, "forget": False,
-                    "keyword": None}
+                    "keyword": None, "unit": None}
         defaults.update(overrides)
         return argparse.Namespace(**defaults)
 
@@ -1610,12 +1616,15 @@ class TestCLIPartB(unittest.TestCase):
 
     def test_cli7_add_item_prints_exact_management_phrases(self):
         """CLI-7: output carries the three exact §3.4 phrases + [CODE]."""
-        ww = [self._prod("woolworths", "WW Yogurt A", 5.0)]
+        # B1: the add route resolves the unit first — give the result a
+        # size so a non-interactive run writes instead of failing fast.
+        ww = [self._prod("woolworths", "WW Yogurt A", 5.0, size="1kg")]
         code, out, _err, _row, _queue = self._run_search(
             {"add_item": 1}, ww=ww, product="yogurt")
         self.assertEqual(code, 0)
+        # A6: the size rides on the ack line.
         self.assertIn("Queued for Wednesday: 'WW Yogurt A' "
-                      "(Woolworths) [", out)
+                      "· 1kg (Woolworths) [", out)
         self.assertRegex(out, r"\[[A-Z]{3}\]")
         self.assertRegex(out, r"💬 Reply 'remove [A-Z]{3}' if this isn't "
                               r"the right product\.")
@@ -1634,7 +1643,8 @@ class TestCLIPartB(unittest.TestCase):
 
     def test_cli9_add_item_already_queued(self):
         """CLI-9: duplicate add -> 'Already queued' line, no dup entry."""
-        ww = [self._prod("woolworths", "WW Yogurt A", 5.0)]
+        # B1: a size-bearing fixture lets the non-interactive run write.
+        ww = [self._prod("woolworths", "WW Yogurt A", 5.0, size="1kg")]
         with tempfile.TemporaryDirectory() as tmpdir:
             # Shared queue dir: the second run sees the first run's write.
             self._run_search({"add_item": 1}, ww=ww, product="yogurt",
@@ -1675,7 +1685,8 @@ class TestCLIPartB(unittest.TestCase):
                 code, out = self._capture_stdout(
                     _cmd_searched_items, self._si_args("show"))
         self.assertEqual(code, 0)
-        self.assertIn("coles · Obela Hommus 200g · 200g · [", out)
+        # A8: size segment sits right before [CODE] (no double `·`).
+        self.assertIn("coles · Obela Hommus 200g · 200g [", out)
 
     def test_cli12_remove_multi_codes(self):
         """CLI-12: remove --items 'KAT,RUM' removes both + remainder."""
@@ -1802,8 +1813,9 @@ class TestCLIPartB(unittest.TestCase):
         self.assertEqual(mock_row.call_args.kwargs["store_keyword"], "")
         self.assertEqual(len(si_data), 1)   # Queue 2 fed
         self.assertEqual(atl_data, [])      # Queue 1 untouched
+        # A6: the live item's size (200g) rides on the ack line.
         self.assertIn("Queued for Wednesday: 'Obela Hommus 200g' "
-                      "(Coles) [", out)
+                      "· 200g (Coles) [", out)
 
 
 class TestWednesdayLiveRouting(unittest.TestCase):
@@ -2366,6 +2378,292 @@ class TestWednesdayReminderRouting(unittest.TestCase):
         self.assertEqual(
             [c for c in sent if c[0] == mod.CHAT_ID], [])
         self.assertTrue(results["topic"]["skipped"])
+
+
+class TestCliUnitSurfaces(unittest.TestCase):
+    """A1/A5/A6 CLI display units."""
+
+    def test_print_queue_confirmation_with_and_without_size(self):
+        import grocery_price_cli as gpc
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            gpc._print_queue_confirmation(
+                {"store": "coles", "keyword": "Beans", "code": "KAT",
+                 "size": "400g"})
+            gpc._print_queue_confirmation(
+                {"store": "coles", "keyword": "Milk", "code": "RUM"})
+        out = buf.getvalue()
+        self.assertIn("Queued for Wednesday: 'Beans' · 400g (Coles) [KAT]",
+                      out)
+        self.assertIn(
+            "Queued for Wednesday: 'Milk' · ⚠️ unit unavailable "
+            "(Coles) [RUM]", out)
+
+
+class TestResolveAddUnit(unittest.TestCase):
+    """Rule B unit resolution chain (spec §4, D-U4, R1)."""
+
+    def test_override_then_live_size_win(self):
+        import grocery_price_cli as gpc
+        r = gpc._resolve_add_unit("Milk", "1L", override="2L")
+        self.assertEqual(r, "2L")
+        self.assertEqual(gpc._resolve_add_unit("Milk", "1L"), "1L")
+
+    def test_name_parse_falls_through(self):
+        import grocery_price_cli as gpc
+        self.assertEqual(
+            gpc._resolve_add_unit("Devondale Milk 2L", ""), "2L")
+
+    def test_noninteractive_fails_fast_with_exact_error(self):
+        import grocery_price_cli as gpc
+        with self.assertRaises(ValueError) as ctx:
+            gpc._resolve_add_unit("Milk", "", interactive=False)
+        self.assertEqual(
+            str(ctx.exception),
+            "unit is required: pass a size or the marker")
+
+    def test_interactive_ask_once_unknown_and_blank_write_marker(self):
+        import grocery_price_cli as gpc
+        replies = iter(["unknown", "  "])
+        fake_input = lambda prompt: next(replies)  # noqa: E731
+        self.assertEqual(
+            gpc._resolve_add_unit(
+                "Milk", "", interactive=True, _input=fake_input),
+            "unit unavailable")
+        self.assertEqual(
+            gpc._resolve_add_unit(
+                "Milk", "", interactive=True, _input=fake_input),
+            "unit unavailable")
+
+    def test_interactive_answer_returned_verbatim(self):
+        import grocery_price_cli as gpc
+        self.assertEqual(
+            gpc._resolve_add_unit(
+                "Milk", "", interactive=True,
+                _input=lambda prompt: "5 pack"),
+            "5 pack")
+
+
+class TestAddRoutesResolveUnit(unittest.TestCase):
+    """B1/B2: add routes resolve the unit before any write."""
+
+    def test_search_add_item_fails_fast_without_unit(self):
+        import grocery_price_cli as gpc
+        args = argparse.Namespace(add_item=1, expand=False, unit=None)
+        chosen = SimpleNamespace(
+            store="Coles", raw_name="Milk", price=3.0, brand="",
+            size="", category="", is_special=False, special_desc="",
+            product_id="")
+        with patch.object(gpc, "_load_env"):
+            rc = gpc._search_add_item(args, "milk", [chosen])
+        self.assertEqual(rc, 1)  # non-TTY under pytest -> fail fast
+
+    def test_search_add_item_uses_flag_unit(self):
+        import grocery_price_cli as gpc
+        args = argparse.Namespace(add_item=1, expand=False, unit="2L")
+        chosen = SimpleNamespace(
+            store="Coles", raw_name="Milk", price=3.0, brand="",
+            size="", category="", is_special=False, special_desc="",
+            product_id="")
+        with patch.object(gpc, "_load_env"), \
+                patch("core.sheets_sync.add_product_row") as apr, \
+                patch.object(gpc, "_queue_searched_item") as qsi:
+            apr.return_value = {"wrote": True, "row_index": 9}
+            rc = gpc._search_add_item(args, "milk", [chosen])
+        self.assertEqual(rc, 0)
+        self.assertEqual(apr.call_args.kwargs["size"], "2L")
+        self.assertEqual(qsi.call_args.kwargs["size"], "2L")
+
+
+class TestMapAddCarriesUnit(unittest.TestCase):
+    """B3: wool/coles add passes size to the row write and the queue."""
+
+    def _atl_ctx(self, tmpdir):
+        from core import add_to_list as atl
+        return patch.object(atl, "ADD_TO_LIST_PATH",
+                            Path(tmpdir) / "add_to_list.json")
+
+    def _fake_prod(self, raw_name, price, size=""):
+        return SimpleNamespace(raw_name=raw_name, price=price, brand="",
+                               is_special=False, special_desc="", size=size)
+
+    def _map_args(self, **overrides):
+        defaults = {"next": False, "pick": None, "add": False,
+                    "skip": False, "na": False, "forget": False,
+                    "keyword": None, "unit": None}
+        defaults.update(overrides)
+        return argparse.Namespace(**defaults)
+
+    def _capture_stdout(self, fn, *args, **kwargs):
+        old_stdout = sys.stdout
+        try:
+            sys.stdout = io.StringIO()
+            result = fn(*args, **kwargs)
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+        return result, output
+
+    @patch("grocery_price_cli._queue_add_to_list")
+    @patch("core.sheets_sync.update_single_price")
+    @patch("grocery_price_cli._search_store_with_fallback")
+    @patch("grocery_price_cli._load_env")
+    def test_noninteractive_add_passes_unit_to_write_and_queue(
+            self, mock_env, mock_search, mock_update, mock_qal):
+        """B3: name-parsed unit ('2L' from 'Milk 2L') reaches BOTH
+        update_single_price(size=...) and _queue_add_to_list(size=...)."""
+        from grocery_price_cli import _cmd_map_noninteractive
+        mock_search.return_value = (
+            [self._fake_prod("Milk 2L", 3.0)], "Milk 2L")
+        mock_update.return_value = {"found": True, "row_index": 5}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                args = self._map_args(add=True)
+                code, _out = self._capture_stdout(
+                    _cmd_map_noninteractive, args, "wool",
+                    ["Beef Mince"], 0, {},
+                    Path(tmpdir) / "progress.json", Path(tmpdir))
+        self.assertEqual(code, 0)
+        usp = mock_update.call_args
+        self.assertEqual(usp.kwargs["size"], "2L")  # name-parsed
+        qal = mock_qal.call_args
+        self.assertEqual(qal.kwargs["size"], "2L")
+
+
+class TestMissingTrackerCarriesSize(unittest.TestCase):
+    """B6: new queue entries copy size from sizes_by_generic."""
+
+    class FakeMatchResult:
+        def __init__(self, matched, generic_name, raw_name, store):
+            self.matched = matched
+            self.generic_name = generic_name
+            self.raw_name = raw_name
+            self.store = store
+
+    def test_new_entries_carry_size_and_blank(self):
+        from core.missing_items_tracker import update_missing_items
+        mit = sys.modules["core.missing_items_tracker"]
+
+        ww_results = [
+            self.FakeMatchResult(
+                True, "Beef Mince", "Woolworths Beef Mince 500g",
+                "woolworths"),
+        ]
+        coles_results = [
+            self.FakeMatchResult(
+                True, "Oat Milk", "Coles Oat Milk 1L", "coles"),
+        ]
+        # B6/P4: generic_name (Col A) -> source store's Col C value.
+        sizes = {"Beef Mince": "500g", "Oat Milk": ""}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ww_path = Path(tmpdir) / "ww_missing.json"
+            coles_path = Path(tmpdir) / "coles_missing.json"
+            with patch.object(mit, "WOOLWORTHS_MISSING_PATH", ww_path), \
+                 patch.object(mit, "COLES_MISSING_PATH", coles_path), \
+                 patch.dict(mit.MISSING_PATH_BY_STORE,
+                            {"woolworths": ww_path, "coles": coles_path}):
+                result = update_missing_items(
+                    ww_results, coles_results,
+                    sizes_by_generic=sizes)
+                self.assertEqual(result["woolworths_missing"], 1)
+                self.assertEqual(result["coles_missing"], 1)
+
+                ww_q = mit.get_missing_items("woolworths")
+                coles_q = mit.get_missing_items("coles")
+
+        self.assertEqual(ww_q[0]["product_name"], "Coles Oat Milk 1L")
+        self.assertEqual(ww_q[0]["size"], "")      # blank Col C copied
+        self.assertEqual(coles_q[0]["product_name"],
+                         "Woolworths Beef Mince 500g")
+        self.assertEqual(coles_q[0]["size"], "500g")  # real Col C copied
+
+
+class TestWednesdayDisplayUnits(unittest.TestCase):
+    """A9: display lines carry units; machine lines stay clean (P5)."""
+
+    def test_missing_display_line_known_and_unknown(self):
+        import grocery_price_cli as gpc
+        self.assertEqual(
+            gpc._missing_display_line("Milk", "1L"), "Milk · 1L")
+        self.assertEqual(
+            gpc._missing_display_line("Herbs", ""),
+            "Herbs · ⚠️ unit unavailable")
+
+    def test_unmatched_display_lines_use_classification_size(self):
+        import grocery_price_cli as gpc
+        pending = [{"raw_name": "Beans 400g",
+                    "store": "coles",
+                    "classification": {"brand": "", "size": "400g",
+                                       "category": ""}},
+                   {"raw_name": "Herbs",
+                    "store": "woolworths",
+                    "classification": {}}]
+        lines = gpc._unmatched_display_lines(pending)
+        self.assertEqual(lines[0], "Beans 400g [coles] · 400g")
+        self.assertEqual(lines[1],
+                         "Herbs [woolworths] · ⚠️ unit unavailable")
+
+    def test_unmatched_display_line_no_classification_key(self):
+        """Legacy entry without a classification dict -> the ⚠️ note."""
+        import grocery_price_cli as gpc
+        line = gpc._unmatched_display_line(
+            {"raw_name": "Herbs", "store": "coles"})
+        self.assertEqual(line, "Herbs [coles] · ⚠️ unit unavailable")
+
+
+class _BatchFakeWorksheet(FakeWorksheet):
+    """FakeWorksheet that records batch_update calls (S17)."""
+
+    def batch_update(self, updates):
+        self.batch_updates = updates
+
+
+class TestBackfillSizes(unittest.TestCase):
+    """C.2: fills only parseable blanks; never touches non-empty C."""
+
+    def _args(self, dry_run):
+        return argparse.Namespace(dry_run=dry_run)
+
+    def _rows(self):
+        return [
+            ["Name", "Cat", "Size", "WW", "Coles", "", "Brand", "TS",
+             "", "", "", "", "", "", "", ""],
+            ["Milk 2L", "", "", "", "", "", "", "", "", "", "", "",
+             "", "", "", ""],
+            ["Herbs", "", "", "", "", "", "", "", "", "", "", "",
+             "", "", "", ""],
+            ["Bread", "", "650g", "", "", "", "", "", "", "", "", "",
+             "", "", "", ""],
+        ]
+
+    def test_plans_only_blank_parseable_rows(self):
+        import grocery_price_cli as gpc
+        ws = _BatchFakeWorksheet(self._rows())
+        with patch("core.sheets_client.connect_worksheet",
+                   return_value=ws), \
+             patch.object(gpc, "_load_env"):
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                rc = gpc._cmd_backfill_sizes(self._args(dry_run=True))
+        self.assertEqual(rc, 0)
+        text = out.getvalue()
+        self.assertIn("Planned writes · 1", text)
+        self.assertIn("Left blank (no parseable size) · 1", text)
+        self.assertIn("Skipped (Col C already set) · 1", text)
+        self.assertFalse(hasattr(ws, "batch_updates"))  # dry run: no write
+
+    def test_live_run_batches_single_cell_ranges(self):
+        import grocery_price_cli as gpc
+        ws = _BatchFakeWorksheet(self._rows())
+        with patch("core.sheets_client.connect_worksheet",
+                   return_value=ws), \
+             patch.object(gpc, "_load_env"):
+            with contextlib.redirect_stdout(io.StringIO()):
+                rc = gpc._cmd_backfill_sizes(self._args(dry_run=False))
+        self.assertEqual(rc, 0)
+        self.assertEqual(
+            ws.batch_updates,
+            [{"range": "C2", "values": [["2L"]]}])
 
 
 if __name__ == "__main__":

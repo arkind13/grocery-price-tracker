@@ -362,7 +362,7 @@ The most complex tool. Tracks Australian supermarket prices (Woolworths, Coles, 
 | Subcommand | Args | What it does |
 |------------|------|--------------|
 | `compare` | `--items` (req) `[--mode auto\|sheet\|live]` `[--team-discount]` `[--extra-discount FLOAT]` | Basket comparison; `--mode auto` = sheet-first then live fallback. Both-live items pass the UOM 20% size gate; non-comparable items render as a found-block and are excluded from totals |
-| `search` | `--product` (req) `[--expand]` `[--add-item N]` | Pure live search (Woolworths API + Coles Scrape.do recipe); no sheet, never writes. ≤3 ranked results per store (8 with `--expand`); `--add-item N` = explicit add of the Nth result (sheet row with EMPTY keyword col + searched-items queue) |
+| `search` | `--product` (req) `[--expand]` `[--add-item N]` `[--unit UNIT]` | Pure live search (Woolworths API + Coles Scrape.do recipe); no sheet, never writes. ≤3 ranked results per store (8 with `--expand`); `--add-item N` = explicit add of the Nth result (sheet row with EMPTY keyword col + searched-items queue); `--unit` supplies the unit when the result has none |
 | `specials` | `[--store woolworths\|coles\|all]` | Active specials (sheet Mode B + Woolworths saved-list Mode A) |
 | `rewards` | `[--store ...]` | Reads rewards column (O); prints "not populated" when empty |
 | `recipe` | `--name` `--ingredients` | Wraps `compare_basket(mode="auto")` for recipe ingredients |
@@ -376,8 +376,11 @@ The most complex tool. Tracks Australian supermarket prices (Woolworths, Coles, 
 | `live-refresh` | `[--flush-only]` `[--fetch-only]` `[--recapture]` | **LOCAL WINDOWS MACHINE ONLY** (headed Chrome + AU residential IP): login once → flush both queues to the store "Price Compare" lists → fetch all list pages (30-page cap) → write snapshots. The agent never runs this. |
 | `wednesday` | `[--source docx\|live]` (default docx) `[--dry-run]` `[--no-scp]` `[--no-telegram]` | Full pipeline. `docx` = previous behaviour byte-for-byte. `live` = VPS queue pull → live window (skipped when today's snapshots exist) → snapshot completeness gate (clean stop before any sheet write) → sync from snapshots → specials from the live Special-list snapshot |
 | `backfill-keywords` | — | Backfill Col P keywords from existing data |
+| `backfill-sizes` | `[--dry-run]` | One-time Col C (size) backfill parsed from Col A/I/J names; fills only blank cells, never overwrites |
 
 > **Routing rule (critical):** `compare X in/at woolworths and coles` must always route to `compare --items "X"` (sheet-first), NEVER `search` (live-only). The `grocery-price/SKILL.md` enforces this.
+
+> **Col C contract (units always visible):** Col C is the unit column; every add path fills it (real size or the literal `unit unavailable`); blank = legacy — displays as ` · ⚠️ unit unavailable` everywhere. `search --add-item` and `map --add` accept `--unit UNIT` for one-shot runs when no unit can be resolved (interactive sessions ask once instead).
 
 > **Weekly add-to-list loop:** a wool/coles `map --add` writes the price AND queues the item on `add_to_list`. Later, on the store website, add the queued items to your shopping list, then run `add-to-list done --items "1,2,3"` to clear them — the item resurfaces in the missing list (and eventually the unmatched report) until you do, so nothing is silently dropped.
 
@@ -843,6 +846,7 @@ AI Studio (VPS):   cd /home/ubuntu/openclaw/tasks/aistudio/ai-studio && docker c
 - **Testing:** TDD where practical; test boundaries (empty, null, invalid types).
 - **Dependencies:** Pinned versions; minimize third-party deps.
 - **Plain-language map:** [`PROJECT-MAP.md`](PROJECT-MAP.md) documents every list, command, and scenario in simple language. **Update it in the same change whenever a list, command, flag, or flow changes.**
+- **Units (Col C):** the sheet's unit/size column is the single unit source. Every product mention in any output shows its unit or an explicit `unit unavailable` note; every add path fills Col C (asks the user when unknown). See `architecture-spec.md` (Units Always Visible).
 
 ---
 

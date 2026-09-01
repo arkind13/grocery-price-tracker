@@ -203,11 +203,14 @@ class TestAddToListModule(unittest.TestCase):
                 ordered = atl.ordered_entries()
                 self.assertEqual(ordered[0]["store"], "coles")
                 self.assertEqual(ordered[0]["keyword"], "Coles Second")
-                # Number 1 in the render is the Coles entry.
+                # Number 1 in the render is the Coles entry (legacy
+                # entry renders the ⚠️ unit note — Rule A).
                 render = atl.render_show()
                 one_line = [ln for ln in render.splitlines()
                             if ln.startswith("1)")]
-                self.assertEqual(one_line[0], "1) Coles Second")
+                self.assertEqual(
+                    one_line[0],
+                    "1) Coles Second · ⚠️ unit unavailable")
 
     # ========================================================================
     # parse_items_arg
@@ -250,10 +253,11 @@ class TestAddToListModule(unittest.TestCase):
                 self._seed_four(atl)
                 output = atl.render_show()
         lines = output.splitlines()
-        self.assertIn("1) Coles Item One", lines)
-        self.assertIn("2) Coles Item Two", lines)
-        self.assertIn("3) Woolies Item Three", lines)
-        self.assertIn("4) Woolies Item Four", lines)
+        # No size captured at add time -> every line shows the marker.
+        self.assertIn("1) Coles Item One · ⚠️ unit unavailable", lines)
+        self.assertIn("2) Coles Item Two · ⚠️ unit unavailable", lines)
+        self.assertIn("3) Woolies Item Three · ⚠️ unit unavailable", lines)
+        self.assertIn("4) Woolies Item Four · ⚠️ unit unavailable", lines)
         lowered = output.lower()
         self.assertLess(lowered.index("coles"), lowered.index("woolworths"))
 
@@ -276,8 +280,13 @@ class TestAddToListModule(unittest.TestCase):
         ]
         output = atl.render_remaining_flat(entries)
         lines = output.splitlines()
-        self.assertEqual(lines[0], "1) Oak Chocolate Milk 750ml (Coles)")
-        self.assertEqual(lines[1], "2) Obela Hommus 3Pk 60g (Woolworths)")
+        # Legacy entries without "size" display the ⚠️ note (Rule A).
+        self.assertEqual(
+            lines[0],
+            "1) Oak Chocolate Milk 750ml · ⚠️ unit unavailable (Coles)")
+        self.assertEqual(
+            lines[1],
+            "2) Obela Hommus 3Pk 60g · ⚠️ unit unavailable (Woolworths)")
         self.assertIn("now empty", atl.render_remaining_flat([]))
 
     # ========================================================================
@@ -323,6 +332,42 @@ class TestAddToListModule(unittest.TestCase):
         self.assertEqual(label, "28 Aug")
         raw = atl.since_label({"added_at": "not-a-timestamp"})
         self.assertEqual(raw, "not-a-timestamp")
+
+
+class TestAddToListSizeContract(unittest.TestCase):
+    """B4/A8: size param always stored; renders tag / marker note."""
+
+    def _patched(self, tmpdir):
+        from core import add_to_list as atl
+        return patch.object(
+            atl, "ADD_TO_LIST_PATH", Path(tmpdir) / "add_to_list.json")
+
+    def test_add_entry_stores_real_and_marker_size(self):
+        from core import add_to_list as atl
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._patched(tmpdir):
+                r1 = atl.add_entry("coles", "Beans 400g", "Beans",
+                                   size="400g")
+                r2 = atl.add_entry("woolworths", "Milk", "Milk")  # no size
+        self.assertEqual(r1["entry"]["size"], "400g")
+        self.assertEqual(r2["entry"]["size"], "unit unavailable")
+
+    def test_render_show_and_remaining_show_unit(self):
+        from core import add_to_list as atl
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._patched(tmpdir):
+                atl.add_entry("coles", "Beans", "Beans", size="500g")
+                # Append a legacy-style entry (no "size" key at all).
+                entries = atl.load_pending()
+                entries.append(
+                    {"store": "woolworths", "keyword": "Milk",
+                     "generic_name": "Milk",
+                     "added_at": "2026-08-28T02:00:00+00:00"})
+                atl.save_pending(entries)
+                show = atl.render_show()
+                self.assertIn(") Beans · 500g", show)
+                flat = atl.render_remaining_flat(atl.ordered_entries())
+        self.assertIn(" · ⚠️ unit unavailable", flat)
 
 
 if __name__ == "__main__":

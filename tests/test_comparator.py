@@ -1178,5 +1178,80 @@ class TestCompareAddReminder(unittest.TestCase):
         self.assertNotIn(self.REMINDER, out)
 
 
+class TestReportUnitSurfaces(unittest.TestCase):
+    """A3/A4: title tag survives truncation; found-block shows size."""
+
+    def test_found_block_shows_store_size_and_marker(self):
+        from core.price_comparator import BasketItem, _found_block_lines
+        item = BasketItem(
+            name="flour", prices={}, sources={}, closest={
+                "woolworths": {"name": "Flour Plain", "size": "1kg"},
+                "coles": {"name": "Coles Flour", "size": ""},
+            })
+        lines = _found_block_lines(item)
+        self.assertTrue(any(ln.endswith(" · 1kg") for ln in lines))
+        self.assertTrue(
+            any(" · ⚠️ unit unavailable" in ln for ln in lines))
+
+    def test_format_report_title_tag_survives_truncation(self):
+        from core.price_comparator import ComparisonReport, format_report
+        item = BasketItem(
+            name="Full Cream Milk Chocolate Organic Supreme",  # > 24 cells
+            prices={"woolworths": 3.0, "coles": 3.5},
+            sources={"woolworths": "sheet", "coles": "sheet"},
+            matched_sizes={"woolworths": "200g"},
+        )
+        out = format_report(ComparisonReport(items=[item]))
+        block_line = next(
+            ln for ln in out.split("\n") if ln.startswith("1. "))
+        self.assertTrue(block_line.endswith(" · 200g"))
+        self.assertIn("…", block_line)  # name truncated, tag never cut
+
+    def test_format_report_title_shows_marker_when_no_sizes(self):
+        from core.price_comparator import ComparisonReport, format_report
+        item = BasketItem(
+            name="Milk",
+            prices={"woolworths": 3.0, "coles": 3.5},
+            sources={"woolworths": "sheet", "coles": "sheet"},
+        )
+        out = format_report(ComparisonReport(items=[item]))
+        block_line = next(
+            ln for ln in out.split("\n") if ln.startswith("1. "))
+        self.assertTrue(block_line.endswith(" · ⚠️ unit unavailable"))
+
+
+class TestIdentitySuffixAlwaysUnit(unittest.TestCase):
+    """A2: the size segment is always present (Rule A)."""
+
+    def _item(self, sizes, names=None):
+        from core.price_comparator import BasketItem
+        return BasketItem(
+            name="milk",
+            prices={"woolworths": 3.0, "coles": 3.5},
+            sources={"woolworths": "sheet", "coles": "sheet"},
+            # `names={}` must mean "no matched names" — an `or` default
+            # would silently replace the empty dict (it is falsy).
+            matched_names=names if names is not None else {
+                "woolworths": "Milk 1L", "coles": "Milk 1L"},
+            matched_sizes=sizes,
+        )
+
+    def test_size_present_when_known(self):
+        from core.price_comparator import _identity_suffix
+        suffix = _identity_suffix(self._item({"woolworths": "1L"}),
+                                  "woolworths")
+        self.assertEqual(suffix, " — Milk 1L 1L (sheet)")
+
+    def test_marker_present_when_missing(self):
+        from core.price_comparator import _identity_suffix
+        suffix = _identity_suffix(self._item({}), "woolworths")
+        self.assertEqual(suffix, " — Milk 1L unit unavailable (sheet)")
+
+    def test_empty_when_no_matched_name(self):
+        from core.price_comparator import _identity_suffix
+        suffix = _identity_suffix(self._item({}, names={}), "woolworths")
+        self.assertEqual(suffix, "")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -32,7 +32,7 @@ GOOGLE SHEET "Products_Master": one row per product, prices per store
 - **Telegram** — where you chat. Claw translates your words into CLI commands.
 - **VPS** — the server that runs the CLI for day-to-day questions (compare, search, specials, map).
 - **Local Windows PC** — the only place the Wednesday run and the browser login window happen.
-- **Google Sheet** — the memory. Columns: A = product name, D/E/F = prices (Woolworths/Coles/Aldi), G = brand, H = updated, I/J/K = store keywords (how the system recognises a product on each store's list), M/N/O = specials/rewards, P = aliases (other names you might type).
+- **Google Sheet** — the memory. Columns: A = product name, C = unit/size (e.g. `1L`, `250g`, `5 pack` — every product mention shows this, or says `unit unavailable` when unknown), D/E/F = prices (Woolworths/Coles/Aldi), G = brand, H = updated, I/J/K = store keywords (how the system recognises a product on each store's list), M/N/O = specials/rewards, P = aliases (other names you might type).
 
 ---
 
@@ -110,6 +110,15 @@ the same commands for you):
 | `live-refresh [--flush-only] [--fetch-only] [--recapture]` | LOCAL ONLY. The browser window: login, push queued items onto the store website lists, read all list pages into snapshots. `--recapture` redoes the one-time "training". |
 | `wednesday [--source docx|live]` | The full Wednesday pipeline (see §6). Default `docx` = the old paste-from-Word flow. `live` = the new website-list flow. |
 | `backfill-keywords` | Fill the alias column (P) from existing data. |
+| `backfill-sizes` | Fill empty unit cells (C) by parsing sizes out of product names. Never overwrites a filled cell; unparseable cells stay blank and show "unit unavailable" in answers. |
+
+**Unit rule (everywhere):** any time a product is mentioned — search,
+compare, recipe, specials, the queues, the Wednesday lists — its unit
+(column C) is shown next to it (` · 1L`). If the unit is unknown, you get
+a clear note (` · ⚠️ unit unavailable`) instead of silence. Every path that
+adds a product (search `add item N`, map unmatched/wool/coles, to-do list,
+searched list) must fill column C first; it asks you for the unit if it
+can't find one, and writes `unit unavailable` if you reply "unknown".
 
 ---
 

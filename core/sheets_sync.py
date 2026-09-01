@@ -26,7 +26,7 @@ if str(_PROJECT) not in sys.path:
 from gspread.exceptions import APIError
 
 from core.sheets_client import connect_worksheet
-from core.name_matcher import KeywordIndex  # for _normalize reuse
+from core.name_matcher import KeywordIndex, _SIZE_PATTERN  # _normalize reuse + size parse
 
 # ============================================================================
 # Section A: Column map + constants
@@ -34,6 +34,7 @@ from core.name_matcher import KeywordIndex  # for _normalize reuse
 
 # 0-based indices into Products_Master row (positional, locked)
 PRICE_COL = {"woolworths": 3, "coles": 4}   # D, E
+SIZE_COL = 2                                             # C (unit column)
 LAST_UPDATED_COL = 7                                     # H
 ALDI_REFRESH_COL = 11                                    # L (legacy; untouched)
 
@@ -230,6 +231,22 @@ def sync_prices(
         row = rows[list_idx]
         row[PRICE_COL[result.store]] = item.price
 
+        # Rule B/C.1: heal a blank Col C in the same batch write —
+        # live item size first, then parse from the item's raw name.
+        # NEVER writes the marker; a non-empty Col C is untouched
+        # (D-U3 / spec §5.3). Rows are pre-padded to width >= 8, so
+        # Col C (index 2) is always inside the written range.
+        col_c = (str(row[SIZE_COL]).strip()
+                 if len(row) > SIZE_COL else "")
+        if not col_c:
+            live_size = str(getattr(item, "size", "") or "").strip()
+            if not live_size:
+                m = _SIZE_PATTERN.search(
+                    str(getattr(item, "raw_name", "") or ""))
+                live_size = m.group(1).strip() if m else ""
+            if live_size:
+                row[SIZE_COL] = live_size
+
         if result.store in specials_col:
             # D25: M/N hold exactly one of no/discount/multi-buy; "no"
             # overwrites stale free text on every matched row. Unmatched
@@ -310,6 +327,7 @@ def update_single_price(
     dry_run: bool = False,
     is_special: Optional[bool] = None,
     special_desc: str = "",
+    size: str = "",
     worksheet=None,
 ) -> dict:
     """Update ONE price cell by generic name (Col A) or store keyword (Col I/J/K).
@@ -324,6 +342,8 @@ def update_single_price(
         is_special: None = leave the specials cell untouched (P3a);
             True/False = write classify_special(...) to M/N (D25).
         special_desc: the live item's specials text (default "").
+        size: Rule B resolved unit — written to a BLANK Col C in the same
+            row write; a non-empty Col C is never modified (spec §5.3).
         worksheet: optional pre-connected worksheet.
 
     Returns:
@@ -448,12 +468,25 @@ def update_single_price(
     specials_col = _find_col(
         header, SPECIALS_HEADER_BY_STORE.get(store_lower, ""))
     write_specials = is_special is not None and specials_col is not None
-    target_width = max(price_col + 1, LAST_UPDATED_COL + 1)
+    target_width = max(price_col + 1, LAST_UPDATED_COL + 1, SIZE_COL + 1)
     if write_specials:
         # Widen past M/N so the flag cell is inside the written range.
         target_width = max(target_width, specials_col + 1)
     while len(full_row) < target_width:
         full_row.append("")
+    # Rule B/C.1: fill a BLANK Col C in the same row write (atomic,
+    # no extra API call). Explicit size (marker allowed) wins;
+    # otherwise parse from the matched name. Non-empty Col C is
+    # NEVER modified (spec §5.3). Parse-based writes are real sizes
+    # only — no marker is ever guessed here (D-U3).
+    size_clean = str(size or "").strip()
+    if not size_clean:
+        m = _SIZE_PATTERN.search(product_name or "")
+        size_clean = m.group(1).strip() if m else ""
+    col_c = (str(full_row[SIZE_COL]).strip()
+             if len(full_row) > SIZE_COL else "")
+    if size_clean and not col_c:
+        full_row[SIZE_COL] = size_clean
     full_row[price_col] = price
     full_row[LAST_UPDATED_COL] = ts
     if write_specials:
@@ -681,7 +714,7 @@ def add_product_row(
     price: float,
     *,
     brand: str = "",
-    size: str = "",
+    size: str,
     category: str = "",
     store_keyword: str = "",
     alias: str = "",
@@ -703,7 +736,8 @@ def add_product_row(
         store: "woolworths"|"coles" — which price column to fill.
         price: numeric price (must be > 0).
         brand: brand string for Col G (default "").
-        size: size string for Col C (default "").
+        size: REQUIRED Col C value — a real size ("1L") or the
+            canonical marker "unit unavailable" (Rule B, spec B1).
         category: category string for Col B (default "").
         store_keyword: the store's exact product name for Col I/J
             (default "" — leave the keyword cell empty).
@@ -735,6 +769,12 @@ def add_product_row(
             "wrote": False, "row_index": None, "range_written": "",
             "error": "price must be > 0",
         }
+    size_clean = str(size or "").strip()
+    if not size_clean:
+        return {
+            "wrote": False, "row_index": None, "range_written": "",
+            "error": "unit is required: pass a size or the marker",
+        }
 
     # --- connect & read ---
     if worksheet is None:
@@ -764,8 +804,7 @@ def add_product_row(
     new_row[0] = generic_name.strip()             # Col A
     if category:
         new_row[1] = category                      # Col B
-    if size:
-        new_row[2] = size                          # Col C
+    new_row[SIZE_COL] = size_clean                 # Col C (always set)
     new_row[price_col] = price                     # Col D/E
     # Home-brand rows are classified ONCE at insert time: the literal
     # "Home" marker replaces the raw brand so every later discount calc

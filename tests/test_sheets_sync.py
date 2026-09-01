@@ -83,6 +83,10 @@ class FakeWorksheet:
                     self._values[r].append("")
                 self._values[r][c] = val
 
+    def batch_update(self, updates):
+        """Record a batch_update call (list of {range, values} dicts)."""
+        self.batch_updates = updates
+
     def add_cols(self, n):
         self.added_cols += n
         for r in self._values:
@@ -724,6 +728,7 @@ class TestSheetsSync(unittest.TestCase):
             store="woolworths",
             price=6.20,
             brand="Macro Wholefoods Market",
+            size="1kg",
             worksheet=ws,
         )
         self.assertTrue(result["wrote"])
@@ -746,6 +751,7 @@ class TestSheetsSync(unittest.TestCase):
             store="woolworths",
             price=3.10,
             brand="",
+            size="2L",
             worksheet=ws,
         )
         self.assertTrue(result["wrote"])
@@ -768,7 +774,7 @@ class TestSheetsSync(unittest.TestCase):
 
         result = add_product_row(
             generic_name="New Item", store="coles", price=5.00,
-            dry_run=True, worksheet=ws,
+            size="500g", dry_run=True, worksheet=ws,
         )
         self.assertFalse(result["wrote"])
         self.assertEqual(result["row_index"], 3)  # would be row 3
@@ -780,18 +786,20 @@ class TestSheetsSync(unittest.TestCase):
     def test_add_product_row_validation_failures(self):
         ws = FakeWorksheet([["H1"]])
 
-        # Unknown store
-        r1 = add_product_row("Milk", "iga", 4.00, worksheet=ws)
+        # Unknown store (B1: size arg now REQUIRED at call sites)
+        r1 = add_product_row("Milk", "iga", 4.00, size="1L", worksheet=ws)
         self.assertFalse(r1["wrote"])
         self.assertIn("unknown store", r1["error"])
 
         # Empty name
-        r2 = add_product_row("", "woolworths", 4.00, worksheet=ws)
+        r2 = add_product_row("", "woolworths", 4.00, size="1L",
+                             worksheet=ws)
         self.assertFalse(r2["wrote"])
         self.assertIn("generic_name", r2["error"])
 
         # Price <= 0
-        r3 = add_product_row("Milk", "woolworths", 0, worksheet=ws)
+        r3 = add_product_row("Milk", "woolworths", 0, size="1L",
+                             worksheet=ws)
         self.assertFalse(r3["wrote"])
         self.assertIn("price", r3["error"])
 
@@ -918,7 +926,7 @@ class TestSpecialsFlagWrites(unittest.TestCase):
     def test_add_product_row_default_writes_no(self):
         ws = FakeWorksheet([self.HEADER])
         res = add_product_row(
-            "New Milk", "woolworths", 2.50, worksheet=ws)
+            "New Milk", "woolworths", 2.50, size="1L", worksheet=ws)
         self.assertTrue(res["wrote"])
         updated = ws.get_all_values()
         self.assertEqual(updated[1][12], "no")          # M
@@ -926,7 +934,7 @@ class TestSpecialsFlagWrites(unittest.TestCase):
     def test_add_product_row_special_writes_discount(self):
         ws = FakeWorksheet([self.HEADER])
         res = add_product_row(
-            "New Bread", "coles", 2.00, worksheet=ws,
+            "New Bread", "coles", 2.00, size="650g", worksheet=ws,
             is_special=True, special_desc="Was $2.00")
         self.assertTrue(res["wrote"])
         updated = ws.get_all_values()
@@ -936,7 +944,7 @@ class TestSpecialsFlagWrites(unittest.TestCase):
         header = self.HEADER[:12]
         ws = FakeWorksheet([header])
         res = add_product_row(
-            "New Eggs", "woolworths", 4.00, worksheet=ws,
+            "New Eggs", "woolworths", 4.00, size="700g", worksheet=ws,
             is_special=True, special_desc="Was $5.00")
         self.assertTrue(res["wrote"])
         updated = ws.get_all_values()
@@ -976,6 +984,152 @@ class TestSpecialsFlagWrites(unittest.TestCase):
         self.assertTrue(res["wrote"])
         updated = ws.get_all_values()
         self.assertEqual(updated[1][13], "multi-buy")
+
+
+class TestAddProductRowRequiredSize(unittest.TestCase):
+    """B1: empty size is rejected; marker is accepted (fail-fast)."""
+
+    HEADER = [
+        "Product_Name", "Category", "Size", "Woolworths_Price",
+        "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+        "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+        "Search_Keyword_Aldi", "Aldi_Refresh",
+        "Woolworths_Specials", "Coles_Specials", "Rewards_Points",
+    ]
+
+    def test_blank_size_rejected_with_exact_error(self):
+        from core.sheets_sync import add_product_row
+        ws = FakeWorksheet([self.HEADER])
+        res = add_product_row("Milk", "coles", 3.0, size="   ",
+                              worksheet=ws)
+        self.assertFalse(res["wrote"])
+        self.assertEqual(
+            res["error"], "unit is required: pass a size or the marker")
+        self.assertEqual(len(ws.updates), 0)  # nothing written
+
+    def test_marker_accepted_and_written_to_col_c(self):
+        from core.sheets_sync import add_product_row
+        ws = FakeWorksheet([self.HEADER])
+        res = add_product_row("Milk", "coles", 3.0,
+                              size="unit unavailable", worksheet=ws)
+        self.assertTrue(res["wrote"])
+        written = ws.updates[0][0][0]
+        self.assertEqual(written[2], "unit unavailable")
+
+    def test_real_size_written_to_col_c(self):
+        from core.sheets_sync import add_product_row
+        ws = FakeWorksheet([self.HEADER])
+        res = add_product_row("Milk", "coles", 3.0, size="1L",
+                              worksheet=ws)
+        self.assertTrue(res["wrote"])
+        written = ws.updates[0][0][0]
+        self.assertEqual(written[2], "1L")
+
+
+class TestUpdateSinglePriceBackfill(unittest.TestCase):
+    """C.1: blank Col C healed in the same write; never overwritten."""
+
+    def test_blank_col_c_backfilled_once_from_explicit_size(self):
+        ws = FakeWorksheet([
+            ["Name", "Cat", "Size", "WW", "Coles", "", "Brand", "TS"],
+            ["Milk", "", "", "", "", "", "", ""],
+        ])
+        from core.sheets_sync import update_single_price
+        res = update_single_price("Milk", "coles", 3.0,
+                                  size="1L", worksheet=ws)
+        self.assertTrue(res["wrote"])
+        row = ws.updates[0][0][0]
+        self.assertEqual(row[2], "1L")
+
+    def test_second_run_writes_nothing_new_to_col_c(self):
+        ws = FakeWorksheet([
+            ["Name", "Cat", "Size", "WW", "Coles", "", "Brand", "TS"],
+            ["Milk", "", "1L", "", "", "", "", ""],
+        ])
+        from core.sheets_sync import update_single_price
+        update_single_price("Milk", "coles", 3.5,
+                            size="unit unavailable", worksheet=ws)
+        row = ws.updates[0][0][0]
+        self.assertEqual(row[2], "1L")  # non-empty Col C untouched
+
+    def test_name_parse_backfills_when_no_size_param(self):
+        ws = FakeWorksheet([
+            ["Name", "Cat", "Size", "WW", "Coles", "", "Brand", "TS"],
+            ["Milk 2L", "", "", "", "", "", "", ""],
+        ])
+        from core.sheets_sync import update_single_price
+        update_single_price("Milk 2L", "coles", 3.0, worksheet=ws)
+        self.assertEqual(ws.updates[0][0][0][2], "2L")
+
+
+class TestSyncPricesColCHeal(unittest.TestCase):
+    """B7/C.1: sync heals blank Col C; never overwrites, no marker."""
+
+    HEADER = [
+        "Product_Name", "Category", "Size", "Woolworths_Price",
+        "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+        "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+        "Search_Keyword_Aldi", "Aldi_Refresh",
+        "Woolworths_Specials", "Coles_Specials", "Rewards_Points",
+    ]
+
+    def _run(self, ws, item, result):
+        from core.sheets_sync import sync_prices
+        return sync_prices([result], [item], worksheet=ws)
+
+    def test_blank_col_c_healed_from_item_size(self):
+        ws = FakeWorksheet([
+            self.HEADER,
+            ["Milk", "", "", "", "", "", "", "", "", "", "", "",
+             "", "", ""],
+        ])
+        result = MatchResult(True, 2, "Milk", "coles",
+                             "Coles Milk 600g", "exact_keyword")
+        item = ProductItem("coles", "Coles Milk 600g", 3.0, size="600g")
+        self._run(ws, item, result)
+        row = ws.updates[0][0][0]
+        self.assertEqual(row[2], "600g")
+
+    def test_blank_col_c_healed_from_raw_name_parse(self):
+        ws = FakeWorksheet([
+            self.HEADER,
+            ["Bread", "", "", "", "", "", "", "", "", "", "", "",
+             "", "", ""],
+        ])
+        result = MatchResult(True, 2, "Bread", "coles",
+                             "Coles Bread 650g", "exact_keyword")
+        item = ProductItem("coles", "Coles Bread 650g", 2.5)
+        self._run(ws, item, result)
+        row = ws.updates[0][0][0]
+        self.assertEqual(row[2], "650g")
+
+    def test_nonempty_col_c_untouched_and_no_marker_written(self):
+        # Case 1: item size "2L" must NOT overwrite Col C "1L".
+        ws = FakeWorksheet([
+            self.HEADER,
+            ["Milk", "", "1L", "", "", "", "", "", "", "", "", "",
+             "", "", ""],
+        ])
+        result = MatchResult(True, 2, "Milk", "coles",
+                             "Coles Milk 2L", "exact_keyword")
+        item = ProductItem("coles", "Coles Milk 2L", 3.0, size="2L")
+        self._run(ws, item, result)
+        row = ws.updates[0][0][0]
+        self.assertEqual(row[2], "1L")
+
+        # Case 2: unparseable item (no size, no size in raw_name) ->
+        # Col C stays "" (no marker ever guessed, D-U3).
+        ws2 = FakeWorksheet([
+            self.HEADER,
+            ["Herbs", "", "", "", "", "", "", "", "", "", "", "",
+             "", "", ""],
+        ])
+        result2 = MatchResult(True, 2, "Herbs", "coles",
+                              "Coles Herbs", "exact_keyword")
+        item2 = ProductItem("coles", "Coles Herbs", 2.0)
+        self._run(ws2, item2, result2)
+        row2 = ws2.updates[0][0][0]
+        self.assertEqual(row2[2], "")
 
 
 if __name__ == "__main__":

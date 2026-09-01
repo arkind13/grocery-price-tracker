@@ -179,5 +179,46 @@ class TestReporterVocabulary(unittest.TestCase):
         self.assertEqual(result[0]["special_desc"], "50% off")
 
 
+class TestSpecialsUnitTags(unittest.TestCase):
+    """A7: specials lines always carry the unit tag (Rule A)."""
+
+    HEADER = ["Product_Name", "Category", "Size", "Woolworths_Price",
+              "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+              "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+              "Search_Keyword_Aldi", "Aldi_Refresh",
+              "Woolworths_Specials", "Coles_Specials", "Rewards_Points"]
+
+    def test_format_specials_report_appends_unit_and_marker(self):
+        from core.specials_reporter import format_specials_report
+        out = format_specials_report([
+            {"name": "Oat Milk", "store": "coles", "price": 2.0,
+             "special_desc": "was $3", "brand": "", "size": "1L"},
+            {"name": "Bread", "store": "coles", "price": 1.0,
+             "special_desc": "", "brand": "", "size": ""},
+        ])
+        self.assertIn("1. Oat Milk · 1L", out)
+        self.assertIn("2. Bread · ⚠️ unit unavailable", out)
+
+    def test_get_active_specials_carries_col_c_size(self):
+        ws = FakeWorksheet([
+            self.HEADER,
+            # Col C (index 2) holds the size for the first product,
+            # "" for the second (legacy blank -> displays the note).
+            ["Oat Milk", "", "1L", "$3.00", "", "", "", "",
+             "", "", "", "", "Half Price", "", ""],
+            ["Bread", "", "", "", "$2.00", "", "", "",
+             "", "", "", "", "", "Special", ""],
+        ])
+        rows = get_active_specials(worksheet=ws)
+        self.assertTrue(rows)
+        by_name = {r["name"]: r for r in rows}
+        self.assertEqual(by_name["Oat Milk"]["size"], "1L")
+        self.assertEqual(by_name["Bread"]["size"], "")
+        from core.specials_reporter import format_specials_report
+        rendered = format_specials_report(rows)
+        self.assertIn("⚠️ unit unavailable", rendered)
+        self.assertIn("Oat Milk · 1L", rendered)
+
+
 if __name__ == "__main__":
     unittest.main()

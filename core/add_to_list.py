@@ -10,8 +10,12 @@ done).
 
 Entry shape (JSON list, insertion order preserved):
     {"store": "woolworths", "keyword": "Woolworths Beef Mince 500g",
-     "generic_name": "Woolworths Beef Mince 500g",
+     "generic_name": "Woolworths Beef Mince 500g", "size": "500g",
      "added_at": "2026-08-28T02:00:00.000000+00:00"}
+
+Every NEW entry carries "size" (real value or the "unit
+unavailable" marker, Rule B); legacy entries without the key read
+as blank and display the note (Rule A).
 
 Dup key: store + normalized Col A generic_name (live-search names drift;
 Col A is stable). Atomic writes mirror missing_items_tracker._write_queue
@@ -27,7 +31,9 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from core.telegram_format import header, subheader
+from core.telegram_format import (
+    UNIT_UNAVAILABLE, header, subheader, unit_suffix,
+)
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 ADD_TO_LIST_PATH = DATA_DIR / "add_to_list.json"     # module-level, patchable
@@ -137,7 +143,8 @@ def is_pending(store: str, generic_name: str) -> dict | None:
     return None
 
 
-def add_entry(store: str, keyword: str, generic_name: str) -> dict:
+def add_entry(store: str, keyword: str, generic_name: str,
+              size: str = "") -> dict:
     """Queue one item (dup-guarded on store + normalized generic name).
 
     Args:
@@ -145,6 +152,7 @@ def add_entry(store: str, keyword: str, generic_name: str) -> dict:
         keyword (str): the live-search result-0 exact store product name
             (what the user must find on the store website).
         generic_name (str): the Col A generic name (stable dup key).
+        size (str): package size (real value or marker; "" → marker).
 
     Returns:
         dict: {"added": True, "entry": <new entry>} when appended;
@@ -175,6 +183,8 @@ def add_entry(store: str, keyword: str, generic_name: str) -> dict:
         "store": store_key,
         "keyword": kw,
         "generic_name": gn,
+        # B4: always present; blank normalises to the marker (P6).
+        "size": str(size or "").strip() or UNIT_UNAVAILABLE,
         "added_at": datetime.now(timezone.utc).isoformat(),
     }
     entries = load_pending()
@@ -294,7 +304,9 @@ def render_show() -> str:
         blocks.append(subheader(store.capitalize()))
         for entry in store_entries:
             counter += 1
-            blocks.append(f"{counter}) {entry.get('keyword', '')}")
+            blocks.append(
+                f"{counter}) {entry.get('keyword', '')}"
+                f"{unit_suffix(entry.get('size', ''))}")
     return "\n".join(blocks)
 
 
@@ -314,7 +326,9 @@ def render_remaining_flat(entries: list[dict], start: int = 1) -> str:
     lines = []
     for i, entry in enumerate(entries, start):
         store = str(entry.get("store", "")).strip().capitalize()
-        lines.append(f"{i}) {entry.get('keyword', '')} ({store})")
+        lines.append(
+            f"{i}) {entry.get('keyword', '')}"
+            f"{unit_suffix(entry.get('size', ''))} ({store})")
     return "\n".join(lines)
 
 

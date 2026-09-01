@@ -122,6 +122,7 @@ def get_active_specials(store=None, worksheet=None) -> list:
                 "price": price,
                 "brand": brand,
                 "row_index": sheet_row,
+                "size": str(row[2]).strip() if len(row) > 2 else "",
             })
 
     return results
@@ -236,7 +237,7 @@ def format_specials_report(specials: list, store=None) -> str:
     if not specials:
         return "No active specials."
 
-    from core.telegram_format import header
+    from core.telegram_format import header, unit_suffix
     from core.woolworths_discounts import (
         format_discounted_price,
         is_woolworths_home_brand,
@@ -262,7 +263,8 @@ def format_specials_report(specials: list, store=None) -> str:
         desc = (s.get("special_desc") or "").strip()
         if desc:
             price_line += f"  ·  {desc}"
-        lines.append(f"{i}. {s['name']}")
+        # A7 (Rule A): every item line carries the unit tag.
+        lines.append(f"{i}. {s['name']}{unit_suffix(s.get('size', ''))}")
         lines.append(price_line)
 
     if len(specials) > 25:

@@ -87,6 +87,8 @@ def _write_queue(path: Path, entries: list[dict]) -> None:
 def update_missing_items(
     woolworths_results: list,
     coles_results: list,
+    *,
+    sizes_by_generic: dict | None = None,
 ) -> dict:
     """Diff matched generic-name sets across stores; upsert both queues.
 
@@ -99,6 +101,11 @@ def update_missing_items(
     Why generic-name, not raw-name: the same product is listed under different
     store-specific names. Comparing raw names would produce false "missing".
     Generic names (Col A) are the canonical cross-store key.
+
+    sizes_by_generic (dict | None): optional map of generic_name (Col A)
+    -> Col C size, built from the source store's sheet rows. New entries
+    copy it into "size" (may be ""). Plan P4 — MatchResult itself has no
+    size field and name_matcher is frozen.
 
     Idempotent upsert per normalized_key: existing entries increment count
     and bump last_seen; brand-new entries get count=1.
@@ -150,6 +157,10 @@ def update_missing_items(
                 "product_name": rn,
                 "normalized_key": key,
                 "source_store": "coles",
+                # B6: copy the source store's Col C size ("" reads as
+                # the note downstream — spec §2).
+                "size": str(
+                    (sizes_by_generic or {}).get(gn, "")).strip(),
                 "first_seen": now,
                 "last_seen": now,
                 "count": 1,
@@ -176,6 +187,10 @@ def update_missing_items(
                 "product_name": rn,
                 "normalized_key": key,
                 "source_store": "woolworths",
+                # B6: copy the source store's Col C size ("" reads as
+                # the note downstream — spec §2).
+                "size": str(
+                    (sizes_by_generic or {}).get(gn, "")).strip(),
                 "first_seen": now,
                 "last_seen": now,
                 "count": 1,

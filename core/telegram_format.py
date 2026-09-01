@@ -183,6 +183,47 @@ def kv(label: str, value: str) -> str:
     return f"{label} {SEP} {value}"
 
 
+# Canonical Col C marker for "unit assessed, unknown" (architecture-spec
+# §2 — the user's own words, exact lowercase phrase). Blank Col C means
+# "legacy, not yet assessed"; both DISPLAY identically via unit_tag().
+UNIT_UNAVAILABLE = "unit unavailable"
+
+
+def unit_tag(size: str | None) -> str:
+    """Return the display text for a package size (Rule A, spec §2).
+
+    Args:
+        size: raw size string (Col C value, live listing size, or a
+            queue entry's "size" key). None-safe.
+
+    Returns:
+        str: the trimmed size when one is known; else the canonical
+        marker "unit unavailable". Blank, whitespace-only, and the
+        marker itself (any case) all map to the marker.
+    """
+    text = str(size or "").strip()
+    if not text or text.lower() == UNIT_UNAVAILABLE:
+        return UNIT_UNAVAILABLE
+    return text
+
+
+def unit_suffix(size: str | None) -> str:
+    """Return the inline unit segment for a product-mention line.
+
+    Single composition over unit_tag (DRY — one source for the marker).
+
+    Args:
+        size: raw size string (None-safe).
+
+    Returns:
+        str: " · 1L" for a known size; " · ⚠️ unit unavailable" for an
+        unknown one (spec §3 formatting rule — silent omission banned).
+    """
+    if unit_tag(size) == UNIT_UNAVAILABLE:
+        return f" {SEP} ⚠️ {UNIT_UNAVAILABLE}"
+    return f" {SEP} {unit_tag(size)}"
+
+
 def money(n) -> str:
     """Format a dollar amount for display.
 
@@ -293,6 +334,7 @@ def item_block(
     name: str,
     prices: list[str],
     home_brand: bool = False,
+    unit: str | None = None,
 ) -> str:
     """Build one numbered list-style item with indented store lines.
 
@@ -301,15 +343,21 @@ def item_block(
         name: product name (truncated to MAX_NAME_WIDTH cells).
         prices: pre-rendered store_line() strings, one per store.
         home_brand: append the 🏠 Woolworths home-brand marker.
+        unit: package size for the unit tag (Rule A, spec A3/D-U2).
+            None = caller manages units elsewhere (NO segment appended);
+            any string — including "" — appends unit_suffix(unit) AFTER
+            truncation so the tag is never cut off.
 
     Returns:
         str: multi-line block, e.g.
-        "2. Full Cream Milk 2L  🏠\\n   🟢 Woolworths  $3.32".
+        "2. Full Cream Milk 2L  🏠 · 1L\\n   🟢 Woolworths  $3.32".
     """
     title = truncate(str(name or ""), MAX_NAME_WIDTH)
     first = f"{index}. {title}"
     if home_brand:
         first += "  🏠"
+    if unit is not None:
+        first += unit_suffix(unit)
     lines = [first]
     for price_line in prices:
         lines.append(f"   {price_line}")

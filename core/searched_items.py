@@ -23,7 +23,9 @@ Entry shape (JSON list, insertion order preserved):
      Hommus 200g", "code": "KAT",
      "added_at": "2026-08-29T02:00:00.000000+00:00"}
 
-The "size" key is present only when a size was captured at add time.
+Every NEW entry carries "size" (real value or the "unit unavailable"
+marker); legacy entries without the key read as blank and display the
+note (Rule A/B).
 
 Structure mirrors core/add_to_list.py (atomic writes RAISE on failure;
 missing/corrupt file reads as empty; dup guard on store + normalised
@@ -38,7 +40,9 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from core.telegram_format import header, subheader
+from core.telegram_format import (
+    UNIT_UNAVAILABLE, header, subheader, unit_suffix,
+)
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 SEARCHED_ITEMS_PATH = DATA_DIR / "searched_items.json"   # patchable
@@ -304,7 +308,7 @@ def add_entry(
         store_product_id (str): store product id captured at search time
             ("" when the payload lacked one).
         size (str): package size string captured at add time ("" when
-            unknown; stored only when non-empty).
+            unknown; blank normalises to the canonical marker).
 
     Returns:
         dict: {"added": True, "entry": <new entry>} when appended;
@@ -339,9 +343,10 @@ def add_entry(
         "code": generate_code(),
         "added_at": datetime.now(timezone.utc).isoformat(),
     }
-    size_clean = str(size or "").strip()
-    if size_clean:
-        entry["size"] = size_clean
+    # B5: every NEW entry carries "size" — blank normalises to the
+    # canonical marker (add paths resolve beforehand; this is the
+    # last-resort backstop, plan P6).
+    entry["size"] = str(size or "").strip() or UNIT_UNAVAILABLE
     entries = load_pending()
     entries.append(entry)
     save_pending(entries)
@@ -516,8 +521,8 @@ def render_show() -> str:
     Empty queue -> one friendly line. Otherwise a style-kit block:
     main header with pending count, then one subheader per NON-EMPTY
     store section (Coles first, then Woolworths). Each entry line is
-    "store · exact product name · size · [CODE]" (size segment omitted
-    when not captured).
+    "store · exact product name · unit tag · [CODE]" (the tag is a real
+    size or the ⚠️ marker note — never omitted, Rule A).
 
     Returns:
         str: multi-line render (print-ready).
@@ -532,12 +537,12 @@ def render_show() -> str:
             continue
         blocks.append(subheader(store.capitalize()))
         for entry in store_entries:
-            segments = [store, entry.get("keyword", "")]
-            size = entry.get("size", "")
-            if size:
-                segments.append(size)
-            segments.append(f"[{entry.get('code', '')}]")
-            blocks.append(" · ".join(segments))
+            # A8 (Rule A): unit segment ALWAYS present; legacy entries
+            # without a "size" key read as blank -> the ⚠️ note.
+            blocks.append(
+                " · ".join([store, entry.get("keyword", "")])
+                + unit_suffix(entry.get("size", ""))
+                + f" [{entry.get('code', '')}]")
     return "\n".join(blocks)
 
 

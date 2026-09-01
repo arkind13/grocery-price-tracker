@@ -49,6 +49,50 @@ class TestHeaderAndDividers(unittest.TestCase):
         self.assertEqual(tf.divider("=", 4), "====")
 
 
+class TestUnitTag(unittest.TestCase):
+    """unit_tag / unit_suffix — the Rule A data contract (spec §2)."""
+
+    def test_unit_tag_real_sizes_pass_through_trimmed(self):
+        self.assertEqual(tf.unit_tag("1L"), "1L")
+        self.assertEqual(tf.unit_tag("  250g "), "250g")
+        self.assertEqual(tf.unit_tag("6 x 170g"), "6 x 170g")
+
+    def test_unit_tag_empty_none_and_marker_map_to_marker(self):
+        for raw in ("", "   ", None, "unit unavailable",
+                    "Unit Unavailable", "UNIT UNAVAILABLE"):
+            self.assertEqual(tf.unit_tag(raw), "unit unavailable")
+
+    def test_unit_suffix_known_and_unknown_exact_strings(self):
+        self.assertEqual(tf.unit_suffix("1L"), " · 1L")
+        self.assertEqual(tf.unit_suffix(""), " · ⚠️ unit unavailable")
+        self.assertEqual(tf.unit_suffix(None), " · ⚠️ unit unavailable")
+
+    def test_unit_suffix_marker_input_shows_warning_note(self):
+        self.assertEqual(
+            tf.unit_suffix("unit unavailable"),
+            " · ⚠️ unit unavailable",
+        )
+
+
+class TestItemBlockUnit(unittest.TestCase):
+    """item_block unit param — appended after truncation (A3/D-U2)."""
+
+    def test_unit_appended_after_truncation_never_cut(self):
+        long_name = "Full Cream Milk Chocolate Organic Supreme"  # > 24 cells
+        block = tf.item_block(1, long_name, [], unit="200g")
+        first_line = block.split("\n")[0]
+        self.assertTrue(first_line.endswith(" · 200g"))
+        self.assertIn("…", first_line)  # name was truncated, unit was not
+
+    def test_unit_empty_string_shows_marker_note(self):
+        block = tf.item_block(2, "Milk", [], unit="")
+        self.assertIn(" · ⚠️ unit unavailable", block.split("\n")[0])
+
+    def test_unit_none_appends_nothing(self):
+        self.assertEqual(
+            tf.item_block(3, "Milk", []).split("\n")[0], "3. Milk")
+
+
 class TestFencedTable(unittest.TestCase):
     """fenced_table: alignment, budget, truncation, borders, edges."""
 
