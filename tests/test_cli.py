@@ -404,7 +404,12 @@ class TestCLI(unittest.TestCase):
             _write_queue(path, [entry])
 
             from core import missing_items_tracker as mit
-            with patch.object(mit, "WOOLWORTHS_MISSING_PATH", path):
+            # get/clear resolve via MISSING_PATH_BY_STORE (built at
+            # import), so patch the dict too — not just the constants
+            # (2026-09-02: latent leak once real data files exist).
+            with patch.object(mit, "WOOLWORTHS_MISSING_PATH", path), \
+                 patch.dict(mit.MISSING_PATH_BY_STORE,
+                            {"woolworths": path}):
                 clear_missing("woolworths", "Test Product")
                 remaining = get_missing_items("woolworths")
                 self.assertEqual(len(remaining), 0)
@@ -458,7 +463,11 @@ class TestCLI(unittest.TestCase):
             with patch.object(mit, "WOOLWORTHS_MISSING_PATH",
                               Path(tmpdir) / "ww_missing.json"), \
                  patch.object(mit, "COLES_MISSING_PATH",
-                              Path(tmpdir) / "coles_missing.json"):
+                              Path(tmpdir) / "coles_missing.json"), \
+                 patch.dict(mit.MISSING_PATH_BY_STORE, {
+                     "woolworths": Path(tmpdir) / "ww_missing.json",
+                     "coles": Path(tmpdir) / "coles_missing.json",
+                 }):
                 result = mit.update_missing_items([], [])
                 self.assertEqual(result["woolworths_missing"], 0)
                 self.assertEqual(result["coles_missing"], 0)
