@@ -1301,6 +1301,7 @@ class TestSyncOverwriteSemantics(unittest.TestCase):
         "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
         "Search_Keyword_Woolworths", "Search_Keyword_Coles",
         "Search_Keyword_Aldi", "Aldi_Refresh",
+        "Woolworths_Specials", "Coles_Specials", "Rewards_Points",
     ]
 
     def _ws(self, *data_rows):
@@ -1443,6 +1444,51 @@ class TestSyncOverwriteSemantics(unittest.TestCase):
         updated = ws.get_all_values()
         self.assertRegex(updated[1][3], r"^N/A \d{4}-\d{2}-\d{2}$")
         self.assertEqual(float(updated[1][4]), 4.20)
+
+    def test_specials_invariant_absent_row_normalized_to_no(self):
+        """D25 (2026-09-02): an absent-from-list row's stale 'discount'
+        flag clears to 'no' — absence = not on special."""
+        ws = self._ws(
+            ["Gone Product", "", "", "5.50", "", "", "", "",
+             "gone product", "", "", "", "discount", ""],
+            ["Other", "", "", "", "", "", "", "",
+             "other", "", "", "", "", ""],
+        )
+        results, items = self._matched(3, "woolworths", 3.0, "Other")
+        sync_prices(results, items, worksheet=ws)
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][12], "no")
+        self.assertRegex(updated[1][3], r"^N/A \d{4}-\d{2}-\d{2}$")
+
+    def test_specials_invariant_na_keyword_blank_filled(self):
+        """Deliberately-NA rows normalize blank specials to 'no' once."""
+        ws = self._ws(
+            ["Never Stocked", "", "", "2.00", "", "", "", "",
+             "NA", "NA", "", "", "", ""],
+            ["Other", "", "", "", "", "", "", "",
+             "other", "", "", "", "", ""],
+        )
+        results, items = self._matched(3, "woolworths", 3.0, "Other")
+        report = sync_prices(results, items, worksheet=ws)
+        self.assertEqual(report.notfound_written, 0)  # NA never marked
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][12], "no")
+        self.assertEqual(updated[1][3], "2.00")  # price untouched
+
+    def test_specials_invariant_seen_row_keeps_fresh_value(self):
+        """Matched rows keep the value the match loop just classified
+        (multi-buy stays multi-buy; the pass never overwrites them)."""
+        ws = self._ws(
+            ["Listed Item", "", "", "", "", "", "", "",
+             "listed item", "", "", "", "", ""],
+        )
+        results = [MatchResult(True, 2, "Listed Item", "woolworths",
+                               "Listed Item", "exact_keyword")]
+        items = [ProductItem("woolworths", "Listed Item", 4.0,
+                             is_special=True, special_desc="2 for $4.50")]
+        sync_prices(results, items, worksheet=ws)
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][12], "multi-buy")
 
 
 class TestUpdateSinglePriceBackfill(unittest.TestCase):

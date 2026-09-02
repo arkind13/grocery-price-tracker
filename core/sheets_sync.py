@@ -352,18 +352,30 @@ def sync_prices(
             if len(row) <= max(kw_col, price_col):
                 continue
             kw = str(row[kw_col]).strip()
-            if not kw or kw.upper() == "NA":
-                continue  # unmapped / deliberately-not-stocked rows
-            if list_idx in seen:
-                continue  # seen in the list this run
-            cell = str(row[price_col]).strip()
-            if cell.startswith(_UNAVAILABLE_PREFIX) or \
-                    cell.startswith(_NA_PREFIX):
-                continue  # already carrying a marker (anchor preserved)
-            row[price_col] = _build_marker(_NA_PREFIX, cell, today)
-            row[LAST_UPDATED_COL] = ts
-            notfound_written += 1
-            notfound_items.append(str(row[0]).strip())
+            if not kw:
+                continue  # unmapped for this store — no data source
+            na_row = kw.upper() == "NA"
+            seen_now = list_idx in seen
+            if not na_row and not seen_now:
+                cell = str(row[price_col]).strip()
+                if not (cell.startswith(_UNAVAILABLE_PREFIX) or
+                        cell.startswith(_NA_PREFIX)):
+                    row[price_col] = _build_marker(_NA_PREFIX, cell, today)
+                    row[LAST_UPDATED_COL] = ts
+                    notfound_written += 1
+                    notfound_items.append(str(row[0]).strip())
+            # D25 invariant (2026-09-02): every row trackable at this
+            # store holds exactly one of no/discount/multi-buy after a
+            # sync. Absent-from-list rows are not on special → "no"
+            # (stale "discount"/"multi-buy" from prior weeks clears);
+            # deliberately-NA rows normalize blanks to "no" once. Rows
+            # seen in the list keep the fresh value the match loop
+            # just wrote.
+            if not seen_now:
+                sc = specials_col.get(store_key)
+                if sc is not None and len(row) > sc and \
+                        str(row[sc]).strip().lower() != "no":
+                    row[sc] = "no"
 
     # Compute final target width
     target_width = max(
