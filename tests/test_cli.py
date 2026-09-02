@@ -577,24 +577,60 @@ class TestCLI(unittest.TestCase):
 
     @patch("grocery_price_cli._load_env")
     def test_specials_sheet_mode_no_results(self, mock_env):
-        """specials with no active specials returns graceful message."""
+        """specials with no active specials returns graceful message.
+        (_TRACKER is pointed at an empty tmp dir so the persisted
+        Wednesday report view stays out of the test output.)"""
+        import tempfile as _tf
         from grocery_price_cli import _cmd_specials
         from unittest.mock import patch as upatch
 
-        # _cmd_specials also calls fetch_woolworths_list() as live fallback
-        with upatch("core.specials_reporter.get_active_specials", return_value=[]), \
-             upatch("core.specials_reporter.format_specials_report", return_value="No active specials."), \
-             upatch("extractors.woolworths_extractor.fetch_woolworths_list", return_value=[]):
-            args = argparse.Namespace(store="all")
-            old_stdout = sys.stdout
-            try:
-                sys.stdout = io.StringIO()
-                code = _cmd_specials(args)
-                output = sys.stdout.getvalue()
-            finally:
-                sys.stdout = old_stdout
-            self.assertEqual(code, 0)
-            self.assertIn("No active specials", output)
+        with _tf.TemporaryDirectory() as tmp:
+            with upatch("grocery_price_cli._TRACKER", Path(tmp)), \
+                 upatch("core.specials_reporter.get_active_specials", return_value=[]), \
+                 upatch("core.specials_reporter.format_specials_report", return_value="No active specials."), \
+                 upatch("extractors.woolworths_extractor.fetch_woolworths_list", return_value=[]):
+                args = argparse.Namespace(store="all")
+                old_stdout = sys.stdout
+                try:
+                    sys.stdout = io.StringIO()
+                    code = _cmd_specials(args)
+                    output = sys.stdout.getvalue()
+                finally:
+                    sys.stdout = old_stdout
+        self.assertEqual(code, 0)
+        self.assertIn("No active specials", output)
+
+    @patch("grocery_price_cli._load_env")
+    def test_specials_leads_with_fresh_report(self, mock_env):
+        """2026-09-02: a fresh persisted Wednesday report prints FIRST
+        (rich save/multi-buy detail) ahead of the sheet view."""
+        import tempfile as _tf
+        from grocery_price_cli import _cmd_specials
+        from unittest.mock import patch as upatch
+
+        with _tf.TemporaryDirectory() as tmp:
+            data_dir = Path(tmp) / "data"
+            data_dir.mkdir()
+            (data_dir / "ww_specials_report.txt").write_text(
+                "# Woolworths specials report — generated "
+                "2026-09-02\n🏷️ WOOLWORTHS SPECIALS\n1. Thing 500g\n"
+                "   $2.00  ·  save $1.00 (33% off)\n", encoding="utf-8")
+            with upatch("grocery_price_cli._TRACKER", Path(tmp)), \
+                 upatch("core.specials_reporter.get_active_specials", return_value=[]), \
+                 upatch("core.specials_reporter.format_specials_report", return_value="sheet view"), \
+                 upatch("extractors.woolworths_extractor.fetch_woolworths_list", return_value=[]):
+                args = argparse.Namespace(store="all")
+                old_stdout = sys.stdout
+                try:
+                    sys.stdout = io.StringIO()
+                    code = _cmd_specials(args)
+                    output = sys.stdout.getvalue()
+                finally:
+                    sys.stdout = old_stdout
+        self.assertEqual(code, 0)
+        self.assertIn("save $1.00 (33% off)", output)
+        self.assertIn("Latest Wednesday report", output)
+        self.assertIn("sheet view", output)
 
     # ========================================================================
     # Phase 9.7.d — search (noauth), map, compare --mode auto tests
