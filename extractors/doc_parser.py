@@ -29,6 +29,12 @@ from extractors.specials_parser import (
     SAVE_RE, FOR_RE, WAS_RE, ANY_RE, SPECIAL_FLAG_RE,
 )
 
+# A unit-price-only line ("$4.44 / 100G", "$3.41/ 100g") — Woolworths
+# and Coles paste it between the price and the specials marker
+# (2026-09-02 Jumpy's/Sunbites fix). When found at i+2 the marker hunt
+# moves to i+3.
+_UNIT_PRICE_RE = re.compile(r"^\$\d+(?:\.\d+)?\s*/\s*\S+")
+
 # ---------------------------------------------------------------------------
 # Path setup
 # ---------------------------------------------------------------------------
@@ -271,10 +277,19 @@ def parse_docx(
             #     bare Save/Was above a product is the PREVIOUS product's
             #     marker in the WW layout — checking it would attach the
             #     wrong special (A7 misfire guard).
+            # 2026-09-02 (Jumpy's fix): Woolworths sometimes pastes a
+            # UNIT-PRICE line ('$4.44 / 100G') between the price and the
+            # multi-buy marker, pushing the marker to i+3. When i+2 is
+            # a unit-price-only line, look one further down — the real
+            # Woolworths.docx layout (verified 2026-09-02):
+            #   name / $4.00 / $4.44 / 100G / 2 for $7.00 - $3.89/100G
             is_special = False
             special_desc = ""
             if i + 2 < len(lines):
                 detail_line = lines[i + 2]
+                if _UNIT_PRICE_RE.match(detail_line) and \
+                        i + 3 < len(lines):
+                    detail_line = lines[i + 3]
                 save_m = SAVE_RE.search(detail_line)
                 for_m = FOR_RE.search(detail_line)
                 if save_m:

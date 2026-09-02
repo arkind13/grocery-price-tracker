@@ -17,6 +17,7 @@ import os
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 # Path setup
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -201,6 +202,81 @@ class TestDocParser(unittest.TestCase):
         items = parse_text_dump("", store="woolworths")
         self.assertEqual(len(items), 0)
 
+    def _docx_from_lines(self, tmpdir, lines):
+        """Write a minimal .docx (one paragraph per line) for tests."""
+        from docx import Document
+        path = Path(tmpdir) / "list.docx"
+        doc = Document()
+        for ln in lines:
+            doc.add_paragraph(ln)
+        doc.save(str(path))
+        return str(path)
+
+    def test_multibuy_marker_under_unit_price_line_ww(self):
+        """2026-09-02 Jumpy's fix: Woolworths pastes a unit-price line
+        between the price and the multi-buy marker — the marker at i+3
+        must still be detected (real Woolworths.docx layout)."""
+        from extractors.doc_parser import parse_docx
+        import tempfile
+
+        lines = ["Jumpy's Chicken Potato Chips 5 pack",
+                 "$4.00",
+                 "$4.44 / 100G",
+                 "2 for $7.00 - $3.89/100G"]
+        with tempfile.TemporaryDirectory() as tmp:
+            items = parse_docx(self._docx_from_lines(tmp, lines),
+                               store="woolworths")
+        self.assertEqual(len(items), 1)
+        self.assertTrue(items[0].is_special)
+        self.assertEqual(items[0].special_desc, "2 for $7.00")
+
+    def test_multibuy_marker_under_unit_price_line_coles(self):
+        """2026-09-02 Sunbites fix: the Coles layout with a unit-price
+        at i+2 and 'Any 2 | $9' at i+3 (real Coles.docx layout)."""
+        from extractors.doc_parser import parse_docx
+        import tempfile
+
+        lines = ["Sunbites Grain Waves Chips Kids' Lunchbox Multipack "
+                 "8 Pack | 176g",
+                 "$6.00",
+                 "$3.41/ 100g",
+                 "Any 2 | $9",
+                 "$2.56/ 100g"]
+        with tempfile.TemporaryDirectory() as tmp:
+            items = parse_docx(self._docx_from_lines(tmp, lines),
+                               store="coles")
+        self.assertEqual(len(items), 1)
+        self.assertTrue(items[0].is_special)
+        self.assertEqual(items[0].special_desc, "Any 2 | $9")
+
+    def test_unit_price_line_alone_is_not_a_special(self):
+        """A plain unit-price line under the price (no marker below)
+        must NOT flag a special."""
+        from extractors.doc_parser import parse_docx
+        import tempfile
+
+        lines = ["Plain Oat Milk 1L", "$4.00", "$4.00 / 1L",
+                 "Next Product 2L", "$3.00"]
+        with tempfile.TemporaryDirectory() as tmp:
+            items = parse_docx(self._docx_from_lines(tmp, lines),
+                               store="woolworths")
+        self.assertTrue(items)
+        self.assertFalse(any(i.is_special for i in items))
+
+    def test_multibuy_directly_below_price_still_works(self):
+        """The original layout (marker at i+2, no unit-price line)
+        keeps working after the skip fix."""
+        from extractors.doc_parser import parse_docx
+        import tempfile
+
+        lines = ["Simple Thing 500g", "$3.00", "2 for $5.00"]
+        with tempfile.TemporaryDirectory() as tmp:
+            items = parse_docx(self._docx_from_lines(tmp, lines),
+                               store="woolworths")
+        self.assertEqual(len(items), 1)
+        self.assertTrue(items[0].is_special)
+        self.assertEqual(items[0].special_desc, "2 for $5.00")
+
     def test_parse_text_dump_single_line_format(self):
         """Text with name - $price on same line is parsed."""
         from extractors.doc_parser import parse_text_dump
@@ -299,6 +375,81 @@ class TestWoolworthsExtractor(unittest.TestCase):
         self.assertIsNotNone(item)
         self.assertEqual(item.raw_name, "Woolworths Full Cream Milk 2L")
         self.assertAlmostEqual(item.price, 0.0)
+
+
+class _FakeResponse:
+    """Minimal stand-in for requests.Response (status + JSON payload)."""
+
+    def __init__(self, status_code, payload=None):
+        self.status_code = status_code
+        self._payload = payload if payload is not None else {}
+
+    def json(self):
+        return self._payload
+
+
+class TestFetchWoolworthsListDiagnostics(unittest.TestCase):
+    """fetch_woolworths_list must distinguish a blocked API from a
+    renamed list (2026-09-01 grocery-channel incident: an Akamai 403
+    from the VPS runner was mis-reported as "List not found")."""
+
+    def setUp(self):
+        import os
+
+        self._old_cookie = os.environ.get("WOOLWORTHS_COOKIE", "")
+        os.environ["WOOLWORTHS_COOKIE"] = "session=fake; token=fake"
+
+    def tearDown(self):
+        import os
+
+        if self._old_cookie:
+            os.environ["WOOLWORTHS_COOKIE"] = self._old_cookie
+        else:
+            os.environ.pop("WOOLWORTHS_COOKIE", None)
+
+    def _fetch_and_capture_stderr(self, fake_responses):
+        """Run fetch_woolworths_list with mocked HTTP; return stderr text."""
+        import contextlib
+        import io
+        from unittest.mock import patch
+
+        import extractors.woolworths_extractor as wwe
+
+        with patch.object(
+            wwe.requests, "get", side_effect=fake_responses
+        ), contextlib.redirect_stderr(io.StringIO()) as err:
+            items = wwe.fetch_woolworths_list("Price Compare")
+        return items, err.getvalue()
+
+    def test_blocked_api_reports_http_not_rename(self):
+        """A 403 mylists response reports the block, not a rename."""
+        from extractors.woolworths_extractor import _find_list_id  # noqa: F401
+
+        blocked = [_FakeResponse(403), _FakeResponse(403)]
+        items, stderr = self._fetch_and_capture_stderr(blocked)
+        self.assertEqual(items, [])
+        self.assertIn("Saved-list API unavailable", stderr)
+        self.assertIn("HTTP 403", stderr)
+        self.assertNotIn("not found", stderr)
+        self.assertNotIn("Available lists", stderr)
+
+    def test_renamed_list_reports_not_found_with_available(self):
+        """A 200 response without the target name reports the rename."""
+        lists_payload = {
+            "Response": [
+                {"Name": "Weekly Shop", "ListId": 111},
+                {"Name": "BBQ", "ListId": 222},
+            ]
+        }
+        ok = [
+            _FakeResponse(200, lists_payload),
+            _FakeResponse(200, lists_payload),
+        ]
+        items, stderr = self._fetch_and_capture_stderr(ok)
+        self.assertEqual(items, [])
+        self.assertIn("List 'Price Compare' not found", stderr)
+        self.assertIn("Available lists", stderr)
+        self.assertIn("Weekly Shop", stderr)
 
 
 # =========================================================================
