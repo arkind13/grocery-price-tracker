@@ -131,6 +131,44 @@ class SyncReport:
     timestamp: str = ""
     dry_run: bool = False
     warnings: list = field(default_factory=list)
+    # Overwrite semantics (2026-09-02): counters + names for the two
+    # price-less markers written during a sync.
+    unavailable_written: int = 0      # listed, but site gave no price
+    notfound_written: int = 0         # mapped row absent from the list
+    unavailable_items: list = field(default_factory=list)
+    notfound_items: list = field(default_factory=list)
+
+
+# Marker prefixes written into D/E when a price is unusable. The date
+# suffix anchors the no-price "weeks" aging and is PRESERVED across
+# marker rewrites (only a returning real price clears it).
+_UNAVAILABLE_PREFIX = "unavailable"
+_NA_PREFIX = "N/A"
+
+
+def _marker_date(cell: str) -> str:
+    """Extract the embedded YYYY-MM-DD anchor from a marker cell ('')."""
+    m = re.search(r"(\d{4}-\d{2}-\d{2})", str(cell or ""))
+    return m.group(1) if m else ""
+
+
+def _build_marker(prefix: str, current_cell: str, today: str) -> str:
+    """Build a marker cell, preserving any existing date anchor.
+
+    Keeps the OLDEST anchor across marker transitions (N/A ->
+    unavailable etc.) so the no-price week count never resets while an
+    item stays price-less.
+
+    Args:
+        prefix (str): "N/A" or "unavailable".
+        current_cell (str): the cell's current content.
+        today (str): today's date (YYYY-MM-DD) when no anchor exists.
+
+    Returns:
+        str: e.g. "N/A 2026-09-02".
+    """
+    date = _marker_date(current_cell)
+    return f"{prefix} {date or today}"
 
 
 # ============================================================================
@@ -205,10 +243,24 @@ def sync_prices(
         )
 
     ts = _sydney_now_str()
+    today = ts[:10]
     rows_updated = 0
     items_matched = 0
     items_skipped = 0
     stores_synced_set: set[str] = set()
+    unavailable_written = 0
+    unavailable_items: list[str] = []
+    # Rows SEEN in a store's list this run (list_idx per store) — the
+    # not-found pass marks every OTHER mapped row for that store.
+    found_rows: dict[str, set] = {"woolworths": set(), "coles": set()}
+    # Stores whose list was provided this run (any parsed item). A
+    # store with no items (parse failure / not pasted) never gets
+    # not-found marking — absence of the LIST is not absence of items.
+    stores_provided: set[str] = {
+        str(getattr(i, "store", "") or "").strip().lower()
+        for i in items
+        if str(getattr(i, "store", "") or "").strip()
+    }
 
     # Pre-pad rows to minimum required width before writing
     min_write_width = max(
@@ -229,7 +281,24 @@ def sync_prices(
             continue  # defensive bounds check
 
         row = rows[list_idx]
-        row[PRICE_COL[result.store]] = item.price
+        store_key = str(result.store).strip().lower()
+        found_rows.setdefault(store_key, set()).add(list_idx)
+
+        # Overwrite semantics (2026-09-02): a listed item whose price
+        # is unusable (0 / None) NEVER keeps a stale price — the cell
+        # becomes "unavailable <date>" (date anchors no-price aging).
+        price_val = getattr(item, "price", None)
+        if price_val is None or float(price_val) <= 0:
+            cell = str(row[PRICE_COL[result.store]]).strip()
+            new_marker = _build_marker(
+                _UNAVAILABLE_PREFIX, cell, today)
+            if cell != new_marker:
+                unavailable_written += 1
+                unavailable_items.append(
+                    str(row[0]).strip() if row else "")
+            row[PRICE_COL[result.store]] = new_marker
+        else:
+            row[PRICE_COL[result.store]] = item.price
 
         # Rule B/C.1: heal a blank Col C in the same batch write —
         # live item size first, then parse from the item's raw name.
@@ -263,6 +332,39 @@ def sync_prices(
         items_matched += 1
         stores_synced_set.add(result.store)
 
+    # --- Not-found pass (2026-09-02 overwrite semantics) ---------------
+    # For every store whose list was provided this run: a MAPPED row
+    # (keyword present, not the literal "NA") whose item did NOT appear
+    # in the list is "not found" — its price cell becomes "N/A <date>"
+    # (stale prices never linger). Rows already carrying today's-or-
+    # older marker keep their anchor date so week aging never resets.
+    notfound_written = 0
+    notfound_items: list[str] = []
+    for store_key, kw_col in STORE_KEYWORD_COL.items():
+        if store_key not in stores_provided:
+            report_warnings.append(
+                f"{store_key} list not provided - not-found marking "
+                f"skipped for that store")
+            continue
+        price_col = PRICE_COL[store_key]
+        seen = found_rows.get(store_key, set())
+        for list_idx, row in enumerate(rows):
+            if len(row) <= max(kw_col, price_col):
+                continue
+            kw = str(row[kw_col]).strip()
+            if not kw or kw.upper() == "NA":
+                continue  # unmapped / deliberately-not-stocked rows
+            if list_idx in seen:
+                continue  # seen in the list this run
+            cell = str(row[price_col]).strip()
+            if cell.startswith(_UNAVAILABLE_PREFIX) or \
+                    cell.startswith(_NA_PREFIX):
+                continue  # already carrying a marker (anchor preserved)
+            row[price_col] = _build_marker(_NA_PREFIX, cell, today)
+            row[LAST_UPDATED_COL] = ts
+            notfound_written += 1
+            notfound_items.append(str(row[0]).strip())
+
     # Compute final target width
     target_width = max(
         max(len(r) for r in rows) if rows else 0,
@@ -283,6 +385,10 @@ def sync_prices(
             f"          stores={sorted(stores_synced_set)} ts={ts}"
         )
         print(
+            f"          would mark unavailable={unavailable_written} "
+            f"not-found N/A={notfound_written}"
+        )
+        print(
             f"          planned_range="
             f"A2:{_col_letter(target_width - 1)}{len(rows) + 1} "
             f"warnings={report_warnings}"
@@ -297,6 +403,10 @@ def sync_prices(
             timestamp=ts,
             dry_run=True,
             warnings=report_warnings,
+            unavailable_written=unavailable_written,
+            notfound_written=notfound_written,
+            unavailable_items=unavailable_items,
+            notfound_items=notfound_items,
         )
 
     range_name = f"A2:{_col_letter(target_width - 1)}{len(rows) + 1}"
@@ -311,6 +421,10 @@ def sync_prices(
         timestamp=ts,
         dry_run=False,
         warnings=report_warnings,
+        unavailable_written=unavailable_written,
+        notfound_written=notfound_written,
+        unavailable_items=unavailable_items,
+        notfound_items=notfound_items,
     )
 
 
@@ -708,6 +822,61 @@ STORE_KEYWORD_COL = {"woolworths": 8, "coles": 9}
 KEYWORDS_HEADER = "Keywords"
 
 
+def _col_letter(idx: int) -> str:
+    """0-based column index -> sheet letter ('A'->0, 'P'->15, 'AA'->26).
+
+    Args:
+        idx (int): 0-based column index.
+
+    Returns:
+        str: column letter(s).
+    """
+    letters = ""
+    idx += 1
+    while idx > 0:
+        idx, rem = divmod(idx - 1, 26)
+        letters = chr(ord("A") + rem) + letters
+    return letters
+
+
+def _append_alias(worksheet, header: list, row_index: int, alias: str) -> str:
+    """Append one alias to a row's Col P cell (pipe-delimited, deduped).
+
+    Args:
+        worksheet: connected gspread-like worksheet (needs
+            get_all_values + update(values=..., range_name=...)).
+        header (list): header row (to locate the Keywords column).
+        row_index (int): 1-based sheet row number.
+        alias (str): alias to append (skipped when already present).
+
+    Returns:
+        str: range written ("" when nothing needed writing).
+    """
+    from core.lookup import ALIAS_DELIM
+
+    col = _find_col(header, KEYWORDS_HEADER)
+    if col is None or not alias.strip():
+        return ""
+    values = worksheet.get_all_values()
+    if row_index > len(values):   # row_index is 1-based (header = row 1)
+        return ""
+    row = values[row_index - 1]
+    if len(row) <= col:
+        row = row + [""] * (col + 1 - len(row))
+    cell = str(row[col] or "").strip()
+    aliases = [a.strip() for a in cell.split(ALIAS_DELIM) if a.strip()]
+    alias_clean = alias.strip()
+    if any(KeywordIndex._normalize(a) == KeywordIndex._normalize(alias_clean)
+           for a in aliases):
+        return ""  # already saved
+    aliases.append(alias_clean)
+    new_cell = ALIAS_DELIM.join(aliases)
+    range_name = f"{_col_letter(col)}{row_index}:{_col_letter(col)}{row_index}"
+    _update_with_backoff(
+        worksheet, [[new_cell]], range_name)
+    return range_name
+
+
 def add_product_row(
     generic_name: str,
     store: str,
@@ -721,6 +890,7 @@ def add_product_row(
     is_special: bool = False,
     special_desc: str = "",
     dry_run: bool = False,
+    allow_duplicate: bool = False,
     worksheet=None,
 ) -> dict:
     """Append a new product row to the bottom of Products_Master.
@@ -730,6 +900,14 @@ def add_product_row(
     the store's price (Col D/E), brand (Col G), timestamp (Col H), the
     store keyword (Col I/J), and optionally the user query as a Col P
     alias.
+
+    ONE-LINE RULE (2026-09-02): before appending, the exact Col A guard
+    and a similarity check run. When a near-identical product row exists
+    (token-set ratio >= name_matcher.DUP_SIMILARITY_THRESHOLD) the add
+    MERGES into it — the price is updated on that row and the alias is
+    appended to its Col P — and NO second row is created. Pass
+    allow_duplicate=True only when the user explicitly says the items
+    are two different products (exact same names are still refused).
 
     Args:
         generic_name: the product name for Col A.
@@ -744,12 +922,16 @@ def add_product_row(
         alias: the user's original query to persist as a Col P alias
             (default "" — no alias written).
         is_special: the live item's specials flag (D25; default False).
-        special_desc: the live item's specials text (default "").
+        special_desc: the live item's specials text (D25).
         dry_run: if True, report the planned row without writing.
+        allow_duplicate: skip the SIMILARITY merge (explicit
+            "these are 2 different products" override). Exact-name
+            duplicates are always refused.
         worksheet: optional pre-connected worksheet.
 
     Returns:
-        dict with keys: wrote, row_index, range_written, error.
+        dict with keys: wrote, merged (True when folded into an
+        existing row), row_index, existing_name, range_written, error.
     """
     store_lower = store.lower()
 
@@ -783,6 +965,64 @@ def add_product_row(
     all_values = worksheet.get_all_values()
     header = all_values[0] if all_values else []
     data_rows = all_values[1:] if len(all_values) > 1 else []
+
+    # --- duplicate guard (2026-09-01 incident) ---
+    # An explicit add for a name that already exists in Col A would
+    # append a duplicate row (e.g. milk added while already tracked).
+    # Refuse and point at the existing row — update/map handle those.
+    new_norm = KeywordIndex._normalize(generic_name)
+    if new_norm:
+        for row_index, row in enumerate(data_rows, start=2):
+            existing = row[0].strip() if row else ""
+            if existing and KeywordIndex._normalize(existing) == new_norm:
+                return {
+                    "wrote": False,
+                    "merged": False,
+                    "row_index": row_index,
+                    "existing_name": existing,
+                    "range_written": "",
+                    "error": (
+                        f"already tracked (row {row_index}: "
+                        f"'{existing}') — use update/map instead of "
+                        f"adding a duplicate"),
+                }
+
+    # --- one-line rule (2026-09-02) ---
+    # Same product = ONE row even when the stores name it differently
+    # (word order, brand prefix, "5 pack" vs "70g"). Only a DIFFERENT
+    # AMOUNT OF THE SAME UNIT (200g vs 400g, 1L vs 2L) keeps lines
+    # apart — see name_matcher.is_same_product. allow_duplicate is the
+    # explicit user override for genuinely different products.
+    if not allow_duplicate:
+        from core.name_matcher import is_same_product
+        similar_idx: Optional[int] = None
+        similar_name = ""
+        for row_index, row in enumerate(data_rows, start=2):
+            existing = row[0].strip() if row else ""
+            if not existing:
+                continue
+            if is_same_product(generic_name, existing):
+                similar_idx = row_index
+                similar_name = existing
+                break
+        if similar_idx is not None:
+            merged = update_single_price(
+                similar_name, store_lower, price,
+                is_special=is_special if is_special else None,
+                special_desc=special_desc,
+                size=size, worksheet=worksheet)
+            range_written = str(merged.get("range_written", ""))
+            if alias:
+                range_written += _append_alias(
+                    worksheet, header, similar_idx, alias)
+            return {
+                "wrote": bool(merged.get("wrote")),
+                "merged": True,
+                "row_index": similar_idx,
+                "existing_name": similar_name,
+                "range_written": range_written,
+                "error": merged.get("error", ""),
+            }
 
     new_row_index = len(data_rows) + 2  # 1-based (row 1 = header)
     price_col = PRICE_COL[store_lower]

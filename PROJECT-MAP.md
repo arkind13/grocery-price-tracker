@@ -1,8 +1,53 @@
 # PROJECT-MAP — The Whole Grocery Tracker in Plain Language
 
-> Last updated: 2026-08-30. This file is the plain-language map of every list,
+> Last updated: 2026-09-02. This file is the plain-language map of every list,
 > every command, and every scenario in the project.
 > **Keep this file updated whenever any list, command, or flow changes.**
+
+---
+
+## 0. Start here — the cheat sheet
+
+### The 7 lists and what each is FOR
+
+| List | What it is telling you |
+|------|------------------------|
+| **Unmatched** | "This line was on your store list, but I don't know which sheet row it is." A to-do list for you — but it heals itself: anything the system can fix (exact name match, keyword already saved) leaves on its own each Wednesday. |
+| **Wool missing / Coles missing** | "You track this product, but it has no keyword for that store yet, so that store can never price it." Fix = one map session reply. |
+| **To-do (add-to-list)** | "This product was just mapped — now add it to that store's website list yourself." You clear it after adding it on the website. |
+| **Searched** | "These are waiting to go ONTO your store website lists." Cleared automatically the moment they appear on a Wednesday list. |
+| **Ignored** | Junk you said "forget" to. Never shown again. |
+| **No-price report** | "Neither store has a real price for this row for N weeks." Your cue to delete dead products from the sheet. |
+
+> **Not a 7th list:** "Pending links" (`unmapped_queue.json`, shown by
+> the `unmapped` command) is the STORAGE LEDGER BEHIND the Unmatched
+> list — the same items at their storage stage, plus ignored junk that
+> never displays again. It is NOT a separate to-do and NOT the
+> missing-price lists (those are Wool/Coles missing above).
+
+### How a product gets onto a list (the rules)
+
+- **Wednesday reads your store lists.** A line that matches a sheet keyword → price updated, no list. A line with no matching keyword → **Unmatched**. A sheet row whose keyword exists but the line is missing → price cell gets `N/A <date>` (and the no-price report counts its weeks).
+- **You say "add item 2" in chat** → genuinely new product: **one sheet row + the Searched list**. Same product already on the sheet (wording/pack differences ignored)? → price updated on that row instead, **nothing queued**.
+- **A map session writes a price** (`add`) → the product also goes on the **To-do list**.
+- **Paste junk** ("Add to cart", "Ends 7 Jul.") → filtered before any list. Junk you confirm with `forget` → **Ignored** forever.
+
+### The commands — what they do, in one table
+
+| Command | Its job | Writes to the sheet? | What happens next |
+|---------|---------|----------------------|-------------------|
+| `compare` | Price battle for things you name (sheet first, live websites as backup) | Never | Nothing — look only |
+| `search` | Live look at both store websites (3 results per store) | Never | Nothing — look only |
+| `search --add-item N` | Save result N | Yes — price, and a new row ONLY if the product is genuinely new (one-line rule) | Goes on the **Searched** list → you add it on the store website → clears automatically next Wednesday |
+| `update` | Write one price by hand | Yes — one price cell | Nothing further |
+| `wednesday` (or `sync`) | The weekly engine: shows your queue first and waits, then reads your lists and overwrites EVERY price (found → price; missing → `N/A <date>`; unpriced → `unavailable <date>`) | Yes — all prices | Unmatched/missing lists rebuilt + self-healed, no-price report posted, queues pushed to Telegram's side |
+| `map unmatched/wool/coles` | Fixes the resolve lists, one item per reply | Yes — a **pick** saves keyword + alias + price in one go; an **add** creates a new row | Picked items never return; added ones go on the To-do list |
+| `searched-items` / `add-to-list` | See or clear those two queues by hand | No | — |
+| `live-refresh` | The browser window: pushes queued items onto the store websites, reads the lists | No (indirect) | Pushed items appear on next Wednesday's list |
+| `backfill-keywords` / `backfill-sizes` | Repairs: fills empty alias / unit cells | Yes — fills blanks only | Better matching + units shown everywhere |
+| `specials` / `rewards` / `recipe` / `specials-scan` | Questions and reports | Never | Nothing — look only |
+
+*(Full details for all of the above: §4 lists, §5 commands, §6 scenarios.)*
 
 ---
 
@@ -32,7 +77,7 @@ GOOGLE SHEET "Products_Master": one row per product, prices per store
 - **Telegram** — where you chat. Claw translates your words into CLI commands.
 - **VPS** — the server that runs the CLI for day-to-day questions (compare, search, specials, map).
 - **Local Windows PC** — the only place the Wednesday run and the browser login window happen.
-- **Google Sheet** — the memory. Columns: A = product name, C = unit/size (e.g. `1L`, `250g`, `5 pack` — every product mention shows this, or says `unit unavailable` when unknown), D/E/F = prices (Woolworths/Coles/Aldi), G = brand, H = updated, I/J/K = store keywords (how the system recognises a product on each store's list), M/N/O = specials/rewards, P = aliases (other names you might type).
+- **Google Sheet** — the memory. Columns: A = product name, C = unit/size (e.g. `1L`, `250g`, `5 pack` — every product mention shows this, or says `unit unavailable` when unknown), D/E/F = prices (Woolworths/Coles/Aldi). A price cell can also hold a marker: `N/A 2026-09-02` (not in that store's list) or `unavailable 2026-09-02` (listed but no usable price) — the date is how the no-price list counts weeks. G = brand, H = updated, I/J/K = store keywords (how the system recognises a product on each store's list), M/N/O = specials/rewards, P = aliases (other names you might type).
 
 ---
 
@@ -43,14 +88,15 @@ GOOGLE SHEET "Products_Master": one row per product, prices per store
   ┌──────────────────────────────────────┐      ┌─────────────────────────────────────┐
   │ "compare milk in woolworths+coles"   │      │ python grocery_price_cli.py         │
   │  -> sheet first, live fallback       │      │        wednesday --source live      │
-  │ "search chocolate protein milk"      │      │  1. pull queues from VPS            │
+  │ "search chocolate protein milk"      │      │  1. pull + merge queues (VPS/local) │
   │  -> live websites, 3 per store       │      │  2. browser login (you, once)       │
   │ "add item 2"  -> ONE item saved:     │      │  3. FLUSH: queued items go ONTO     │
-  │     new sheet row + queue entry [KAT]│ ───> │     the store website lists         │
-  │ "remove KAT"  -> undo that one item  │      │  4. FETCH: read ALL list pages      │
-  │ (do nothing -> NOTHING is saved)     │      │  5. match to sheet, write prices    │
-  └──────────────────────────────────────┘      │  6. specials report                  │
-                                                │  7. Telegram summary + lists         │
+  │     new row if new, else price       │ ───> │     the store website lists         │
+  │     on the existing line + queue     │      │  4. FETCH: read ALL list pages      │
+  │     entry [KAT] (one-line rule)      │      │  5. auto-link exact names, match,   │
+  │ "remove KAT"  -> undo that one item  │      │     OVERWRITE all prices            │
+  │ (do nothing -> NOTHING is saved)     │      │  6. specials report                  │
+  └──────────────────────────────────────┘      │  7. Telegram summary + 7 lists       │
                                                 └─────────────────────────────────────┘
 ```
 
@@ -64,12 +110,21 @@ compare only LOOKS. An item enters the system only when you explicitly say
 
 | # | List (file) | Plain name | What puts things on it | What clears it |
 |---|-------------|------------|------------------------|----------------|
-| 1 | `data/unmatched.txt` (+ `unmapped_queue.json`) | **Unmatched** | Wednesday sync: items from your website lists the sheet does not recognise | You resolve them: reply with a number, `add`, `forget`, or `skip` in a map session |
+| 1 | `data/unmatched.txt` (+ `unmapped_queue.json` = its storage ledger, "Pending Links") | **Unmatched** (a persistent debt list) | Wednesday sync: list items whose store keyword doesn't match any sheet row. Entries ACCUMULATE week after week (each week's miss bumps a counter) and carry the last-seen price. Paste junk (button labels like "Add to cart", "Ends 7 Jul.") is filtered at parse time | You resolve them (see §6D: one reply per item); Wednesday also auto-heals: exact sheet-name items get their keyword linked automatically (Step 1c), entries whose keyword now exists leave the debt automatically, and the resolved debt is pushed to the VPS |
 | 2 | `data/wool_missing.txt` | **Wool missing** | Products known at Coles but with no Woolworths price/keyword yet | `map wool` sessions: `add`, `na`, exact name, or `skip` |
 | 3 | `data/coles_missing.txt` | **Coles missing** | Products known at Woolworths but with no Coles price/keyword yet | `map coles` sessions (same replies) |
-| 4 | `data/add_to_list.json` | **To-do list** (website-add reminder) | `map wool/coins --add` when a price is written | You add the item on the store website, then `add-to-list done --items "1,2"` |
-| 5 | `data/searched_items.json` | **Searched list** (Wednesday queue) | ONLY an explicit "add item N" after a search/compare | Drained automatically by the Wednesday live window (items get added to your website lists); `searched-items remove/clear` also works |
-| 6 | `data/ignored_items.txt` | **Ignored** (junk) | `map unmatched --forget` | Never (permanent exclusion) |
+| 4 | `data/add_to_list.json` | **To-do list** (website-add reminder) | `map wool/coles --add` when a price is written (the entry remembers the EXACT store name + a 3-letter code) | You add the item on the store website, then `add-to-list done` (by number or code) — **done also saves the exact store name as the row's keyword**, so next Wednesday it matches + price-syncs straight away |
+| 5 | `data/searched_items.json` | **Searched list** (Wednesday queue) | ONLY an explicit "add item N" after a search/compare — and only when the product is genuinely NEW (the one-line rule updates existing rows instead, without queueing) | Wednesday Step 1b clears each item the moment it appears on its store's list; the live window flush also adds + clears; `searched-items remove/clear` works too |
+| 6 | `data/ignored_items.txt` | **Ignored** (junk) | `map unmatched --forget` | Never (permanent exclusion; pulled from the VPS each Wednesday so Telegram forgets count everywhere) |
+| 7 | *(generated report, no file)* | **No-price list** | The Wednesday run itself: sheet rows where NEITHER store price is a real number above zero — `N/A <date>`, `unavailable <date>`, `$0`, blank, or any text — grouped by category with weeks counts, oldest first | You: delete genuinely dead products from the sheet (ask Claw to show you them any time) |
+
+**Where you see them:** every Wednesday, ALL seven lists are posted to the
+**weekly-lists** Telegram topic with the sync summary — the three resolve
+lists (1–3), the no-price list (7), the to-do list (4), searched list (5),
+and ignored list (6). Empty lists post as "none" (proof the queues were
+drained). One-store drops (e.g. Coles `N/A` while Woolworths still prices
+the item) are NOT posted anywhere — they live in the sheet; ask Claw to
+list them any time.
 
 Notes:
 - Every searched-list entry carries a **3-letter code** (letters only, no I/O,
@@ -95,7 +150,7 @@ the same commands for you):
 |---------|---------------|
 | `compare --items "milk"` | Price battle between stores for things you name. Checks YOUR SHEET first; falls back to live websites. Only fair pairs count (same pack size within 20%). |
 | `search --product "X"` | Live look at both store websites. Up to 3 results per store. Saves nothing. Ends with a reminder that you can reply "add item N". |
-| `search --product "X" --add-item 2` | The explicit save: result 2 gets a new sheet row (store keyword left empty on purpose) + a searched-list entry with a 3-letter code. |
+| `search --product "X" --add-item 2` | The explicit save: result 2 becomes a sheet row (store keyword left empty on purpose). **One-line rule:** if the SAME product is already on the sheet (word order / store-brand wording / pack wording ignored — `5 pack` and `70g` of the same item are ONE product), the price is updated on that existing row instead and nothing is queued. Only a same-unit different-size (200g vs 400g, beyond 20%) keeps lines apart; 33g vs 35g match. Add `--allow-duplicate` when you really want a second line. |
 | `search --product "X" --expand` | Show up to 8 results per store instead of 3. Still saves nothing. |
 | `specials` / `rewards` | What's on special / reward points, from the sheet + a live Woolworths scan. |
 | `recipe --name --ingredients` | Compare a whole recipe's ingredients. |
@@ -103,12 +158,12 @@ the same commands for you):
 | `sync` | Match + batch-write prices from your lists to the sheet. |
 | `specials-scan` | Site-wide scan for big savings. |
 | `unmapped` | Show the unmatched queue (offline-safe). |
-| `map unmatched / wool / coles / status` | The one-item-at-a-time resolve sessions. In-session replies: a number (pick), `add`, `na` (not stocked at this store — writes NA, never asked again), exact product name (save as keyword), `skip`, `stop`, `done`. |
+| `map unmatched / wool / coles / status` | The one-item-at-a-time resolve sessions. In-session replies: a number (pick — see §6D, it does the FULL job), `add` (link an exact hit, or add a genuinely new product), `na` (not stocked at this store — writes NA, never asked again), exact product name (save as keyword), `skip`, `stop`, `done`. Aldi-tagged junk items say so and offer pick/forget/skip — they cannot be live-searched. |
 | `map wool --na` | Mark a product permanently not-available at Woolworths (same for coles). |
-| `add-to-list show / done --items "1,2"` | See / clear the manual website-add to-do list. |
-| `searched-items show / remove --items "KAT,RUM" / clear` | See / remove / empty the searched list (Wednesday queue). |
+| `add-to-list show / done --items "1,KAT"` | See / clear the manual website-add to-do list (entries carry the exact store names + 3-letter codes). **`done` = "I added it on the website"** — it clears the reminder AND saves the exact store name as the row's keyword, so the next Wednesday sync matches the item immediately. `done` accepts numbers and codes mixed. |
+| `searched-items show / remove --items "KAT,RUM" / clear` | See / remove / empty the searched list (Wednesday queue). Items also clear by themselves the moment they show up on your store lists (Wednesday Step 1b). |
 | `live-refresh [--flush-only] [--fetch-only] [--recapture]` | LOCAL ONLY. The browser window: login, push queued items onto the store website lists, read all list pages into snapshots. `--recapture` redoes the one-time "training". |
-| `wednesday [--source docx|live]` | The full Wednesday pipeline (see §6). Default `docx` = the old paste-from-Word flow. `live` = the new website-list flow. |
+| `wednesday [--source docx\|live] [--no-prompt]` | The full Wednesday pipeline (see §6). Default `docx` = paste flow, now WITH a pause: it shows the queue first, waits while you add those items on the store websites and paste the updated lists, then syncs on `done`. `live` = the browser-window flow. |
 | `backfill-keywords` | Fill the alias column (P) from existing data. |
 | `backfill-sizes` | Fill empty unit cells (C) by parsing sizes out of product names. Never overwrites a filled cell; unparseable cells stay blank and show "unit unavailable" in answers. |
 
@@ -135,31 +190,69 @@ can't find one, and writes `unit unavailable` if you reply "unknown".
    dropped. Multiple: "remove KAT,RUM".
 5. You never reply -> nothing was ever saved. Searches are look-only.
 
-### B. Wednesday, old way (docx)
-You paste your store lists into `Woolworths.docx` / `Coles.docx` /
-`Woolworths_Specials.docx`, then run `python grocery_price_cli.py wednesday`.
-It parses the Word files, updates the sheet, posts the summary + specials to
-Telegram (DM + grocery-sync-sheet topic).
+### B. Wednesday, docx way (default)
+1. Run `python grocery_price_cli.py wednesday`.
+2. **It shows the searched + to-do queues FIRST and waits.** You add
+   those items to your store website lists, paste the updated lists into
+   `Woolworths.docx` / `Coles.docx` (specials into
+   `Woolworths_Specials.docx`), then type `done`.
+3. It parses the lists and **auto-links exact matches** (Step 1c): any
+   list item whose name exactly matches a sheet row with an empty store
+   keyword gets the keyword set right there — matched + priced in the
+   same run, never becoming manual work.
+4. It syncs: every price is OVERWRITTEN — found items get today's price;
+   items missing from a list get `N/A <today>` in that store's cell;
+   listed-but-unpriced items get `unavailable <today>` (old prices never
+   linger).
+5. Queued items that now appear on the pasted lists clear automatically;
+   the debt list is healed the same way (entries whose keyword now
+   exists leave automatically, and every remaining entry gets this
+   week's price attached so map picks can write prices immediately).
+6. Telegram gets the summary + all seven lists (incl. the no-price list
+   with weeks counts) in the weekly-lists topic, plus the specials
+   report in the specials-wool topic. The healed lists + debt queue are
+   pushed to the VPS so Telegram sessions see exactly the same state.
 
-### C. Wednesday, new way (live) — every week, not just the first
+### C. Wednesday, live way — every week, not just the first
 `python grocery_price_cli.py wednesday --source live`
-1. Pulls the queue files from the VPS.
+1. Step 0 pulls the queues from the VPS and MERGES them with the local
+   copies (nothing is lost on either side); the merged copies are pushed
+   back so both machines always show the same queue.
 2. Opens a real Chrome window; YOU log into Woolworths and Coles once
    (2FA included). The login is remembered until it expires.
 3. Flush: everything in the to-do + searched lists is added to your
    "Price Compare" lists ON THE STORE WEBSITES (needs the one-time training, §7).
 4. Fetch: reads ALL pages of both lists (30-page safety cap) into snapshots.
 5. Gate: if the snapshots came back incomplete it STOPS before touching the sheet.
-6. Sync: prices written to the sheet; unknown items -> Unmatched; one-store
+6. Sync: same overwrite rules as docx (found → price; absent → `N/A <date>`;
+   unpriced → `unavailable <date>`); unknown items -> Unmatched; one-store
    items -> Wool/Coles missing.
-7. Specials report + summary posted to Telegram.
+7. Specials report + summary posted to Telegram; queues mirrored back to
+   the VPS so consumption propagates.
 
-### D. Resolve sessions (map)
-Claw shows one item at a time. You reply with a number (pick a candidate),
-`add` (take the live-search result), an exact product name (save as that
-store's keyword), `na` (never stocked there — stop asking), `forget` (junk —
-never ask again), or `skip`. Each reply advances to the next item
-automatically. `stop` pauses; the session resumes later.
+### D. Resolve sessions (map) — one reply per item
+Claw shows one item at a time with the system's best information:
+
+- **Recommendations ("Which did you mean? 1) … 2) …")** = sheet rows
+  whose names look similar (ranked by matching words; the size is shown
+  so you can judge). A recommendation means the product is PROBABLY
+  already tracked — the store list just words it differently.
+- **Reply a number (pick)** — the COMPLETE fix, one reply: saves the
+  long name as a chat alias, sets the store keyword on that row (so
+  Wednesday recognises it forever), writes the item's price immediately
+  (when the debt entry carries one — items not in any current list get
+  their price at the next Wednesday sync), and clears the debt entry.
+- **"Already on the sheet" with a row number** — the exact case: reply
+  `add` and it links the store keyword in one step.
+- **`add`** — for genuinely NEW products only: creates a row with
+  today's live price (and queues it for your store website list).
+  The one-line rule keeps it to one line per product.
+- **`na`** (wool/coles lists) — never stocked there, stop asking.
+- **`forget`** — junk (paste garbage), never asked again.
+- **`skip`** / **`stop`** — move on / pause (resumes later).
+
+Aldi-tagged items cannot be live-searched (sheet-only store) — the
+session says so and offers pick/forget/skip instead of garbage results.
 
 ### E. Specials today
 `specials` reads the sheet's specials columns + scans your Woolworths list
@@ -176,31 +269,23 @@ how list pages are numbered. That knowledge is saved in
 `data/live_api_capture.json`. The code refuses to guess without it. It is
 captured automatically during the first live-window run, and
 `live-refresh --recapture` redoes it if a store changes its website.
-Status today: **never run yet** (the file does not exist), so the flush step
-cannot work until the first live run happens.
+Status: the capture file exists and per-store captures have been trained
+on this machine — check `live-refresh` per-store `Discovery:` status lines
+for the current state.
 
 ---
 
 ## 8. Planned but NOT built yet (do not assume these exist)
 
-1. **Compare reminder line** — compare output does not yet end with the
-   "Reply 'add item N'..." reminder (search already has it).
-2. **Umbrella command** — one main grocery command with subcommands,
-   including a `lists` subcommand that shows all lists (unmatched, wool
-   missing, coles missing, to-do, searched) in one view.
-3. **Telegram topic split** — specials -> a "specials-wool" topic; the three
-   resolve lists -> a second topic. (Today everything goes to DM +
-   grocery-sync-sheet.)
-4. **Specials columns M/N populated** — Wednesday writing
-   no / discount / multi-buy per store into the sheet's specials columns.
-   Verified formats: Woolworths docx uses "Save $X" (discount) and
-   "2 for $4.50" (multi-buy); Coles docx uses "Save $X"/"Was $X" (discount)
-   and "Any 2 | $9" (multi-buy). The Coles "Any N" pattern is new and not
-   parsed yet.
-5. **Fallback-model relay fix** — on hold; the model will be replaced first.
+1. **Umbrella command** — one main grocery command with subcommands,
+   including a `lists` subcommand that shows all lists in one view.
+2. **Fallback-model relay fix** — on hold; the model will be replaced first.
 
-All of the above (1, 3, 4) are user-approved decisions recorded in
-`pre-arch.md` §C.9 (decisions 23-25, 2026-08-30) — approved but not yet built.
+(Built since the 2026-08-30 list: compare add-reminder, Telegram topic
+split, specials columns M/N, queue sync, the Wednesday pause + auto-clear,
+the one-line rule, sync overwrite semantics, the no-price list, Wednesday
+exact-name auto-linking, debt auto-heal + price enrichment, one-reply map
+picks, and the aldi guard — see `test.md` for every round.)
 
 ---
 

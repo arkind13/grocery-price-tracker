@@ -411,5 +411,114 @@ class TestSearchedItemsSizeContract(SearchedItemsTestCase):
         self.assertIn(" · ⚠️ unit unavailable [BBB]", out)
 
 
+class DrainFromParsedTestCase(SearchedItemsTestCase):
+    """Step 1b: queued items found on a parsed store list clear."""
+
+    class _Item:
+        """Minimal ProductItem stand-in (raw_name only)."""
+
+        def __init__(self, raw_name):
+            self.raw_name = raw_name
+
+    def test_item_on_its_store_list_is_cleared_and_tombstoned(self):
+        self.seed([
+            {"store": "woolworths", "keyword": "Yumi's Herb Falafel 200g",
+             "generic_name": "Yumi's Herb Falafel 200g", "code": "XCL",
+             "size": "200g", "added_at": "2026-09-01T08:27:20+00:00"},
+        ])
+        removed = self.si.drain_from_parsed({
+            "woolworths": [self._Item("Yumi's Herb Falafel 200g")],
+            "coles": [],
+        })
+        self.assertEqual(len(removed), 1)
+        self.assertEqual(self.read_queue(), [])
+        self.assertEqual(
+            [t["code"] for t in self.read_tombstones()], ["XCL"])
+
+    def test_slightly_different_name_still_matches(self):
+        self.seed([
+            {"store": "coles", "keyword": "CARMANS Fruit Straps 70g",
+             "generic_name": "CARMANS Fruit Straps 70g", "code": "TXY",
+             "size": "70g", "added_at": "2026-09-01T11:42:37+00:00"},
+        ])
+        removed = self.si.drain_from_parsed({
+            "woolworths": [],
+            "coles": [self._Item("Carmans fruit straps 70G")],
+        })
+        self.assertEqual(len(removed), 1)
+
+    def test_item_absent_from_lists_stays_queued(self):
+        self.seed([
+            {"store": "woolworths", "keyword": "Yumi's Herb Falafel 200g",
+             "generic_name": "Yumi's Herb Falafel 200g", "code": "XCL",
+             "size": "200g", "added_at": "2026-09-01T08:27:20+00:00"},
+        ])
+        removed = self.si.drain_from_parsed({
+            "woolworths": [self._Item("Something Else 500g")],
+            "coles": [],
+        })
+        self.assertEqual(removed, [])
+        self.assertEqual(len(self.read_queue()), 1)
+        if self.si.TOMBSTONES_PATH.exists():
+            self.assertEqual(self.read_tombstones(), [])
+
+    def test_same_unit_different_amount_not_drained(self):
+        """200g vs 400g are different products — must NOT clear
+        (2026-09-02 rule: only same-unit size differences stay apart)."""
+        self.seed([
+            {"store": "woolworths",
+             "keyword": "Obela Classic Hommus 200g",
+             "generic_name": "Obela Classic Hommus 200g",
+             "code": "KAT", "size": "200g",
+             "added_at": "2026-08-29T02:00:00+00:00"},
+        ])
+        removed = self.si.drain_from_parsed({
+            "woolworths": [self._Item("Obela Classic Hommus 400g")],
+            "coles": [],
+        })
+        self.assertEqual(removed, [])
+        self.assertEqual(len(self.read_queue()), 1)
+
+    def test_pack_vs_weight_wording_same_product_drains(self):
+        """WW '5 pack' vs Coles/WW '70G' wording of the SAME product
+        (the 2026-09-01 Carman's case) — one product, MUST clear."""
+        self.seed([
+            {"store": "woolworths",
+             "keyword": "Carman's Apple & Blueberry Fruit Straps 5 pack",
+             "generic_name": "Carman's Apple & Blueberry Fruit Straps 5 pack",
+             "code": "DAC", "size": "5 pack",
+             "added_at": "2026-09-01T11:41:05+00:00"},
+        ])
+        removed = self.si.drain_from_parsed({
+            "woolworths": [
+                self._Item("CARMANS FRUIT STRAPS APPLE & BLUEBERRY 70G")],
+            "coles": [],
+        })
+        self.assertEqual(len(removed), 1)
+        self.assertEqual(self.read_queue(), [])
+
+    def test_other_store_match_does_not_clear(self):
+        self.seed([
+            {"store": "coles", "keyword": "Obela Classic Hommus 200g",
+             "generic_name": "Obela Classic Hommus 200g", "code": "KAT",
+             "size": "200g", "added_at": "2026-08-29T02:00:00+00:00"},
+        ])
+        removed = self.si.drain_from_parsed({
+            "woolworths": [self._Item("Obela Classic Hommus 200g")],
+            "coles": [],
+        })
+        self.assertEqual(removed, [])
+        self.assertEqual(len(self.read_queue()), 1)
+
+    def test_empty_lists_leave_queue_untouched(self):
+        self.seed([
+            {"store": "woolworths", "keyword": "Milk 3L",
+             "generic_name": "Milk 3L", "code": "GDP", "size": "3L",
+             "added_at": "2026-08-31T08:31:49+00:00"},
+        ])
+        self.assertEqual(self.si.drain_from_parsed({}), [])
+        self.assertEqual(len(self.read_queue()), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

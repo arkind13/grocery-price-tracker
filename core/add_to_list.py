@@ -185,6 +185,8 @@ def add_entry(store: str, keyword: str, generic_name: str,
         "generic_name": gn,
         # B4: always present; blank normalises to the marker (P6).
         "size": str(size or "").strip() or UNIT_UNAVAILABLE,
+        # 2026-09-02: 3-letter reference code (same UX as searched items).
+        "code": generate_code(),
         "added_at": datetime.now(timezone.utc).isoformat(),
     }
     entries = load_pending()
@@ -278,6 +280,15 @@ def remove_by_numbers(numbers: list[int]) -> dict:
     removed = [ordered[n - 1] for n in unique]
     remaining = [e for i, e in enumerate(ordered, 1) if i not in remove_set]
     save_pending(remaining)
+    # 2026-09-02: tombstone removed codes for 7 days (no immediate
+    # reuse on a different product).
+    removed_codes = [
+        str(e.get("code", "")).strip() for e in removed if e.get("code")]
+    if removed_codes:
+        try:
+            _add_code_tombstones(removed_codes)
+        except OSError:
+            pass  # a tombstone failure must not fail the removal
     return {"removed": removed, "remaining_count": len(remaining)}
 
 
@@ -304,9 +315,11 @@ def render_show() -> str:
         blocks.append(subheader(store.capitalize()))
         for entry in store_entries:
             counter += 1
+            code = str(entry.get("code", "")).strip()
+            code_bit = f" [{code}]" if code else ""
             blocks.append(
                 f"{counter}) {entry.get('keyword', '')}"
-                f"{unit_suffix(entry.get('size', ''))}")
+                f"{unit_suffix(entry.get('size', ''))}{code_bit}")
     return "\n".join(blocks)
 
 
@@ -326,9 +339,11 @@ def render_remaining_flat(entries: list[dict], start: int = 1) -> str:
     lines = []
     for i, entry in enumerate(entries, start):
         store = str(entry.get("store", "")).strip().capitalize()
+        code = str(entry.get("code", "")).strip()
+        code_bit = f" [{code}]" if code else ""
         lines.append(
             f"{i}) {entry.get('keyword', '')}"
-            f"{unit_suffix(entry.get('size', ''))} ({store})")
+            f"{unit_suffix(entry.get('size', ''))} ({store}){code_bit}")
     return "\n".join(lines)
 
 
@@ -347,3 +362,184 @@ def since_label(entry: dict) -> str:
         return datetime.fromisoformat(raw).strftime("%d %b")
     except (TypeError, ValueError):
         return raw
+
+
+# ===========================================================================
+# 3-letter entry codes (2026-09-02 — mirrors searched_items codes)
+# ===========================================================================
+# Every entry gets a unique 3-letter code (letters only, no I/O, no
+# repeated letter inside the code) so the user can reference items the
+# same way as the searched list ("done KAT"). Removed codes are
+# tombstoned for 7 days so a code can't immediately reattach to a
+# different product after removal.
+
+A_L_TOMBSTONES_PATH = DATA_DIR / "add_to_list_code_tombstones.json"
+CODE_TTL_DAYS = 7
+_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ"   # letters only, no I/O
+
+
+def _load_code_tombstones(*, now: datetime | None = None) -> list[dict]:
+    """Read code tombstones, pruning entries older than the TTL."""
+    from datetime import timedelta
+
+    now = now or datetime.now(timezone.utc)
+    if not A_L_TOMBSTONES_PATH.exists():
+        return []
+    try:
+        with open(A_L_TOMBSTONES_PATH, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except (OSError, ValueError):
+        return []
+    if not isinstance(raw, list):
+        return []
+    kept: list[dict] = []
+    cutoff = now - timedelta(days=CODE_TTL_DAYS)
+    for tomb in raw:
+        try:
+            ts = datetime.fromisoformat(str(tomb.get("removed_at", "")))
+        except (TypeError, ValueError):
+            continue
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        if ts >= cutoff:
+            kept.append(tomb)
+    return kept
+
+
+def _save_code_tombstones(tombstones: list[dict]) -> None:
+    """Write code tombstones atomically."""
+    A_L_TOMBSTONES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(
+        prefix="add_to_list_tombstones_",
+        dir=str(A_L_TOMBSTONES_PATH.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(tombstones, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_path, str(A_L_TOMBSTONES_PATH))
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _add_code_tombstones(codes: list[str], *,
+                         now: datetime | None = None) -> None:
+    """Tombstone the given codes (idempotent)."""
+    now = now or datetime.now(timezone.utc)
+    existing = _load_code_tombstones(now=now)
+    have = {t.get("code", "") for t in existing}
+    for code in codes:
+        code = str(code or "").strip().upper()
+        if code and code not in have:
+            existing.append(
+                {"code": code, "removed_at": now.isoformat()})
+            have.add(code)
+    _save_code_tombstones(existing)
+
+
+def generate_code(*, rng=None, now: datetime | None = None) -> str:
+    """Generate a fresh 3-letter code (no I/O, no repeated letter).
+
+    Uniqueness is enforced against CURRENT entry codes and live
+    tombstones. Exhaustion (astronomically unlikely at this scale)
+    falls back to allowing a repeated letter before ever raising.
+
+    Args:
+        rng (random.Random | None): injected RNG for tests.
+        now (datetime | None): injected clock for tombstone expiry.
+
+    Returns:
+        str: 3 uppercase letters.
+    """
+    import random as _random
+
+    rng = rng or _random
+    taken = {
+        str(e.get("code", "")).strip().upper()
+        for e in load_pending()
+    }
+    taken |= {t.get("code", "") for t in _load_code_tombstones(now=now)}
+    for _ in range(500):
+        code = "".join(rng.sample(_CODE_ALPHABET, 3))
+        if code not in taken:
+            return code
+    # Fallback: allow repeated letters rather than fail.
+    while True:
+        code = "".join(rng.choices(_CODE_ALPHABET, k=3))
+        if code not in taken:
+            return code
+
+
+def ensure_codes(*, rng=None, now: datetime | None = None) -> int:
+    """Backfill codes for legacy entries created before 2026-09-02.
+
+    Args:
+        rng / now: injected for tests (see generate_code).
+
+    Returns:
+        int: number of codes assigned (0 when nothing to do, and the
+        file is not touched in that case).
+    """
+    entries = load_pending()
+    taken = {
+        str(e.get("code", "")).strip().upper() for e in entries if e.get("code")}
+    assigned = 0
+    for entry in entries:
+        if str(entry.get("code", "")).strip():
+            continue
+        for _ in range(50):
+            code = generate_code(rng=rng, now=now)
+            if code not in taken:
+                break
+        entry["code"] = code
+        taken.add(code)
+        assigned += 1
+    if assigned:
+        save_pending(entries)
+    return assigned
+
+
+def resolve_items_arg(text: str) -> list[int]:
+    """Parse a mixed --items value ("1,KAT,3") into show numbers.
+
+    Numbers pass through; 3-letter codes are resolved against the
+    current entries (case-insensitive). An unknown code raises with
+    the live code list so the user can self-correct (mirrors
+    searched-items remove errors).
+
+    Args:
+        text (str): raw --items value.
+
+    Returns:
+        list[int]: show numbers, deduped, first-seen order.
+
+    Raises:
+        ValueError: unknown code (message lists current codes), or
+        nothing parseable.
+    """
+    ordered = ordered_entries()
+    by_code = {
+        str(e.get("code", "")).strip().upper(): i
+        for i, e in enumerate(ordered, 1) if e.get("code")}
+    numbers: list[int] = []
+    for token in _numeric_tokens(text):
+        upper = token.strip().upper()
+        if upper in by_code:
+            numbers.append(by_code[upper])
+            continue
+        if re.fullmatch(r"[A-Z]{3}", upper):
+            live = ", ".join(
+                f"{e.get('code')} ({e.get('keyword', '')[:30]})"
+                for e in ordered if e.get("code")) or "none"
+            raise ValueError(
+                f"unknown code '{upper}' — current codes: {live}.")
+        try:
+            numbers.append(int(token))
+        except ValueError:
+            raise ValueError(f"could not parse items '{text}'.")
+    if not numbers:
+        raise ValueError(f"could not parse items '{text}'.")
+    seen: set[int] = set()
+    return [n for n in numbers if not (n in seen or seen.add(n))]

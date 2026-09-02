@@ -1026,6 +1026,425 @@ class TestAddProductRowRequiredSize(unittest.TestCase):
         self.assertEqual(written[2], "1L")
 
 
+class TestAddProductRowDuplicateGuard(unittest.TestCase):
+    """2026-09-01 incident: exact Col A match must not append a dup row."""
+
+    HEADER = [
+        "Product_Name", "Category", "Size", "Woolworths_Price",
+        "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+        "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+        "Search_Keyword_Aldi", "Aldi_Refresh",
+        "Woolworths_Specials", "Coles_Specials", "Rewards_Points",
+        "Keywords",
+    ]
+
+    def _ws_with_milk(self):
+        rows = [
+            self.HEADER,
+            ["Woolworths Full Cream Milk 3L", "Dairy", "3L", "4.30",
+             "", "", "Home", "", "milk 3l", "", "", "", "", "", ""],
+        ]
+        return FakeWorksheet(rows)
+
+    def test_exact_existing_name_refused(self):
+        from core.sheets_sync import add_product_row
+        ws = self._ws_with_milk()
+        res = add_product_row(
+            "Woolworths Full Cream Milk 3L", "woolworths", 4.30,
+            brand="Woolworths", size="3L", worksheet=ws)
+        self.assertFalse(res["wrote"])
+        self.assertEqual(res["row_index"], 2)
+        self.assertIn("already tracked", res["error"])
+        self.assertEqual(len(ws.updates), 0)  # nothing appended
+
+    def test_normalized_match_refused(self):
+        from core.sheets_sync import add_product_row
+        ws = self._ws_with_milk()
+        res = add_product_row(
+            "  woolworths   FULL cream milk 3l ", "woolworths", 4.30,
+            brand="Woolworths", size="3L", worksheet=ws)
+        self.assertFalse(res["wrote"])
+        self.assertIn("already tracked", res["error"])
+
+    def test_new_name_still_appends(self):
+        from core.sheets_sync import add_product_row
+        ws = self._ws_with_milk()
+        res = add_product_row(
+            "A2 Full Cream Milk 3L", "woolworths", 4.10,
+            brand="A2", size="3L", worksheet=ws)
+        self.assertTrue(res["wrote"])
+        self.assertEqual(res["row_index"], 3)
+
+
+class TestAddProductRowOneLineRule(unittest.TestCase):
+    """2026-09-02 user rule: 1 line per product even when names differ
+    slightly; --allow-duplicate is the explicit 2-different-items override."""
+
+    HEADER = [
+        "Product_Name", "Category", "Size", "Woolworths_Price",
+        "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+        "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+        "Search_Keyword_Aldi", "Aldi_Refresh",
+        "Woolworths_Specials", "Coles_Specials", "Rewards_Points",
+        "Keywords",
+    ]
+
+    def _ws_with_hommus(self):
+        rows = [
+            self.HEADER,
+            ["Obela Classic Hommus 200g", "Dairy", "200g", "4.50",
+             "", "", "Obela", "", "obela hommus", "", "", "", "", "",
+             "", "hommus"],
+        ]
+        return FakeWorksheet(rows)
+
+    def test_similar_name_merges_into_existing_row(self):
+        """Word order + store prefix differ -> ONE row, price updated."""
+        from core.sheets_sync import add_product_row
+        ws = self._ws_with_hommus()
+        res = add_product_row(
+            "Woolworths Hommus Classic Obela 200g", "woolworths", 4.20,
+            brand="Obela", size="200g", alias="hommus dip",
+            worksheet=ws)
+        self.assertTrue(res["wrote"])
+        self.assertTrue(res["merged"])
+        self.assertEqual(res["row_index"], 2)
+        self.assertEqual(res["existing_name"], "Obela Classic Hommus 200g")
+        # No second row appended.
+        self.assertEqual(len(ws.get_all_values()), 2)
+        # Price updated on the existing row (Col D).
+        updated = ws.get_all_values()
+        self.assertEqual(float(updated[1][3]), 4.20)
+
+    def test_merge_appends_alias_to_col_p(self):
+        from core.sheets_sync import add_product_row
+        ws = self._ws_with_hommus()
+        res = add_product_row(
+            "Obela Hommus Classic 200g", "woolworths", 4.20,
+            brand="Obela", size="200g", alias="hommus dip",
+            worksheet=ws)
+        self.assertTrue(res["merged"])
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][15], "hommus|hommus dip")
+
+    def test_merge_alias_already_present_not_duplicated(self):
+        from core.sheets_sync import add_product_row
+        ws = self._ws_with_hommus()
+        res = add_product_row(
+            "Obela Hommus Classic 200g", "woolworths", 4.20,
+            brand="Obela", size="200g", alias="hommus",
+            worksheet=ws)
+        self.assertTrue(res["merged"])
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][15], "hommus")
+
+    def test_allow_duplicate_creates_separate_row(self):
+        from core.sheets_sync import add_product_row
+        ws = self._ws_with_hommus()
+        res = add_product_row(
+            "Obela Hommus Classic 200g", "woolworths", 4.20,
+            brand="Obela", size="200g", allow_duplicate=True,
+            worksheet=ws)
+        self.assertTrue(res["wrote"])
+        self.assertFalse(res.get("merged"))
+        self.assertEqual(res["row_index"], 3)
+
+    def test_exact_duplicate_refused_even_with_allow_duplicate(self):
+        from core.sheets_sync import add_product_row
+        ws = self._ws_with_hommus()
+        res = add_product_row(
+            "Obela Classic Hommus 200g", "woolworths", 4.20,
+            brand="Obela", size="200g", allow_duplicate=True,
+            worksheet=ws)
+        self.assertFalse(res["wrote"])
+        self.assertIn("already tracked", res["error"])
+
+    def test_different_size_stays_separate_without_override(self):
+        """200g vs 400g are different products (token sets differ)."""
+        from core.sheets_sync import add_product_row
+        ws = self._ws_with_hommus()
+        res = add_product_row(
+            "Obela Classic Hommus 400g", "woolworths", 7.00,
+            brand="Obela", size="400g", worksheet=ws)
+        self.assertTrue(res["wrote"])
+        self.assertFalse(res.get("merged"))
+        self.assertEqual(res["row_index"], 3)
+
+
+class TestNameSimilarityHelpers(unittest.TestCase):
+    """token_set_ratio / similarity_tokens — the one-line-rule engine."""
+
+    def test_store_words_ignored(self):
+        from core.name_matcher import token_set_ratio
+        self.assertEqual(
+            token_set_ratio("Woolworths Full Cream Milk 3L",
+                            "Full Cream Milk 3l"), 1.0)
+
+    def test_word_order_irrelevant(self):
+        from core.name_matcher import token_set_ratio
+        self.assertEqual(
+            token_set_ratio("Obela Classic Hommus 200g",
+                            "Hommus Classic Obela 200g"), 1.0)
+
+    def test_punctuation_ignored(self):
+        from core.name_matcher import token_set_ratio
+        self.assertEqual(
+            token_set_ratio("Carman's Apple & Blueberry",
+                            "carmans apple blueberry"), 1.0)
+
+    def test_different_sizes_score_low(self):
+        from core.name_matcher import token_set_ratio
+        ratio = token_set_ratio("Fruit Straps 5 pack", "Fruit Straps 70g")
+        self.assertLess(ratio, 0.8)
+
+    def test_blank_scores_zero(self):
+        from core.name_matcher import token_set_ratio
+        self.assertEqual(token_set_ratio("", "Milk"), 0.0)
+
+
+class TestIsSameProduct(unittest.TestCase):
+    """The one-line rule engine: same product = one line ALWAYS, unless
+    it's the same unit with a different amount (2026-09-02 user rule)."""
+
+    def test_pack_vs_weight_wording_is_same_product(self):
+        """WW '5 pack' vs Coles '70G' of the same item -> ONE line."""
+        from core.name_matcher import is_same_product
+        self.assertTrue(is_same_product(
+            "Carman's Apple & Blueberry Fruit Straps 5 pack",
+            "CARMANS FRUIT STRAPS APPLE & BLUEBERRY 70G"))
+
+    def test_same_unit_different_amount_is_different(self):
+        from core.name_matcher import is_same_product
+        self.assertFalse(is_same_product(
+            "Obela Classic Hommus 200g", "Obela Classic Hommus 400g"))
+        self.assertFalse(is_same_product(
+            "Full Cream Milk 1L", "Full Cream Milk 2L"))
+
+    def test_within_20pct_size_variance_still_matches(self):
+        """33g (Woolworths) vs 35g (Coles) = 6% apart — the built-in
+        20% tolerance keeps them ONE line (user-confirmed 2026-09-02)."""
+        from core.name_matcher import is_same_product
+        self.assertTrue(is_same_product(
+            "Obela Classic Hommus 33g", "Obela Classic Hommus 35g"))
+        # ...but 20%+ apart stays separate (200g vs 400g).
+
+    def test_same_size_same_product(self):
+        from core.name_matcher import is_same_product
+        self.assertTrue(is_same_product(
+            "Obela Classic Hommus 200g", "Obela Hommus Classic 200g"))
+
+    def test_brand_words_still_separate(self):
+        from core.name_matcher import is_same_product
+        self.assertFalse(is_same_product(
+            "A2 Full Cream Milk 3L", "Woolworths Full Cream Milk 3L"))
+
+    def test_one_side_missing_size_merges(self):
+        from core.name_matcher import is_same_product
+        self.assertTrue(is_same_product(
+            "Yumi's Herb Falafel 200g", "Yumi's Herb Falafel"))
+
+    def test_blank_is_not_same(self):
+        from core.name_matcher import is_same_product
+        self.assertFalse(is_same_product("", "Milk 3L"))
+
+    def test_different_families_merge_per_user_rule(self):
+        """g vs mL (different unit types) is NOT a keep-apart reason —
+        only same-unit-different-amount keeps lines apart."""
+        from core.name_matcher import is_same_product
+        self.assertTrue(is_same_product(
+            "Store Stock Concentrate 500g", "Store Stock Concentrate 500mL"))
+
+
+class TestAddProductRowPackVsWeight(unittest.TestCase):
+    """The 2026-09-01 Carman's incident: WW 5-pack add vs the Coles 70G
+    row must fold into ONE line (same product, different pack wording)."""
+
+    HEADER = [
+        "Product_Name", "Category", "Size", "Woolworths_Price",
+        "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+        "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+        "Search_Keyword_Aldi", "Aldi_Refresh",
+        "Woolworths_Specials", "Coles_Specials", "Rewards_Points",
+        "Keywords",
+    ]
+
+    def test_carmans_pack_add_merges_into_weight_row(self):
+        from core.sheets_sync import add_product_row
+        ws = FakeWorksheet([
+            self.HEADER,
+            ["CARMANS FRUIT STRAPS APPLE & BLUEBERRY 70G", "Snacks",
+             "70g", "", "4.50", "", "Carman's", "", "", "carmans straps",
+             "", "", "", "", "", ""],
+        ])
+        res = add_product_row(
+            "Carman's Apple & Blueberry Fruit Straps 5 pack",
+            "woolworths", 4.50, brand="Carman's", size="5 pack",
+            worksheet=ws)
+        self.assertTrue(res["merged"])
+        self.assertEqual(res["row_index"], 2)
+        # One row, WW price now filled on the existing line.
+        updated = ws.get_all_values()
+        self.assertEqual(len(updated), 2)
+        self.assertEqual(float(updated[1][3]), 4.50)
+
+
+class TestSyncOverwriteSemantics(unittest.TestCase):
+    """2026-09-02: every sync OVERWRITES all prices — mapped rows
+    absent from the list get 'N/A <date>' (stale prices never linger),
+    listed-but-priceless items get 'unavailable <date>'; the date
+    anchors no-price week aging and survives until a real price
+    returns. Rows with blank or literal-NA keywords are never marked;
+    a store whose list wasn't provided is never marked either."""
+
+    HEADER = [
+        "Product_Name", "Category", "Size", "Woolworths_Price",
+        "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+        "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+        "Search_Keyword_Aldi", "Aldi_Refresh",
+    ]
+
+    def _ws(self, *data_rows):
+        return FakeWorksheet([self.HEADER] + [list(r) for r in data_rows])
+
+    def _matched(self, ws_row, store, price, name="Item"):
+        result = MatchResult(True, ws_row, name, store, name,
+                             "exact_keyword")
+        item = ProductItem(store, name, price)
+        return [result], [item]
+
+    def test_notfound_mapped_row_marked_na_with_date(self):
+        ws = self._ws(
+            ["Gone Product", "", "", "5.50", "", "", "", "",
+             "gone product", "", "", ""],
+            ["Other", "", "", "", "", "", "", "",
+             "other", "", "", ""],
+        )
+        # One DIFFERENT woolworths item matches (row 3) — the store
+        # list was provided, so the absent row 2 must be marked.
+        results, items = self._matched(3, "woolworths", 3.0, "Other")
+        report = sync_prices(results, items, worksheet=ws)
+        self.assertEqual(report.notfound_written, 1)
+        self.assertIn("Gone Product", report.notfound_items)
+        updated = ws.get_all_values()
+        self.assertRegex(updated[1][3], r"^N/A \d{4}-\d{2}-\d{2}$")
+        self.assertEqual(float(updated[2][3]), 3.0)
+
+    def test_stale_price_replaced_by_na(self):
+        """The headline fix: price lingers after the item left the
+        list — the sync must overwrite it with the N/A marker."""
+        ws = self._ws(
+            ["Old Fav", "", "", "5.50", "", "", "", "",
+             "old fav", "old fav coles", "", ""],
+            ["Still Here", "", "", "", "", "", "", "",
+             "still here", "", "", ""],
+        )
+        results, items = self._matched(3, "woolworths", 2.0, "Still Here")
+        report = sync_prices(results, items, worksheet=ws)
+        self.assertEqual(report.notfound_written, 1)
+        updated = ws.get_all_values()
+        self.assertRegex(updated[1][3], r"^N/A \d{4}-\d{2}-\d{2}$")
+
+    def test_listed_but_no_price_marked_unavailable(self):
+        ws = self._ws(
+            ["Stock Item", "", "", "4.00", "", "", "", "",
+             "stock item", "", "", ""],
+        )
+        results, items = self._matched(2, "woolworths", 0, "Stock Item")
+        report = sync_prices(results, items, worksheet=ws)
+        self.assertEqual(report.unavailable_written, 1)
+        updated = ws.get_all_values()
+        self.assertRegex(updated[1][3], r"^unavailable \d{4}-\d{2}-\d{2}$")
+
+    def test_found_row_with_price_not_marked(self):
+        ws = self._ws(
+            ["Priced", "", "", "", "", "", "", "",
+             "priced", "", "", ""],
+        )
+        results, items = self._matched(2, "woolworths", 4.5, "Priced")
+        report = sync_prices(results, items, worksheet=ws)
+        self.assertEqual(report.notfound_written, 0)
+        self.assertEqual(report.unavailable_written, 0)
+        self.assertEqual(ws.get_all_values()[1][3], 4.5)
+
+    def test_blank_and_na_keyword_rows_never_marked(self):
+        ws = self._ws(
+            ["No Kw", "", "", "1.00", "", "", "", "", "", "", "", ""],
+            ["Deliberate", "", "", "2.00", "", "", "", "",
+             "NA", "NA", "", ""],
+            ["Other", "", "", "", "", "", "", "",
+             "other", "", "", ""],
+        )
+        results, items = self._matched(4, "woolworths", 3.0, "Other")
+        report = sync_prices(results, items, worksheet=ws)
+        self.assertEqual(report.notfound_written, 0)
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][3], "1.00")   # blank kw untouched
+        self.assertEqual(updated[2][3], "2.00")   # NA kw untouched
+
+    def test_store_not_provided_no_marking(self):
+        """Coles list failed to parse (no coles items) — mapped Coles
+        rows must keep their prices; only a warning is added."""
+        ws = self._ws(
+            ["Coles Only", "", "", "", "3.00", "", "", "",
+             "", "coles only", "", ""],
+        )
+        results, items = self._matched(2, "woolworths", 1.5, "Other")
+        report = sync_prices(results, items, worksheet=ws)
+        self.assertEqual(report.notfound_written, 0)
+        self.assertEqual(ws.get_all_values()[1][4], "3.00")
+        self.assertTrue(any("coles list not provided" in w
+                            for w in report.warnings))
+
+    def test_marker_anchor_date_preserved(self):
+        """An already-marked row keeps its original anchor — the week
+        count grows, it never resets while the item stays price-less."""
+        ws = self._ws(
+            ["Long Gone", "", "", "N/A 2026-08-01", "", "", "", "",
+             "long gone", "", "", ""],
+            ["Other", "", "", "", "", "", "", "",
+             "other", "", "", ""],
+        )
+        results, items = self._matched(3, "woolworths", 3.0, "Other")
+        report = sync_prices(results, items, worksheet=ws)
+        self.assertEqual(report.notfound_written, 0)  # no rewrite
+        self.assertEqual(ws.get_all_values()[1][3], "N/A 2026-08-01")
+
+    def test_returning_price_overwrites_marker(self):
+        ws = self._ws(
+            ["Back Again", "", "", "N/A 2026-08-01", "", "", "", "",
+             "back again", "", "", ""],
+        )
+        results, items = self._matched(2, "woolworths", 6.25, "Back Again")
+        report = sync_prices(results, items, worksheet=ws)
+        self.assertEqual(ws.get_all_values()[1][3], 6.25)
+
+    def test_one_store_na_other_priced_is_not_reported(self):
+        """WW drops the item (N/A) but Coles still prices it — the
+        overwrite happens; no-price surfacing (both stores price-less)
+        is the CLI's job. Both store lists provided this run."""
+        ws = self._ws(
+            ["Split Item", "", "", "4.00", "4.20", "", "", "",
+             "split item", "split item", "", ""],
+            ["WW Only", "", "", "", "", "", "", "",
+             "ww only", "", "", ""],
+        )
+        results = [
+            MatchResult(True, 2, "Split Item", "coles",
+                        "Split Item", "exact_keyword"),
+            MatchResult(True, 3, "WW Only", "woolworths",
+                        "WW Only", "exact_keyword"),
+        ]
+        items = [
+            ProductItem("coles", "Split Item", 4.20),
+            ProductItem("woolworths", "WW Only", 2.00),
+        ]
+        report = sync_prices(results, items, worksheet=ws)
+        self.assertEqual(report.notfound_written, 1)
+        updated = ws.get_all_values()
+        self.assertRegex(updated[1][3], r"^N/A \d{4}-\d{2}-\d{2}$")
+        self.assertEqual(float(updated[1][4]), 4.20)
+
+
 class TestUpdateSinglePriceBackfill(unittest.TestCase):
     """C.1: blank Col C healed in the same write; never overwritten."""
 

@@ -476,6 +476,56 @@ def clear_all() -> dict:
     return {"removed": ordered, "remaining_count": 0}
 
 
+def drain_from_parsed(store_items: dict) -> list:
+    """Remove queued entries whose product now appears on a store list.
+
+    Wednesday Step 1b (2026-09-02 user workflow): after the docx lists
+    are parsed (or live snapshots read), any queued searched item whose
+    name matches an item on ITS store's list has been added to the
+    store website — clear it from the queue (consume_entries: removal
+    + code tombstone, idempotent).
+
+    Matching uses the ONE canonical same-product rule
+    (name_matcher.is_same_product — store wording/pack phrasing
+    differences match; only same-unit-different-amount like 200g vs
+    400g stays apart), with exact-normalized equality as a fast path.
+    A missed match just leaves the reminder in place; a false match
+    would silently drop a pending add, so the rule stays strict on
+    descriptive words.
+
+    Args:
+        store_items (dict): {"woolworths": [ProductItem, ...],
+            "coles": [...]} — the parsed lists (raw_name attribute).
+
+    Returns:
+        list[dict]: the entries removed (show order), newest last.
+    """
+    from core.name_matcher import KeywordIndex, is_same_product
+
+    removed: list[dict] = []
+    for store in _STORE_ORDER:
+        items = store_items.get(store) or []
+        names = [str(getattr(i, "raw_name", "") or "") for i in items]
+        if not names:
+            continue
+        matched = []
+        for entry in ordered_entries():
+            if entry.get("store") != store:
+                continue
+            keyword = str(entry.get("keyword", ""))
+            hit = any(
+                KeywordIndex._normalize(keyword) ==
+                KeywordIndex._normalize(name)
+                or is_same_product(keyword, name)
+                for name in names if name)
+            if hit:
+                matched.append(entry)
+        if matched:
+            consume_entries(store, matched)
+            removed.extend(matched)
+    return removed
+
+
 # ---------------------------------------------------------------------------
 # CLI argument parsing + render
 # ---------------------------------------------------------------------------

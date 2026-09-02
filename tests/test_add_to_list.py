@@ -27,10 +27,14 @@ class TestAddToListModule(unittest.TestCase):
     # ========================================================================
 
     def _patched(self, tmpdir):
-        """Return a patcher context for an isolated ADD_TO_LIST_PATH."""
+        """Return a patcher context isolating queue AND tombstone paths."""
         from core import add_to_list as atl
-        return patch.object(
-            atl, "ADD_TO_LIST_PATH", Path(tmpdir) / "add_to_list.json")
+        return patch.multiple(
+            atl,
+            ADD_TO_LIST_PATH=Path(tmpdir) / "add_to_list.json",
+            A_L_TOMBSTONES_PATH=(
+                Path(tmpdir) / "add_to_list_code_tombstones.json"),
+        )
 
     def _read_file(self):
         """Read the raw queue file as a JSON list (isolated path)."""
@@ -208,9 +212,9 @@ class TestAddToListModule(unittest.TestCase):
                 render = atl.render_show()
                 one_line = [ln for ln in render.splitlines()
                             if ln.startswith("1)")]
-                self.assertEqual(
-                    one_line[0],
-                    "1) Coles Second · ⚠️ unit unavailable")
+                # Line ends with the entry's 3-letter code (2026-09-02).
+                self.assertTrue(one_line[0].startswith(
+                    "1) Coles Second · ⚠️ unit unavailable ["))
 
     # ========================================================================
     # parse_items_arg
@@ -253,11 +257,17 @@ class TestAddToListModule(unittest.TestCase):
                 self._seed_four(atl)
                 output = atl.render_show()
         lines = output.splitlines()
-        # No size captured at add time -> every line shows the marker.
-        self.assertIn("1) Coles Item One · ⚠️ unit unavailable", lines)
-        self.assertIn("2) Coles Item Two · ⚠️ unit unavailable", lines)
-        self.assertIn("3) Woolies Item Three · ⚠️ unit unavailable", lines)
-        self.assertIn("4) Woolies Item Four · ⚠️ unit unavailable", lines)
+        # No size captured at add time -> every line shows the marker;
+        # entries now also carry [CODE] suffixes (2026-09-02), so match
+        # by prefix rather than exact line membership.
+        for prefix in (
+            "1) Coles Item One · ⚠️ unit unavailable",
+            "2) Coles Item Two · ⚠️ unit unavailable",
+            "3) Woolies Item Three · ⚠️ unit unavailable",
+            "4) Woolies Item Four · ⚠️ unit unavailable",
+        ):
+            self.assertTrue(
+                any(ln.startswith(prefix) for ln in lines), prefix)
         lowered = output.lower()
         self.assertLess(lowered.index("coles"), lowered.index("woolworths"))
 
@@ -368,6 +378,96 @@ class TestAddToListSizeContract(unittest.TestCase):
                 self.assertIn(") Beans · 500g", show)
                 flat = atl.render_remaining_flat(atl.ordered_entries())
         self.assertIn(" · ⚠️ unit unavailable", flat)
+
+
+class TestAddToListCodes(unittest.TestCase):
+    """2026-09-02: 3-letter entry codes mirroring searched_items."""
+
+    def _patched(self, tmpdir):
+        from core import add_to_list as atl
+        return patch.multiple(
+            atl,
+            ADD_TO_LIST_PATH=Path(tmpdir) / "add_to_list.json",
+            A_L_TOMBSTONES_PATH=(
+                Path(tmpdir) / "add_to_list_code_tombstones.json"),
+        )
+
+    def test_add_entry_assigns_unique_code(self):
+        from core import add_to_list as atl
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._patched(tmpdir):
+                a = atl.add_entry("coles", "Beans", "Beans", size="500g")
+                b = atl.add_entry(
+                    "woolworths", "Milk", "Milk", size="1L")
+        code_a = a["entry"]["code"]
+        code_b = b["entry"]["code"]
+        self.assertRegex(code_a, r"^[A-HJ-NP-Z]{3}$")  # no I/O
+        self.assertRegex(code_b, r"^[A-HJ-NP-Z]{3}$")
+        self.assertNotEqual(code_a, code_b)
+        self.assertEqual(len(set(code_a)), 3)  # no repeated letter
+
+    def test_render_shows_code(self):
+        from core import add_to_list as atl
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._patched(tmpdir):
+                res = atl.add_entry("coles", "Beans", "Beans", size="500g")
+                show = atl.render_show()
+                flat = atl.render_remaining_flat(atl.ordered_entries())
+        self.assertIn(f"[{res['entry']['code']}]", show)
+        self.assertIn(f"[{res['entry']['code']}]", flat)
+
+    def test_removal_tombstones_code(self):
+        from core import add_to_list as atl
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._patched(tmpdir):
+                res = atl.add_entry("coles", "Beans", "Beans", size="500g")
+                code = res["entry"]["code"]
+                atl.remove_by_numbers([1])
+                toms = atl._load_code_tombstones()
+                # Code retired: generate_code must not reissue it.
+                reused = {atl.generate_code() for _ in range(50)}
+        self.assertIn(code, {t["code"] for t in toms})
+        self.assertNotIn(code, reused)
+
+    def test_ensure_codes_backfills_legacy_entries(self):
+        from core import add_to_list as atl
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._patched(tmpdir):
+                atl.save_pending([
+                    {"store": "coles", "keyword": "Old One",
+                     "generic_name": "Old One",
+                     "added_at": "2026-08-28T02:00:00+00:00"},
+                    {"store": "coles", "keyword": "Old Two",
+                     "generic_name": "Old Two", "code": "ABC",
+                     "added_at": "2026-08-28T02:00:00+00:00"},
+                ])
+                assigned = atl.ensure_codes()
+                entries = atl.load_pending()
+        self.assertEqual(assigned, 1)
+        codes = [e["code"] for e in entries]
+        self.assertIn("ABC", codes)
+        self.assertNotIn(codes[0], ("ABC", ""))
+
+    def test_resolve_items_arg_mixed_numbers_and_codes(self):
+        from core import add_to_list as atl
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._patched(tmpdir):
+                a = atl.add_entry("coles", "One", "One", size="1")
+                b = atl.add_entry("coles", "Two", "Two", size="2")
+                atl.add_entry("woolworths", "Three", "Three", size="3")
+                numbers = atl.resolve_items_arg(
+                    f"{a['entry']['code']},3")
+        self.assertEqual(numbers, [1, 3])
+
+    def test_resolve_unknown_code_lists_live_codes(self):
+        from core import add_to_list as atl
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._patched(tmpdir):
+                res = atl.add_entry("coles", "One", "One", size="1")
+                with self.assertRaises(ValueError) as ctx:
+                    atl.resolve_items_arg("ZZZ")
+        self.assertIn(res["entry"]["code"], str(ctx.exception))
+        self.assertIn("current codes", str(ctx.exception))
 
 
 if __name__ == "__main__":

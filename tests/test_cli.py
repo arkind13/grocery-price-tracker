@@ -138,11 +138,13 @@ class TestCLI(unittest.TestCase):
     # _cmd_unmapped tests
     # ========================================================================
 
+    @patch("grocery_price_cli._read_ignored_items")
     @patch("core.name_matcher.get_pending_mappings")
-    def test_unmapped_empty_queue(self, mock_get):
-        """Empty queue prints 'No pending unmapped items.'"""
+    def test_unmapped_empty_queue(self, mock_get, mock_ignored):
+        """Empty queue prints the no-items line."""
         from grocery_price_cli import _cmd_unmapped
         mock_get.return_value = []
+        mock_ignored.return_value = set()
         old_stdout = sys.stdout
         try:
             sys.stdout = io.StringIO()
@@ -151,11 +153,12 @@ class TestCLI(unittest.TestCase):
         finally:
             sys.stdout = old_stdout
         self.assertEqual(code, 0)
-        self.assertIn("No pending", output)
+        self.assertIn("No items waiting for a store keyword", output)
 
+    @patch("grocery_price_cli._read_ignored_items")
     @patch("core.name_matcher.get_pending_mappings")
-    def test_unmapped_populated_queue(self, mock_get):
-        """Populated queue renders table with N rows."""
+    def test_unmapped_populated_queue(self, mock_get, mock_ignored):
+        """Populated queue renders the Pending Links view."""
         from grocery_price_cli import _cmd_unmapped
         mock_get.return_value = [
             {
@@ -171,6 +174,7 @@ class TestCLI(unittest.TestCase):
                 "count": 1,
             },
         ]
+        mock_ignored.return_value = set()
         old_stdout = sys.stdout
         try:
             sys.stdout = io.StringIO()
@@ -181,7 +185,8 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("Test Item 1", output)
         self.assertIn("Test Item 2", output)
-        self.assertIn("pending unmapped item(s)", output)
+        self.assertIn("item(s) waiting for a keyword", output)
+        self.assertIn("STORAGE BEHIND THE UNMATCHED LIST", output)
 
     # ========================================================================
     # _cmd_update tests
@@ -937,10 +942,14 @@ class TestAddToListCLI(unittest.TestCase):
     # ========================================================================
 
     def _atl_ctx(self, tmpdir):
-        """Patch context for an isolated ADD_TO_LIST_PATH."""
+        """Patch context isolating queue AND tombstone paths."""
         from core import add_to_list as atl
-        return patch.object(atl, "ADD_TO_LIST_PATH",
-                            Path(tmpdir) / "add_to_list.json")
+        return patch.multiple(
+            atl,
+            ADD_TO_LIST_PATH=Path(tmpdir) / "add_to_list.json",
+            A_L_TOMBSTONES_PATH=(
+                Path(tmpdir) / "add_to_list_code_tombstones.json"),
+        )
 
     def _map_args(self, **overrides):
         """Namespace for _cmd_map_noninteractive with all action flags."""
@@ -1036,7 +1045,10 @@ class TestAddToListCLI(unittest.TestCase):
                 from core import add_to_list as atl
                 self._seed_four(atl)
                 args = argparse.Namespace(action="done", items="1,3")
-                code, output = self._capture_stdout(_cmd_add_to_list, args)
+                with patch("core.sheets_sync.set_store_keyword") as mock_kw:
+                    mock_kw.return_value = {"found": False}
+                    code, output = self._capture_stdout(
+                        _cmd_add_to_list, args)
                 remaining = [e["keyword"] for e in atl.load_pending()]
         self.assertEqual(code, 0)
         self.assertIn("Removed: Coles Item One (Coles)", output)
@@ -1049,6 +1061,37 @@ class TestAddToListCLI(unittest.TestCase):
             "2) Woolies Item Four · ⚠️ unit unavailable (Woolworths)",
             output)
         self.assertEqual(remaining, ["Coles Item Two", "Woolies Item Four"])
+
+    def test_done_saves_store_keywords(self):
+        """2026-09-02: 'done' = added on the website — the remembered
+        EXACT store name becomes the row's store keyword for every
+        removed entry (no coles/wool-missing re-ask, no unmatched
+        detour next Wednesday)."""
+        from grocery_price_cli import _cmd_add_to_list
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                from core import add_to_list as atl
+                atl.add_entry("coles", "COLES EXACT NAME 500G",
+                              "Generic Thing", size="500g")
+                atl.add_entry("woolworths", "WW EXACT NAME 1L",
+                              "Other Thing", size="1L")
+                args = argparse.Namespace(action="done", items="1,2")
+                with patch(
+                        "core.sheets_sync.set_store_keyword"
+                ) as mock_kw:
+                    mock_kw.return_value = {
+                        "found": True, "row_index": 7, "wrote": True}
+                    code, output = self._capture_stdout(
+                        _cmd_add_to_list, args)
+                    calls = [c.args for c in mock_kw.call_args_list]
+        self.assertEqual(code, 0)
+        self.assertEqual(calls[0], ("Generic Thing", "coles",
+                                    "COLES EXACT NAME 500G"))
+        self.assertEqual(calls[1], ("Other Thing", "woolworths",
+                                    "WW EXACT NAME 1L"))
+        self.assertIn("Coles keyword saved (row 7)", output)
+        self.assertIn("Woolworths keyword saved (row 7)", output)
+        self.assertIn("Keywords saved: 2", output)
 
     def test_done_out_of_range_removes_nothing_exit_1(self):
         """B5: done --items "9" on 4 -> exit 1, stderr names range, file
@@ -1077,14 +1120,41 @@ class TestAddToListCLI(unittest.TestCase):
         self.assertIn("--items", err)
 
     def test_done_unparsable_items_exit_1(self):
-        """B7: done --items "abc" -> exit 1."""
+        """B7: done --items "banana" (not a number, not a 3-letter
+        code) -> exit 1. ("ABC" now means an unknown CODE and gets the
+        self-correcting codes error instead — see the codes tests.)"""
         from grocery_price_cli import _cmd_add_to_list
         with tempfile.TemporaryDirectory() as tmpdir:
             with self._atl_ctx(tmpdir):
-                args = argparse.Namespace(action="done", items="abc")
+                args = argparse.Namespace(action="done", items="banana")
                 code, out, err = self._capture_both(_cmd_add_to_list, args)
         self.assertEqual(code, 1)
         self.assertIn("could not parse items", err)
+
+    def test_done_by_code_removes_and_saves_keyword(self):
+        """2026-09-02: done accepts 3-letter codes mixed with numbers;
+        the exact store name still becomes the row keyword."""
+        from grocery_price_cli import _cmd_add_to_list
+        from core import add_to_list as atl
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                res = atl.add_entry("coles", "COLES EXACT NAME 500G",
+                                    "Generic Thing", size="500g")
+                code = res["entry"]["code"]
+                args = argparse.Namespace(action="done", items=code)
+                with patch(
+                        "core.sheets_sync.set_store_keyword"
+                ) as mock_kw:
+                    mock_kw.return_value = {
+                        "found": True, "row_index": 9, "wrote": True}
+                    code_ret, output = self._capture_stdout(
+                        _cmd_add_to_list, args)
+                remaining = atl.load_pending()
+        self.assertEqual(code_ret, 0)
+        self.assertEqual(remaining, [])
+        mock_kw.assert_called_once_with(
+            "Generic Thing", "coles", "COLES EXACT NAME 500G")
+        self.assertIn("Coles keyword saved (row 9)", output)
 
     def test_done_empty_queue_exit_1(self):
         """B8: done with no queue file -> exit 1, stderr mentions empty."""
@@ -1415,10 +1485,14 @@ class TestCLIPartB(unittest.TestCase):
     # Helpers
     # ------------------------------------------------------------------
     def _atl_ctx(self, tmpdir):
-        """Patch context for an isolated ADD_TO_LIST_PATH."""
+        """Patch context isolating queue AND tombstone paths."""
         from core import add_to_list as atl
-        return patch.object(atl, "ADD_TO_LIST_PATH",
-                            Path(tmpdir) / "add_to_list.json")
+        return patch.multiple(
+            atl,
+            ADD_TO_LIST_PATH=Path(tmpdir) / "add_to_list.json",
+            A_L_TOMBSTONES_PATH=(
+                Path(tmpdir) / "add_to_list_code_tombstones.json"),
+        )
 
     def _fake_prod(self, raw_name, price, size=""):
         """Duck-typed live-search result covering the print path attrs."""
@@ -1499,6 +1573,13 @@ class TestCLIPartB(unittest.TestCase):
                           return_value=coles), \
                     patch("core.sheets_sync.add_product_row") as mock_row, \
                     patch("grocery_price_cli._load_env"):
+                # Realistic sheet-write result: a NEW row was written
+                # (not merged) so the queue-dup paths stay exercisable.
+                mock_row.return_value = {
+                    "wrote": True, "merged": False, "row_index": 9,
+                    "existing_name": "", "range_written": "A9:P9",
+                    "error": "",
+                }
                 old_stdout, old_stderr = sys.stdout, sys.stderr
                 try:
                     sys.stdout = io.StringIO()
@@ -2612,6 +2693,81 @@ class TestWednesdayDisplayUnits(unittest.TestCase):
         self.assertEqual(line, "Herbs [coles] · ⚠️ unit unavailable")
 
 
+class TestWeeklyQueueLists(unittest.TestCase):
+    """2026-09-01: the three queue lists for the weekly-lists post.
+
+    All six lists must land in weekly-lists — unmatched, wool missing,
+    coles missing (posted by _cmd_wednesday) plus to-do, searched, and
+    forgotten (built by _weekly_queue_lists). Hermetic: queue paths and
+    the data dir point at a temp dir.
+    """
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        self._tmp = tempfile.TemporaryDirectory()
+        tmp = Path(self._tmp.name)
+        self.data_dir = tmp / "data"
+        self.data_dir.mkdir()
+        self.todo_path = self.data_dir / "add_to_list.json"
+        self.searched_path = self.data_dir / "searched_items.json"
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _run(self):
+        import grocery_price_cli as gpc
+        from unittest.mock import patch
+        with patch("core.add_to_list.ADD_TO_LIST_PATH", self.todo_path), \
+                patch("core.searched_items.SEARCHED_ITEMS_PATH",
+                      self.searched_path):
+            return gpc._weekly_queue_lists(self.data_dir)
+
+    def test_titles_and_order(self):
+        """Three lists, fixed titles, resolve-lists-companion order."""
+        result = self._run()
+        self.assertEqual(
+            [t for t, _ in result],
+            ["To-do (website adds)", "Searched items",
+             "Forgotten items"])
+
+    def test_empty_queues_render_empty(self):
+        """No queue files at all -> three tuples with empty item lists
+        (the chunker renders each as 'none')."""
+        result = self._run()
+        for title, items in result:
+            self.assertEqual(items, [], title)
+
+    def test_populated_queues_line_format(self):
+        """Lines carry keyword, unit tag, store, and (searched) code."""
+        import json
+        self.todo_path.write_text(json.dumps([
+            {"store": "woolworths", "keyword": "WW Beef Mince 500g",
+             "generic_name": "beef mince", "size": "500g",
+             "added_at": "2026-08-28T02:00:00+00:00"},
+        ]), encoding="utf-8")
+        self.searched_path.write_text(json.dumps([
+            {"store": "coles", "keyword": "Coles Bread 650g",
+             "generic_name": "bread", "size": "650g", "code": "KAT",
+             "added_at": "2026-08-29T02:00:00+00:00"},
+        ]), encoding="utf-8")
+        (self.data_dir / "ignored_items.txt").write_text(
+            "# comment\nJunk Item [coles]\n", encoding="utf-8")
+        result = dict((t, i) for t, i in self._run())
+        self.assertEqual(result["To-do (website adds)"],
+                         ["WW Beef Mince 500g · 500g (Woolworths)"])
+        self.assertEqual(result["Searched items"],
+                         ["Coles Bread 650g · 650g (Coles) [KAT]"])
+        self.assertEqual(result["Forgotten items"],
+                         ["Junk Item [coles]"])
+
+    def test_corrupt_queue_degrades_to_empty(self):
+        """A corrupt queue file must never raise — empty list instead."""
+        self.todo_path.write_text("{not json", encoding="utf-8")
+        result = dict((t, i) for t, i in self._run())
+        self.assertEqual(result["To-do (website adds)"], [])
+
+
 class _BatchFakeWorksheet(FakeWorksheet):
     """FakeWorksheet that records batch_update calls (S17)."""
 
@@ -2664,6 +2820,169 @@ class TestBackfillSizes(unittest.TestCase):
         self.assertEqual(
             ws.batch_updates,
             [{"range": "C2", "values": [["2L"]]}])
+
+
+class TestNoPriceHelpers(unittest.TestCase):
+    """Wednesday 4d helpers: price-less cell detection + weeks age."""
+
+    def test_priceless_cells(self):
+        from grocery_price_cli import _is_priceless_cell
+        for raw in ("", "   ", None, "0", "0.00", "$0",
+                    "price unavailable", "Price Unavailable",
+                    "N/A", "n/a", "NA", "na", "-", "tbc"):
+            self.assertTrue(_is_priceless_cell(raw), repr(raw))
+
+    def test_priced_cells_have_price(self):
+        from grocery_price_cli import _is_priceless_cell
+        for raw in ("4.50", "$3", "0.99", "12", 4.5, "3.5"):
+            self.assertFalse(_is_priceless_cell(raw), repr(raw))
+
+    def test_weeks_without_price_age_buckets(self):
+        from datetime import datetime, timedelta, timezone
+        from grocery_price_cli import _weeks_without_price
+        now = datetime(2026, 9, 2, tzinfo=timezone.utc)
+        self.assertEqual(
+            _weeks_without_price("2026-08-01 10:00", now=now), "4w")
+        self.assertEqual(
+            _weeks_without_price("2026-08-30 10:00", now=now), "new")
+        self.assertEqual(_weeks_without_price("garbage", now=now), "?")
+        self.assertEqual(_weeks_without_price("", now=now), "?")
+
+
+class TestNoPriceReportLines(unittest.TestCase):
+    """Categorized no-price lines (2026-09-02): category prefix, human
+    week count, oldest embedded marker date wins."""
+
+    NOW = None  # set per-test via import
+
+    def _now(self):
+        from datetime import datetime, timezone
+        return datetime(2026, 9, 2, tzinfo=timezone.utc)
+
+    def test_na_category_with_weeks(self):
+        from grocery_price_cli import _noprice_line
+        line = _noprice_line("Sour Worms", "3L",
+                             "N/A 2026-08-01", "N/A 2026-08-15", "",
+                             now=self._now())
+        self.assertEqual(line, "N/A - Sour Worms · 3L (4 weeks)")
+
+    def test_one_week_singular(self):
+        from grocery_price_cli import _noprice_line
+        line = _noprice_line("Thing", "70g",
+                             "unavailable 2026-08-26", "", "",
+                             now=self._now())
+        self.assertEqual(line, "Unavailable - Thing · 70g (1 week)")
+
+    def test_severity_na_beats_unavailable(self):
+        from grocery_price_cli import _noprice_line
+        line = _noprice_line("Thing", "1L",
+                             "unavailable 2026-08-01", "N/A 2026-08-22",
+                             "", now=self._now())
+        self.assertTrue(line.startswith("N/A - Thing"))
+
+    def test_dollar_zero_category(self):
+        from grocery_price_cli import _noprice_line
+        line = _noprice_line("Zeroed", "500g", "0", "0", "",
+                             now=self._now())
+        self.assertTrue(line.startswith("$0 - Zeroed"))
+
+    def test_blank_category_falls_back_to_col_h(self):
+        from grocery_price_cli import _noprice_line
+        line = _noprice_line("Ghost", "1kg", "", "",
+                             "2026-08-01 09:00", now=self._now())
+        self.assertTrue(line.startswith("Blank - Ghost"))
+        self.assertIn("(4 weeks)", line)
+
+    def test_other_category_for_junk(self):
+        from grocery_price_cli import _noprice_line
+        line = _noprice_line("Junky", "2L", "tbc", "??", "",
+                             now=self._now())
+        self.assertTrue(line.startswith("Other - Junky"))
+
+    def test_new_marker_reads_new(self):
+        from grocery_price_cli import _noprice_line
+        line = _noprice_line("Fresh", "500g", "N/A 2026-09-01", "", "",
+                             now=self._now())
+        self.assertIn("(new)", line)
+
+
+class TestAutohealExactKeywords(unittest.TestCase):
+    """Wednesday Step 1c: parsed items with exact Col A names get the
+    empty store keyword set — the #1 unmatched-list polluter (2026-09-02
+    beef-mince incident)."""
+
+    class _Item:
+        def __init__(self, raw_name, price=4.0):
+            self.raw_name = raw_name
+            self.price = price
+
+    def _ws(self, *data_rows):
+        import sys as _sys
+        _sys.path.insert(0, str(_HERE))
+        from test_sheets_sync import FakeWorksheet
+        header = [
+            "Product_Name", "Category", "Size", "Woolworths_Price",
+            "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+            "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+        ]
+        return FakeWorksheet([header] + [list(r) for r in data_rows])
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_exact_name_empty_keyword_gets_linked(self, mock_conn):
+        from grocery_price_cli import _autoheal_exact_keywords
+        ws = self._ws(
+            ["Beef Mince 500g", "Meat", "500g", "8.00", "8.50", "",
+             "", "", "", ""],
+        )
+        mock_conn.return_value = ws
+        healed = _autoheal_exact_keywords(
+            {"woolworths": [self._Item("Beef Mince 500g")],
+             "coles": []}, dry_run=False)
+        self.assertEqual(len(healed), 1)
+        # The item came from the WOOLWORTHS list — keyword I (col 8).
+        self.assertIn("woolworths keyword", healed[0])
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][8], "Beef Mince 500g")
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_keyword_already_set_is_left_alone(self, mock_conn):
+        from grocery_price_cli import _autoheal_exact_keywords
+        ws = self._ws(
+            ["Beef Mince 500g", "Meat", "500g", "8.00", "8.50", "",
+             "", "", "beef mince", ""],
+        )
+        mock_conn.return_value = ws
+        healed = _autoheal_exact_keywords(
+            {"woolworths": [self._Item("Beef Mince 500g")],
+             "coles": []}, dry_run=False)
+        self.assertEqual(healed, [])
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_no_sheet_row_no_heal(self, mock_conn):
+        from grocery_price_cli import _autoheal_exact_keywords
+        ws = self._ws(
+            ["Something Else", "", "", "", "", "", "", "", "", ""],
+        )
+        mock_conn.return_value = ws
+        healed = _autoheal_exact_keywords(
+            {"woolworths": [self._Item("Brand New Thing")],
+             "coles": []}, dry_run=False)
+        self.assertEqual(healed, [])
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_dry_run_reports_without_writing(self, mock_conn):
+        from grocery_price_cli import _autoheal_exact_keywords
+        ws = self._ws(
+            ["Beef Mince 500g", "Meat", "500g", "8.00", "", "",
+             "", "", "", ""],
+        )
+        mock_conn.return_value = ws
+        healed = _autoheal_exact_keywords(
+            {"coles": [self._Item("Beef Mince 500g")]}, dry_run=True)
+        self.assertEqual(len(healed), 1)
+        self.assertIn("dry run", healed[0])
+        # Nothing written.
+        self.assertEqual(ws.get_all_values()[1][9], "")
 
 
 if __name__ == "__main__":

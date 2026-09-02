@@ -31,6 +31,10 @@ The local machine (Windows + Anaconda) is the development workspace; the VPS (Do
 ```
 grocery-price-tracker/                      ← ULTIMATE PROJECT ROOT (this folder)
 ├── README.md                              ← this file
+├── PROJECT-MAP.md                         ← plain-language map of every list/command/flow (update with every change)
+├── architecture-spec.md                   ← architecture spec
+├── implementation-plan.md                 ← implementation plan (§7 = test matrices)
+├── test.md                                ← test execution log (every round)
 ├── __init__.py                            ← package marker
 ├── app.py                                 ← Streamlit app (legacy UI, mostly superseded by headless CLI)
 ├── local_sync.py                           ← legacy rapidfuzz-based sync (superseded by lookup engine)
@@ -213,7 +217,7 @@ sequenceDiagram
     L->>G: sync snapshot prices + specials flags (M/N vocabulary)
     L->>T: summary + resolve lists → DM + weekly-lists (208)
     L->>T: WW specials report → DM + specials-wool (206)
-    Note over U,L: docx fallback — paste lists into the .docx files,<br/>then run plain wednesday (byte-identical old path)
+    Note over U,L: Step 0 (both modes): pull + union-merge VPS queues,<br/>show them first, push back identical<br/>docx fallback — paste lists into the .docx files,<br/>then run plain wednesday and add queued<br/>items to the store lists manually
 ```
 
 ---
@@ -269,6 +273,19 @@ The VPS runs the OpenClaw gateway inside a Docker container (`openclaw-core`). T
 | `/app/openclaw.json` | `/home/ubuntu/openclaw/openclaw.json` | rw |
 | `/home/node/.openclaw/openclaw.json` | `/home/ubuntu/openclaw/openclaw.json` | rw |
 | `/app/pylibs` | `/home/ubuntu/openclaw/pylibs` | ro |
+
+> **Package installs must go into `pylibs`, never the container layer.**
+> Anything `pip install`ed inside the running container is wiped by the
+> next `--force-recreate` (this silently broke Woolworths live search on
+> 2026-09-01: curl_cffi lived only in the container layer). Durable
+> install (matches container Python 3.11, survives recreates):
+>
+> ```bash
+> ssh myvps "docker run --rm -v /home/ubuntu/openclaw/pylibs:/target \
+>   python:3.11-slim pip install --no-deps --target /target <pkg>"
+> ```
+>
+> curl_cffi 0.16.1 is installed this way (Woolworths no-auth search).
 | `/app/tasks/ai-tools/.env` | `/home/ubuntu/openclaw/.env` | ro |
 
 ### 3. GitHub
@@ -362,19 +379,19 @@ The most complex tool. Tracks Australian supermarket prices (Woolworths, Coles, 
 | Subcommand | Args | What it does |
 |------------|------|--------------|
 | `compare` | `--items` (req) `[--mode auto\|sheet\|live]` `[--team-discount]` `[--extra-discount FLOAT]` | Basket comparison; `--mode auto` = sheet-first then live fallback. Both-live items pass the UOM 20% size gate; non-comparable items render as a found-block and are excluded from totals |
-| `search` | `--product` (req) `[--expand]` `[--add-item N]` `[--unit UNIT]` | Pure live search (Woolworths API + Coles Scrape.do recipe); no sheet, never writes. ≤3 ranked results per store (8 with `--expand`); `--add-item N` = explicit add of the Nth result (sheet row with EMPTY keyword col + searched-items queue); `--unit` supplies the unit when the result has none |
+| `search` | `--product` (req) `[--expand]` `[--add-item N]` `[--unit UNIT]` `[--allow-duplicate]` | Pure live search (Woolworths API + Coles Scrape.do recipe); no sheet, never writes. ≤3 ranked results per store (8 with `--expand`); `--add-item N` = explicit add of the Nth result (sheet row with EMPTY keyword col + searched-items queue); `--unit` supplies the unit when the result has none. **One-line rule v2 (2026-09-02):** an add that is the SAME product as an existing row updates that row's price + alias instead of creating a second line, and is NOT queued (already tracked). Same product = matching descriptive words (order/brand-prefix/punctuation-insensitive) regardless of pack wording ("5 pack" vs "70g") or unit family (g vs mL); the ONLY keep-apart reason is the same unit with a different amount beyond the 20% tolerance (200g vs 400g, 1L vs 2L — 33g vs 35g still matches). `--allow-duplicate` is the explicit "2 different products" override |
 | `specials` | `[--store woolworths\|coles\|all]` | Active specials (sheet Mode B + Woolworths saved-list Mode A) |
 | `rewards` | `[--store ...]` | Reads rewards column (O); prints "not populated" when empty |
 | `recipe` | `--name` `--ingredients` | Wraps `compare_basket(mode="auto")` for recipe ingredients |
 | `update` | `--product` `--store` `--price` `[--dry-run]` | Writes a single price to the sheet |
-| `sync` | `[--force]` `[--dry-run]` | Extract → match → batch sheet write + queue summary |
+| `sync` | `[--force]` `[--dry-run]` | Extract → match → batch sheet write + queue summary. **Overwrite semantics (2026-09-02):** listed items with an unusable price (0/blank) get `unavailable <date>`; mapped rows absent from a provided store list get `N/A <date>` — stale prices never linger. The embedded date anchors no-price week aging and survives marker rewrites until a real price returns; a store whose list wasn't parsed is never marked |
 | `specials-scan` | `[--min-savings INT]` `[--store woolworths]` | Tier 2 site-wide scan → Tier 1 saved-list |
 | `unmapped` | — | Reads `data/unmapped_queue.json`; offline-safe |
 | `map` | `unmatched\|wool\|coles\|status` + flags | One-item-at-a-time list resolution (non-interactive) |
-| `add-to-list` | `show` / `done --items "1,2,3"` | Manual website-add queue: show pending items (Coles then Woolworths, continuous numbering) / mark items done (all-or-nothing, re-prints the remainder). Offline-safe. |
+| `add-to-list` | `show` / `done --items "1,KAT,3"` | Manual website-add queue: show pending items (Coles then Woolworths, continuous numbering; every entry carries a 3-letter code — letters only, no I/O, removed codes tombstoned 7 days, legacy entries backfilled on `show`) / mark items done (numbers AND codes accepted, all-or-nothing, unknown code → self-correcting error listing live codes; `done` also saves the remembered exact store name as the row's store keyword — 2026-09-02: done = "added on the website", so the next sync matches immediately). Offline-safe. |
 | `searched-items` | `show` / `remove --items "KAT,RUM"` / `clear` | Searched-items queue (explicit Wednesday adds): 3-letter codes (A–Z minus I/O, no repeated letter), all-or-nothing removal, 7-day code tombstones. Offline-safe. |
 | `live-refresh` | `[--flush-only]` `[--fetch-only]` `[--recapture]` | **LOCAL WINDOWS MACHINE ONLY** (headed Chrome + AU residential IP): login once → flush both queues to the store "Price Compare" lists → fetch all list pages (30-page cap) → write snapshots. The agent never runs this. |
-| `wednesday` | `[--source docx\|live]` (default docx) `[--dry-run]` `[--no-scp]` `[--no-telegram]` | Full pipeline. `docx` = previous behaviour byte-for-byte. `live` = VPS queue pull → live window (skipped when today's snapshots exist) → snapshot completeness gate (clean stop before any sheet write) → sync from snapshots → specials from the live Special-list snapshot |
+| `wednesday` | `[--source docx\|live]` (default docx) `[--dry-run]` `[--no-scp]` `[--no-telegram]` `[--no-prompt]` | Full pipeline. **Step 0 (both modes, 2026-09-02):** pull VPS queues → tombstone-aware union-merge (nothing lost on either side) → push back identical → print the queues. **Docx pause:** on a real terminal the run WAITS — add the queued items to the store website lists, re-paste the docx lists, type `done` (auto-skips with no TTY / `--no-prompt` / live mode). Then: parse lists → **Step 1b auto-clears queued items that now appear on the parsed lists** → match/sync prices → resolve lists + scp → Telegram **seven-list** post (unmatched, wool/coles missing, **no-price items** — rows where neither store price parses to a number > 0 (blank/0/"price unavailable"/N/A), with weeks-since-Col-H age — obsolete-product deletion candidates, to-do, searched, forgotten) → specials report → **Step 9** mirrors queues back to the VPS. Live mode = live window (skipped when today's snapshots exist) + snapshot completeness gate instead of the manual pause |
 | `backfill-keywords` | — | Backfill Col P keywords from existing data |
 | `backfill-sizes` | `[--dry-run]` | One-time Col C (size) backfill parsed from Col A/I/J names; fills only blank cells, never overwrites |
 
@@ -382,9 +399,11 @@ The most complex tool. Tracks Australian supermarket prices (Woolworths, Coles, 
 
 > **Col C contract (units always visible):** Col C is the unit column; every add path fills it (real size or the literal `unit unavailable`); blank = legacy — displays as ` · ⚠️ unit unavailable` everywhere. `search --add-item` and `map --add` accept `--unit UNIT` for one-shot runs when no unit can be resolved (interactive sessions ask once instead).
 
-> **Weekly add-to-list loop:** a wool/coles `map --add` writes the price AND queues the item on `add_to_list`. Later, on the store website, add the queued items to your shopping list, then run `add-to-list done --items "1,2,3"` to clear them — the item resurfaces in the missing list (and eventually the unmatched report) until you do, so nothing is silently dropped.
+> **Weekly add-to-list loop:** a wool/coles `map --add` writes the price AND queues the item on `add_to_list` (remembering the EXACT store name + a 3-letter code). Later, on the store website, add the queued items to your shopping list, then run `add-to-list done` (by number or code) — this clears the reminder AND writes the exact store name as the row's store keyword, so the next Wednesday sync matches + price-syncs the item immediately (2026-09-02).
 
 > **Explicit-add-only + UOM gate (2026-08):** nothing is ever auto-queued. Plain `compare`/`search`/`expand` never write; the only live→sheet routes are `search --add-item N` and `map unmatched --add` (both leave the store keyword column EMPTY). A live item enters a comparison only via a UOM-passing pair (`core/uom.py`: same measurement family, within 20% size, no per-unit prices ever) or when the other store is unavailable (Woolworths-only answer + one ⚠️ line). Coles search runs through a credit-guard (3-attempt silent retry, 40/call-run cap, 10-min circuit breaker in `data/scrapedo_health.json`).
+
+> **One-line rule (2026-09-02):** every explicit add for a product that is already on the sheet lands on the EXISTING row — the price is updated there and the query is saved as a Col P alias; nothing is queued (already tracked). "Same product" ignores word order, store-brand prefixes, punctuation, and pack wording (`5 pack` vs `70g` are ONE product); the only keep-apart reason is the same unit with a different amount beyond the 20% tolerance (200g vs 400g, 1L vs 2L — 33g vs 35g still matches). `search --allow-duplicate` is the explicit "these are 2 different products" override. Exact-name duplicates are always refused.
 
 ### Core library (`core/`)
 
@@ -393,10 +412,11 @@ The most complex tool. Tracks Australian supermarket prices (Woolworths, Coles, 
 | `lookup.py` | **Lookup engine** — query resolution chain: exact sheet match (Col A / store keywords I/J/K) → Col P alias two-pass → partial candidates → live search (ranked per store, UOM-gated pair selection, display-only). `LookupIndex` builds `_exact` and `_alias_exact` indices; `LookupEngine` orchestrates the chain; `rank_live_results` / `select_live_pair` implement the tolerant ranking + 20% size gate. |
 | `uom.py` | **Unit-of-measure gate** — parses package sizes (25L → 25000 mL, multipacks to totals), compares within families only, 20% tolerance band. Pure stdlib; the sole gate on both-live comparisons. |
 | `sheets_client.py` | Shared headless Google Sheets connection (via `GROCERY_SERVICE_ACCOUNT_JSON` + `GROCERY_SPREADSHEET_ID` env vars) |
-| `sheets_sync.py` | Batch sync, `update_single_price`, `add_product_row`, range-width-aware row writes |
+| `sheets_sync.py` | Batch sync (overwrite semantics: listed-but-priceless → `unavailable <date>`, mapped-but-absent → `N/A <date>`, anchor dates preserved, store-not-provided immunity), `update_single_price`, `add_product_row` (exact-dup guard + one-line-rule merge + `_append_alias`), range-width-aware row writes |
 | `price_comparator.py` | Dual-mode basket comparator; in `auto` mode uses the lookup engine via `_gather_lookup_prices()`. Every store line carries identity + provenance (`— name size (sheet|live)`); non-comparable items render the found-block and are excluded from totals |
-| `searched_items.py` | Queue-2 (explicit Wednesday adds): 3-letter codes (A–Z minus I/O, no repeated letter), dup-guarded adds, all-or-nothing code removal, 7-day code tombstones. Mirror of `add_to_list.py` |
-| `name_matcher.py` | Exact keyword matcher for the sync path (Col I/J/K) |
+| `searched_items.py` | Queue-2 (explicit Wednesday adds): 3-letter codes (A–Z minus I/O, no repeated letter), dup-guarded adds, all-or-nothing code removal, 7-day code tombstones, `drain_from_parsed` (Step 1b auto-clear). Mirror of `add_to_list.py` |
+| `queue_sync.py` | Wednesday Step 0 queue convergence local↔VPS: union merge by (store, normalised name), earliest added_at wins, blank-field backfill, code-collision regeneration, tombstone union (Claw-side removals never resurrect), atomic JSON IO |
+| `name_matcher.py` | Exact keyword matcher for the sync path (Col I/J/K) + duplicate-detection helpers (`similarity_tokens`, `token_set_ratio`, `split_name_size`, `is_same_product` — the one-line-rule engine) |
 | `recipe_resolver.py` | Sheet exact → partial → live search resolver for recipe ingredients |
 | `specials_reporter.py` | Reads specials/rewards columns from the sheet |
 | `missing_items_tracker.py` | Cross-store missing-items diff |
@@ -434,7 +454,8 @@ Runtime state files (not in git; synced between local↔VPS):
 | `list_action_progress.json` | `map` session progress (resume indices) |
 | `ignored_items.txt` | Permanently-excluded junk items (`map --forget`) |
 | `add_to_list.json` | Manual website-add queue (fed by wool/coles `map --add`; drained by `add-to-list done`) |
-| `searched_items.json` / `searched_item_code_tombstones.json` | Queue-2 (explicit Wednesday adds via `search --add-item` / `map unmatched --add`; drained by the live-window flush; removed codes tombstoned 7 days) |
+| `searched_items.json` / `searched_item_code_tombstones.json` | Queue-2 (explicit Wednesday adds via `search --add-item` / `map unmatched --add`; drained by the live-window flush or Wednesday Step 1b list-match; removed codes tombstoned 7 days; converged local↔VPS at every Wednesday Step 0) |
+| `forget_list.json` / `price_unavailable.json` | Runtime state from parent-repo Plan B modules (forgotten items; price-unavailable tracker) |
 | `session_state.json` / `ww_coles_profile/` | **Secrets** — live-window cookies + browser profile (gitignored, never committed, never printed) |
 | `live_snapshots/` | `YYYY-MM-DD_<store>_<list>.json` list snapshots written by the live window, read by `wednesday --source live` |
 | `live_api_capture.json` | Discovered add-to-list API + pagination shape per store |
@@ -450,26 +471,31 @@ Runtime state files (not in git; synced between local↔VPS):
 
 | File | Scenarios |
 |------|-----------|
-| `test_lookup.py` | 15 GROUP A lookup state-machine scenarios |
-| `test_lookup_uom.py` | 18 UOM-gate Step-5 tests: ranking, pair selection, single-store/unavailable routing, Steps 1–4 golden regression |
+| `test_lookup.py` | 19 GROUP A lookup state-machine scenarios |
+| `test_lookup_uom.py` | 19 UOM-gate Step-5 tests: ranking, pair selection, single-store/unavailable routing, Steps 1–4 golden regression |
 | `test_uom.py` | 24 size-parse + comparability gate tests |
-| `test_searched_items.py` | 30 Queue-2 tests: codes, tombstones, atomic IO, render |
-| `test_coles_recipe.py` | 19 Scrape.do credit-guard tests: params, retry chain, breaker, cap, probes |
-| `test_live_window.py` | 30 live-window tests: snapshot loader (F), flush engine + pagination + heartbeat (W) |
+| `test_searched_items.py` | 40 Queue-2 tests: codes, tombstones, atomic IO, render, Wednesday Step-1b drain (auto-clear of items found on the store lists) |
+| `test_queue_sync.py` | 17 queue-convergence tests: union merge (local↔VPS), earliest-added_at identity, field backfill, code-collision regeneration, tombstone union + removal-not-resurrected, file IO |
+| `test_coles_recipe.py` | 24 Scrape.do credit-guard tests: params, retry chain, breaker, cap, probes |
+| `test_live_window.py` | 48 live-window tests: snapshot loader (F), flush engine + pagination + heartbeat (W) |
 | `test_live_search.py` | 13 GROUP B Woolworths+Coles mocked integration tests |
-| `test_sheets_sync.py` | 29 tests: `add_product_row` (incl. `Home` Col G marker), `mark_not_available`, `set_store_keyword`, Col I/J/K |
+| `test_sheets_sync.py` | 77 tests: `add_product_row` (incl. `Home` Col G marker), `mark_not_available`, `set_store_keyword`, Col I/J/K, duplicate guard, one-line-rule merge (pack-vs-weight, 33g/35g tolerance), sync overwrite semantics (`N/A`/`unavailable` markers, anchor preservation, store-not-provided immunity) |
 | `test_name_matcher.py` | 25 Col P two-pass lookup tests |
-| `test_comparator.py` | 42 live-search + always-on discount comparison + UOM report tests |
-| `test_cli.py` | 96 search/map/compare/discount-surface/backfill/live-routing tests |
-| `test_woolworths_discounts.py` | 24 always-on WW discount tests: 32-brand detection, compounding math, engine, tracker guard |
-| `test_extractors.py` | Extractor unit tests |
-| `test_sheets_conn.py` | Sheets connection tests |
+| `test_comparator.py` | 53 live-search + always-on discount comparison + UOM report tests |
+| `test_cli.py` | 122 search/map/compare/discount-surface/backfill/live-routing tests + no-price helpers (price-less cell detection, week buckets, categorized report lines) |
+| `test_woolworths_discounts.py` | 30 always-on WW discount tests: 32-brand detection, compounding math, engine, tracker guard |
+| `test_extractors.py` | 31 extractor unit tests |
+| `test_add_to_list.py` | 22 manual website-add queue tests (module + CLI + size contract) |
+| `test_specials_flags.py` | 25 specials vocabulary/flag write tests (D25) |
+| `test_telegram_format.py` | 32 Telegram Style Kit tests |
+| `test_sheets_conn.py` | offline sheets-connection smoke file (0 collected; network-dependent) |
 
-**Total: 504 tests passing, 0 failed** (the 8 stale Phase-1 failures in
-`test_extractors.py` were repaired by the 04 Checker on 2026-08-29 — see
-`test.md`; the D23–D27/B4/B5 additions brought the suite from 446 to 504
-on 2026-08-30, and the repaired + new test files were synced to the VPS.
-Testing runs locally — the VPS/container has no pytest).
+**Total: 621 tests passing, 0 failed** (2026-09-02: round 1 +20
+queue-sync/dup-guard, round 2 +17 one-line-rule/drain, round 3 +13
+same-product-v2/no-price, round 4 +16 overwrite-semantics tests —
+555 → 621 after the 2026-08-29 repair of the 8 stale Phase-1 failures
+and subsequent suite growth. See `test.md` for every round. Testing
+runs locally — the VPS/container has no pytest.)
 
 ### Google Sheet schema
 
@@ -478,7 +504,7 @@ The tracker reads/writes a Google Sheet (`GROCERY_SPREADSHEET_ID = 16INuFvOUVUY3
 | Col | Header | Purpose |
 |-----|--------|---------|
 | A | Generic Name | Canonical product name (exact-match target) |
-| D/E/F | Woolworths/Coles/Aldi price | Stored **raw** prices (never discounted in the sheet) |
+| D/E/F | Woolworths/Coles/Aldi price | Stored **raw** prices (never discounted in the sheet). Since 2026-09-02 D/E can also hold overwrite markers: `N/A YYYY-MM-DD` (mapped row absent from that store's list) or `unavailable YYYY-MM-DD` (listed but no usable price) — the embedded date anchors no-price week aging and survives marker rewrites until a real price returns |
 | G | Brand | Brand name; literal `Home` marks Woolworths home-brand rows (drives the extra home-brand discount) |
 | I/J/K | Store keywords | Exact-match keywords for sync path (Wool/Coles/Aldi) |
 | M/N/O | Specials/rewards flags | |
@@ -802,12 +828,36 @@ ssh myvps 'docker exec openclaw-core node /app/openclaw.mjs agent --channel tele
 ### Wednesday grocery-sync pipeline (local)
 
 ```powershell
-# After pasting lists into Woolworths.docx / Coles.docx / Woolworths_Specials.docx:
+# Run it — it shows the queue FIRST and waits:
 & "$env:USERPROFILE\anaconda3\python.exe" ..\grocery_price_cli.py wednesday
 ```
-Does: parse .docx → match against sheet → batch sync → scp missing lists to VPS → post summary to Telegram → post specials report.
 
-Flags: `--dry-run` (parse+match only), `--no-scp`, `--no-telegram`.
+The docx flow, in order:
+
+1. **Step 0** — pulls the queues from the VPS, union-merges them with the
+   local copies (nothing lost on either side), pushes the merged files
+   back, and prints the searched + to-do queues.
+2. **Pause** (real terminal only) — you add the queued items to the store
+   website lists, paste the updated lists into `Woolworths.docx` /
+   `Coles.docx` (specials into `Woolworths_Specials.docx`), then type
+   `done`. `--no-prompt` skips the wait; non-terminal callers (Claw/CI)
+   skip it automatically.
+3. **Steps 1–1b** — parses the docx lists, then auto-clears every queued
+   item that now appears on its store's list (proof it was added).
+4. **Steps 2–3** — matches against the sheet and OVERWRITES every price:
+   found → real price; listed-but-priceless → `unavailable <date>`;
+   mapped-but-absent → `N/A <date>` (stale prices never linger).
+5. **Steps 4–7** — builds the resolve lists, scps them to the VPS, posts
+   the summary + **seven lists** to the weekly-lists topic (unmatched,
+   wool/coles missing, no-price items with category + weeks, to-do,
+   searched, forgotten).
+6. **Step 8** — Woolworths specials report → DM + specials-wool topic.
+7. **Step 9** — mirrors the queues back to the VPS so consumption and
+   removals propagate.
+
+Flags: `--dry-run` (parse+match+report only, no writes), `--no-scp`,
+`--no-telegram`, `--no-prompt`, `--source live` (browser window flow —
+flush + fetch snapshots instead of the manual pause; completeness-gated).
 
 ---
 

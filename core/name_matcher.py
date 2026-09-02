@@ -125,6 +125,137 @@ class KeywordIndex:
         """Lowercase, trim, collapse internal whitespace runs to one space."""
         return re.sub(r"\s+", " ", str(s).strip().lower())
 
+
+# ---------------------------------------------------------------------------
+# Section A2: duplicate-detection similarity (2026-09-02 user rule:
+# "one line per product even when names differ slightly")
+# ---------------------------------------------------------------------------
+
+# Store-brand words never distinguish one product from another.
+_STORE_WORDS = frozenset({"woolworths", "coles", "aldi"})
+
+# Names whose token sets overlap at/above this ratio are the same product
+# ("Classic Hommus 200g" vs "Woolworths Hommus Classic 200g" -> 1.0).
+DUP_SIMILARITY_THRESHOLD = 0.9
+
+
+def similarity_tokens(name: str) -> set:
+    """Token set of a name for duplicate detection.
+
+    Lowercase alphanumeric tokens with store-brand words removed and
+    apostrophes collapsed ("Carman's" == "Carmans"), so "Woolworths
+    Full Cream Milk 3L" and "Full Cream Milk 3L" produce the SAME set
+    ({"full", "cream", "milk", "3l"}).
+
+    Args:
+        name (str): raw product name.
+
+    Returns:
+        set[str]: comparison tokens (empty set for blank input).
+    """
+    cleaned = str(name).lower().replace("'", "").replace("\u2019", "")
+    tokens = re.findall(r"[a-z0-9]+", cleaned)
+    return {t for t in tokens if t not in _STORE_WORDS}
+
+
+def token_set_ratio(a: str, b: str) -> float:
+    """Order-insensitive name similarity (Jaccard on token sets, 0..1).
+
+    "Obela Classic Hommus 200g" vs "Obela Hommus Classic 200g" -> 1.0;
+    "...Fruit Straps 5 pack" vs "...Fruit Straps 70g" -> well below
+    the threshold (genuinely different sizes stay separate).
+
+    Args:
+        a (str): first name.
+        b (str): second name.
+
+    Returns:
+        float: 0.0 when either side has no tokens; else |A∩B| / |A∪B|.
+    """
+    ta = similarity_tokens(a)
+    tb = similarity_tokens(b)
+    if not ta or not tb:
+        return 0.0
+    return len(ta & tb) / len(ta | tb)
+
+
+# Size-like words inside a product NAME ("70G", "5 pack", "6 x 170g",
+# "2L") — used to split a name into its descriptive body and its size.
+_NAME_SIZE_RE = re.compile(
+    r"\d+(?:\.\d+)?\s*(?:x\s*\d+(?:\.\d+)?\s*)?"
+    r"(?:mg|g|kg|ml|l|mm|cm|m|packs|pack|pks|pk|each|ea|ct)\b",
+    re.IGNORECASE,
+)
+
+
+def split_name_size(name: str) -> tuple:
+    """Split a product name into (body-token set, parsed size).
+
+    The body keeps the descriptive words (store-brand words dropped);
+    the LAST size-like phrase in the name is parsed via uom.parse_size
+    (multipacks like "6 x 170g" become their 1020 g total). Sizes the
+    uom module cannot parse (e.g. "5 pack") still leave the body — a
+    pack count is not a distinguishing measurement for the one-line
+    rule (a 5-pack and a 70g bag of the same product are ONE item per
+    the 2026-09-02 user rule).
+
+    Args:
+        name (str): raw product name.
+
+    Returns:
+        tuple[set, ParsedSize | None]: body tokens (may be empty) and
+        the parsed size (None when no parseable size phrase exists).
+    """
+    from core.uom import parse_size
+
+    text = str(name or "")
+    matches = list(_NAME_SIZE_RE.finditer(text))
+    body = text
+    parsed = None
+    for m in matches:
+        body = body.replace(m.group(0), " ")
+        try:
+            candidate = parse_size(m.group(0))
+        except Exception:
+            candidate = None
+        if candidate is not None:
+            parsed = candidate  # keep the last parseable one
+    body_tokens = similarity_tokens(body)
+    return body_tokens, parsed
+
+
+def is_same_product(a: str, b: str) -> bool:
+    """The one-line rule: are two names the SAME product?
+
+    User rule (2026-09-02): same product = one sheet line ALWAYS. The
+    ONLY thing that keeps two near-identical names apart is a DIFFERENT
+    AMOUNT OF THE SAME UNIT — e.g. 200g vs 400g, 1L vs 2L (same family,
+    beyond the 20% tolerance). Everything else merges: different pack
+    phrasing ("5 pack" vs "70g"), different families (g vs mL), or a
+    missing size on either side. Brand words still separate products
+    ("A2 Full Cream Milk" vs "Full Cream Milk" differ in body tokens).
+
+    Args:
+        a (str): first product name.
+        b (str): second product name.
+
+    Returns:
+        bool: True when both names should share ONE sheet line.
+    """
+    from core.uom import size_families_match, within_20pct
+
+    body_a, size_a = split_name_size(a)
+    body_b, size_b = split_name_size(b)
+    if not body_a or not body_b:
+        return False
+    if len(body_a & body_b) / len(body_a | body_b) < DUP_SIMILARITY_THRESHOLD:
+        return False
+    if size_a is not None and size_b is not None:
+        if size_families_match(size_a, size_b) and \
+                not within_20pct(size_a.value, size_b.value):
+            return False  # 200g vs 400g: same unit, different amount
+    return True
+
     def __len__(self) -> int:
         """Total number of indexed keywords across both stores."""
         return len(self._woolworths) + len(self._coles)
@@ -365,6 +496,10 @@ def append_unmatched(item, classification: dict) -> None:
             ):
                 entry["count"] = entry.get("count", 1) + 1
                 entry["last_seen"] = now_iso
+                # Keep the latest-seen price so map --pick can write it
+                # immediately (2026-09-02: pick without price update left
+                # N/A markers sitting on genuinely-matched rows).
+                entry["price"] = getattr(item, "price", None)
                 _write_queue(queue)
                 return
 
@@ -374,6 +509,7 @@ def append_unmatched(item, classification: dict) -> None:
             "raw_name": item.raw_name,
             "normalized_key": normalized_key,
             "classification": classification,
+            "price": getattr(item, "price", None),
             "first_seen": now_iso,
             "last_seen": now_iso,
             "count": 1,
@@ -395,6 +531,57 @@ def get_pending_mappings() -> list[dict]:
     """
     queue = _read_queue()
     return [e for e in queue if e.get("status") == "pending"]
+
+
+def refresh_pending_prices(items_by_store: dict) -> int:
+    """Refresh pending debt entries with the latest parsed prices.
+
+    The unmatched debt queue predates price storage (2026-09-02) — old
+    entries carry no price, so map --pick on the VPS (where the docx
+    files don't exist) could not write prices. The Wednesday run calls
+    this after parsing: every pending entry whose raw_name matches a
+    parsed item for its store gets that item's price stored, and the
+    enriched queue is scp'd to the VPS with the lists — picks then
+    write prices immediately.
+
+    Args:
+        items_by_store (dict): {"woolworths": [ProductItem, ...],
+            "coles": [...]} — tonight's parsed lists.
+
+    Returns:
+        int: number of entries whose price changed.
+    """
+    changed = 0
+    try:
+        queue = _read_queue()
+    except Exception:
+        return 0
+    lookup = {}
+    for store, items in (items_by_store or {}).items():
+        for item in items or []:
+            raw = str(getattr(item, "raw_name", "") or "").strip()
+            if raw:
+                lookup[(store, KeywordIndex._normalize(raw))] = \
+                    getattr(item, "price", None)
+    for entry in queue:
+        if entry.get("status") != "pending":
+            continue
+        key = (entry.get("store", ""),
+               KeywordIndex._normalize(str(entry.get("raw_name", ""))))
+        new_price = lookup.get(key)
+        if new_price is None:
+            continue
+        try:
+            if float(new_price) <= 0:
+                continue
+        except (TypeError, ValueError):
+            continue
+        if entry.get("price") != new_price:
+            entry["price"] = new_price
+            changed += 1
+    if changed:
+        _write_queue(queue)
+    return changed
 
 
 def clear_resolved(store: str, raw_name: str) -> None:
