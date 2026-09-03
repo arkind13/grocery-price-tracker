@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Unified `todo` queue tests (to-do + searched merged, uniform done).
+"""Unified `todo` queue tests (ONE to-do queue, 2026-09-03 user rule).
 
-Sandboxed: queue paths patched to temp files; sheet keyword writes
-mocked. The real data/ folder is never touched.
+Searched queue RETIRED — the to-do list is add_to_list only. Sandboxed:
+queue paths patched to temp files; sheet writes mocked. The real data/
+folder is never touched.
 """
 from __future__ import annotations
 import contextlib
@@ -24,7 +25,6 @@ if str(_ROOT) not in sys.path:
 
 import grocery_price_cli as gcli  # noqa: E402
 from core import add_to_list as atl  # noqa: E402
-from core import searched_items as si  # noqa: E402
 
 
 def _write_queue(path: Path, entries: list) -> None:
@@ -32,9 +32,9 @@ def _write_queue(path: Path, entries: list) -> None:
 
 
 class TodoTestCase(unittest.TestCase):
-    """Base: both queues isolated in a temp dir + keyword write mock."""
+    """Base: the queue isolated in a temp dir + keyword write mock."""
 
-    ADDS = [  # add-to-list entries (price written, keyword pending)
+    ENTRIES = [  # add-to-list entries (price written, keyword pending)
         {"store": "coles", "keyword": "Coles Up&Go Choc 500mL",
          "generic_name": "Up&Go Chocolate Protein 500Ml",
          "size": "500mL", "code": "HUY", "added_at": "2026-09-01T00:00:00"},
@@ -42,30 +42,17 @@ class TodoTestCase(unittest.TestCase):
          "generic_name": "Birkford Iced Mocha",
          "size": "500mL", "code": "MUY", "added_at": "2026-09-02T00:00:00"},
     ]
-    SEARCHED = [  # searched entries (new row, keyword empty)
-        {"store": "coles", "keyword": "Coles Raw Sugar 2kg",
-         "generic_name": "Coles Raw Sugar 2kg",
-         "size": "2kg", "code": "EDA", "added_at": "2026-09-03T00:00:00"},
-        {"store": "woolworths", "keyword": "WW Basmati Rice 250g",
-         "generic_name": "WW Basmati Rice 250g",
-         "size": "250g", "code": "SRM", "added_at": "2026-09-03T00:00:00"},
-    ]
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         tmp = Path(self._tmp.name)
         self.adds_path = tmp / "add_to_list.json"
-        self.searched_path = tmp / "searched_items.json"
-        self.si_tomb = tmp / "si_tombstones.json"
         self.atl_tomb = tmp / "atl_tombstones.json"
-        _write_queue(self.adds_path, list(self.ADDS))
-        _write_queue(self.searched_path, list(self.SEARCHED))
+        _write_queue(self.adds_path, list(self.ENTRIES))
         self._patchers = [
             patch.object(atl, "ADD_TO_LIST_PATH", self.adds_path),
             patch.object(atl, "A_L_TOMBSTONES_PATH", self.atl_tomb),
-            patch.object(si, "SEARCHED_ITEMS_PATH", self.searched_path),
-            patch.object(si, "TOMBSTONES_PATH", self.si_tomb),
         ]
         for p in self._patchers:
             p.start()
@@ -87,24 +74,19 @@ class TodoTestCase(unittest.TestCase):
 
 class TestTodoShow(TodoTestCase):
 
-    def test_merged_view_continuous_numbering(self):
-        """Coles adds, Coles searched, WW adds, WW searched — one list."""
+    def test_view_numbering_coles_then_woolworths(self):
+        """Coles first, then Woolworths — one list, coded entries."""
         out, code = self._run("show")
         self.assertEqual(code, 0)
         self.assertIn("1. Coles Up&Go Choc 500mL · 500mL (Coles) [HUY]", out)
-        self.assertIn("2. Coles Raw Sugar 2kg · 2kg (Coles) [EDA] · new row",
-                      out)
         self.assertIn(
-            "3. Birkford Iced Mocha 500mL · 500mL "
+            "2. Birkford Iced Mocha 500mL · 500mL "
             "(Woolworths) [MUY]", out)
-        self.assertIn(
-            "4. WW Basmati Rice 250g · 250g "
-            "(Woolworths) [SRM] · new row", out)
-        self.assertIn("4 pending (2 price-pending · 2 new rows)", out)
+        self.assertIn("2 pending", out)
+        self.assertNotIn("new row", out)  # searched queue is retired
 
     def test_empty_queue(self):
         _write_queue(self.adds_path, [])
-        _write_queue(self.searched_path, [])
         out, code = self._run("show")
         self.assertEqual(code, 0)
         self.assertIn("none", out)
@@ -112,28 +94,24 @@ class TestTodoShow(TodoTestCase):
 
 class TestTodoDone(TodoTestCase):
 
-    def test_done_by_merged_number_and_code_writes_keywords(self):
-        """done 2,SRM: searched-by-number (EDA) + searched-by-code
-        (SRM) — BOTH get their keyword written (the gap fix); the
-        add-to-list queue is untouched."""
-        out, code = self._run("done", "2,SRM")
+    def test_done_by_number_and_code_writes_keywords(self):
+        """done 1,MUY: both entries get their keyword written and leave
+        the queue."""
+        out, code = self._run("done", "1,MUY")
         self.assertEqual(code, 0)
-        remaining = self._queue(self.searched_path)
-        self.assertEqual(remaining, [])
+        self.assertEqual(self._queue(self.adds_path), [])
         written = [(c.args[0], c.args[1], c.args[2])
                    for c in self.kw_writes.call_args_list]
         self.assertIn(
-            ("Coles Raw Sugar 2kg", "coles", "Coles Raw Sugar 2kg"), written)
+            ("Up&Go Chocolate Protein 500Ml", "coles",
+             "Coles Up&Go Choc 500mL"), written)
         self.assertIn(
-            ("WW Basmati Rice 250g", "woolworths",
-             "WW Basmati Rice 250g"), written)
-        self.assertIn("2 keyword(s) saved", out)
-        # adds untouched
-        self.assertEqual(len(self._queue(self.adds_path)), 2)
+            ("Birkford Iced Mocha", "woolworths",
+             "Birkford Iced Mocha 500mL"), written)
+        self.assertIn("2 item(s) removed, 2 keyword(s) saved", out)
 
-    def test_done_add_entry_uses_remembered_store_name(self):
-        """done HUY: add-type — keyword = remembered exact store name,
-        not the generic name."""
+    def test_done_uses_remembered_store_name(self):
+        """done HUY: keyword = remembered exact store name."""
         out, code = self._run("done", "HUY")
         self.assertEqual(code, 0)
         written = [(c.args[0], c.args[1], c.args[2])
@@ -143,20 +121,11 @@ class TestTodoDone(TodoTestCase):
              "Coles Up&Go Choc 500mL"), written)
         self.assertEqual(len(self._queue(self.adds_path)), 1)
 
-    def test_done_mixed_types(self):
-        """1,HUY + 4,EDA across both queues in one call."""
-        out, code = self._run("done", "1,4")
-        self.assertEqual(code, 0)
-        self.assertEqual(len(self._queue(self.adds_path)), 1)
-        self.assertEqual(len(self._queue(self.searched_path)), 1)
-        self.assertIn("2 item(s) removed, 2 keyword(s) saved", out)
-
     def test_unknown_code_all_or_nothing(self):
-        """A bad code aborts with NO mutation on either queue."""
+        """A bad code aborts with NO mutation."""
         out, code = self._run("done", "HUY,ZZZ")
         self.assertEqual(code, 1)
         self.assertEqual(len(self._queue(self.adds_path)), 2)
-        self.assertEqual(len(self._queue(self.searched_path)), 2)
         self.assertEqual(self.kw_writes.call_count, 0)
 
     def test_row_not_found_still_removes(self):
@@ -199,12 +168,11 @@ class TestTodoGone(TodoTestCase):
         self.assertIn("marked GONE", out)
         self.assertIn("keywords untouched", out)
 
-    def test_gone_mixed_queues_all_or_nothing(self):
-        """1,SRM spans both queues; a bad extra code aborts everything."""
-        out, code = self._run_gone("1,SRM,ZZZ")
+    def test_gone_bad_code_all_or_nothing(self):
+        """A bad extra code aborts everything."""
+        out, code = self._run_gone("HUY,ZZZ")
         self.assertEqual(code, 1)
         self.assertEqual(len(self._queue(self.adds_path)), 2)
-        self.assertEqual(len(self._queue(self.searched_path)), 2)
         self.assertEqual(self.gone_writes.call_count, 0)
 
     def test_gone_row_not_found_still_removes(self):
@@ -212,14 +180,14 @@ class TestTodoGone(TodoTestCase):
         self.gone_writes = MagicMock(
             return_value={"found": False, "wrote": False,
                           "error": "product not found"})
-        args = MagicMock(action="gone", items="EDA")
+        args = MagicMock(action="gone", items="HUY")
         with patch("core.sheets_sync.mark_price_gone", self.gone_writes), \
                 patch("core.sheets_sync.set_store_keyword", self.kw_writes):
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
                 code = gcli._cmd_todo(args)
         self.assertEqual(code, 0)
-        self.assertEqual(len(self._queue(self.searched_path)), 1)
+        self.assertEqual(len(self._queue(self.adds_path)), 1)
         self.assertIn("GONE not written", buf.getvalue())
 
     def test_gone_requires_items(self):

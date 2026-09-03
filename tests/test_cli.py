@@ -27,6 +27,23 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 
+class _CombinedPatch:
+    """Context manager applying several patches at once (2026-09-03)."""
+
+    def __init__(self, patches):
+        self._patches = patches
+        self._stack = None
+
+    def __enter__(self):
+        import contextlib
+        self._stack = contextlib.ExitStack()
+        for p in self._patches:
+            self._stack.enter_context(p)
+
+    def __exit__(self, *exc):
+        return self._stack.__exit__(*exc)
+
+
 # ============================================================================
 # FakeWorksheet (reuse pattern from test_sheets_sync.py)
 # ============================================================================
@@ -987,14 +1004,23 @@ class TestAddToListCLI(unittest.TestCase):
     # ========================================================================
 
     def _atl_ctx(self, tmpdir):
-        """Patch context isolating queue AND tombstone paths."""
+        """Patch context isolating queue AND tombstone paths.
+
+        2026-09-03: also isolates the searched-items queue — the
+        add-to-list handlers delegate to the merged todo flow, which
+        reads both queues."""
         from core import add_to_list as atl
-        return patch.multiple(
-            atl,
-            ADD_TO_LIST_PATH=Path(tmpdir) / "add_to_list.json",
-            A_L_TOMBSTONES_PATH=(
-                Path(tmpdir) / "add_to_list_code_tombstones.json"),
-        )
+        from core import searched_items as si
+        return _CombinedPatch([
+            patch.object(atl, "ADD_TO_LIST_PATH",
+                         Path(tmpdir) / "add_to_list.json"),
+            patch.object(atl, "A_L_TOMBSTONES_PATH",
+                         Path(tmpdir) / "add_to_list_code_tombstones.json"),
+            patch.object(si, "SEARCHED_ITEMS_PATH",
+                         Path(tmpdir) / "searched_items.json"),
+            patch.object(si, "TOMBSTONES_PATH",
+                         Path(tmpdir) / "searched_item_code_tombstones.json"),
+        ])
 
     def _map_args(self, **overrides):
         """Namespace for _cmd_map_noninteractive with all action flags."""
@@ -1056,17 +1082,17 @@ class TestAddToListCLI(unittest.TestCase):
         self.assertIsNone(args_done.items)
 
     def test_show_empty_prints_friendly_line(self):
-        """B2: show on an empty queue -> exit 0 + friendly line."""
+        """B2: show on an empty queue -> exit 0 + friendly empty view."""
         from grocery_price_cli import _cmd_add_to_list
         with tempfile.TemporaryDirectory() as tmpdir:
             with self._atl_ctx(tmpdir):
                 args = argparse.Namespace(action="show", items=None)
                 code, output = self._capture_stdout(_cmd_add_to_list, args)
         self.assertEqual(code, 0)
-        self.assertIn("add_to_list is empty", output)
+        self.assertIn("none — nothing waiting", output)
 
     def test_show_two_sections_continuous_numbering(self):
-        """B3: Seed 2C+2W -> both section headers, 1)..4), each keyword."""
+        """B3: Seed 2C+2W -> continuous numbering 1..4."""
         from grocery_price_cli import _cmd_add_to_list
         with tempfile.TemporaryDirectory() as tmpdir:
             with self._atl_ctx(tmpdir):
@@ -1077,9 +1103,11 @@ class TestAddToListCLI(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("Coles", output)
         self.assertIn("Woolworths", output)
-        for line in ("1) Coles Item One", "2) Coles Item Two",
-                     "3) Woolies Item Three", "4) Woolies Item Four"):
+        # numbering: "1. Coles Item One ..." style
+        for line in ("1. Coles Item One", "2. Coles Item Two",
+                     "3. Woolies Item Three", "4. Woolies Item Four"):
             self.assertIn(line, output)
+        self.assertIn("4 pending", output)
 
     def test_done_valid_removes_and_reprints(self):
         """B4: done --items "1,3" -> exit 0; two Removed lines;
@@ -1099,12 +1127,9 @@ class TestAddToListCLI(unittest.TestCase):
         self.assertIn("Removed: Coles Item One (Coles)", output)
         self.assertIn("Removed: Woolies Item Three (Woolworths)", output)
         self.assertIn("2 still pending:", output)
-        # Remaining render lines carry the ⚠️ note (legacy entries).
-        self.assertIn("1) Coles Item Two · ⚠️ unit unavailable (Coles)",
-                      output)
-        self.assertIn(
-            "2) Woolies Item Four · ⚠️ unit unavailable (Woolworths)",
-            output)
+        # 2026-09-03 merged re-render: "1. <name> (Store) [CODE]"
+        self.assertIn("1. Coles Item Two", output)
+        self.assertIn("2. Woolies Item Four", output)
         self.assertEqual(remaining, ["Coles Item Two", "Woolies Item Four"])
 
     def test_done_saves_store_keywords(self):
@@ -1136,7 +1161,8 @@ class TestAddToListCLI(unittest.TestCase):
                                     "WW EXACT NAME 1L"))
         self.assertIn("Coles keyword saved (row 7)", output)
         self.assertIn("Woolworths keyword saved (row 7)", output)
-        self.assertIn("Keywords saved: 2", output)
+        # 2026-09-03 merged-flow wording
+        self.assertIn("2 item(s) removed, 2 keyword(s) saved", output)
 
     def test_done_out_of_range_removes_nothing_exit_1(self):
         """B5: done --items "9" on 4 -> exit 1, stderr names range, file
@@ -1151,8 +1177,9 @@ class TestAddToListCLI(unittest.TestCase):
                 code, out, err = self._capture_both(_cmd_add_to_list, args)
                 self.assertEqual(atl.ADD_TO_LIST_PATH.read_bytes(), before)
         self.assertEqual(code, 1)
-        self.assertIn("1-4", err)
-        self.assertEqual(out, "")
+        # 2026-09-03 merged-flow message
+        self.assertIn("out of range", err)
+        self.assertIn("4 item(s)", err)
 
     def test_done_missing_items_arg_exit_1(self):
         """B6: Namespace without items -> exit 1, stderr mentions --items."""
@@ -1174,7 +1201,8 @@ class TestAddToListCLI(unittest.TestCase):
                 args = argparse.Namespace(action="done", items="banana")
                 code, out, err = self._capture_both(_cmd_add_to_list, args)
         self.assertEqual(code, 1)
-        self.assertIn("could not parse items", err)
+        # 2026-09-03 merged flow: unknown token -> unknown-code error
+        self.assertIn("unknown code", err)
 
     def test_done_by_code_removes_and_saves_keyword(self):
         """2026-09-02: done accepts 3-letter codes mixed with numbers;
@@ -1202,14 +1230,16 @@ class TestAddToListCLI(unittest.TestCase):
         self.assertIn("Coles keyword saved (row 9)", output)
 
     def test_done_empty_queue_exit_1(self):
-        """B8: done with no queue file -> exit 1, stderr mentions empty."""
+        """B8: done with no queue file -> exit 1, stderr names the
+        empty merged view."""
         from grocery_price_cli import _cmd_add_to_list
         with tempfile.TemporaryDirectory() as tmpdir:
             with self._atl_ctx(tmpdir):
                 args = argparse.Namespace(action="done", items="1")
                 code, out, err = self._capture_both(_cmd_add_to_list, args)
         self.assertEqual(code, 1)
-        self.assertIn("empty", err.lower())
+        # 2026-09-03 merged flow: "the merged view shows 0 item(s)"
+        self.assertIn("0 item", err)
 
     # ========================================================================
     # wool/coles map add hooks (B9-B16)
@@ -1251,7 +1281,7 @@ class TestAddToListCLI(unittest.TestCase):
         self.assertEqual(data[0]["store"], "woolworths")
         self.assertEqual(data[0]["keyword"], "Woolworths Beef Mince 500g")
         self.assertEqual(data[0]["generic_name"], "Beef Mince 500g")
-        self.assertIn("Added to add_to_list:", output)
+        self.assertIn("Queued on the TO-DO list:", output)
 
     @patch("core.sheets_sync.update_single_price")
     @patch("grocery_price_cli._search_store_with_fallback")
@@ -1271,7 +1301,7 @@ class TestAddToListCLI(unittest.TestCase):
         self.assertEqual(data[0]["store"], "coles")
         self.assertEqual(data[0]["keyword"], "Coles Butter 500g")
         self.assertEqual(data[0]["generic_name"], "Butter 500g")
-        self.assertIn("Added to add_to_list:", output)
+        self.assertIn("Queued on the TO-DO list:", output)
 
     @patch("core.sheets_sync.set_store_keyword")
     @patch("core.sheets_sync.mark_not_available")
@@ -1383,7 +1413,7 @@ class TestAddToListCLI(unittest.TestCase):
                     Path(tmpdir) / "progress.json", Path(tmpdir))
                 data = atl.load_pending()
         self.assertEqual(code, 0)
-        self.assertIn("Already on add_to_list (since", output)
+        self.assertIn("Already on the to-do list (since", output)
         self.assertIn("not added again", output)
         self.assertEqual(len(data), 1)
         self.assertEqual(data[0]["keyword"], "Old WW Keyword")
@@ -1438,7 +1468,7 @@ class TestAddToListCLI(unittest.TestCase):
         self.assertEqual(data[0]["store"], "woolworths")
         self.assertEqual(data[0]["keyword"], "Woolworths Beef Mince 500g")
         self.assertEqual(data[0]["generic_name"], "Beef Mince 500g")
-        self.assertIn("Added to add_to_list:", output)
+        self.assertIn("Queued on the TO-DO list:", output)
 
     @patch("core.sheets_sync.update_single_price")
     @patch("grocery_price_cli._search_store_with_fallback")
@@ -1530,14 +1560,20 @@ class TestCLIPartB(unittest.TestCase):
     # Helpers
     # ------------------------------------------------------------------
     def _atl_ctx(self, tmpdir):
-        """Patch context isolating queue AND tombstone paths."""
+        """Patch context isolating BOTH queues (add-to-list delegates
+        to the merged todo flow — 2026-09-03)."""
         from core import add_to_list as atl
-        return patch.multiple(
-            atl,
-            ADD_TO_LIST_PATH=Path(tmpdir) / "add_to_list.json",
-            A_L_TOMBSTONES_PATH=(
-                Path(tmpdir) / "add_to_list_code_tombstones.json"),
-        )
+        from core import searched_items as si
+        return _CombinedPatch([
+            patch.object(atl, "ADD_TO_LIST_PATH",
+                         Path(tmpdir) / "add_to_list.json"),
+            patch.object(atl, "A_L_TOMBSTONES_PATH",
+                         Path(tmpdir) / "add_to_list_code_tombstones.json"),
+            patch.object(si, "SEARCHED_ITEMS_PATH",
+                         Path(tmpdir) / "searched_items.json"),
+            patch.object(si, "TOMBSTONES_PATH",
+                         Path(tmpdir) / "searched_item_code_tombstones.json"),
+        ])
 
     def _fake_prod(self, raw_name, price, size=""):
         """Duck-typed live-search result covering the print path attrs."""
@@ -1591,11 +1627,11 @@ class TestCLIPartB(unittest.TestCase):
 
         Returns:
             tuple: (code, stdout, stderr, mock_add_row, queue_data) where
-            queue_data is the searched_items queue content AFTER the run
-            (real module code executed against an isolated temp file).
+            queue_data is the add_to_list (to-do) queue content AFTER the
+            run (real module code executed against an isolated temp file).
         """
         from grocery_price_cli import _cmd_search
-        from core import searched_items as si
+        from core import add_to_list as atl
 
         ns = {"product": product, "expand": False, "add_item": None}
         ns.update(argv_extra or {})
@@ -1606,9 +1642,9 @@ class TestCLIPartB(unittest.TestCase):
             tmp_holder = tempfile.TemporaryDirectory()
             tmpdir = tmp_holder.name
         try:
-            with patch.object(si, "SEARCHED_ITEMS_PATH",
-                              Path(tmpdir) / "searched_items.json"), \
-                    patch.object(si, "TOMBSTONES_PATH",
+            with patch.object(atl, "ADD_TO_LIST_PATH",
+                              Path(tmpdir) / "add_to_list.json"), \
+                    patch.object(atl, "A_L_TOMBSTONES_PATH",
                                  Path(tmpdir) / "tombstones.json"), \
                     patch("extractors.woolworths_extractor."
                           "fetch_woolworths_search_noauth",
@@ -1634,7 +1670,7 @@ class TestCLIPartB(unittest.TestCase):
                     err = sys.stderr.getvalue()
                 finally:
                     sys.stdout, sys.stderr = old_stdout, old_stderr
-                queue_data = si.load_pending()
+                queue_data = atl.load_pending()
         finally:
             if own_tmp:
                 tmp_holder.cleanup()
@@ -1741,7 +1777,7 @@ class TestCLIPartB(unittest.TestCase):
         self.assertEqual(queue_data[0]["keyword"], "WW Yogurt B")
 
     def test_cli7_add_item_prints_exact_management_phrases(self):
-        """CLI-7: output carries the three exact §3.4 phrases + [CODE]."""
+        """CLI-7: output carries the exact management phrases + [CODE]."""
         # B1: the add route resolves the unit first — give the result a
         # size so a non-interactive run writes instead of failing fast.
         ww = [self._prod("woolworths", "WW Yogurt A", 5.0, size="1kg")]
@@ -1749,13 +1785,12 @@ class TestCLIPartB(unittest.TestCase):
             {"add_item": 1}, ww=ww, product="yogurt")
         self.assertEqual(code, 0)
         # A6: the size rides on the ack line.
-        self.assertIn("Queued for Wednesday: 'WW Yogurt A' "
+        self.assertIn("Queued on the TO-DO list: 'WW Yogurt A' "
                       "· 1kg (Woolworths) [", out)
         self.assertRegex(out, r"\[[A-Z]{3}\]")
-        self.assertRegex(out, r"💬 Reply 'remove [A-Z]{3}' if this isn't "
-                              r"the right product\.")
-        self.assertIn("💬 'show searched items' any time to review "
-                      "the queue.", out)
+        self.assertRegex(out, r"💬 Reply 'todo gone [A-Z]{3}' if this "
+                              r"isn't the right product.")
+        self.assertIn("💬 'todo show' any time to review the queue.", out)
 
     def test_cli8_add_item_out_of_range_errors(self):
         """CLI-8: N out of range -> stderr error, exit 1, no writes."""
@@ -1768,7 +1803,8 @@ class TestCLIPartB(unittest.TestCase):
         self.assertEqual(queue_data, [])
 
     def test_cli9_add_item_already_queued(self):
-        """CLI-9: duplicate add -> 'Already queued' line, no dup entry."""
+        """CLI-9: duplicate add -> 'Already on the to-do list' line, no
+        dup entry."""
         # B1: a size-bearing fixture lets the non-interactive run write.
         ww = [self._prod("woolworths", "WW Yogurt A", 5.0, size="1kg")]
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1778,7 +1814,7 @@ class TestCLIPartB(unittest.TestCase):
             code2, out2, _err, _row, queue_data = self._run_search(
                 {"add_item": 1}, ww=ww, product="yogurt", tmpdir=tmpdir)
         self.assertEqual(code2, 0)
-        self.assertIn("Already queued", out2)
+        self.assertIn("Already on the to-do list", out2)
         self.assertEqual(len(queue_data), 1)
 
     def test_cli10_coles_unavailable_single_line_ww_shown(self):
@@ -1791,90 +1827,30 @@ class TestCLIPartB(unittest.TestCase):
         self.assertIn("WW Milk 2L", out)
 
     # ------------------------------------------------------------------
-    # CLI-11..CLI-14: searched-items queue management
+    # CLI-11..CLI-14: searched-items queue — RETIRED (2026-09-03)
     # ------------------------------------------------------------------
     def _si_args(self, action, items=None):
         return argparse.Namespace(action=action, items=items)
 
-    def test_cli11_show_renders_format_and_empty_line(self):
-        """CLI-11: show renders 'store · name · size · [CODE]'; empty
-        queue -> friendly line."""
+    def test_cli11_searched_items_retired_points_to_todo(self):
+        """CLI-11..14 (2026-09-03): the searched queue is gone — every
+        action just prints the retirement notice + the to-do view."""
         from grocery_price_cli import _cmd_searched_items
-        from core import searched_items as si
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with self._si_ctx(tmpdir), self._si_tomb_ctx(tmpdir):
-                code, out = self._capture_stdout(
-                    _cmd_searched_items, self._si_args("show"))
-                self.assertIn("searched_items is empty", out)
-                si.add_entry("coles", "Obela Hommus 200g", "Hommus 200g",
-                             store_product_id="1", size="200g")
-                code, out = self._capture_stdout(
-                    _cmd_searched_items, self._si_args("show"))
+        code, out = self._capture_stdout(
+            _cmd_searched_items, self._si_args("show"))
         self.assertEqual(code, 0)
-        # A8: size segment sits right before [CODE] (no double `·`).
-        self.assertIn("coles · Obela Hommus 200g · 200g [", out)
+        self.assertIn("RETIRED", out)
+        self.assertIn("TO-DO", out)
 
-    def test_cli12_remove_multi_codes(self):
-        """CLI-12: remove --items 'KAT,RUM' removes both + remainder."""
-        from grocery_price_cli import _cmd_searched_items
-        from core import searched_items as si
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with self._si_ctx(tmpdir), self._si_tomb_ctx(tmpdir):
-                e1 = si.add_entry("coles", "Item One", "one")
-                e2 = si.add_entry("woolworths", "Item Two", "two")
-                e3 = si.add_entry("coles", "Item Three", "three")
-                # Deterministic codes for the assertion.
-                for entry, code_letter in ((e1, "KAT"), (e2, "RUM")):
-                    entry["entry"]["code"] = code_letter
-                entries = [e1["entry"], e2["entry"], e3["entry"]]
-                si.save_pending(entries)
-                code, out = self._capture_stdout(
-                    _cmd_searched_items,
-                    self._si_args("remove", "KAT,RUM"))
-                data = si.load_pending()
+        code, out = self._capture_stdout(
+            _cmd_searched_items, self._si_args("remove", "KAT,RUM"))
         self.assertEqual(code, 0)
-        self.assertEqual(len(data), 1)
-        self.assertIn("Item Three", out)
+        self.assertIn("RETIRED", out)
 
-    def test_cli13_unknown_code_exact_error(self):
-        """CLI-13: unknown code -> exact self-correcting error, exit 1."""
-        from grocery_price_cli import _cmd_searched_items
-        from core import searched_items as si
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with self._si_ctx(tmpdir), self._si_tomb_ctx(tmpdir):
-                a = si.add_entry("coles", "Item One", "one")
-                a["entry"]["code"] = "KAT"
-                b = si.add_entry("woolworths", "Item Two", "two")
-                b["entry"]["code"] = "RUM"
-                si.save_pending([a["entry"], b["entry"]])
-                old_stderr = sys.stderr
-                try:
-                    sys.stderr = io.StringIO()
-                    code = _cmd_searched_items(
-                        self._si_args("remove", "KA"))
-                    err = sys.stderr.getvalue()
-                finally:
-                    sys.stderr = old_stderr
-        self.assertEqual(code, 1)
-        self.assertIn("⚠️ Code 'KA' not found. Current queue codes: "
-                      "KAT, RUM.", err)
-
-    def test_cli14_clear_empties_and_tombstones(self):
-        """CLI-14: clear empties the queue (tombstones written)."""
-        from grocery_price_cli import _cmd_searched_items
-        from core import searched_items as si
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with self._si_ctx(tmpdir), self._si_tomb_ctx(tmpdir):
-                si.add_entry("coles", "Item One", "one")
-                si.add_entry("woolworths", "Item Two", "two")
-                code, out = self._capture_stdout(
-                    _cmd_searched_items, self._si_args("clear"))
-                data = si.load_pending()
-                tombs = si._load_tombstones()
+        code, out = self._capture_stdout(
+            _cmd_searched_items, self._si_args("clear"))
         self.assertEqual(code, 0)
-        self.assertEqual(data, [])
-        self.assertEqual(len(tombs), 2)
-        self.assertIn("Cleared 2 item(s)", out)
+        self.assertIn("RETIRED", out)
 
     # ------------------------------------------------------------------
     # CLI-15..CLI-16: Queue-1 vs Queue-2 separation (guardrail 4)
@@ -1933,14 +1909,12 @@ class TestCLIPartB(unittest.TestCase):
                     ["Mystery Item 5L"], 0, {},
                     Path(tmpdir) / "progress.json", Path(tmpdir))
                 atl_data = atl.load_pending()
-                si_data = si.load_pending()
         self.assertEqual(code, 0)
         mock_row.assert_called_once()
         self.assertEqual(mock_row.call_args.kwargs["store_keyword"], "")
-        self.assertEqual(len(si_data), 1)   # Queue 2 fed
-        self.assertEqual(atl_data, [])      # Queue 1 untouched
+        self.assertEqual(len(atl_data), 1)   # the ONE to-do queue fed
         # A6: the live item's size (200g) rides on the ack line.
-        self.assertIn("Queued for Wednesday: 'Obela Hommus 200g' "
+        self.assertIn("Queued on the TO-DO list: 'Obela Hommus 200g' "
                       "· 200g (Coles) [", out)
 
 
@@ -2192,7 +2166,8 @@ class TestWednesdayLiveRouting(unittest.TestCase):
     # WC-7..WC-9: Step 0 queue pull + window skip
     # ------------------------------------------------------------------
     def test_wc7_step0_pulls_both_queues_via_scp(self):
-        """WC-7: Step 0 scp-pulls add_to_list + searched_items."""
+        """WC-7 (2026-09-03): Step 0 scp-pulls add_to_list only — the
+        searched queue is retired."""
         mock_run = MagicMock(return_value=SimpleNamespace(
             returncode=0, stdout="", stderr=""))
         stack, _report = self._base_patches([], [], patch_subprocess=False)
@@ -2205,7 +2180,8 @@ class TestWednesdayLiveRouting(unittest.TestCase):
                      if c.args and c.args[0] and c.args[0][0] == "scp"]
         pulled = " ".join(" ".join(c.args[0]) for c in scp_calls)
         self.assertIn("add_to_list.json", pulled)
-        self.assertIn("searched_items.json", pulled)
+        self.assertIn("add_to_list_code_tombstones.json", pulled)
+        self.assertNotIn("searched_items.json", pulled)
 
     def test_wc8_scp_unreachable_proceeds_local(self):
         """WC-8: scp unreachable -> ONE warning, proceeds, exit 0."""
@@ -2519,10 +2495,10 @@ class TestCliUnitSurfaces(unittest.TestCase):
             gpc._print_queue_confirmation(
                 {"store": "coles", "keyword": "Milk", "code": "RUM"})
         out = buf.getvalue()
-        self.assertIn("Queued for Wednesday: 'Beans' · 400g (Coles) [KAT]",
+        self.assertIn("Queued on the TO-DO list: 'Beans' · 400g (Coles) [KAT]",
                       out)
         self.assertIn(
-            "Queued for Wednesday: 'Milk' · ⚠️ unit unavailable "
+            "Queued on the TO-DO list: 'Milk' · ⚠️ unit unavailable "
             "(Coles) [RUM]", out)
 
 
@@ -2593,12 +2569,12 @@ class TestAddRoutesResolveUnit(unittest.TestCase):
             product_id="")
         with patch.object(gpc, "_load_env"), \
                 patch("core.sheets_sync.add_product_row") as apr, \
-                patch.object(gpc, "_queue_searched_item") as qsi:
+                patch.object(gpc, "_queue_add_to_list") as qtodo:
             apr.return_value = {"wrote": True, "row_index": 9}
             rc = gpc._search_add_item(args, "milk", [chosen])
         self.assertEqual(rc, 0)
         self.assertEqual(apr.call_args.kwargs["size"], "2L")
-        self.assertEqual(qsi.call_args.kwargs["size"], "2L")
+        self.assertEqual(qtodo.call_args.kwargs["size"], "2L")
 
 
 class TestMapAddCarriesUnit(unittest.TestCase):
@@ -2739,12 +2715,13 @@ class TestWednesdayDisplayUnits(unittest.TestCase):
 
 
 class TestWeeklyQueueLists(unittest.TestCase):
-    """2026-09-01: the three queue lists for the weekly-lists post.
+    """2026-09-03: the queue lists for the weekly-lists post.
 
-    All six lists must land in weekly-lists — unmatched, wool missing,
-    coles missing (posted by _cmd_wednesday) plus to-do, searched, and
-    forgotten (built by _weekly_queue_lists). Hermetic: queue paths and
-    the data dir point at a temp dir.
+    All lists must land in weekly-lists — unmatched, wool missing,
+    coles missing (posted by _cmd_wednesday) plus the to-do queue
+    (FIRST) and forgotten-as-count (built by _weekly_queue_lists).
+    The searched queue is RETIRED. Hermetic: queue paths and the data
+    dir point at a temp dir.
     """
 
     def setUp(self):
@@ -2769,26 +2746,27 @@ class TestWeeklyQueueLists(unittest.TestCase):
             return gpc._weekly_queue_lists(self.data_dir)
 
     def test_titles_and_order(self):
-        """Three lists, fixed titles, resolve-lists-companion order."""
+        """Two lists, fixed titles: to-do FIRST, then forgotten count."""
         result = self._run()
         self.assertEqual(
             [t for t, _ in result],
-            ["To-do (website adds)", "Searched items",
-             "Forgotten items"])
+            ["To-do (website adds)", "Forgotten items"])
 
     def test_empty_queues_render_empty(self):
-        """No queue files at all -> three tuples with empty item lists
+        """No queue files at all -> tuples with empty item lists
         (the chunker renders each as 'none')."""
         result = self._run()
         for title, items in result:
             self.assertEqual(items, [], title)
 
     def test_populated_queues_line_format(self):
-        """Lines carry keyword, unit tag, store, and (searched) code."""
+        """To-do lines carry keyword + unit + store + code; forgotten
+        items render as a COUNT only (names stay hidden)."""
         import json
         self.todo_path.write_text(json.dumps([
             {"store": "woolworths", "keyword": "WW Beef Mince 500g",
              "generic_name": "beef mince", "size": "500g",
+             "code": "MNX",
              "added_at": "2026-08-28T02:00:00+00:00"},
         ]), encoding="utf-8")
         self.searched_path.write_text(json.dumps([
@@ -2800,11 +2778,12 @@ class TestWeeklyQueueLists(unittest.TestCase):
             "# comment\nJunk Item [coles]\n", encoding="utf-8")
         result = dict((t, i) for t, i in self._run())
         self.assertEqual(result["To-do (website adds)"],
-                         ["WW Beef Mince 500g · 500g (Woolworths)"])
-        self.assertEqual(result["Searched items"],
-                         ["Coles Bread 650g · 650g (Coles) [KAT]"])
+                         ["WW Beef Mince 500g · 500g (Woolworths) [MNX]"])
+        # The searched queue is retired — its file is ignored.
+        self.assertNotIn("Searched items", result)
+        # Forgotten: count only, names hidden.
         self.assertEqual(result["Forgotten items"],
-                         ["Junk Item [coles]"])
+                         ["1 item(s) hidden — ask to see the names"])
 
     def test_corrupt_queue_degrades_to_empty(self):
         """A corrupt queue file must never raise — empty list instead."""
