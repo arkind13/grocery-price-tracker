@@ -732,3 +732,629 @@ All five root causes fixed and verified against real data.
 ## No lostbattle.md for this round
 
 Both user-visible defects fixed and verified live.
+
+## Round: Smart Basket optimizer (B2 / R17) — 2026-09-03
+
+Spec: `architecture-spec.md` (workspace root). New:
+`core/basket_optimizer.py` (+ `optimize` CLI subcommand + skill
+routing). Baseline before the round: 641 passed (the spec's "621" was
+stale — verified 2026-09-03).
+
+### Matrix OPT — core/basket_optimizer.py + tests/test_optimizer.py (28 tests)
+
+| ID | Case | Status |
+|----|------|--------|
+| G-1..G-5 | gate 0/2/4 items refused without comparator call; 5 proceeds; parsing parity | PASS |
+| A-1 | split wins: assignment, subtotals, split_total, Σ gaps | PASS |
+| A-2 | negation regression (user rule 2026-09-02): +$10/−$10 → savings $20, split | PASS |
+| A-3 | sub-threshold movement → one_trip woolworths (even when Coles is the cheaper cart) | PASS |
+| A-4 | boundary: Σ gaps == threshold → one_trip (strictly greater required) | PASS |
+| A-5 | degenerate guard: all-WW assignment → one_trip despite Σ gaps 20 | PASS |
+| A-6 | WW incomplete + sub-threshold → forced_split; single-store items add no gap | PASS |
+| A-7 | min_saving override respected | PASS |
+| A-8 | home-brand effective price = discounted_woolworths_price()["final"]; gaps on discounted prices | PASS |
+| A-9..A-15 | raw basis off-switch; tie→WW; unpriceable; WW-prices-nothing→one Coles trip; none; warnings/not_available relay; 2dp rounding | PASS |
+| F-1..F-4 | one_trip / split / forced_split / unpriceable+reminder output shapes (Style Kit, no markdown tables, no "(was") | PASS |
+| F-5..F-8 | gate exit 2 on stderr; success exit 0; sheet-only has no 💬 reminder; constants pinned to CLI default | PASS |
+
+### Full-suite gate
+
+641 → 669 collected; 669 passed, 0 failed, 0 skipped.
+
+### Deviation note (A-11, plan-internal bug — fixed by 03 Code)
+
+The plan's S18 quoted test A-11 with `self.assertEqual(r.split_total,
+2.00)` for a 1-priceable + 1-unpriceable basket. That contradicts the
+plan's own locked design: §1.1 step 5's degenerate guard makes this a
+`one_trip`, and §1.1 step 7 (and sibling test A-5, which pins
+`split_total == 0.0` with a nonzero subtotal) mandate
+`split_total = 0.0` for one_trip. The module code (S6–S9, verbatim) is
+correct; the A-11 assertion was the bug. Fix: assert
+`split_total == 0.0` AND `assignments[0].subtotal == 2.00` (ghost in
+NO total — the test's stated intent, master-register §7 "excluded from
+totals"). No production code was changed for this.
+
+### Verification commands (local)
+
+- `anaconda3\python.exe -m pytest grocery-price-tracker/tests/ -q` → 669 passed (baseline was 641 passed)
+- `anaconda3\python.exe grocery_price_cli.py optimize --items "milk, eggs"` → exit 2 + refusal on stderr
+- `anaconda3\python.exe -c "…optimize_basket('milk, eggs')…"` gate smoke → `False none` + refusal message
+- `python skills_doc.py --check` → OK
+
+### Local acceptance (S27, 2026-09-03)
+
+| # | Command | Result |
+|---|---------|--------|
+| 1 | `optimize --items "milk, eggs, bread, beef mince, apples, rice"` | PASS — 🧠 header, ✅ SPLIT SHOP — SAVE $3.39, store blocks, 📊 PLAN fence, ⚠️ unpriceable block (bread, beef mince), 💬 reminder; exit 0 |
+| 2 | `optimize --items "milk, eggs"` | PASS — refusal on stderr ("at least 5 items (got 2)… run: compare --items"), exit 2 |
+| 3 | `pytest grocery-price-tracker/tests/ -q` | PASS — 669 passed, 0 failed, 0 skipped |
+| 4 | `python skills_doc.py --check` | PASS — OK |
+
+**Environment note:** local piped runs of the emoji CLI need the house
+convention `$env:PYTHONIOENCODING="utf-8"` (workspace README §10) —
+without it Python's charmap stdout raises
+`UnicodeEncodeError: \U0001f9e0` on the 🧠 header (strict errors on
+piped stdout). Interactive consoles are unaffected; no code change.
+
+### VPS deploy (S28, 2026-09-03, after user confirmed S27 green)
+
+- scp'd `grocery_price_cli.py`, `core/basket_optimizer.py`,
+  `SKILL.md`, `claw_skills_easy.md` → `myvps:/home/ubuntu/openclaw/
+  tasks/ai-tools/…` (live bind-mount, no container restart).
+- MD5 verified identical on both sides for all four files.
+- Container smoke 1: `optimize --items 'milk, eggs'` → refusal line +
+  exit 2. PASS.
+- Container smoke 2: `optimize --items 'milk, eggs, bread, beef mince,
+  apples, rice'` → ⚠️ forced-split plan (a transient Sheets 503 on
+  'milk' was degraded per design — item relayed as unpriceable, exit
+  0). PASS.
+- §6.3 Telegram agent turn (8-item list) prepared for the user; commit
+  (§6.4) deferred until the user asks.
+
+### Format revision (user-directed, 2026-09-03, same round)
+
+User rules (2026-09-03): (1) sub-threshold one-trip plans show the
+winning store only, with the savings note at the BOTTOM ("Splitting
+would only save $2.50 — showing Woolworths only."); (2) split plans
+show numbered buy-lists per store (`N. item — $price`, continuous
+numbering, per-item price at the assigned store ONLY — no cross-store
+per-item pricing) with 💵 subtotals and a `💰 Total savings this trip`
+line; PLAN fenced box removed.
+
+Changes: `core/basket_optimizer.py` only (StoreAssignment + item_prices
+parallel list; _assign/_build_report fill it; _store_lines numbered
+priced blocks; _one_trip_reason bottom-note phrasing; format_plan new
+layout; _plan_rows + fenced_table import removed). Output docs
+(SKILL.md row, README §5) remain accurate — no wording change needed,
+no catalogue regen.
+
+| Check | Result |
+|-------|--------|
+| optimizer tests (F-1..F-3 rewritten to pin new shapes) | PASS — 28/28 |
+| full suite | PASS — 669 passed, 0 skipped |
+| local live run (6 items, forced_split) | PASS — numbered blocks, 💵 subtotals, 💰 line, exit 0 |
+| scp basket_optimizer.py + md5 both sides | PASS — `0BC39356…4B5` |
+| container smoke (6 items, split) | PASS — new format, exit 0 |
+
+### UX fix round (user feedback, 2026-09-03, same round)
+
+User rules: (1) drop the 💬 'add item N' relay — buy-list numbers are
+plan positions, not search-result numbers; (2) every buy-list line
+shows the FULL matched product name (never cut down) + a
+`(sheet)`/`(live)` source label, so the user can see where each price
+came from.
+
+Changes: `core/basket_optimizer.py` only — StoreAssignment +
+item_labels/item_sources parallel lists (from
+BasketItem.matched_names/sources); _store_lines renders
+`N. Full Name — $price (source)`; _tail_blocks no longer relays the
+comparator 💬 reminder. SKILL.md/README wording stays accurate — no
+regen.
+
+| Check | Result |
+|-------|--------|
+| full suite | PASS — 669 passed, 0 skipped (F-1..F-4, F-7 re-pinned) |
+| scp + deploy + container smoke | PASS — full names + (sheet)/(live) labels in output, no 💬 line, exit 0 |
+
+### Confirmation flow (user-directed, 2026-09-03, same round)
+
+User rules: sheet prices first; NOTHING is live-searched or written
+until the user confirms. Items with missing prices are presented as
+A (Coles missing) / B (Woolworths missing) / C (no pricing) with
+distinct 3-letter codes. Confirmed A/B items update their EXISTING
+sheet row via the map writers (set_store_keyword + update_single_price
+— they leave the wool/coles missing lists naturally; NO searched-list
+entry, which would create a second line). Confirmed C items: no row →
+new sheet row + searched-list entries (exact `search --add-item`
+semantics: empty keyword cols + Col P alias; both store listings
+queued when a gate-passing pair is found); legacy unpriced row →
+updated in place. The final basket is rebuilt from the sheet after
+the writes.
+
+New: `core/basket_confirm.py` (pending state
+`data/optimize_pending.json`, classification, code assignment,
+execution, display block). Changed: `core/basket_optimizer.py`
+(+ public `plan_from_items` — pipeline on pre-priced items),
+`grocery_price_cli.py` (+ `--confirm CODES|all|none`, `--items` now
+optional with explicit validation), SKILL.md row/mapping/pattern 7 +
+example, README §5 + blockquote, PROJECT-MAP §5. Catalogue regen → OK.
+
+| Check | Result |
+|-------|--------|
+| test_basket_confirm.py (12 tests: classification, codes, state IO, A/B write semantics + never-queues, C-new add+queue, C-row in-place, Coles-unavailable degradation, block format, CLI wiring ×2, hydration) | PASS |
+| FULL GATE | PASS — 681 passed, 0 skipped |
+| Local run 1 → confirmation block (B/C groups, codes, full row names) | PASS — exit 0 |
+| Local `--confirm none` → no writes + rebuilt sheet-only plan (full names) | PASS — exit 0 |
+| Deploy 5 files + md5 both sides | PASS — all identical |
+| Container smoke: run 1 + `--confirm none` | PASS — same shapes, exit 0 |
+
+Note: no REAL confirmation was executed (that writes to the user's
+sheet/queues) — the user drives those from Telegram.
+
+### Lookup live-fill fix (user-directed, 2026-09-03, same round)
+
+User granted the file boundary ("fix it in lookup.py"). Defect: a
+sheet row resolved by lookup steps 1-3 whose price cells are
+unusable (unavailable / N-A / blank — e.g. legacy 🏠 bread / beef
+mince rows) returned immediately, so Step 5 live search never fired
+and the item showed "No comparable price".
+
+Fix (core/lookup.py): Steps 1-3 resolutions are now finished by
+`_finish_sheet_result()` — for NON-INTERACTIVE callers (compare
+auto / optimize) the MISSING stores are live-searched and merged into
+the result (`LookupStatus.SHEET_AND_LIVE` + per-store `sources`;
+sheet prices never overwritten; UOM pair gate still applies to live
+prices; nothing found → pure sheet answer). INTERACTIVE callers (the
+map resolve flow) keep the pure sheet answer — list semantics
+untouched. core/price_comparator.py: `_gather_lookup_prices` gained
+the SHEET_AND_LIVE branch (per-store source tags). New tests:
+tests/test_lookup_live_fill.py (7).
+
+| Check | Result |
+|-------|--------|
+| FULL GATE | PASS — 688 passed, 0 skipped |
+| Deploy lookup.py + price_comparator.py, md5 both sides | PASS — identical |
+| Container `compare --items "beef mince"` (was: no comparable price) | PASS — both stores LIVE-priced ($13.54 / $14.50), (live) labels, exit 0 |
+
+### Loophole fix: confirmation writes are PRICE-ONLY (user-directed, 2026-09-03)
+
+User caught the loophole: writing the store KEYWORD during confirm
+would make the row vanish from the wool/coles missing lists (those
+lists are keyword-derived: I present + J empty = wool missing, and
+vice versa) while the product is not actually on the store website
+list — so Wednesday would never refresh the price and the staleness
+would be invisible. User's own suggestion adopted: **write the price,
+NOT the keyword.**
+
+- A/B/C-row-exists confirms now call update_single_price ONLY (unit
+  into blank Col C). set_store_keyword is never called by the
+  confirmation flow — keywords stay the resolve flow's job (map), and
+  the row stays flagged on the missing list until then.
+- C-new items unchanged (new row + searched-list entries — the
+  designed reminder loop).
+- Robustness: `_compare_with_retry` (CLI, 3 tries) around the
+  sheet reads on the confirm/auto paths — a transient Sheets 500/503
+  mid-confirm no longer aborts after writes succeeded.
+- Docs updated (SKILL.md row/mapping, README, PROJECT-MAP); catalogue
+  regen → OK.
+
+| Check | Result |
+|-------|--------|
+| test_basket_confirm.py updated (keyword never called; price-only; block wording) | PASS — 12/12 |
+| FULL GATE | PASS — 688 passed, 0 skipped |
+| Deploy basket_confirm.py + SKILL.md + catalogue + CLI, md5 both sides | PASS — identical |
+| Container smoke: run 1 (new wording) + `--confirm none` rebuild | PASS — exit 0 |
+
+### Plural matching fix + routing phrase (user-directed, 2026-09-03)
+
+Real Telegram test exposed two questions: (1) "mince" displayed the
+full matched row name "Woolworths Beef Mince 500g" — by design (full
+names rule; shows exactly which row a confirm would price); (2)
+"apples" was classified "(not on sheet)" although row 52 "Royal Gala
+Apple 1 Kg" exists — the sheet matchers compare whole words only, so
+plural "apples" never matched singular "apple" (alias "royal gala
+apple").
+
+Fix (core/lookup.py): `find_alias_token` + `find_candidates` now use
+the same singular/plural `_token_variants` normalisation the live
+search ranker already had. Deployed + verified on the real sheet:
+"apples" → row 52 SHEET_AND_LIVE (WW $7.90 sheet + Coles $7.50 live);
+"mince" → row 82 both-store live fill. Also this round: SKILL.md
+routing + frontmatter gained "this week's shopping list" phrasings
+(catalogue regen OK, deployed).
+
+| Check | Result |
+|-------|--------|
+| test_lookup.py + plural class (6 new) + live_fill | PASS — 31/31 |
+| FULL GATE | PASS — 693 passed, 0 skipped |
+| Deploy lookup.py + SKILL.md + catalogue, md5 | PASS — identical |
+| Real-sheet probes: apples → row 52 (sheet+live), mince → row 82 (live fill) | PASS |
+
+### Round 2: RecipeResolver plurals + to-do awareness (2026-09-03)
+
+The first Telegram test still classified "apples" as C "(not on
+sheet)": the optimize SHEET pass uses RecipeResolver's SheetIndex —
+a different matcher from the LookupIndex fixed above, with the same
+missing plural handling. Fixed: SheetIndex.find_partial now applies
+_token_variants (mirroring lookup.py).
+
+Also answered the user's dedup question with code + a fix: C-new
+confirms now check the to-do list (add_to_list.is_pending) before
+queueing on searched-items and skip the entry if already pending
+there; searched-items itself was always dup-guarded (store +
+normalised name); A/B items never touch either queue (price-only
+write); the sheet write is protected by the one-line rule merge.
+
+| Check | Result |
+|-------|--------|
+| test_basket_confirm.py (+5: SheetIndex plural ×2, to-do awareness ×1, etc.) | PASS — 15/15 |
+| FULL GATE | PASS — 696 passed, 0 skipped |
+| Deploy recipe_resolver.py + basket_confirm.py, md5 both sides | PASS — identical |
+| Container re-test, real 8-item list: apples → A.1 "Royal Gala Apple 1 Kg" (was C "not on sheet") | PASS — exit 0 |
+
+### Final decision tree (user-directed, 2026-09-03)
+
+The user specified the full classification tree; implemented verbatim
+in `basket_confirm.classify_basket` + CLI:
+1. fully sheet-priced → basket.
+2. one side priced: keyword missing + already queued on searched/to-do
+   → "already queued for Wednesday", NO action (queues carry no
+   prices — user confirmed); pricing missing/error → closest sheet
+   SUBSTITUTE first (read-only, source "sub", full name disclosed,
+   never written) → else live search (price-only write into the
+   existing row).
+3. row exists, neither priced → same as 2 (sub both sides → live).
+4. not on sheet → confirmable: compare-only by default (nothing
+   written; live prices injected into the plan), `+add` opts in to
+   new row + searched entries (chosen BEFORE the comparison, per
+   user).
+
+LookupIndex row dicts now carry raw ww_kw/coles_kw cells so the
+classifier can tell a missing KEYWORD from a missing PRICE.
+`parse_confirm` grammar: all / none / all+add / codes[+add].
+CLI `_load_queues` (read-only) feeds both queues into classification.
+
+| Check | Result |
+|-------|--------|
+| test_basket_confirm.py rewritten (20 tests: tree, substitutes, queued, compare-only, +add, parse grammar, inject_live, CLI) | PASS — 20/20 |
+| FULL GATE | PASS — 712 passed, 0 skipped |
+| Deploy CLI + basket_confirm + lookup + SKILL.md + catalogue, md5 both sides | PASS — identical |
+| Container smoke, real 8-item list: eggs+apples auto-resolved via sheet subs; 3 gaps pending; `--confirm none` rebuild shows (sub) labels + savings | PASS — exit 0 |
+
+Backlog note: substitute matching is token-based and can pick loose
+subs (e.g. apple fruit straps for "apples"); tightening with the UOM
+size gate is a candidate follow-up.
+
+### Stale-keyword resync (user report from live test, 2026-09-03)
+
+Live test: "royal gala apples" went through `search --add-item`
+(agent routing) and created a DUPLICATE row, even though row 52
+"Royal Gala Apple 1 Kg" exists with BOTH keywords and a Coles cell of
+"N/A 2026-09-02". User semantics: keyword present + price N/A means
+the product is SUPPOSED to be on that store's website list but never
+matched — the correct action on a confirmed live price is: write the
+price, RE-SYNC the stale keyword to the found product name, and add a
+TO-DO reminder so the user verifies the website shopping list.
+
+Fix (core/basket_confirm.py): classification carries `kw_present` per
+gap (persisted in pending state); execute_confirmation re-syncs the
+keyword + adds the to-do entry for sides with stale keywords (A/B and
+C-row paths). Sides with no keyword stay price-only/stay-flagged as
+before. Also flagged to the user: the agent's detour through
+`search --add-item` was routing, not the confirm flow — the confirm
+flow itself would have resolved "royal gala apples" → row 52 via the
+plural alias fix.
+
+| Check | Result |
+|-------|--------|
+| test_basket_confirm.py (+3 resync tests: A stale, A no-kw price-only, C-row stale ×2 sides) | PASS — 24/24 |
+| FULL GATE | PASS — 717 passed, 0 skipped |
+| Deploy CLI + basket_confirm + SKILL.md + catalogue, md5 both sides | PASS — identical |
+
+User cleanup advised (sheet data, not code): duplicate row 100
+("ROYAL GALA APPLES 1KG:…") should be deleted — the live price now
+lives on row 52 via the resync path; searched-list entry [UFL] can be
+removed with "remove UFL".
+
+### Rule corrected + sheet/list repaired (user-directed, 2026-09-03)
+
+User rejected the keyword OVERWRITE ("it becomes an issue if the item
+is not added — the price would never change and the item would be
+hidden"): the stale keyword is clearly WRONG, so the correct rule is
+DELETE it, write the correct price, and queue the CORRECT keyword on
+the TO-DO list.
+
+Code (core/basket_confirm.py): `_clear_stale_keyword_and_todo`
+replaces the overwrite attempt — set_store_keyword(row, store, "")
+clears the wrong keyword, update_single_price writes the live price,
+add_to_list.add_entry queues the correct product (dup-guarded).
+Docs updated to match (SKILL.md row, README, PROJECT-MAP); catalogue
+regen OK.
+
+Sheet/list repaired via one-off container script (user-approved):
+1. Row 52 "Royal Gala Apple 1 Kg": Coles price N/A -> $7.90 (found=True, wrote=True)
+2. Row 52 stale Coles keyword cleared (wrote=True)
+3. To-do list: "ROYAL GALA APPLES 1KG:ROYAL GALA:.:1 KG" queued (code BQW)
+4. Duplicate row 100 deleted (Col A safety check passed first)
+5. Searched list: stray entry UFL removed (15 entries remain)
+
+| Check | Result |
+|-------|--------|
+| test_basket_confirm.py (stale = clear + todo; no-kw = price-only) | PASS — 23/23 |
+| FULL GATE | PASS — 717 passed, 0 skipped |
+| Deploy basket_confirm + SKILL.md + catalogue, md5 both sides | PASS — identical (CLI already current) |
+
+### Round closed (2026-09-03)
+
+Docs finalised: SKILL.md (row + mappings + pattern 7 + examples),
+grocery-price-tracker README (§5 row + Smart Basket blockquote),
+PROJECT-MAP (§0/§5/§8), future_roadmap (R17 → Realized with the
+confirmation-flow + plural-fix additions), catalogue regenerated
+(`skills_doc.py --check` OK). All code + SKILL.md + catalogue deployed
+to myvps with matching md5s. Full gate at close: **712 passed,
+0 skipped**. Pending: user's live Telegram test (no code work
+outstanding).
+
+### Telegram E2E test — SUCCESS (user-confirmed, 2026-09-03)
+
+User ran the full flow: list message → 🔎 confirmation list (tomato =
+B stale-keyword item) → confirmed the tomato code only → result line
+reported price written + "wrong keyword cleared + correct one added
+to your to-do list" — exactly as designed. User: "ok success".
+
+TOPIC CLOSED. Final state: 717 passed / 0 skipped; all code + docs +
+skill + catalogue deployed (md5-verified); sheet + queues repaired.
+Uncommitted by design (user commits on request). Backlog candidates
+logged above (substitute UOM tightening; agent routing for
+post-result refine — mitigated via SKILL.md guidance).
+
+### Backlog items raised (NOT built — outside 03 boundary / need design)
+
+1. **Lookup-chain defect:** sheet rows with an UNUSABLE price
+   (unavailable/N-A/blank, e.g. legacy 🏠 bread + beef mince rows) are
+   treated as resolved by `_gather_lookup_prices` (Steps 1-3) and
+   never reach Step 5 live search — they show "No comparable price"
+   even though both stores are reachable. Fix belongs in
+   `core/lookup.py`/`core/price_comparator.py` (FORBIDDEN to 03 Code
+   by plan §0.3.1) → needs 02 Planner or explicit boundary grant.
+2. **Pre-basket live-search confirmation flow (user request):** before
+   live searching non-sheet items, present A (coles-missing) / B
+   (wool-missing) / C (no pricing at all) groups with distinct
+   3-letter codes; user confirms → confirmed items go to the
+   searched-items queue AND the live search; then the basket is built.
+   This REVERSES the spec-locked "optimize is look-only, never
+   queues" rule and needs new state + CLI flags → 02 Planner scope.
+
+### Live 7-list counts + mid-week resolution removal (2026-09-03, Checker)
+
+User incident: "show me all 7 lists only their counts" reported
+Unmatched 45 / Coles missing 10 AFTER everything was resolved, and
+no-price 11 after a deletion (yesterday: 10). Investigation found the
+reporting rule counted the Wednesday-run .txt snapshots — map
+resolutions never rewrite them, so counts stay frozen at last
+Wednesday. (No-price 11 was LIVE-correct: the Beef Mince --na
+resolution joined it to the no-price list. Birkford deletion held.)
+
+Fixes (user approved both):
+
+1. New `lists` command — the 7 user-facing lists with LIVE counts:
+   sheet-based for 1-3 + 7 (exact Wednesday semantics: keyword cols
+   I/J, NA=populated, priceless = neither price > $0), Unmatched also
+   drops debt entries whose keyword now exists (read-only auto-heal
+   view) + ignored junk; live queue files for 4-6. `--full` prints
+   names. Sheet failure degrades those lists to "unavailable" with
+   the verbatim error (never stale substitutes), exit 0.
+2. Mid-week removal: map --pick/--na/--keyword/--forget and the
+   unmatched exact-link --add now remove the resolved line from its
+   .txt work list immediately (header count decremented; progress
+   stays at idx since the next item slides in). --skip and the
+   price-only wool/coles --add intentionally keep the line.
+   Shared `_noprice_sort_key` extracted (Wednesday/no-price/lists
+   order identically). SKILL.md 7-list rule now runs `lists` and
+   forbids counting the .txt snapshots.
+
+Sandboxed tests (test_lists_cmd.py — tmp dirs only): 11 new. NOTE:
+the pre-existing suite still writes fixtures into the REAL data/ (the
+root cause of the local queue wipe found during investigation); the
+user is enforcing sandboxed tests for future agents.
+
+Also observed (NOT fixed, user decision pending): the VPS debt ledger
+(unmapped_queue.json) contains old test-junk entries ("Totally
+Unknown Product 999g [aldi]" etc.) mixed with real unresolved items
+— live Unmatched on the VPS reads 18. Cleanup via map --forget or a
+bulk purge on request.
+
+| Check | Result |
+|-------|--------|
+| New tests test_lists_cmd.py | PASS — 11/11 |
+| FULL GATE | PASS — 712 passed, 0 skipped |
+| Local live run `lists` + `lists --full` | PASS — live sheet + queues |
+| Deploy deploy_vps.py (CLI + SKILL.md), container restart + smoke | PASS — 24/24 scp OK |
+| Catalogue regen + --check, scp + md5 both sides (CLI/SKILL/catalogue) | PASS — identical |
+| Container `lists` / `lists --full` / `no-price` | PASS — live counts (18/0/7/8/15/12/11) |
+
+### Unmatched purge + website-add handshake annotation (2026-09-03, Checker)
+
+User-approved one-off: cleared ALL pending unmatched debt on the VPS
+(34 entries — 18 visible + 16 already hidden) via tmp_purge script:
+each entry appended to data/ignored_items.txt (permanent — the docx
+junk re-parses every Wednesday and the ignore list is what keeps it
+hidden) + marked resolved in unmapped_queue.json. Cleaned queue pulled
+back to LOCAL (Wednesday Step 5 pushes local debt to the VPS — both
+sides must agree or the cleanup un-does itself); same ignore lines
+appended locally (33 new, dup-guarded). Live: Unmatched 0,
+Forgotten 34.
+
+`lists` now annotates the wool/coles-missing ↔ to-do overlap:
+"(N pending website adds)" on the count line + "⏳ website add queued"
+per item in --full. Rationale: `map --add` writes the price now but
+the store keyword only lands on `add-to-list done` — writing it
+earlier would make the next Wednesday sync stamp the fresh price
+N/A (keyword exists, item not yet on the store list). The overlap is
+the designed 2-step handshake, not a duplicate; unannotated missing
+rows are the genuinely-open ones (live: Coles 7, of which 5 queued).
+
+| Check | Result |
+|-------|--------|
+| Purge run in container (34 cleared), temp script removed both sides | PASS |
+| Local mirror: cleaned unmapped_queue.json pulled, ignore lines appended | PASS |
+| Annotation tests (+2, is_pending mocked to entry-or-None contract) | PASS |
+| FULL GATE | PASS — 714 passed, 0 skipped |
+| Redeploy (CLI + SKILL.md + catalogue), md5 both sides | PASS — identical |
+| Container `lists --full`: Unmatched 0; "Coles missing — 7 (5 pending website adds)" | PASS |
+
+### Missed pricing (list #7 redefined) + GONE word + two-strike auto-delete (2026-09-03, Checker)
+
+User spec (after reviewing the one-price-missing populations): list #7
+becomes MISSSED PRICING — (a) FIXABLE: store keyword present + that
+price unusable + not GONE (covers keyword mismatches AND deliberate-NA
+rows, which the user ruled must be reviewed too — a Coles home brand
+can still exist for a WW item); no-keyword rows stay excluded (missing
+lists own them). (b) DELETE-PENDING: both prices unusable (GONE
+counts) — the old no-price population, now a deletion pipeline.
+
+GONE (user decision): typed manually into a PRICE cell (D/E) =
+"verified unavailable — never captured again". Marker writes (N/A /
+unavailable) never stomp it (sync match loop + not-found pass guarded,
+tested); a returning REAL price clears it (resurrection).
+
+Auto-delete (two strikes, user-approved): Wednesday Step 3b — a
+both-dead row is deleted only when a PREVIOUS run already saw it dead
+(data/delete_candidates.json ledger; same-day rerun never deletes;
+recovered rows leave the ledger). One bad paste can never wipe rows.
+Every deletion archived to data/deleted_rows.json first. Manual exit:
+`missed-pricing --purge` (explicit user request during review) deletes
+all delete-pending rows now + archives + clears ledger strikes;
+`--dry-run` previews. `delete_product_rows` (bottom-up, batch) added to
+sheets_sync; sheets_sync added to the deploy manifest (was missing —
+md5 mismatch caught during this deploy, hand-scp'd + manifest fixed).
+
+no-price subcommand kept as the legacy both-dead view; skill rule now
+points at lists/missed-pricing.
+
+| Check | Result |
+|-------|--------|
+| test_missed_pricing.py (classification, two-strike, purge, GONE guards) | PASS — 16/16 |
+| Full gate | PASS — 733 passed, 0 skipped |
+| Local live `lists` + `missed-pricing --dry-run` | PASS — 33 (23 fixable · 10 delete-pending) |
+| Deploy (CLI + SKILL + catalogue + sheets_sync), md5 both sides | PASS — identical |
+| Container `lists` | PASS — 33 (23 fixable · 10 delete-pending) |
+
+### Root cause of the 4:43 PM stale-list regression + merged todo queue (2026-09-03, Checker)
+
+User re-tested at 4:43 PM and STILL got 45/10/old-format. Root cause:
+the agent loads skills from the CONTAINER-tree copy —
+openclaw.json: skills.load.extraDirs = ["/app/tasks/ai-tools/claw-
+skills"] — and that copy was stale until 4:41 PM (deploy_vps.py only
+pushed SKILL.md to /openclaw/skills/, a different path). The agent
+process had started at the 4:25 PM restart and cached the old text;
+the 4:43 reply followed the OLD rule (count Wednesday .txt snapshots)
+and LLM-decorated the output (also a verbatim-rule violation).
+Fix: container-tree copy synced (md5 identical on all copies),
+deploy manifest now pushes SKILL.md to BOTH paths, agent restarted +
+verified. If the bot still misbehaves inside an old Telegram thread,
+a fresh thread is needed (per-conversation instruction cache).
+
+User rule (same session): MERGE to-do + searched into ONE queue with
+a uniform done that ALWAYS writes the keyword — no gaps:
+
+- new `todo` subcommand: show = merged continuous-numbering view
+  (Coles then Woolworths; add entries before searched; "· new row"
+  marks searched); done --items "1,HUY,SRM" resolves merged numbers +
+  codes, all-or-nothing (BOTH queues validated before EITHER mutates),
+  removes entries AND writes the remembered exact store name as the
+  row's store keyword for BOTH kinds (closes the "searched has no
+  done" gap). Wednesday Step 1b list-presence auto-drain unchanged.
+- Basmati gap fix: add_product_row merged result now reports
+  store_keyword_empty; a merged search-add (price onto an existing
+  keyword-less row) queues a to-do entry with the exact store name.
+- `lists` renumbered 7 -> 6: #4 = merged To-do (N price-pending · M
+  new rows), #5 Forgotten, #6 Missed pricing. add-to-list /
+  searched-items kept as legacy views. Skill updated (6-list rule,
+  todo routing); the parallel session's optimize-row edits preserved.
+
+| Check | Result |
+|-------|--------|
+| test_todo_cmd.py (merged show, done both kinds, all-or-nothing, gap fix) | PASS — 9/9 |
+| FULL GATE | PASS — 742 passed, 0 skipped |
+| Live 503 degradation (transient Sheets outage mid-verify) | PASS — "unavailable" + verbatim error, offline lists still delivered |
+| Deploy (CLI + SKILL.md both paths + sheets_sync + catalogue), md5 x4 | PASS — identical |
+| Agent skill path (/app/tasks/ai-tools/claw-skills) post-restart | PASS — current md5 |
+| Container `lists` + `todo show` | PASS — 6 lists live; 33 merged entries (10+23) |
+
+### Legacy commands redirected to merged views (2026-09-03, Checker)
+
+User escalation: the bot (old instructions cached in its Telegram
+thread context) kept showing 7 lists, SEPARATE to-do/searched, and
+no-price 10. Fix at the command layer so EVERY instruction version
+produces the new truth:
+- no-price -> full missed-pricing report (one-store failures included;
+  the old both-dead-only view is gone)
+- add-to-list show / searched-items show -> the merged ONE-queue view
+  (same numbering as todo show)
+- add-to-list done -> delegated to the todo done flow (merged numbers
+  + codes; always writes the keyword)
+Test updates: 8 assertions to the merged wording; _atl_ctx isolates
+BOTH queues now (_CombinedPatch helper).
+SECURITY NOTE: during gateway config recon a provider API key value
+was accidentally printed in admin output (key-filter matched apiKey).
+Not committed anywhere; user advised to rotate it.
+
+| Check | Result |
+|-------|--------|
+| FULL GATE | PASS — 742 passed, 0 skipped |
+| Container: add-to-list show / searched-items show / no-price | PASS — all print merged views (verified live) |
+| Gateway headless chat probe (in-container /api/prompt) | 404 — no public chat API; agent verified via its command layer instead |
+| Deploy (CLI + SKILL both paths + catalogue), smoke | PASS |
+
+### Docs refresh + restart-safety proof (2026-09-03, Checker)
+
+User confirmations requested and delivered:
+1. ALL lists live irrespective of docker restart/recreate — PROVEN:
+   compose-defined bind mounts carry every state file on the host;
+   captured lists output, restarted the container, re-ran: IDENTICAL.
+2. Format explanation delivered (bot thread narration vs command
+   output; commands now print the new views regardless).
+3. Docs updated: root README + tracker README (new commands table
+   rows, data-file table, Wednesday row, 2026-09-03 note),
+   DIRECTORY_TREE.md revision note, NEW PROJECT-MAP.md (consolidated
+   architecture map: 6 lists, merged todo, missed pricing/GONE/
+   two-strike, topology + restart safety, scenario matrix).
+
+### Missed-pricing weeks-on-list ages ledger (2026-09-03, Code)
+
+Fix for the "(new)" regression: every row showed (new) because the
+2026-09-02 overwrite-semantics change re-stamped all price-cell
+anchors (date-based aging restarted from zero). New first-fail ledger
+data/missed_pricing_ages.json ({generic: first_seen YYYY-MM-DD}):
+- Written ONLY by persist_ages=True callers (missed-pricing command,
+  Wednesday Step 3b non-dry-run); lists stays read-only (hash-proven).
+- _cell_weeks prefers the ledger date; anchor/Col-H fallback unchanged.
+- Pruning drops entries no longer failing (price fixed, row deleted,
+  or manual GONE verdict leaving the lists - re-ages if undeleted).
+- OLDEST date kept on collision; delete_candidates.json untouched.
+First live run recorded today, so current labels read (new) - correct;
+ages grow from the ledger now and survive anchor resets. Self-heal
+note stands: anchor preservation means 2026-09-09 still-failing rows
+would show (1 week) either way; the ledger additionally survives
+manual cell clears and is correct immediately.
+
+| Check | Result |
+|-------|--------|
+| FULL GATE (pytest grocery-price-tracker/tests -q) | PASS - 750 passed (742 prior + 8 new ages-ledger tests) |
+| Seeded history shows (2 weeks) on first run (tmp sandbox) | PASS |
+| Genuinely-new failures (<7d) still show (new), record today | PASS |
+| lists path never writes ledger (absent / byte-identical) | PASS |
+| GONE row's ledger entry dropped; still-failing kept | PASS |
+| delete_candidates.json untouched by ages write | PASS |
+| Live missed-pricing local run creates ledger (32 rows, 2026-09-03) | PASS |
+| Live lists run leaves ledger md5-identical | PASS |
+| Deploy (deploy_vps.py: 26 files, container restart + smoke) | PASS |
+| In-container missed-pricing verify | PASS - 22 fixable / 10 delete-pending |
+| VPS ledger written (32 entries, all 2026-09-03) | PASS |
+| md5 grocery_price_cli.py local vs VPS | PASS - BAEACD8E7EAF36B2905A28EF7D3AB08E both sides |
+
+Windows note: local console cp1252 cannot decode the report emoji
+(PYTHONIOENCODING=utf-8 workaround); deploy script's trailing
+reader-thread UnicodeDecodeError is the same cosmetic artifact AFTER
+"Deploy complete." - deployment itself fully green.
