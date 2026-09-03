@@ -145,6 +145,17 @@ class SyncReport:
 _UNAVAILABLE_PREFIX = "unavailable"
 _NA_PREFIX = "N/A"
 
+# GONE (2026-09-03, user rule): the user types GONE into a price cell
+# (D/E) to say "verified unavailable at this store — never capture on
+# missed pricing again". Marker writes (N/A / unavailable) must NEVER
+# stomp it; a returning REAL price may (the item resurrected).
+_GONE_MARKER = "GONE"
+
+
+def _is_gone(cell) -> bool:
+    """Is this price cell the user's manual GONE verdict?"""
+    return str(cell if cell is not None else "").strip().upper() == _GONE_MARKER
+
 
 def _marker_date(cell: str) -> str:
     """Extract the embedded YYYY-MM-DD anchor from a marker cell ('')."""
@@ -287,16 +298,19 @@ def sync_prices(
         # Overwrite semantics (2026-09-02): a listed item whose price
         # is unusable (0 / None) NEVER keeps a stale price — the cell
         # becomes "unavailable <date>" (date anchors no-price aging).
+        # GONE exception (2026-09-03): a manual GONE verdict is never
+        # stomped by a marker — only a returning real price clears it.
         price_val = getattr(item, "price", None)
         if price_val is None or float(price_val) <= 0:
             cell = str(row[PRICE_COL[result.store]]).strip()
-            new_marker = _build_marker(
-                _UNAVAILABLE_PREFIX, cell, today)
-            if cell != new_marker:
-                unavailable_written += 1
-                unavailable_items.append(
-                    str(row[0]).strip() if row else "")
-            row[PRICE_COL[result.store]] = new_marker
+            if not _is_gone(cell):
+                new_marker = _build_marker(
+                    _UNAVAILABLE_PREFIX, cell, today)
+                if cell != new_marker:
+                    unavailable_written += 1
+                    unavailable_items.append(
+                        str(row[0]).strip() if row else "")
+                row[PRICE_COL[result.store]] = new_marker
         else:
             row[PRICE_COL[result.store]] = item.price
 
@@ -358,7 +372,8 @@ def sync_prices(
             seen_now = list_idx in seen
             if not na_row and not seen_now:
                 cell = str(row[price_col]).strip()
-                if not (cell.startswith(_UNAVAILABLE_PREFIX) or
+                if not (_is_gone(cell) or
+                        cell.startswith(_UNAVAILABLE_PREFIX) or
                         cell.startswith(_NA_PREFIX)):
                     row[price_col] = _build_marker(_NA_PREFIX, cell, today)
                     row[LAST_UPDATED_COL] = ts
@@ -754,6 +769,118 @@ def mark_not_available(
     }
 
 
+def mark_price_gone(
+    product_name: str,
+    store: str,
+    worksheet=None,
+    dry_run: bool = False,
+) -> dict:
+    """Write the manual GONE verdict into a store's price cell ONLY.
+
+    User rule (2026-09-03): marking an item GONE must leave the store
+    keyword (Col I/J) untouched and write the literal "GONE" into the
+    store's price column (Col D/E). The GONE marker is exempt from
+    marker writes during sync and is cleared only by a returning real
+    price.
+
+    Row matching reuses the same two-step strategy as update_single_price:
+    exact Col A match first, then the store's keyword col (Col I/J).
+
+    Args:
+        product_name (str): Generic name (Col A) or store keyword to match.
+        store (str): "woolworths" | "coles".
+        worksheet: Open gspread worksheet; connected if None.
+        dry_run (bool): If True, return the planned write without mutating.
+
+    Returns:
+        dict: {found, row_index, store, wrote, range_written, error}.
+    """
+    store_lower = (store or "").strip().lower()
+    if store_lower not in PRICE_COL:
+        return {
+            "found": False,
+            "row_index": None,
+            "store": store_lower,
+            "wrote": False,
+            "range_written": "",
+            "error": f"unknown store: {store}",
+        }
+
+    if worksheet is None:
+        worksheet = connect_worksheet()
+
+    all_values = worksheet.get_all_values()
+    rows = all_values[1:]  # skip header
+
+    target_normalized = KeywordIndex._normalize(product_name)
+    kw_col = STORE_KEYWORD_COL.get(store_lower)
+    price_col = PRICE_COL[store_lower]
+
+    found_idx: Optional[int] = None
+    row_data: Optional[list] = None
+    for i, row in enumerate(rows):
+        # Step 1: exact match on Col A (generic name).
+        if len(row) > 0 and KeywordIndex._normalize(row[0]) == target_normalized:
+            found_idx = i
+            row_data = row
+            break
+        # Step 2: match on this store's keyword col (Col I/J/K).
+        if (
+            kw_col is not None
+            and len(row) > kw_col
+            and row[kw_col]
+            and KeywordIndex._normalize(row[kw_col]) == target_normalized
+        ):
+            found_idx = i
+            row_data = row
+            break
+
+    if found_idx is None:
+        return {
+            "found": False,
+            "row_index": None,
+            "store": store_lower,
+            "wrote": False,
+            "range_written": "",
+            "error": "product not found",
+        }
+
+    sheet_row = found_idx + 2  # 1-based
+
+    if dry_run:
+        return {
+            "found": True,
+            "row_index": sheet_row,
+            "store": store_lower,
+            "wrote": False,
+            "range_written": "",
+            "error": "",
+        }
+
+    # Live write: "GONE" into the price col ONLY. The keyword col is
+    # deliberately left alone (user rule: GONE keeps the keyword).
+    full_row = list(row_data)  # make mutable copy
+    target_width = max(price_col + 1, 1)
+    while len(full_row) < target_width:
+        full_row.append("")
+    full_row[price_col] = _GONE_MARKER
+    # Truncate to target_width so the range write doesn't overflow into
+    # columns past target_width (gspread rejects writing past the range).
+    full_row = full_row[:target_width]
+
+    range_name = f"A{sheet_row}:{_col_letter(target_width - 1)}{sheet_row}"
+    _update_with_backoff(worksheet, [full_row], range_name)
+
+    return {
+        "found": True,
+        "row_index": sheet_row,
+        "store": store_lower,
+        "wrote": True,
+        "range_written": range_name,
+        "error": "",
+    }
+
+
 def set_store_keyword(product_name, store, keyword, worksheet=None, dry_run=False):
     """Write a store keyword (Col I/J) for an existing sheet row.
 
@@ -1027,11 +1154,21 @@ def add_product_row(
             if alias:
                 range_written += _append_alias(
                     worksheet, header, similar_idx, alias)
+            # 2026-09-03 gap fix: tell the caller whether the merged
+            # row is still MISSING this store's keyword — the price
+            # landed but the keyword loop needs a to-do entry.
+            kw_col = STORE_KEYWORD_COL.get(store_lower)
+            similar_row = data_rows[similar_idx - 2]
+            kw_empty = (
+                not str(similar_row[kw_col]).strip()
+                if (kw_col is not None and len(similar_row) > kw_col)
+                else True)
             return {
                 "wrote": bool(merged.get("wrote")),
                 "merged": True,
                 "row_index": similar_idx,
                 "existing_name": similar_name,
+                "store_keyword_empty": kw_empty,
                 "range_written": range_written,
                 "error": merged.get("error", ""),
             }
@@ -1088,6 +1225,42 @@ def add_product_row(
         "wrote": True, "row_index": new_row_index,
         "range_written": range_name, "error": "",
     }
+
+
+# ============================================================================
+# Section F2: Row deletion (dead-row auto-cleanup, 2026-09-03)
+# ============================================================================
+
+def delete_product_rows(row_indices, worksheet=None, dry_run=False) -> dict:
+    """Delete sheet rows by 1-based index, bottom-up (indices stay valid).
+
+    Used by the Wednesday auto-delete (two-strike dead rows) and the
+    manual `missed-pricing --purge`. Bottom-up ordering means earlier
+    deletions never shift the indices of rows still to delete.
+
+    Args:
+        row_indices (list[int]): 1-based sheet row numbers (header = 1).
+        worksheet: optional pre-connected gspread Worksheet.
+        dry_run (bool): print the plan, delete nothing.
+
+    Returns:
+        dict: {"deleted": [...], "count": int, "dry_run": bool} where
+        deleted is the sorted list of row indices removed (or planned).
+    """
+    targets = sorted({int(r) for r in row_indices if int(r) >= 2})
+    if dry_run:
+        if targets:
+            print(f"[DRY RUN] delete_product_rows: would delete rows "
+                  f"{targets}")
+        return {"deleted": targets, "count": 0, "dry_run": True}
+
+    if worksheet is None:
+        worksheet = connect_worksheet()
+    done = []
+    for row_index in reversed(targets):  # bottom-up keeps indices valid
+        worksheet.delete_rows(row_index)
+        done.append(row_index)
+    return {"deleted": sorted(done), "count": len(done), "dry_run": False}
 
 
 # ============================================================================

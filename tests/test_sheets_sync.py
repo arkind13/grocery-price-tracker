@@ -28,7 +28,8 @@ from core.schema_upgrade import (
 )
 from core.sheets_sync import (
     sync_prices, update_single_price, _update_with_backoff, _find_col,
-    add_product_row, mark_not_available, set_store_keyword,
+    add_product_row, mark_not_available, mark_price_gone,
+    set_store_keyword,
 )
 from core.name_matcher import KeywordIndex, MatchResult
 from extractors.models import ProductItem
@@ -835,6 +836,46 @@ class TestSheetsSync(unittest.TestCase):
         result = mark_not_available("Nonexistent", "coles", worksheet=ws)
         self.assertFalse(result["found"])
         self.assertIn("product not found", result["error"])
+
+    # ------------------------------------------------------------------ #
+    # Test 25b: mark_price_gone writes GONE to price col ONLY
+    # (user rule 2026-09-03: keyword col untouched)
+    # ------------------------------------------------------------------ #
+    def test_mark_price_gone_writes_price_cell_only(self):
+        header = [
+            "Product_Name", "Category", "Size", "Woolworths_Price",
+            "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+            "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+            "Search_Keyword_Aldi", "Aldi_Refresh",
+        ]
+        rows = [
+            header,
+            ["Oat Milk", "Dairy", "1L", "3.50", "", "", "", "",
+             "WW Oat Milk 1L", "", "", ""],
+        ]
+        ws = FakeWorksheet(rows)
+
+        result = mark_price_gone("Oat Milk", "woolworths", worksheet=ws)
+        self.assertTrue(result["found"])
+        self.assertTrue(result["wrote"])
+
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][3], "GONE")  # Col D = GONE
+        # Keyword col (I) must be LEFT ALONE — the whole point.
+        self.assertEqual(updated[1][8], "WW Oat Milk 1L")
+        # No marker bleed into other cells.
+        self.assertEqual(updated[1][4], "")
+
+    def test_mark_price_gone_product_not_found(self):
+        ws = FakeWorksheet([["H1"]])
+        result = mark_price_gone("Nonexistent", "coles", worksheet=ws)
+        self.assertFalse(result["found"])
+        self.assertIn("product not found", result["error"])
+
+    def test_mark_price_gone_unknown_store(self):
+        result = mark_price_gone("Oat Milk", "aldi")
+        self.assertFalse(result["found"])
+        self.assertIn("unknown store", result["error"])
 
     # ------------------------------------------------------------------ #
     # Test 26: set_store_keyword writes keyword to Col I
