@@ -176,7 +176,9 @@ class TestMissedPricingCommand(unittest.TestCase):
             (tmp / "data").mkdir()
             out, code = self._run(tmp, FakeDeleteWorksheet(_SHEET))
             self.assertEqual(code, 0)
-            self.assertIn("4 fixable · 2 delete-pending", out)
+            self.assertIn(
+                "4 fixable (3 woolworths · 1 coles) · 2 delete-pending",
+                out)
             self.assertIn("Mismatch WW", out)
             self.assertIn("Both Dead", out)
             self.assertIn("GONE", out)  # the GONE hint text
@@ -510,6 +512,169 @@ class TestMissedPricingAgesLedger(unittest.TestCase):
                 set(ages),
                 {"Mismatch WW", "Mismatch Coles", "NA keyword",
                  "Blank price", "Both Dead", "Both Dead GONE"})
+
+
+# ============================================================================
+# 3-letter codes + grouped report + gone verb (2026-09-03 user requests)
+# ============================================================================
+
+class TestMissedPricingCodes(unittest.TestCase):
+
+    def test_codes_deterministic_fixable_first(self):
+        """Codes are allocated in render order (fixable, then dead) and
+        are stable across runs on an unchanged sheet."""
+        fix1, dead1 = gcli._classify_missed_pricing(_SHEET[1:])
+        gcli._assign_mp_codes(fix1, dead1)
+        fix2, dead2 = gcli._classify_missed_pricing(_SHEET[1:])
+        gcli._assign_mp_codes(fix2, dead2)
+        codes1 = [e["code"] for e in fix1 + dead1]
+        codes2 = [e["code"] for e in fix2 + dead2]
+        self.assertEqual(codes1, codes2)
+        self.assertEqual(len(set(codes1)), len(codes1))  # unique
+        alpha = set(gcli._MP_CODE_ALPHABET)
+        for c in codes1:
+            self.assertEqual(len(c), 3)
+            self.assertTrue(set(c) <= alpha)
+            self.assertEqual(len(set(c)), 3)  # no repeated letter
+
+    def test_split_fixable_by_store(self):
+        fix, _dead = gcli._classify_missed_pricing(_SHEET[1:])
+        gcli._assign_mp_codes(fix, [])
+        wool, coles = gcli._split_fixable_by_store(fix)
+        self.assertEqual(
+            {e["generic"] for e in wool}
+            | {e["generic"] for e in coles},
+            {e["generic"] for e in fix})
+        self.assertTrue(all(e["store"] == "woolworths" for e in wool))
+        self.assertTrue(all(e["store"] == "coles" for e in coles))
+
+
+class TestMissedPricingGone(unittest.TestCase):
+    """gone --items: keyword LEFT ALONE, price cell GONE, item leaves
+    the list (dead rows deleted immediately, archived)."""
+
+    def setUp(self):
+        # Ages ledger sandboxed (classify uses persist_ages=True).
+        self._ages = {}
+        for name, obj in (("_load_missed_ages",
+                           lambda data_dir=None: dict(self._ages)),
+                          ("_save_missed_ages",
+                           lambda ages, data_dir=None:
+                           self._ages.update(ages))):
+            p = patch.object(gcli, name, obj)
+            p.start()
+            self.addCleanup(p.stop)
+
+    def _run_gone(self, items, sheet=None):
+        args = SimpleNamespace(action="gone", items=items, purge=False,
+                               dry_run=False)
+        ws = FakeDeleteWorksheet(sheet or _SHEET)
+        gone_writes = MagicMock(
+            return_value={"found": True, "wrote": True, "row_index": 5})
+        archive_delete = MagicMock(return_value=1)
+        with patch.object(gcli, "_load_env"), \
+                patch("core.sheets_client.connect_worksheet",
+                      MagicMock(return_value=ws)), \
+                patch("core.sheets_sync.mark_price_gone", gone_writes), \
+                patch.object(gcli, "_archive_and_delete_rows",
+                             archive_delete):
+            err = io.StringIO()
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf), \
+                    contextlib.redirect_stderr(err):
+                code = gcli._cmd_missed_pricing(args)
+        return code, buf.getvalue(), err.getvalue(), gone_writes, \
+            archive_delete
+
+    def test_gone_fixable_by_code_marks_one_store(self):
+        """A fixable entry: only its failing store is stamped; no row
+        deletion; keyword untouched (mark_price_gone's contract)."""
+        fix, dead = gcli._classify_missed_pricing(_SHEET[1:])
+        gcli._assign_mp_codes(fix, dead)
+        target = next(e for e in fix if e["generic"] == "Mismatch WW")
+        code, out, _err, gone_writes, archive_delete = self._run_gone(
+            target["code"])
+        self.assertEqual(code, 0)
+        gone_writes.assert_called_once_with(
+            "Mismatch WW", "woolworths")
+        archive_delete.assert_not_called()
+        self.assertIn("marked GONE", out)
+        self.assertIn("keyword", out)
+
+    def test_gone_dead_by_number_marks_both_and_deletes(self):
+        """A delete-pending entry: BOTH stores stamped, the row is
+        deleted immediately (archived) — the item leaves the list."""
+        fix, dead = gcli._classify_missed_pricing(_SHEET[1:])
+        gcli._assign_mp_codes(fix, dead)
+        pos = (fix + dead).index(
+            next(e for e in dead if e["generic"] == "Both Dead")) + 1
+        code, out, _err, gone_writes, archive_delete = self._run_gone(
+            str(pos))
+        self.assertEqual(code, 0)
+        called = [c.args for c in gone_writes.call_args_list]
+        self.assertIn(("Both Dead", "woolworths"), called)
+        self.assertIn(("Both Dead", "coles"), called)
+        archive_delete.assert_called_once()
+        self.assertIn("both stores", out)
+        self.assertIn("deleted", out)
+
+    def test_gone_requires_items(self):
+        code, _out, err, gone_writes, archive_delete = self._run_gone(None)
+        self.assertEqual(code, 1)
+        self.assertIn("requires --items", err)
+        self.assertEqual(gone_writes.call_count, 0)
+        archive_delete.assert_not_called()
+
+    def test_gone_unknown_code_aborts(self):
+        code, _out, err, gone_writes, archive_delete = self._run_gone("ZZZ")
+        self.assertEqual(code, 1)
+        self.assertIn("unknown code 'ZZZ'", err)
+        self.assertEqual(gone_writes.call_count, 0)
+        archive_delete.assert_not_called()
+
+    def test_gone_mixed_selection_dedupes(self):
+        """Number + its code for the SAME entry = one GONE write."""
+        fix, dead = gcli._classify_missed_pricing(_SHEET[1:])
+        gcli._assign_mp_codes(fix, dead)
+        target = next(e for e in fix if e["generic"] == "Mismatch WW")
+        n = (fix + dead).index(target) + 1
+        code, _out, _err, gone_writes, archive_delete = self._run_gone(
+            f"{n},{target['code']}")
+        self.assertEqual(code, 0)
+        self.assertEqual(gone_writes.call_count, 1)
+
+
+class TestMissedPricingGroupedReport(unittest.TestCase):
+    """show: entries grouped under WOOLWORTHS / COLES / BOTH headers,
+    every line carrying its [CODE]."""
+
+    def test_show_renders_groups_and_codes(self):
+        args = SimpleNamespace(action="show", items=None, purge=False,
+                               dry_run=False)
+        with patch.object(gcli, "_TRACKER",
+                          Path(tempfile.mkdtemp())), \
+                patch.object(gcli, "_load_env"), \
+                patch.object(gcli, "_load_missed_ages",
+                             lambda data_dir=None: {}), \
+                patch.object(gcli, "_save_missed_ages",
+                             lambda ages, data_dir=None: None), \
+                patch("core.sheets_client.connect_worksheet",
+                      MagicMock(
+                          return_value=FakeDeleteWorksheet(_SHEET))):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                code = gcli._cmd_missed_pricing(args)
+        out = buf.getvalue()
+        self.assertEqual(code, 0)
+        self.assertIn("WOOLWORTHS", out)
+        self.assertIn("COLES", out)
+        self.assertIn("BOTH STORES", out)
+        # Codes render on the lines (no I/O letters anywhere).
+        self.assertRegex(out, r"\d+\. \[[A-HJ-KM-NP-Z]{3}\]")
+        self.assertIn("[ABC]", out)
+        # The WW fixable entry sits under the WOOLWORTHS subheader.
+        wool_block = out.split("WOOLWORTHS")[1].split("COLES")[0]
+        self.assertIn("Mismatch WW", wool_block)
 
 
 if __name__ == "__main__":

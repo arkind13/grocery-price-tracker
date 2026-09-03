@@ -1,53 +1,67 @@
-# test.md — `todo gone` quick fix (03 Code Agent, 2026-09-03)
+# test.md — missed-pricing GONE + grouped/coded lists (03 Code Agent, 2026-09-03)
 
-Fix: reviewing the to-do list and asking for an item to be "marked GONE"
-confused the agent (the only unavailable-verb was `map --na`, which
-overwrites the store keyword). New rule implemented verbatim: **leave the
-keyword, write `GONE` into the store's price cell, remove the item from
-the to-do list.**
+Three user requests implemented on top of the morning's `todo gone` fix:
+
+1. **GONE on missed pricing** — same rule as the to-do: leave the keyword,
+   mark the price cell GONE, delete the item from the list.
+   `missed-pricing gone --items "N,CODE"`.
+2. **Lists separated into Woolworths / Coles / Both headers** — the
+   missed-pricing report, `lists --full`, and the Wednesday Telegram
+   weekly-lists post are now grouped under WOOLWORTHS / COLES /
+   BOTH STORES headers.
+3. **3-letter codes on missed-pricing items** — deterministic
+   alphabetical codes (A–Z minus I/O, no repeated letters: ABC, ABD, …),
+   allocated in report order (fixable then delete-pending), accepted by
+   `gone --items` alongside numbers.
 
 ## Changes
 
-- `core/sheets_sync.py` — new `mark_price_gone(product_name, store)`:
-  writes literal `GONE` into Col D/E ONLY (keyword Col I/J untouched);
-  same two-step row match as `update_single_price`.
-- `grocery_price_cli.py` — `todo gone --items "N,CODE,…"`: same
-  all-or-nothing selection as `todo done`; removes entries from the
-  queues, stamps the store price cell GONE, never calls
-  `set_store_keyword`. `show` footer now advertises the gone verb.
-- `claw-skills/grocery-price/SKILL.md` — `todo` row + routing row:
-  "mark 2 as GONE" → `todo gone --items "2"`; explicitly forbids
-  `map --na` / `missed-pricing --purge` for this.
-- `claw-skills/claw_skills_easy.md` — regenerated (`skills_doc.py`),
-  `--check` = OK.
-- `README.md` — `todo` row documents `gone`.
-- Tests: `tests/test_todo_cmd.py` (+4 `TestTodoGone`),
-  `tests/test_sheets_sync.py` (+3 `mark_price_gone`).
+- `grocery_price_cli.py`
+  - `_mp_code_iter` / `_assign_mp_codes` / `_split_fixable_by_store` /
+    `_numbered` / `_resolve_missed_items` — codes + grouping + selection.
+  - `_format_missed_fix` / `_format_missed_dead` — `[CODE]` prefix.
+  - `_archive_and_delete_rows` — shared purge/gone archive+delete path.
+  - `_cmd_missed_pricing` — positional `show|gone` action (flags kept),
+    grouped render, gone flow (fixable → one store stamped; delete-pending
+    → both stores stamped + row deleted immediately, archived, ledger
+    cleared).
+  - `lists --full` — three grouped missed-pricing blocks with codes.
+  - Wednesday Step 7 — Telegram post splits "No-price items" into
+    ("Missed pricing — Woolworths" / "— Coles" / "— Both stores
+    (delete-pending)") with coded lines.
+  - `no-price` alias updated for the new action Namespace.
+- `claw-skills/grocery-price/SKILL.md` — `missed-pricing` row (gone +
+  codes + grouped headers), list-6 description, routing rows for
+  "mark N GONE (missed pricing)" and "split lists by store".
+- `claw-skills/claw_skills_easy.md` — regenerated, `--check` OK
+  (content unchanged: catalogue embeds frontmatter only).
+- `README.md` — missed-pricing row + Wednesday post description.
+- Tests (`tests/test_missed_pricing.py`): +10 (codes determinism,
+  store split, gone by code/number/mixed, requires-items,
+  unknown-code abort, dead-row both-store stamp + immediate archive
+  delete, grouped render) and 1 updated (`test_report_groups` — new
+  summary counts).
 
 ## Test log
 
-[PASS] | mark_price_gone writes price cell only, keyword kept | `python -m pytest tests/test_sheets_sync.py -q` | 77 passed
-[PASS] | mark_price_gone not found / unknown store | (same run) | included above
-[PASS] | todo gone marks price cell, never touches keyword | `python -m pytest tests/test_todo_cmd.py -q` | 24 passed
-[PASS] | todo gone all-or-nothing (bad code aborts, no mutation) | (same run) | included above
-[PASS] | todo gone row-not-found still removes from queue | (same run) | included above
-[PASS] | todo gone requires --items (stderr, exit 1) | (same run) | included above
-[PASS] | affected suites regression | `python -m pytest tests/test_todo_cmd.py tests/test_sheets_sync.py tests/test_cli.py tests/test_add_to_list.py tests/test_lists_cmd.py -q` | 266 passed
-[PASS] | full suite (excluding network-dependent conn file) | `python -m pytest tests -q -p no:cacheprovider --ignore=tests/test_sheets_conn.py` | 755 passed, 2 failed (pre-existing, below)
-[PASS] | parser smoke | `python ..\grocery_price_cli.py todo gone` | `Error: 'todo gone' requires --items …` exit 1 (expected)
+[PASS] | codes deterministic, unique, same-alphabet, no repeats | `python -m pytest tests/test_missed_pricing.py -q` | 31 passed, 2 failed (pre-existing, below)
+[PASS] | split fixable by store | (same run) | included
+[PASS] | gone by code → one store stamped, keyword untouched, no delete | (same run) | included
+[PASS] | gone delete-pending by number → both stores stamped + row archived-deleted | (same run) | included
+[PASS] | gone requires --items (exit 1) | (same run) | included
+[PASS] | gone unknown code aborts, nothing written | (same run) | included
+[PASS] | mixed number+code selection dedupes | (same run) | included
+[PASS] | show renders WOOLWORTHS / COLES / BOTH headers with [CODE] lines | (same run) | included
+[PASS] | purge still archives + clears ledger (existing suite) | (same run) | included
+[PASS] | full suite | `python -m pytest tests -q --ignore=tests/test_sheets_conn.py` | 763 passed, 2 failed (pre-existing, below)
 [PASS] | claw skills catalogue | `python skills_doc.py --check` | `OK: claw_skills_easy.md is current.`
-[FAIL → PRE-EXISTING] | test_cell_weeks_prefers_ledger_then_falls_back | `python -m pytest tests/test_missed_pricing.py -q` | `AssertionError: '2 weeks' != '3 weeks'` — date-boundary flake; fails identically on the clean tree (verified via stash of my changes before any fix); unrelated to this change (missed-pricing week-aging math vs today's date)
-[FAIL → PRE-EXISTING] | test_seeded_history_shows_two_weeks_immediately | (same run) | `AssertionError: '1 week' != '2 weeks'` — same root cause, same clean-tree verification
-
-## Notes / incident during round
-
-- A `git stash`/`git stash pop` cycle used to verify the pre-existing
-  failures hit Windows CRLF noise (`pop` refused to merge). Recovery:
-  `git checkout -- .` (discarded EOL-only noise) → `git stash pop`
-  (tracked changes restored; untracked files had never left). All edits
-  verified present afterwards and suites re-run green. Stash dropped.
+[FAIL → PRE-EXISTING] | test_cell_weeks_prefers_ledger_then_falls_back | `tests/test_missed_pricing.py` | `'2 weeks' != '3 weeks'` — date-boundary flake, fails identically on the clean tree (verified this morning via stash before any change); unrelated to this work
+[FAIL → PRE-EXISTING] | test_seeded_history_shows_two_weeks_immediately | (same file) | `'1 week' != '2 weeks'` — same root cause
 
 ## Verdict
 
-All green except 2 documented pre-existing date-flaky failures in
-`tests/test_missed_pricing.py` (fail without this change too).
+All green except the 2 documented pre-existing date-flaky failures in
+`tests/test_missed_pricing.py` (they fail without this change too; the
+`_days_ago(21)`/`_days_ago(14)` seeds straddle the week-boundary
+rounding on today's date). Deployment: scp of the 4 changed runtime
+files to the VPS + md5 verification on both sides.
