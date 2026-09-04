@@ -278,5 +278,12 @@ plan missed that third call site (gap found and closed).
 - The 14 existing bare cells need NO manual repair: the next
   Wednesday sync rewrites the specials cell of every seen row (and
   prices with deal rates); unseen rows' specials clear to "no".
-- Deployed to VPS (scp + container restart + skill sync + md5) this
-  round — see the deploy note appended after verification.
+- Deploy DONE (2026-09-05): `deploy_vps.py` scp mode — 39 files OK
+  (manifest extended first with test_sheets_sync/test_todo_cmd/
+  test_lists_cmd), container `openclaw-core` restarted, in-container
+  smoke `searched-items show` OK. Rule-04 skill sync: SKILL.md ->
+  BOTH VPS copies + claw_skills_easy.md -> ai-tools/claw-skills/;
+  md5 verified identical both sides (SKILL.md a96dc827..., catalogue
+  193f5b7b... — catalogue output unchanged by this round's edits,
+  `skills_doc.py --check` OK). In-container `todo show` against the
+  live sheet: clean render, no false (m) marks.
