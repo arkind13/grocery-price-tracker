@@ -10,6 +10,13 @@ whitespace/underscores/hyphens to single spaces.
 Boundary-safe patterns: \\bbreads?\\b can NOT match "breading" or
 "breadcrumbs" (the letter after "bread" is a word char, so the \\b
 fails) — spec §4 mandates this.
+
+USER REVISION 2026-09-05: misfire-prone single words carry \\b
+anchors so substrings never guess wrong — "V Sugarfree" is NOT
+sugar, "V Watermelon" is NOT water, "eggplant" is NOT eggs,
+"pineapple" is NOT apples. Such names now fall through to
+NEEDS_REVIEW and surface on the "Sub-category reviews" list, where
+the user decides (ask-first policy — never write a guess).
 """
 from __future__ import annotations
 
@@ -36,6 +43,9 @@ def normalize_subcategory(s: str) -> str:
 
 # (pattern, label) — ORDER IS BINDING: first match wins; compounds
 # BEFORE generic parents ("cheese slice" before "cheese").
+# \b anchors on single words (2026-09-05): substrings must never
+# guess wrong — "sugarfree"/"watermelon"/"eggplant"/"pineapple" fall
+# through to needs review instead of a confident misfire.
 _RULE_DEFS: list[tuple[str, str]] = [
     # Cross-family compounds that must outrank EVERY generic rule
     # below (e.g. "Supreme Cheese Corn Chips" -> "corn chips", not
@@ -48,73 +58,74 @@ _RULE_DEFS: list[tuple[str, str]] = [
     (r"mozzarella", "mozzarella"),
     (r"parmesan", "parmesan"),
     (r"feta", "feta"),
-    (r"cheese\s*&?\s*cracker|crackers?", "crackers"),
-    (r"cheese", "cheese"),
+    (r"cheese\s*&?\s*cracker|\bcrackers?\b", "crackers"),
+    (r"\bcheese\b", "cheese"),
     # --- dairy ---
     (r"greek\s*yogh?urt", "greek yoghurt"),
     (r"yogh?urt", "yoghurt"),
-    (r"eggs?", "eggs"),
-    (r"long\s*life\s*milk|uht", "long life milk"),
-    (r"milk", "milk"),
+    (r"\beggs?\b", "eggs"),
+    (r"long\s*life\s*milk|\buht\b", "long life milk"),
+    (r"\bmilk\b", "milk"),
     (r"iced\s*coffee", "iced coffee"),
     (r"coffee\s*syrup", "coffee syrup"),
-    (r"coffee", "coffee"),
+    (r"\bcoffee\b", "coffee"),
     # --- fruit & veg ---
     (r"spring\s*onion", "spring onion"),
-    (r"onions?", "onion"),
-    (r"bananas?", "bananas"),
+    (r"\bonions?\b", "onion"),
+    (r"\bbananas?\b", "bananas"),
     (r"blueberries", "blueberries"),
     (r"raspberries", "raspberries"),
     (r"strawberries", "strawberries"),
-    (r"apples?", "apples"),
+    (r"\bapples?\b", "apples"),
     (r"capsicum", "capsicum"),
-    (r"cucumbers?", "cucumber"),
-    (r"tomatoes?", "tomato"),
-    (r"coriander|fresh\s*herbs?|herbs?", "fresh herbs"),
-    (r"potatoes?", "potatoes"),
-    (r"lettuce|salad\s*mix", "salad"),
+    (r"\bcucumbers?\b", "cucumber"),
+    (r"\btomatoes?\b", "tomato"),
+    (r"coriander|fresh\s*herbs?|\bherbs?\b", "fresh herbs"),
+    (r"\bpotatoes?\b", "potatoes"),
+    (r"\blettuce\b|salad\s*mix", "salad"),
     # --- bakery ---
     # \b anchors: "breading"/"breadcrumbs" must never match (§4).
     (r"\bbreads?\b", "bread"),
     (r"croissants?", "croissant"),
     (r"pancake\s*mix", "pancake mix"),
-    (r"muffins?", "muffins"),
+    (r"\bmuffins?\b", "muffins"),
     # --- drinks ---
-    (r"juice", "juice"),
+    (r"\bjuice\b", "juice"),
     (r"mineral\s*water", "mineral water"),
     (r"spring\s*water", "spring water"),
-    (r"water", "water"),
+    (r"\bwater\b", "water"),
     (r"energy\s*drink", "energy drink"),
     (r"liquid\s*breakfast", "liquid breakfast"),
     (r"sports?\s*drink", "sports drink"),
-    (r"soft\s*drink|soda", "soft drink"),
+    (r"soft\s*drink|\bsodas?\b", "soft drink"),
     # --- snacks / confectionery ---
     (r"chocolate\s*bar", "chocolate bar"),
     (r"choc\s*hazelnut|hazelnut\s*chocolate|chocolate\s*spread",
      "chocolate spread"),
-    (r"chocolate", "chocolate"),
+    (r"\bchocolate\b", "chocolate"),
     (r"chewing\s*gum", "chewing gum"),
-    (r"mints?", "mints"),
-    (r"potato\s*chips|grain\s*waves|grainwaves|chips", "potato chips"),
+    (r"\bmints?\b", "mints"),
+    (r"potato\s*chips|grain\s*waves|grainwaves|\bchips\b",
+     "potato chips"),
     (r"popcorn", "popcorn"),
-    (r"biscuits?|quadratini", "biscuits"),
-    (r"choc\s*slice|cake\s*slice|slices?", "slices"),
+    (r"\bbiscuits?|quadratini", "biscuits"),
+    (r"choc\s*slice|cake\s*slice|\bslices?\b", "slices"),
     (r"loll(ie)?s|lolly", "lollies"),
     # --- freezer ---
     (r"ice\s*cream|frozen\s*dessert", "ice cream"),
     (r"frozen\s*snacks?|nuggets?|pickers|frozen\s*veg", "frozen snacks"),
     (r"frozen\s*berries", "frozen berries"),
     # --- pantry ---
-    (r"sugar", "sugar"),
-    (r"cereal", "cereal"),
-    (r"pasta", "pasta"),
-    (r"rice", "rice"),
-    (r"flour", "flour"),
-    (r"oil", "oil"),
-    (r"sauce", "sauce"),
-    (r"spread", "spread"),
+    (r"\bsugars?\b", "sugar"),
+    (r"\bcereal\b", "cereal"),
+    (r"\bpasta\b", "pasta"),
+    (r"\brice\b", "rice"),
+    (r"\bflour\b", "flour"),
+    (r"\boils?\b", "oil"),
+    (r"\bsauces?\b", "sauce"),
+    (r"\bspreads?\b", "spread"),
     # --- household / other ---
-    (r"pads?|tampon", "pads"),
+    (r"\bpads?\b|\btampons?\b", "pads"),
     (r"hand\s*warmers?", "hand warmers"),
 ]
 

@@ -212,7 +212,7 @@ def compare_basket(
         if not item.is_woolworths_home_brand:
             hb = is_woolworths_home_brand(item.name, item.brand)
             from core.multibuy import (
-                decode_multibuy_cell, is_mixed_promo, parse_multibuy,
+                decode_multibuy_cell, parse_multibuy,
             )
             mb: dict = {}
             for store in item.prices:
@@ -220,7 +220,10 @@ def compare_basket(
                 terms = decode_multibuy_cell(desc)  # sheet cell first
                 if terms is None:
                     terms = parse_multibuy(desc)    # live desc fallback
-                if terms and not is_mixed_promo(desc):
+                # USER REVISION 2026-09-05: "Any N | $X" promos are
+                # rate-eligible too (D-MB3 retired) — every parsed
+                # multi-buy deal drives the effective-rate math.
+                if terms:
                     mb[store] = terms
             items[i] = BasketItem(
                 name=item.name,

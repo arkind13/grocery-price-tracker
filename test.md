@@ -187,3 +187,96 @@ Plan: `implementation-plan.md` (same folder). Branch
 - VPS sanity: container has no pytest (established state - testing runs locally per README); grocery_price_cli.py subcategories works in-container against the live sheet (68 confident labels + 36 needs review).
 - M4 full verification: 913 passed, 0 failed, 0 skipped (local).
 - Post-M4 fix (date-boundary flake): at the local-midnight roll to 2026-09-05, two PRE-EXISTING test_missed_pricing ledger tests failed (they seed local-date stamps while production week math uses UTC now; 21 local days measured as 20.x UTC days). Fixed test-side: UTC-anchored seeds (_days_ago_utc) + mirrored expectation helper (_weeks_label_utc); plus a test-enabling now= pass-through added to _cell_weeks (mirrors the existing injected-clock pattern of _weeks_without_price; callers unchanged). test_missed_pricing: 32 passed; full suite re-run green 913/0/0.
+
+
+---
+
+# Round 2026-09-05 — Multi-buy price cells + (m) markers + Any-N eligibility
+# + Sub-category ask-first (04 Architect Checker, user-directed overrides R1-R3)
+
+User answers 2026-09-05 to the checker's three questions plus a new
+sub-category policy. Spec overrides recorded in architecture-spec.md
+§15 (R1 supersedes D-MB1 raw-price clause; R2 retires D-MB3; R3
+extends D-SC2). Verified before coding: live-sheet read showed 14 rows
+with the OLD bare `multi-buy` cells and raw prices; both docx files
+carry 7 WW "2 for $X" + 8 Coles "Any 2 | $X" deals; the Wednesday
+BATCH path (sync_prices) still wrote the old vocabulary — the S14
+plan missed that third call site (gap found and closed).
+
+## Changes
+
+- `core/multibuy.py` — `is_mixed_promo` REMOVED (D-MB3 retired):
+  "Any N | $X" promos are rate-eligible multi-buy deals (user: they
+  mean any N from the same range/brand in store).
+- `core/sheets_sync.py`
+  - `_multibuy_price` (NEW) — per-unit deal rate for the price cell
+    (R1); `_specials_cell` now encodes terms for ANY-parseable promo.
+  - `sync_prices` — batch Wednesday path now writes `_specials_cell`
+    (encoded terms; was bare classify_special — the missed call site)
+    AND the deal rate into D/E.
+  - `update_single_price` — deal rate into the price cell when
+    is_special + parseable desc (docstring step 11); dry-run reports
+    the transformed price.
+  - `add_product_row` — new rows with a multi-buy desc write the deal
+    rate into D/E.
+- `core/price_comparator.py` — mixed-promo gate dropped: every parsed
+  multi-buy deal (sheet cell or live desc) drives effective-rate math.
+- `extractors/coles_extractor.py` — captured multiBuyPromotion now
+  also composes `Any N | $X` special_desc/is_special (when no other
+  promo desc) so live adds get the same treatment.
+- `grocery_price_cli.py`
+  - `_MULTIBUY_LEGEND` + `_load_sheet_rows_safe` + `_sheet_multibuy_keys`
+    + `_todo_is_multibuy` (NEW): `(m)` marks on to-do views whose sheet
+    row sits on a multi-buy deal; legend renders when any item is
+    marked. Wired into `_print_queue_snapshot` (Step 0), `_cmd_todo
+    show`, `_tally_todo_with_sheet` updated list, `_weekly_queue_lists`
+    to-do section (posted FIRST), and `lists --full` list 4.
+  - `lists` — now SEVEN lists: list 7 "Sub-category reviews" (names of
+    rows with the literal needs-review marker) + summary line + tail
+    pointer; header rebranded "The 7 lists".
+  - `_weekly_queue_lists` — new "Sub-category reviews" builder (names,
+    best-effort sheet read; degrades to empty, never aborts Wednesday).
+  - `search` — result lines carry the mandatory multi-buy note after
+    the promo text; cheapest-store math uses the effective deal rate
+    (§7.3 rule 6).
+- `core/subcategory.py` — word-boundary hardening (R3): \bsugars?\b,
+  \bwater\b, \beggs?\b, \bapples?\b, \bmilk\b, \boils?\b, \brice\b,
+  \bflour\b, \bcheese\b, \bcoffee\b, \bjuice\b, \bsodas?\b, \bchips\b,
+  \bsauces?\b, \bspreads?\b, \bpads?\b/\btampons?\b, etc. — "V
+  Sugarfree"/"V Watermelon"/"eggplant"/"pineapple" now fall to needs
+  review instead of a confident mislabel (the user's reported bugs).
+- `claw-skills/grocery-price/SKILL.md` — multi-buy rule: deal rates
+  live in price cells, Any-N counts, relay `(m)` + legend verbatim;
+  NEW sub-category ask-first hard rule (run `subcategories`, pick
+  confidently, ASK when unsure, unsure-without-user → needs review →
+  Sub-category reviews list); lists table 6→7 lists with list 7
+  description; catalogue regenerated, `--check` OK.
+- `README.md` — multi-buy section rewritten (price-cell rule, Any-N,
+  (m) marks); lists row 6→7; D/E/F + M/N/O schema rows; sheet diagram;
+  new "Sub-categories: never guess" section.
+- `PROJECT-MAP.md` — sub-category reviews note + multi-buy price note
+  (top lists section).
+- `architecture-spec.md` — §15 revision table (R1/R2/R3 overrides).
+- Tests: test_multibuy (mixed-promo class → Any-N rate-eligibility),
+  test_comparator (Any promo yields terms), test_sheets_sync (+5 new
+  price-cell tests: sync FOR-style deal rate, update ANY-style,
+  plain-untouched, is_special-None guard, add_product_row deal rate),
+  test_subcategory (+3: misfires→review, V energy drink, boundary
+  positives), test_lists_cmd (reviews wording + (m)/legend + reviews
+  block + no-mark negative), test_todo_cmd ((m)+legend render +
+  no-mark negative), test_cli (hermetic `_load_sheet_rows_safe` stubs
+  in _atl_ctx/TestWeeklyQueueLists; titles 2→3 lists).
+
+## Test log
+
+[PASS] | full suite | `python -m pytest tests -q --ignore=tests/test_sheets_conn.py` | **925 passed, 0 failed, 0 skipped** (913 baseline + 12 new)
+[PASS] | classifier sandbox check (misfires + positives) | temp-dir script against live rules | all 14 verified names matched expectations
+[PASS] | live-sheet read-only state check | temp-dir script (get_all_values only) | 14 bare `multi-buy` cells, raw prices — no deal rates yet; Wednesday sync self-heals M/N + prices once deployed
+
+## Notes
+
+- The 14 existing bare cells need NO manual repair: the next
+  Wednesday sync rewrites the specials cell of every seen row (and
+  prices with deal rates); unseen rows' specials clear to "no".
+- Deployed to VPS (scp + container restart + skill sync + md5) this
+  round — see the deploy note appended after verification.

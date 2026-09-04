@@ -1310,17 +1310,20 @@ class TestComparatorMultiBuyTerms(unittest.TestCase):
         self.assertEqual(cola.multibuy["woolworths"], (2, 6.0))
         self.assertEqual(juice.multibuy["woolworths"], (2, 3.0))
 
-    def test_mixed_any_promo_never_yields_terms(self):
-        # D-MB3: mixed "any N" promos are display-only — no terms.
+    def test_mixed_any_promo_yields_terms(self):
+        # USER REVISION 2026-09-05 (D-MB3 retired): "Any N | $X"
+        # promos are rate-eligible multi-buy deals (same-range
+        # bundles) — their terms drive the effective-rate math.
         header = _make_header()
         rows = [
             header,
             ["Sunbites", "Snacks", "200g", "$4.00", "", "", "", "",
-             "", "", "", "", "Any 2 | $9", "", ""],
+             "", "", "", "", "multi-buy 2/$9.00", "", ""],
         ]
         ws = FakeWorksheet(rows)
         report = compare_basket("Sunbites", mode="sheet", worksheet=ws)
-        self.assertEqual(report.items[0].multibuy, {})
+        self.assertEqual(report.items[0].multibuy["woolworths"],
+                         (2, 9.0))
 
 
 class TestComparatorEffectiveRateMath(unittest.TestCase):

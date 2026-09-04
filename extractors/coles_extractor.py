@@ -454,6 +454,10 @@ def _parse_search_result(item: dict) -> Optional[ProductItem]:
     # D-MB2 best-effort multi-buy capture (probe 2026-09-04: live
     # payloads carry pricing.multiBuyPromotion = {type, minQuantity,
     # reward}; reward is the bundle TOTAL). Absent -> defaults 0.
+    # USER REVISION 2026-09-05 (Any-N rate-eligible): a captured deal
+    # also composes the specials desc ("Any 2 | $9.00") when no other
+    # promo desc exists, so adds/syncs write the encoded M/N cell and
+    # the per-unit deal rate into the price cell.
     promo = (pricing or {}).get("multiBuyPromotion") or {}
     if not isinstance(promo, dict):
         promo = {}
@@ -464,6 +468,9 @@ def _parse_search_result(item: dict) -> Optional[ProductItem]:
         tot = float(promo.get("reward", 0.0) or 0.0)
         if qty >= 2 and tot > 0:
             multi_buy_qty, multi_buy_total = qty, tot
+            if not special_desc:
+                is_special = True
+                special_desc = f"Any {qty} | ${tot:.2f}"
     except (TypeError, ValueError):
         pass
 

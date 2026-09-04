@@ -53,6 +53,10 @@ class TodoTestCase(unittest.TestCase):
         self._patchers = [
             patch.object(atl, "ADD_TO_LIST_PATH", self.adds_path),
             patch.object(atl, "A_L_TOMBSTONES_PATH", self.atl_tomb),
+            # The (m) multi-buy marker render is sheet-fed — stub it so
+            # `todo show` never touches the network (2026-09-05).
+            patch("grocery_price_cli._load_sheet_rows_safe",
+                  return_value=None),
         ]
         for p in self._patchers:
             p.start()
@@ -90,6 +94,33 @@ class TestTodoShow(TodoTestCase):
         out, code = self._run("show")
         self.assertEqual(code, 0)
         self.assertIn("none", out)
+
+    def test_view_marks_multibuy_items_with_legend(self):
+        """USER RULE 2026-09-05: entries whose sheet row sits on a
+        multi-buy deal render ' (m)' + the bottom legend line."""
+        rows = [
+            # 0-based: N = idx 13, Col J keyword = idx 9, Col A = 0.
+            ["Up&Go Chocolate Protein 500Ml", "", "500mL", "", "9.00",
+             "", "", "", "", "Coles Up&Go Choc 500mL",
+             "", "", "", "multi-buy 2/$9.00", "", ""],
+        ]
+        with patch("grocery_price_cli._load_sheet_rows_safe",
+                   return_value=rows):
+            out, code = self._run("show")
+        self.assertEqual(code, 0)
+        self.assertIn("(m)", out)
+        self.assertIn("(m) - multi buy discount", out)
+        # The deal item carries the mark; the other item does not.
+        self.assertRegex(out, r"1\. Coles Up&Go Choc 500mL[^\n]*\(m\)")
+        self.assertNotRegex(out, r"2\. Birkford[^\n]*\(m\)")
+
+    def test_view_no_mark_without_deals(self):
+        """No multi-buy cells -> plain lines, no legend."""
+        with patch("grocery_price_cli._load_sheet_rows_safe",
+                   return_value=[]):
+            out, code = self._run("show")
+        self.assertEqual(code, 0)
+        self.assertNotIn("(m)", out)
 
 
 class TestTodoDone(TodoTestCase):

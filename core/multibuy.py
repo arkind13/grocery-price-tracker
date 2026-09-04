@@ -3,9 +3,13 @@
 
 Display + math ONLY; never touches core/uom.py (§7.3 rule 5).
 Parsing REUSES extractors.specials_parser FOR_RE / ANY_RE (no regex
-duplication, spec §12). Mixed-product "Any N" promos parse to terms
-but are INFORMATIONAL ONLY (D-MB3): callers must gate rate math on
-is_mixed_promo().
+duplication, spec §12).
+
+USER REVISION 2026-09-05 (overrides D-MB3): "Any N | $X" promos are
+RATE-ELIGIBLE multi-buy deals — in-store they mean any N units from
+the same range/brand, so the per-unit rate participates in sheet
+prices and comparison math exactly like "N for $X" deals. There is
+no informational-only promo class any more.
 """
 from __future__ import annotations
 
@@ -41,16 +45,6 @@ def parse_multibuy(desc: str) -> tuple[int, float] | None:
     if qty < 2 or total <= 0:
         return None
     return (qty, total)
-
-
-def is_mixed_promo(desc: str) -> bool:
-    """True when ONLY the cross-range "any N" marker is present.
-
-    Mixed-product bundles have no true per-product price (D-MB3) —
-    informational text only, never a rate.
-    """
-    text = str(desc or "")
-    return bool(ANY_RE.search(text)) and not FOR_RE.search(text)
 
 
 def effective_unit_rate(qty: int, total: float) -> float:

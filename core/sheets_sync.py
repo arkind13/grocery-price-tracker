@@ -312,7 +312,11 @@ def sync_prices(
                         str(row[0]).strip() if row else "")
                 row[PRICE_COL[result.store]] = new_marker
         else:
-            row[PRICE_COL[result.store]] = item.price
+            # USER RULE 2026-09-05: multi-buy items write the per-unit
+            # deal rate into the price cell (saving evident in sheet
+            # comparisons); bundle terms stay in the specials cell.
+            row[PRICE_COL[result.store]] = _multibuy_price(
+                float(price_val), str(item.special_desc or ""))
 
         # Rule B/C.1: heal a blank Col C in the same batch write —
         # live item size first, then parse from the item's raw name.
@@ -334,8 +338,9 @@ def sync_prices(
             # D25: M/N hold exactly one of no/discount/multi-buy; "no"
             # overwrites stale free text on every matched row. Unmatched
             # rows keep their old cells (same semantics as prices).
-            from extractors.specials_parser import classify_special
-            row[specials_col[result.store]] = classify_special(
+            # _specials_cell encodes the deal terms ("multi-buy
+            # 2/$7.00") so the comparator's rate math engages.
+            row[specials_col[result.store]] = _specials_cell(
                 bool(item.is_special), str(item.special_desc or ""))
 
         if rewards_col is not None:
@@ -505,6 +510,9 @@ def update_single_price(
            write the single row back via _update_with_backoff.
         9. Return result dict with wrote=True, range_written set.
         10. Q/R/S untouched (one-line rule merge — row already owns them).
+        11. Multi-buy (user rule 2026-09-05): is_special with a parseable
+            deal desc writes the per-unit deal RATE into the price cell
+            ("2 for $7.00" -> 3.50) and the encoded terms into M/N.
     """
     store_lower = store.lower()
 
@@ -532,6 +540,14 @@ def update_single_price(
             "range_written": "",
             "error": "price must be > 0",
         }
+
+    # USER RULE 2026-09-05: when the caller passes a multi-buy desc,
+    # the price cell receives the per-unit deal rate ("2 for $7.00"
+    # on a $4.00 item writes 3.50) and the specials cell — when
+    # written — carries the encoded terms. is_special=None means the
+    # caller asked to leave specials untouched -> no transform.
+    if is_special is not None:
+        price = _multibuy_price(price, special_desc)
 
     # --- connect & read ---
     if worksheet is None:
@@ -1020,21 +1036,44 @@ def _append_alias(worksheet, header: list, row_index: int, alias: str) -> str:
     return range_name
 
 
+def _multibuy_price(price: float, special_desc: str) -> float:
+    """Price-cell value for a store: per-unit deal rate on multi-buy.
+
+    USER RULE 2026-09-05 (overrides spec D-MB1's raw-price clause):
+    the D/E price cell holds the multi-buy per-unit price so the
+    saving is evident in every sheet comparison ("2 for $7.00" on a
+    $4.00 item writes 3.50). The bundle terms stay the source of
+    truth in the M/N specials cell. Any-N promos count too (same
+    revision — D-MB3 retired).
+
+    Args:
+        price: raw single-unit price (> 0).
+        special_desc: the item's specials text.
+
+    Returns:
+        float: total/qty when `special_desc` parses to multi-buy
+        terms, else the raw price unchanged.
+    """
+    from core.multibuy import effective_unit_rate, parse_multibuy
+    terms = parse_multibuy(special_desc or "")
+    if terms:
+        return effective_unit_rate(*terms)
+    return price
+
+
 def _specials_cell(is_special, special_desc: str) -> str:
     """Classify + encode a specials M/N cell (D25 + §7.2).
 
     classify_special vocabulary first; when the promo parses to
-    product-specific multi-buy terms, the cell carries them
-    ("multi-buy 2/$6.00"). Mixed "any N" promos stay the bare
-    "multi-buy" marker (D-MB3 — informational only).
+    multi-buy terms the cell carries the encoded form
+    ("multi-buy 2/$6.00"). USER REVISION 2026-09-05 (overrides
+    D-MB3): "Any N | $X" deals are rate-eligible too, so they encode
+    terms as well — no informational-only class remains.
     """
-    from core.multibuy import (
-        encode_multibuy_cell, is_mixed_promo, parse_multibuy,
-    )
+    from core.multibuy import encode_multibuy_cell, parse_multibuy
     from extractors.specials_parser import classify_special
     kind = classify_special(bool(is_special), special_desc or "")
-    if kind == "multi-buy" and not is_mixed_promo(
-            special_desc or ""):
+    if kind == "multi-buy":
         terms = parse_multibuy(special_desc or "")
         if terms:
             return encode_multibuy_cell(*terms)
@@ -1228,7 +1267,9 @@ def add_product_row(
     if category:
         new_row[1] = category                      # Col B
     new_row[SIZE_COL] = size_clean                 # Col C (always set)
-    new_row[price_col] = price                     # Col D/E
+    # USER RULE 2026-09-05: a multi-buy deal writes the per-unit deal
+    # rate into Col D/E (saving evident in sheet comparisons).
+    new_row[price_col] = _multibuy_price(price, special_desc)
     # Home-brand rows are classified ONCE at insert time: the literal
     # "Home" marker replaces the raw brand so every later discount calc
     # can trust Col G. Price cells ALWAYS stay raw (display-time only).

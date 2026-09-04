@@ -1008,7 +1008,9 @@ class TestAddToListCLI(unittest.TestCase):
 
         2026-09-03: also isolates the searched-items queue — the
         add-to-list handlers delegate to the merged todo flow, which
-        reads both queues."""
+        reads both queues. 2026-09-05: the (m) marker render is
+        sheet-fed — stubbed to None so `show` never touches the
+        network (multi-buy marks simply don't render)."""
         from core import add_to_list as atl
         from core import searched_items as si
         return _CombinedPatch([
@@ -1020,6 +1022,8 @@ class TestAddToListCLI(unittest.TestCase):
                          Path(tmpdir) / "searched_items.json"),
             patch.object(si, "TOMBSTONES_PATH",
                          Path(tmpdir) / "searched_item_code_tombstones.json"),
+            patch("grocery_price_cli._load_sheet_rows_safe",
+                  return_value=None),
         ])
 
     def _map_args(self, **overrides):
@@ -1561,7 +1565,8 @@ class TestCLIPartB(unittest.TestCase):
     # ------------------------------------------------------------------
     def _atl_ctx(self, tmpdir):
         """Patch context isolating BOTH queues (add-to-list delegates
-        to the merged todo flow — 2026-09-03)."""
+        to the merged todo flow — 2026-09-03). The (m) sheet feed is
+        stubbed (2026-09-05) so `show` never touches the network."""
         from core import add_to_list as atl
         from core import searched_items as si
         return _CombinedPatch([
@@ -1573,6 +1578,8 @@ class TestCLIPartB(unittest.TestCase):
                          Path(tmpdir) / "searched_items.json"),
             patch.object(si, "TOMBSTONES_PATH",
                          Path(tmpdir) / "searched_item_code_tombstones.json"),
+            patch("grocery_price_cli._load_sheet_rows_safe",
+                  return_value=None),
         ])
 
     def _fake_prod(self, raw_name, price, size=""):
@@ -2742,15 +2749,19 @@ class TestWeeklyQueueLists(unittest.TestCase):
         from unittest.mock import patch
         with patch("core.add_to_list.ADD_TO_LIST_PATH", self.todo_path), \
                 patch("core.searched_items.SEARCHED_ITEMS_PATH",
-                      self.searched_path):
+                      self.searched_path), \
+                patch("grocery_price_cli._load_sheet_rows_safe",
+                      return_value=None):
             return gpc._weekly_queue_lists(self.data_dir)
 
     def test_titles_and_order(self):
-        """Two lists, fixed titles: to-do FIRST, then forgotten count."""
+        """Three lists, fixed titles: to-do FIRST, then sub-category
+        reviews, then the forgotten count (2026-09-05)."""
         result = self._run()
         self.assertEqual(
             [t for t, _ in result],
-            ["To-do (website adds)", "Forgotten items"])
+            ["To-do (website adds)", "Sub-category reviews",
+             "Forgotten items"])
 
     def test_empty_queues_render_empty(self):
         """No queue files at all -> tuples with empty item lists

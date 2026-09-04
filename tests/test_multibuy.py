@@ -23,7 +23,6 @@ from core.multibuy import (
     effective_unit_rate,
     encode_multibuy_cell,
     format_multibuy_note,
-    is_mixed_promo,
     is_multibuy_cell,
     parse_multibuy,
 )
@@ -52,17 +51,22 @@ class TestParseMultibuy(unittest.TestCase):
         self.assertIsNone(parse_multibuy("discount"))
 
 
-class TestIsMixedPromo(unittest.TestCase):
-    """D-MB3: 'any N' without FOR terms is informational only."""
+class TestAnyStyleRateEligible(unittest.TestCase):
+    """USER REVISION 2026-09-05 (D-MB3 retired): "Any N" promos are
+    rate-eligible multi-buy deals — same-range bundles, per the user.
+    """
 
-    def test_is_mixed_promo_true_for_any_only(self):
-        self.assertTrue(is_mixed_promo("Any 2 | $9"))
+    def test_any_style_parses_to_terms(self):
+        self.assertEqual(parse_multibuy("Any 2 | $9"), (2, 9.0))
 
-    def test_is_mixed_promo_false_for_for(self):
-        self.assertFalse(is_mixed_promo("2 for $6.00"))
+    def test_any_style_effective_rate(self):
+        self.assertEqual(effective_unit_rate(*parse_multibuy("Any 2 | $9")),
+                         4.5)
 
-    def test_is_mixed_promo_false_for_plain_text(self):
-        self.assertFalse(is_mixed_promo("Save $1.00"))
+    def test_mixed_promo_concept_retired(self):
+        # The old informational-only gate is gone from the module.
+        import core.multibuy as mb
+        self.assertFalse(hasattr(mb, "is_mixed_promo"))
 
 
 class TestEffectiveRate(unittest.TestCase):

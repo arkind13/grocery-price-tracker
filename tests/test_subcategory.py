@@ -81,6 +81,47 @@ class TestClassify(unittest.TestCase):
         self.assertEqual(got, "")
         self.assertEqual(conf, 0.0)
 
+    def test_substring_misfires_land_in_review(self):
+        # USER REVISION 2026-09-05: substrings must never guess wrong.
+        # The live misfires the user reported (V energy drinks filed
+        # as sugar/water) plus the same trap class — every case falls
+        # through to NEEDS_REVIEW instead of a confident mislabel
+        # (verified against the real classifier 2026-09-05).
+        misfires = {
+            "V Sugarfree Energy 4x250ml": "sugar",   # NOT sugar
+            "V Watermelon 250ml": "water",           # NOT water
+            "Woolworths Eggplant 300g": "eggs",      # NOT eggs
+            "Pineapple Pieces 450g": "apples",       # NOT apples
+        }
+        for name, wrong in misfires.items():
+            got, conf = classify_subcategory(name)
+            self.assertNotEqual(got, wrong,
+                                msg=f"{name} misfired to {wrong}")
+            self.assertEqual((got, conf), ("", 0.0), msg=name)
+
+    def test_v_energy_drink_classifies(self):
+        # The user's reported case: V energy drinks must reach the
+        # energy drink label when the wording is on the pack. A
+        # brand-only wording ("V Guarana Energy") has NO rule match —
+        # it goes to review (ask-first), never to a food cluster.
+        got, conf = classify_subcategory("V Energy Drink 500ml")
+        self.assertEqual((got, conf), ("energy drink", 1.0))
+        got, conf = classify_subcategory("V Guarana Energy 250ml")
+        self.assertEqual((got, conf), ("", 0.0))
+
+    def test_word_boundary_positives_still_match(self):
+        # The \b anchors must not break the real words.
+        cases = {
+            "Coles Sugar 1kg": "sugar",
+            "Mount Franklin Water 600ml": "water",
+            "Sun Rice Long Grain 2kg": "rice",
+            "PB Spread Smooth 500g": "spread",
+        }
+        for name, want in cases.items():
+            got, conf = classify_subcategory(name)
+            self.assertEqual(got, want, msg=name)
+            self.assertEqual(conf, 1.0, msg=name)
+
     def test_corn_chips_before_potato_chips(self):
         # Compound ordering: corn chips before the generic chips rule.
         got, _conf = classify_subcategory("Supreme Cheese Corn Chips")

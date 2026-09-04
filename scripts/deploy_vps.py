@@ -111,6 +111,13 @@ _FILE_MANIFEST: list[tuple[str, str]] = [
      f"{VPS_BASE}/grocery-price-tracker/tests"),
     ("grocery-price-tracker/tests/test_preferences.py",
      f"{VPS_BASE}/grocery-price-tracker/tests"),
+    # 2026-09-05 multi-buy price cells + (m) + sub-category reviews
+    ("grocery-price-tracker/tests/test_sheets_sync.py",
+     f"{VPS_BASE}/grocery-price-tracker/tests"),
+    ("grocery-price-tracker/tests/test_todo_cmd.py",
+     f"{VPS_BASE}/grocery-price-tracker/tests"),
+    ("grocery-price-tracker/tests/test_lists_cmd.py",
+     f"{VPS_BASE}/grocery-price-tracker/tests"),
     # Automation assets (Task 11)
     ("grocery-price-tracker/scripts/deploy_vps.py",
      f"{VPS_BASE}/grocery-price-tracker/scripts"),

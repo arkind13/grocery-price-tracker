@@ -348,9 +348,10 @@ class TestListsQRSSurfacing(unittest.TestCase):
         row += [subcategory, "", preferred]               # Q, R, S
         return row
 
-    def _run_lists(self, tmp: Path, ws=None, sheet_error=None):
-        args = MagicMock(full=False)
-        queue_a = MagicMock(return_value=[])
+    def _run_lists(self, tmp: Path, ws=None, sheet_error=None,
+                   full=False, todo_entries=None):
+        args = MagicMock(full=full)
+        queue_a = MagicMock(return_value=list(todo_entries or []))
         queue_s = MagicMock(return_value=[])
         connect = MagicMock(return_value=ws)
         if sheet_error is not None:
@@ -388,8 +389,10 @@ class TestListsQRSSurfacing(unittest.TestCase):
             out, code = self._run_lists(
                 tmp, ws=FakeWorksheet(self._with_header(rows)))
             self.assertEqual(code, 0)
-            self.assertIn("2 row(s) with sub-category "
-                          "'needs review'", out)
+            # List 7 (user rule 2026-09-05): sub-category reviews.
+            self.assertIn("7. Sub-category reviews — 2", out)
+            self.assertIn("Sub-category reviews — 2 row(s) need "
+                          "your call", out)
 
     def test_lists_warns_on_multi_p(self):
         with tempfile.TemporaryDirectory() as td:
@@ -421,6 +424,46 @@ class TestListsQRSSurfacing(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertNotIn("needs review", out)
             self.assertNotIn("P flags", out)
+
+    def test_lists_full_marks_multibuy_todo_and_reviews(self):
+        """USER RULE 2026-09-05: --full renders ' (m)' + the legend on
+        to-do entries whose sheet row is on a multi-buy deal, and a
+        SUB-CATEGORY REVIEWS block naming the unsure rows."""
+        rows = [
+            self._qrs_row("Milk Deal", subcategory="milk"),
+            self._qrs_row("Mystery Goo", subcategory="needs review"),
+        ]
+        # Put the WW row on a multi-buy deal (Col M, idx 12).
+        rows[0][12] = "multi-buy 2/$7.00"
+        todo = [{
+            "store": "woolworths", "keyword": "KW Deal Milk",
+            "generic_name": "Milk Deal", "size": "2L", "code": "MBD",
+        }]
+        out, code = self._run_lists(
+            Path(tempfile.gettempdir()),
+            ws=FakeWorksheet(self._with_header(rows)),
+            full=True, todo_entries=todo)
+        self.assertEqual(code, 0)
+        # (m) on the deal line + the legend underneath.
+        self.assertRegex(out, r"KW Deal Milk[^\n]*\(m\)")
+        self.assertIn("(m) - multi buy discount", out)
+        # Sub-category reviews block names the unsure row.
+        self.assertIn("SUB-CATEGORY REVIEWS", out)
+        self.assertIn("Mystery Goo", out)
+
+    def test_lists_full_no_m_without_deal(self):
+        """No multi-buy cells -> no (m) mark and no legend."""
+        rows = [self._qrs_row("Milk 2L", subcategory="milk")]
+        todo = [{
+            "store": "woolworths", "keyword": "kw", "generic_name": "Milk 2L",
+            "size": "", "code": "PLN",
+        }]
+        out, code = self._run_lists(
+            Path(tempfile.gettempdir()),
+            ws=FakeWorksheet(self._with_header(rows)),
+            full=True, todo_entries=todo)
+        self.assertEqual(code, 0)
+        self.assertNotIn("(m)", out)
 
 
 if __name__ == "__main__":

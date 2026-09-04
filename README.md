@@ -151,7 +151,7 @@ flowchart TB
         DATA["🗂️ data/ — runtime state<br/>searched_items · add_to_list<br/>live_snapshots/ · scrapedo_health"]
     end
 
-    SHEET["📊 Google Sheet — master price DB<br/>A name · D/E/F RAW prices · I/J/K keywords<br/>M/N no · discount · multi-buy · O rewards · P aliases"]
+    SHEET["📊 Google Sheet — master price DB<br/>A name · D/E/F prices (multi-buy = deal rate) · I/J/K keywords<br/>M/N no · discount · multi-buy · O rewards · P aliases"]
     STORES["🏬 woolworths.com.au · coles.com.au<br/>Akamai/Incapsula protected"]
     GH["🐙 GitHub — arkind13/AI-Development-Environment"]
 
@@ -389,7 +389,7 @@ The most complex tool. Tracks Australian supermarket prices (Woolworths, Coles, 
 | `specials-scan` | `[--min-savings INT]` `[--store woolworths]` | Tier 2 site-wide scan → Tier 1 saved-list |
 | `unmapped` | — | Reads `data/unmapped_queue.json`; offline-safe |
 | `map` | `unmatched\|wool\|coles\|status` + flags | One-item-at-a-time list resolution (non-interactive). **2026-09-03:** a full resolution (`--pick/--na/--keyword/--forget`, unmatched exact-link `--add`) also removes the item's line from its work-list `.txt` immediately (header count kept honest; progress index stays aligned) — no more stale mid-week counts |
-| `lists` | `[--full]` | **THE 6 USER-FACING LISTS — LIVE counts (2026-09-03).** Lists 1-3 + 6 from one fresh sheet read (Unmatched = debt minus ignored minus keyword-exists; wool/coles missing = keyword cols I/J with `NA` counting as populated); list 4 = the to-do queue; list 5 = ignored file (COUNT only — names with `--full`); list 6 = **Missed pricing** (FIXABLE: keyword present + price unusable + not GONE; DELETE-PENDING: both stores unusable, GONE included). Missing-list counts annotate `(N pending website adds)` (handshake, not dupes) and `(N also in missed pricing)` for cross-list rows. `--full` prints names with ⏳/⚠ markers. NEVER counts the Wednesday `.txt` snapshots (the root cause of the 2026-09-03 stale-counts incident). Sheet failure → "unavailable" + verbatim error, exit 0 |
+| `lists` | `[--full]` | **THE 7 USER-FACING LISTS — LIVE counts (2026-09-03; list 7 added 2026-09-05).** Lists 1-3 + 6-7 from one fresh sheet read (Unmatched = debt minus ignored minus keyword-exists; wool/coles missing = keyword cols I/J with `NA` counting as populated); list 4 = the to-do queue (multi-buy items marked `(m)` + legend); list 5 = ignored file (COUNT only — names with `--full`); list 6 = **Missed pricing** (FIXABLE: keyword present + price unusable + not GONE; DELETE-PENDING: both stores unusable, GONE included); list 7 = **Sub-category reviews** — rows carrying the literal `needs review` Col Q marker (the classifier never guessed them; the user decides the label). Missing-list counts annotate `(N pending website adds)` (handshake, not dupes) and `(N also in missed pricing)` for cross-list rows. `--full` prints names with ⏳/⚠ markers. NEVER counts the Wednesday `.txt` snapshots (the root cause of the 2026-09-03 stale-counts incident). Sheet failure → "unavailable" + verbatim error, exit 0 |
 | `todo` | `show` / `done --items "1,HUY"` / `gone --items "1,HUY"` | **The ONE website-add queue (2026-09-03).** add-to-list entries only (the searched queue is RETIRED) — Coles then Woolworths, continuous numbering, `[CODE]` per entry. `done` (numbers and/or codes, all-or-nothing) removes entries AND writes the remembered exact store name as the row's store keyword. **`gone`:** the item is verified unavailable at that store — the keyword is LEFT ALONE, the literal `GONE` is written into the store's price cell (D/E), and the entry is removed from the queue (same selection as `done`). **Wednesday Step 3c tallies the queue with the sheet** after the sync and auto-clears entries whose row now carries the keyword — the UPDATED to-do list posts FIRST in Telegram |
 | `missed-pricing` | `show` (default) / `gone --items "1,ABC"` / `[--purge]` `[--dry-run]` | List #6 on demand: **GROUPED under WOOLWORTHS / COLES / BOTH STORES headers with a deterministic 3-letter code per entry (2026-09-03)** — FIXABLE rows (keyword present + that store's price unusable, not GONE) under their store header, DELETE-PENDING rows (both stores dead) under BOTH STORES. **`gone` (2026-09-03, same rule as the to-do):** the keyword is LEFT ALONE, the failing store's price cell is stamped GONE, and the item leaves the list; a delete-pending selection is stamped at both stores and its row is DELETED immediately (archived to `data/deleted_rows.json`, source `gone-verdict`). `--purge` deletes ALL delete-pending rows NOW (explicit user action; archived; ledger strikes cleared); `--dry-run` previews the purge. A returning real price clears a GONE cell (item resurrected) |
 | `add-to-list` | `show` / `done` | **ALIAS of the `todo` queue (2026-09-03)** — same numbering, same done semantics (always writes the keyword) |
@@ -518,10 +518,10 @@ The tracker reads/writes a Google Sheet (`GROCERY_SPREADSHEET_ID = 16INuFvOUVUY3
 | Col | Header | Purpose |
 |-----|--------|---------|
 | A | Generic Name | Canonical product name (exact-match target) |
-| D/E/F | Woolworths/Coles/Aldi price | Stored **raw** prices (never discounted in the sheet). Since 2026-09-02 D/E can also hold overwrite markers: `N/A YYYY-MM-DD` (mapped row absent from that store's list) or `unavailable YYYY-MM-DD` (listed but no usable price) — the embedded date anchors no-price week aging and survives marker rewrites until a real price returns |
+| D/E/F | Woolworths/Coles/Aldi price | D/E hold live prices — since 2026-09-05 a multi-buy item's price cell carries the per-unit DEAL rate ("2 for $7.00" on $4.00 → 3.50; "Any 2" deals count too), so sheet comparisons show the saving; when the deal ends the next sync writes the normal shelf price again. F stays raw. Since 2026-09-02 D/E can also hold overwrite markers: `N/A YYYY-MM-DD` (mapped row absent from that store's list) or `unavailable YYYY-MM-DD` (listed but no usable price) — the embedded date anchors no-price week aging and survives marker rewrites until a real price returns |
 | G | Brand | Brand name; literal `Home` marks Woolworths home-brand rows (drives the extra home-brand discount) |
 | I/J/K | Store keywords | Exact-match keywords for sync path (Wool/Coles/Aldi) |
-| M/N/O | Specials/rewards flags | |
+| M/N/O | Specials/rewards flags | Multi-buy cells carry the deal terms (`multi-buy 2/$6.00`, incl. "Any N" deals) |
 | P | Keywords | Alias list (delimiter-separated; two-pass lookup target) |
 | Q | Sub_Category | Granular cluster (bread, shredded cheese, eggs); "needs review" marker |
 | R | Item_Code | Permanent 3-letter row ID, A–Z minus I/L/O, no repeats |
@@ -589,27 +589,45 @@ TEAM_DISCOUNT_ENABLED = False   🟢 Woolworths  $4.00
 discounts on/off for a single call without touching the switch (their
 default is to follow `TEAM_DISCOUNT_ENABLED`).
 
-### Multi-buy pricing (2026-09-04)
+### Multi-buy pricing (2026-09-04, price-cell rule 2026-09-05)
 
 "2 for $6.00" promos carry real per-unit rates, applied everywhere a
 price is compared or shown:
 
+- **Price cells hold the deal rate (user rule 2026-09-05):** a
+  multi-buy item's D/E price IS the per-unit deal rate — "2 for
+  $7.00" on a $4.00 item writes 3.50 — so the saving is evident in
+  every sheet comparison. The bundle terms stay the source of truth
+  in the specials cell; when the deal ends the next sync overwrites
+  the price normally.
 - **Rate math:** `rate = bundle total / qty` (`core/multibuy.py`):
   2 for $6.00 → $3.00 per unit. Totals, cheapest-store math, and WW
   display discounts all compute from the effective rate (§7.3).
 - **Mandatory note:** whenever a displayed price is multi-buy-derived,
   the tag `🏷️ 2 for $6.00  [Note: must purchase 2+ units to receive
   this price]` and a totals footnote are shown.
-- **Sheet cells (M/N):** product-specific promos are stored WITH terms
-  as `multi-buy 2/$6.00`; the bare legacy `multi-buy` marker stays
-  informational only.
-- **Mixed promos (D-MB3):** cross-range "Any 2 | $9" bundles have no
-  true per-product price — they are display-only and NEVER feed rate
-  math.
+- **Sheet cells (M/N):** ALL multi-buy promos are stored WITH terms
+  as `multi-buy 2/$6.00`; the bare legacy `multi-buy` marker is
+  refreshed by the next sync that sees the item.
+- **"Any N | $X" deals count (user rule 2026-09-05, D-MB3 retired):**
+  in-store they mean any N units from the same range/brand, so they
+  are rate-eligible multi-buy prices exactly like "N for $X".
+- **List marks:** to-do/list views mark deal items with `(m)` and a
+  bottom legend `(m) - multi buy discount` (no per-item clutter).
 - **Live degradation (D-MB2):** when a store payload carries no
   multi-buy data (or, for Woolworths, the keys are unverified), live
   paths fall back to normal pricing; the docx/sheet paths carry
   multi-buy alone. Promo fields are never invented.
+
+### Sub-categories: never guess (user rule 2026-09-05)
+
+New products are classified against the taxonomy
+(`core/subcategory.py`, word-boundary safe — "V Sugarfree" is not
+sugar, "V Watermelon" is not water, "eggplant" is not eggs). When no
+rule matches confidently, the row's Col Q gets the literal
+`needs review` marker and the item surfaces on the **Sub-category
+reviews** list (list 7 in `lists`, plus the weekly Telegram post) —
+the agent asks the user for the right label; nothing is ever guessed.
 
 ### Shopping list & preferences (2026-09-04)
 

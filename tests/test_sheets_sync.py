@@ -962,9 +962,12 @@ class TestSpecialsFlagWrites(unittest.TestCase):
         self.assertEqual(report.items_matched, 2)
         self.assertEqual(report.items_skipped, 1)
         updated = ws.get_all_values()
-        self.assertEqual(updated[1][13], "multi-buy")   # N: Any 2 | $9
-        self.assertEqual(updated[2][13], "no")          # N: not special
-        self.assertEqual(updated[3][13], "50% off")     # unmatched: kept
+        # USER REVISION 2026-09-05 (D-MB3 retired): "Any 2 | $9" is a
+        # rate-eligible deal — encoded terms + per-unit deal price.
+        self.assertEqual(updated[1][13], "multi-buy 2/$9.00")
+        self.assertEqual(updated[1][4], 4.5)    # 9.00 / 2 deal rate
+        self.assertEqual(updated[2][13], "no")  # N: not special
+        self.assertEqual(updated[3][13], "50% off")  # unmatched: kept
 
     # add_product_row --------------------------------------------------- #
 
@@ -1524,7 +1527,8 @@ class TestSyncOverwriteSemantics(unittest.TestCase):
 
     def test_specials_invariant_seen_row_keeps_fresh_value(self):
         """Matched rows keep the value the match loop just classified
-        (multi-buy stays multi-buy; the pass never overwrites them)."""
+        (multi-buy stays multi-buy with encoded terms; the pass never
+        overwrites them)."""
         ws = self._ws(
             ["Listed Item", "", "", "", "", "", "", "",
              "listed item", "", "", "", "", ""],
@@ -1535,7 +1539,7 @@ class TestSyncOverwriteSemantics(unittest.TestCase):
                              is_special=True, special_desc="2 for $4.50")]
         sync_prices(results, items, worksheet=ws)
         updated = ws.get_all_values()
-        self.assertEqual(updated[1][12], "multi-buy")
+        self.assertEqual(updated[1][12], "multi-buy 2/$4.50")
 
 
 class TestUpdateSinglePriceBackfill(unittest.TestCase):
@@ -1762,11 +1766,12 @@ class TestSpecialsCellCodec(unittest.TestCase):
         self.assertEqual(
             _specials_cell(True, "2 for $6.00"), "multi-buy 2/$6.00")
 
-    def test_specials_cell_any_promo_stays_bare(self):
-        # Mixed "any N" promos are informational only (D-MB3).
+    def test_specials_cell_any_promo_encodes_terms(self):
+        # USER REVISION 2026-09-05 (D-MB3 retired): "Any N | $X"
+        # deals are rate-eligible — the cell encodes their terms.
         from core.sheets_sync import _specials_cell
         self.assertEqual(
-            _specials_cell(True, "Any 2 | $9"), "multi-buy")
+            _specials_cell(True, "Any 2 | $9"), "multi-buy 2/$9.00")
 
     def test_specials_cell_discount_unchanged(self):
         from core.sheets_sync import _specials_cell
@@ -1807,6 +1812,95 @@ class TestSpecialsCellCodec(unittest.TestCase):
         self.assertTrue(res["wrote"])
         updated = ws.get_all_values()
         self.assertEqual(updated[1][12], "multi-buy 2/$6.00")  # Col M
+
+
+class TestMultibuyPriceCell(unittest.TestCase):
+    """USER RULE 2026-09-05: multi-buy items write the per-unit deal
+    rate into the price cell on ALL THREE write paths (the saving must
+    be evident in sheet comparisons). Bundle terms stay in M/N."""
+
+    HEADER = [
+        "Product_Name", "Category", "Size", "Woolworths_Price",
+        "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+        "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+        "Search_Keyword_Aldi", "Aldi_Refresh",
+        "Woolworths_Specials", "Coles_Specials", "Rewards_Points",
+        "Keywords",
+    ]
+
+    def test_sync_prices_writes_deal_rate_for_style(self):
+        ws = FakeWorksheet([
+            self.HEADER,
+            ["Cola 2L", "Drinks", "2L", "4.00", "", "", "", "",
+             "", "", "", "", "no", "", "", ""],
+        ])
+        results = [MatchResult(True, 2, "Cola 2L", "woolworths",
+                               "Cola 2L", "exact_keyword")]
+        items = [ProductItem("woolworths", "WW Cola 2L", 4.00,
+                             is_special=True, special_desc="2 for $7.00")]
+        sync_prices(results, items, worksheet=ws)
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][3], 3.5)   # 7.00 / 2 deal rate
+        self.assertEqual(updated[1][12], "multi-buy 2/$7.00")
+
+    def test_update_single_price_writes_deal_rate_any_style(self):
+        # D-MB3 retired: "Any 2 | $9" is a rate-eligible deal.
+        ws = FakeWorksheet([
+            self.HEADER,
+            ["Sunbites", "Snacks", "200g", "6.00", "", "", "", "",
+             "", "", "", "", "no", "", "", ""],
+        ])
+        res = update_single_price(
+            "Sunbites", "woolworths", 6.00,
+            is_special=True, special_desc="Any 2 | $9.00", worksheet=ws)
+        self.assertTrue(res["wrote"])
+        self.assertEqual(res["new_price"], 4.5)  # 9.00 / 2
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][3], 4.5)
+        self.assertEqual(updated[1][12], "multi-buy 2/$9.00")
+
+    def test_update_single_price_plain_price_untouched(self):
+        ws = FakeWorksheet([
+            self.HEADER,
+            ["Milk", "Dairy", "2L", "3.20", "", "", "", "",
+             "", "", "", "", "no", "", "", ""],
+        ])
+        res = update_single_price(
+            "Milk", "woolworths", 3.50,
+            is_special=True, special_desc="Save $0.50", worksheet=ws)
+        self.assertTrue(res["wrote"])
+        self.assertEqual(res["new_price"], 3.5)  # no multibuy terms
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][3], 3.5)
+        self.assertEqual(updated[1][12], "discount")
+
+    def test_update_single_price_no_specials_leaves_raw(self):
+        # is_special=None: caller asked to leave specials untouched —
+        # no transform (a deal desc without a specials write would
+        # desync price vs cell).
+        ws = FakeWorksheet([
+            self.HEADER,
+            ["Milk", "Dairy", "2L", "3.20", "", "", "", "",
+             "", "", "", "", "no", "", "", ""],
+        ])
+        res = update_single_price(
+            "Milk", "woolworths", 4.00, worksheet=ws)
+        self.assertTrue(res["wrote"])
+        self.assertEqual(res["new_price"], 4.0)
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][3], 4.0)
+
+    def test_add_product_row_writes_deal_rate(self):
+        from core.sheets_sync import add_product_row
+        ws = FakeWorksheet([self.HEADER])
+        res = add_product_row(
+            "Zero Sugar Coke 10x375ml", "coles", 11.50,
+            size="10x375ml", is_special=True,
+            special_desc="2 for $23.00", worksheet=ws)
+        self.assertTrue(res["wrote"])
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][4], 11.5)  # 23.00 / 2 deal rate
+        self.assertEqual(updated[1][13], "multi-buy 2/$23.00")
 
 
 if __name__ == "__main__":

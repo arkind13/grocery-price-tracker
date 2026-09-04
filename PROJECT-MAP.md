@@ -19,10 +19,19 @@
 | **Ignored** | Junk you said "forget" to. Never shown again. |
 | **No-price report** | "Neither store has a real price for this row for N weeks." Your cue to delete dead products from the sheet. |
 
-> **Sub-categories (2026-09-04):** rows whose sub-category is
-> `needs review` surface as a count in the `lists` output — run
-> `subcategories` to view the taxonomy, `prefer`/`backfill-subcategories`
-> to fix them (never auto-fixed).
+> **Sub-categories (2026-09-04, reviews list 2026-09-05):** rows whose
+> sub-category is `needs review` — the classifier was NOT confident,
+> nothing was guessed — surface on the **Sub-category reviews** list
+> (list 7 in `lists` and in the weekly Telegram post). The agent asks
+> the user for the right label before writing one; the classifier is
+> word-boundary safe (V Sugarfree is not sugar, V Watermelon is not
+> water, eggplant is not eggs — such names go to review, never a
+> guess).
+
+> **Multi-buy prices (2026-09-05):** a multi-buy item's price cell
+> holds the per-unit deal rate ("2 for $7.00" on $4.00 → 3.50;
+> "Any 2 | $X" deals count too — same-range bundles). To-do/list views
+> mark those items `(m)` with the legend `(m) - multi buy discount`.
 
 > **Not a 7th list:** "Pending links" (`unmapped_queue.json`, shown by
 > the `unmapped` command) is the STORAGE LEDGER BEHIND the Unmatched
