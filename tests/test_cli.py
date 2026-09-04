@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Pure unit tests for Phase 5: CLI dispatch + missing-items tracker.
 
 No network, no live sheet. Uses FakeWorksheet mock pattern.
@@ -13,7 +13,7 @@ import re
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, mock_open, patch
@@ -2880,7 +2880,7 @@ class TestNoPriceReportLines(unittest.TestCase):
     NOW = None  # set per-test via import
 
     def _now(self):
-        from datetime import datetime, timezone
+        from datetime import datetime, timedelta, timezone
         return datetime(2026, 9, 2, tzinfo=timezone.utc)
 
     def test_na_category_with_weeks(self):
@@ -3007,6 +3007,511 @@ class TestAutohealExactKeywords(unittest.TestCase):
         self.assertIn("dry run", healed[0])
         # Nothing written.
         self.assertEqual(ws.get_all_values()[1][9], "")
+
+
+class TestQRSCommandParsers(unittest.TestCase):
+    """Five new Q/R/S commands + --subcategory flags (S19)."""
+
+    def test_parser_has_five_new_commands(self):
+        from grocery_price_cli import build_parser
+        parser = build_parser()
+        for cmd in ("shop", "prefer", "subcategories",
+                    "backfill-subcategories", "backfill-codes"):
+            argv = [cmd]
+            if cmd == "shop":
+                argv += ["--items", "eggs"]
+            args = parser.parse_args(argv)
+            self.assertTrue(hasattr(args, "func"), msg=cmd)
+
+    def test_search_parser_accepts_subcategory_flag(self):
+        from grocery_price_cli import build_parser
+        parser = build_parser()
+        args = parser.parse_args(
+            ["search", "--product", "eggs", "--add-item", "1",
+             "--subcategory", "eggs"])
+        self.assertEqual(args.subcategory, "eggs")
+        # Default is None when the flag is absent.
+        args2 = parser.parse_args(["search", "--product", "eggs"])
+        self.assertIsNone(args2.subcategory)
+
+    def test_map_parser_accepts_subcategory_flag(self):
+        from grocery_price_cli import build_parser
+        parser = build_parser()
+        args = parser.parse_args(
+            ["map", "wool", "--add", "--subcategory", "bread"])
+        self.assertEqual(args.subcategory, "bread")
+        args2 = parser.parse_args(["map", "wool", "--add"])
+        self.assertIsNone(args2.subcategory)
+
+    def test_stub_handlers_return_1(self):
+        # All S19 stubs have been replaced by real handlers (S20-S22).
+        # _cmd_prefer without code/pick errors with usage (exit 1).
+        from grocery_price_cli import _cmd_prefer
+        ns = argparse.Namespace(code=None, pick=None)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(_cmd_prefer(ns), 1)
+            self.assertIn("--code ABC or --pick N", err.getvalue())
+
+
+class _QRSHeaderSheet(FakeWorksheet):
+    """FakeWorksheet with a spreadsheet attribute for code seeding.
+
+    Also supports gspread's single-cell range form ("R2") which
+    ensure_codes uses for per-row Col R writes.
+    """
+
+    def __init__(self, rows):
+        super().__init__(rows)
+        self.spreadsheet = type("SS", (), {"id": "test-sheet-id"})()
+
+    def update(self, *, values, range_name):
+        if ":" not in range_name:
+            m = re.match(r"([A-Z]+)(\d+)$", range_name)
+            if not m:
+                raise ValueError(
+                    f"Cannot parse range: {range_name}")
+            col = _col_letter_to_idx(m.group(1))
+            row = int(m.group(2)) - 1
+            self.updates.append((values, range_name))
+            while len(self._values) <= row:
+                self._values.append([])
+            for offset, val in enumerate(values[0]):
+                c = col + offset
+                while len(self._values[row]) <= c:
+                    self._values[row].append("")
+                self._values[row][c] = val
+            return
+        super().update(values=values, range_name=range_name)
+
+    def batch_update(self, updates):
+        self.batch_updates = updates
+        for u in updates:
+            m = re.match(r"([A-Z]+)(\d+)$", u["range"])
+            col = _col_letter_to_idx(m.group(1))
+            row = int(m.group(2)) - 1
+            while len(self._values) <= row:
+                self._values.append([])
+            self._values[row][col:col + 1] = list(u["values"][0])
+
+
+def _qrs_sheet(rows_data):
+    """Sheet with header A..S plus the given data rows."""
+    header = [c for c in "ABCDEFGHIJKLMNOP"]
+    header += ["Sub_Category", "Item_Code", "Preferred"]
+    return _QRSHeaderSheet([header, *rows_data])
+
+
+class TestSubcategoriesCmd(unittest.TestCase):
+    """subcategories / backfills (S20, spec §13.6 / D-SC2)."""
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_subcategories_prints_labels_and_counts(self, mock_conn):
+        from grocery_price_cli import _cmd_subcategories
+        ws = _qrs_sheet([
+            ["Woolworths Eggs 700g", *[""] * 15, "eggs", "AAA", "P"],
+            ["Coles Eggs XL", *[""] * 15, "eggs", "BBB", ""],
+            ["AJI BREADING MIX", *[""] * 15, "needs review", "", ""],
+        ])
+        mock_conn.return_value = ws
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = _cmd_subcategories(argparse.Namespace())
+        self.assertEqual(rc, 0)
+        text = out.getvalue()
+        self.assertIn("eggs · 2", text)
+        self.assertIn("needs review · 1", text)
+        self.assertIn("bread · 0", text)
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_backfill_subcategories_fills_confident_only(
+            self, mock_conn):
+        from grocery_price_cli import _cmd_backfill_subcategories
+        ws = _qrs_sheet([
+            ["Woolworths White Bread 650g", *[""] * 16, "", "", ""],
+            ["Free Range Eggs 700g", *[""] * 16, "", "", ""],
+            ["AJI CRISPY FRY BREADING MIX", *[""] * 16, "", "", ""],
+        ])
+        mock_conn.return_value = ws
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = _cmd_backfill_subcategories(
+                argparse.Namespace(dry_run=False))
+        self.assertEqual(rc, 0)
+        text = out.getvalue()
+        # 2 confident labels + 1 needs review (never a guess).
+        self.assertIn("Filled (confident) · 2", text)
+        self.assertIn("needs review · 1", text)
+        self.assertIn("Wrote 3 Col Q cell(s)", text)
+        written = ws.get_all_values()
+        self.assertEqual(written[1][16], "bread")
+        self.assertEqual(written[2][16], "eggs")
+        self.assertEqual(written[3][16], "needs review")
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_backfill_subcategories_never_overwrites(
+            self, mock_conn):
+        from grocery_price_cli import _cmd_backfill_subcategories
+        ws = _qrs_sheet([
+            ["Woolworths White Bread 650g", *[""] * 15,
+             "custom label", "", ""],
+        ])
+        mock_conn.return_value = ws
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = _cmd_backfill_subcategories(
+                argparse.Namespace(dry_run=False))
+        self.assertEqual(rc, 0)
+        self.assertIn("Skipped (Col Q already set) · 1",
+                      out.getvalue())
+        self.assertNotIn("Wrote", out.getvalue())
+        # Non-empty Q byte-identical.
+        self.assertEqual(ws.get_all_values()[1][16], "custom label")
+        self.assertEqual(getattr(ws, "batch_updates", None), None)
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_backfill_subcategories_dry_run_writes_nothing(
+            self, mock_conn):
+        from grocery_price_cli import _cmd_backfill_subcategories
+        ws = _qrs_sheet([
+            ["Woolworths White Bread 650g", *[""] * 16, "", "", ""],
+        ])
+        mock_conn.return_value = ws
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = _cmd_backfill_subcategories(
+                argparse.Namespace(dry_run=True))
+        self.assertEqual(rc, 0)
+        self.assertIn("[DRY RUN] no sheet write", out.getvalue())
+        self.assertEqual(getattr(ws, "batch_updates", None), None)
+        self.assertEqual(ws.get_all_values()[1][16], "")
+
+
+class TestBackfillCodesCmd(unittest.TestCase):
+    """backfill-codes: reserve-write-verify loop (S20, §8.2)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        tmp_path = Path(self._tmp.name)
+        import core.item_codes as item_codes
+        reg_patch = patch.object(
+            item_codes, "REGISTRY_PATH", tmp_path / "registry.json")
+        lock_patch = patch.object(
+            item_codes, "LOCK_PATH", tmp_path / ".item_code_lock")
+        reg_patch.start()
+        lock_patch.start()
+        self.addCleanup(reg_patch.stop)
+        self.addCleanup(lock_patch.stop)
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_backfill_codes_assigns_unique_codes(self, mock_conn):
+        import core.item_codes as item_codes
+        from grocery_price_cli import _cmd_backfill_codes
+        ws = _qrs_sheet([
+            ["Milk", *[""] * 16, "", "", ""],
+            ["Bread", *[""] * 16, "", "", ""],
+        ])
+        mock_conn.return_value = ws
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = _cmd_backfill_codes(argparse.Namespace(dry_run=False))
+        self.assertEqual(rc, 0)
+        self.assertIn("Written · 2", out.getvalue())
+        written = ws.get_all_values()
+        codes = [written[1][17], written[2][17]]
+        self.assertNotEqual(codes[0], codes[1])
+        for code in codes:
+            self.assertTrue(item_codes.is_valid_code(code), msg=code)
+        # Idempotent re-run: nothing left to write.
+        out2 = io.StringIO()
+        with contextlib.redirect_stdout(out2):
+            rc2 = _cmd_backfill_codes(
+                argparse.Namespace(dry_run=False))
+        self.assertEqual(rc2, 0)
+        self.assertIn("Planned · 0", out2.getvalue())
+        self.assertIn("Skipped (code already set) · 2", out2.getvalue())
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_backfill_codes_dry_run_writes_nothing(self, mock_conn):
+        import core.item_codes as item_codes
+        from grocery_price_cli import _cmd_backfill_codes
+        ws = _qrs_sheet([
+            ["Milk", *[""] * 16, "", "", ""],
+        ])
+        mock_conn.return_value = ws
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = _cmd_backfill_codes(argparse.Namespace(dry_run=True))
+        self.assertEqual(rc, 0)
+        self.assertIn("Planned · 1", out.getvalue())
+        self.assertIn("[DRY RUN] no sheet write", out.getvalue())
+        self.assertEqual(ws.get_all_values()[1][17], "")
+        self.assertEqual(item_codes.load_registry(), {})
+
+
+class TestShopCmd(unittest.TestCase):
+    """shop handler: preference state machine (S21, §6.2-6.5)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.pending_path = Path(self._tmp.name) / "shop_pending.json"
+        patcher = patch("core.preferences.PENDING_PATH",
+                        self.pending_path)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _ws(self):
+        return _qrs_sheet([
+            # idx: 0 name, 3 D(ww), 4 E(coles), 16 Q, 17 R, 18 S
+            ["Woolworths Eggs 700g", "", "", "$5.00", *[""] * 12,
+             "eggs", "AAA", "P"],
+            ["Coles Eggs XL", "", "", "", "$4.80", *[""] * 11,
+             "eggs", "BBB", ""],
+            ["Royal Gala Apples 1kg", *[""] * 15, "apples", "CCC", ""],
+            ["Home Brand Milk 2L", "", "", "$3.00", *[""] * 12,
+             "milk", "MMM", "P"],
+        ])
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_shop_autoselects_preferred(self, mock_conn):
+        from grocery_price_cli import _cmd_shop
+        mock_conn.return_value = self._ws()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = _cmd_shop(argparse.Namespace(items="eggs"))
+        self.assertEqual(rc, 0)
+        text = out.getvalue()
+        # Table renders with the P row's price.
+        self.assertIn("BASKET COMPARISON", text)
+        self.assertIn("$5.00", text)
+        self.assertNotIn("Which one would you like", text)
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_shop_halts_with_exact_prompt(self, mock_conn):
+        import core.preferences as prefs
+        from grocery_price_cli import _cmd_shop
+        mock_conn.return_value = self._ws()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = _cmd_shop(argparse.Namespace(items="apples"))
+        self.assertEqual(rc, 0)
+        text = out.getvalue()
+        self.assertIn(
+            "Sub-Category: apples - Which one would you like to make "
+            "your preferred item?", text)
+        self.assertIn("1 - Royal Gala Apples 1kg - CCC", text)
+        self.assertIn("Or: Not in list? Provide another keyword for "
+                      "live search.", text)
+        self.assertIn("1 item(s) halted", text)
+        # Pending file written with the options (JSON: tuples -> lists).
+        pending = prefs.load_pending()
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending["items"], ["apples"])
+        self.assertEqual(
+            pending["halted"][0]["options"],
+            [[4, "Royal Gala Apples 1kg", "CCC"]])
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_shop_cold_item_offer(self, mock_conn):
+        from grocery_price_cli import _cmd_shop
+        mock_conn.return_value = self._ws()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = _cmd_shop(argparse.Namespace(items="bread"))
+        self.assertEqual(rc, 0)
+        self.assertIn("no tracked products yet", out.getvalue())
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_shop_override_warning_exact_text(self, mock_conn):
+        from grocery_price_cli import _cmd_shop
+        mock_conn.return_value = self._ws()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = _cmd_shop(argparse.Namespace(items="coles eggs xl"))
+        self.assertEqual(rc, 0)
+        text = out.getvalue()
+        self.assertIn("⚠️ Warning: [Coles Eggs XL] is not your "
+                      "preferred item for sub-category [eggs].", text)
+        self.assertIn("Reply 'switch' to make it preferred, or "
+                      "'keep' to continue without switching.", text)
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_shop_multi_p_note_topmost(self, mock_conn):
+        from grocery_price_cli import _cmd_shop
+        ws = _qrs_sheet([
+            ["Eggs One", "", "", "$5.00", *[""] * 12,
+             "eggs", "AAA", "P"],
+            ["Eggs Two", "", "", "", "$5.50", *[""] * 11,
+             "eggs", "BBB", "P"],
+        ])
+        mock_conn.return_value = ws
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = _cmd_shop(argparse.Namespace(items="eggs"))
+        self.assertEqual(rc, 0)
+        text = out.getvalue()
+        self.assertIn("2 P flags", text)
+        self.assertIn("$5.00", text)   # topmost (Eggs One) priced
+
+    def test_shop_empty_items_errors(self):
+        from grocery_price_cli import _cmd_shop
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            rc = _cmd_shop(argparse.Namespace(items=" , ; "))
+        self.assertEqual(rc, 1)
+        self.assertIn("--items is required", err.getvalue())
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_shop_completed_items_render_with_halts(self, mock_conn):
+        from grocery_price_cli import _cmd_shop
+        mock_conn.return_value = self._ws()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = _cmd_shop(argparse.Namespace(items="eggs, apples"))
+        self.assertEqual(rc, 0)
+        text = out.getvalue()
+        # BOTH the comparison table AND the disambiguation prompt.
+        self.assertIn("BASKET COMPARISON", text)
+        self.assertIn("Which one would you like", text)
+
+
+class TestPreferCmd(unittest.TestCase):
+    """prefer handler: set P + resume pending (S22, §6.3/§8.1)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.pending_path = Path(self._tmp.name) / "shop_pending.json"
+        patcher = patch("core.preferences.PENDING_PATH",
+                        self.pending_path)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _ws(self):
+        return _qrs_sheet([
+            ["Woolworths Eggs 700g", "", "", "$5.00", *[""] * 12,
+             "eggs", "AAA", "P"],
+            ["Coles Eggs XL", "", "", "", "$4.80", *[""] * 11,
+             "eggs", "BBB", ""],
+            ["Royal Gala Apples 1kg", *[""] * 15, "apples", "CCC", ""],
+        ])
+
+    def _save_pending(self, halted):
+        import core.preferences as prefs
+        prefs.save_pending({
+            "started_at": datetime.now(timezone.utc).isoformat(
+                timespec="seconds"),
+            "items": ["apples"],
+            "halted": halted,
+        })
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_prefer_standalone_sets_p(self, mock_conn):
+        from grocery_price_cli import _cmd_prefer
+        mock_conn.return_value = self._ws()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = _cmd_prefer(argparse.Namespace(code="ccc", pick=None))
+        self.assertEqual(rc, 0)
+        self.assertIn("Preferred set: CCC", out.getvalue())
+        # S flag moved to the CCC row.
+        written = mock_conn.return_value.get_all_values()
+        self.assertEqual(written[3][18], "P")
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_prefer_pick_resolves_pending_option(self, mock_conn):
+        import core.preferences as prefs
+        from grocery_price_cli import _cmd_prefer
+        self._save_pending([{
+            "item": "apples", "subcategory": "apples",
+            "options": [(4, "Royal Gala Apples 1kg", "CCC")],
+        }])
+        mock_conn.return_value = self._ws()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = _cmd_prefer(argparse.Namespace(code=None, pick=1))
+        self.assertEqual(rc, 0)
+        self.assertIn("Preferred set: CCC", out.getvalue())
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_prefer_resumes_and_clears_pending(self, mock_conn):
+        import core.preferences as prefs
+        from grocery_price_cli import _cmd_prefer
+        self._save_pending([{
+            "item": "apples", "subcategory": "apples",
+            "options": [(4, "Royal Gala Apples 1kg", "CCC")],
+        }])
+        mock_conn.return_value = self._ws()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = _cmd_prefer(argparse.Namespace(code=None, pick=1))
+        self.assertEqual(rc, 0)
+        # The resumed comparison table is printed.
+        self.assertIn("BASKET COMPARISON", out.getvalue())
+        # Pending file consumed.
+        self.assertIsNone(prefs.load_pending())
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_prefer_keeps_other_halted_entries(self, mock_conn):
+        import core.preferences as prefs
+        from grocery_price_cli import _cmd_prefer
+        self._save_pending([
+            {"item": "apples", "subcategory": "apples",
+             "options": [(4, "Royal Gala Apples 1kg", "CCC")]},
+            {"item": "bread", "subcategory": "bread",
+             "options": [(5, "White Bread 650g", "DDD")]},
+        ])
+        mock_conn.return_value = self._ws()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = _cmd_prefer(argparse.Namespace(code=None, pick=1))
+        self.assertEqual(rc, 0)
+        remaining = prefs.load_pending()
+        self.assertIsNotNone(remaining)
+        self.assertEqual(len(remaining["halted"]), 1)
+        self.assertEqual(remaining["halted"][0]["item"], "bread")
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_prefer_stale_pending_discarded(self, mock_conn):
+        import core.preferences as prefs
+        from grocery_price_cli import _cmd_prefer
+        stale_time = (datetime.now(timezone.utc)
+                      - timedelta(hours=25)).isoformat(
+            timespec="seconds")
+        prefs.save_pending({
+            "started_at": stale_time,
+            "items": ["apples"],
+            "halted": [{"item": "apples", "subcategory": "apples",
+                        "options": [(4, "Royal Gala", "CCC")]}],
+        })
+        mock_conn.return_value = self._ws()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = _cmd_prefer(argparse.Namespace(code="ccc", pick=None))
+        self.assertEqual(rc, 0)
+        self.assertIn("stale", out.getvalue())
+        self.assertIsNone(prefs.load_pending())  # cleared
+        self.assertIn("Preferred set: CCC", out.getvalue())  # P set
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_prefer_unknown_code_errors(self, mock_conn):
+        from grocery_price_cli import _cmd_prefer
+        mock_conn.return_value = self._ws()
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            rc = _cmd_prefer(argparse.Namespace(code="ZZZ", pick=None))
+        self.assertEqual(rc, 1)
+        self.assertIn("no row holds item-code ZZZ", err.getvalue())
+
+    def test_prefer_requires_code_or_pick(self):
+        from grocery_price_cli import _cmd_prefer
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            rc = _cmd_prefer(argparse.Namespace(code=None, pick=None))
+        self.assertEqual(rc, 1)
+        self.assertIn("--code ABC or --pick N", err.getvalue())
 
 
 if __name__ == "__main__":

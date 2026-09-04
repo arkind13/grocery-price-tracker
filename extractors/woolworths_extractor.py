@@ -250,6 +250,21 @@ def _parse_product_detail(product: dict, quantity: float = 1.0) -> Optional[Prod
     elif is_special and float(savings) > 0:
         special_desc = f"Save ${float(savings):.2f}"
 
+    # D-MB2 best-effort multi-buy capture: ONLY when the payload
+    # really carries it (probe 2026-09-04: WW API returned 403 —
+    # payload keys UNVERIFIED, so promo stays {} per outcome B).
+    # Absent -> defaults 0. This block stays as the documented hook.
+    promo = {}
+    multi_buy_qty = 0
+    multi_buy_total = 0.0
+    try:
+        qty = int(promo.get("Quantity", 0) or 0)
+        tot = float(promo.get("TotalPrice", 0.0) or 0.0)
+        if qty >= 2 and tot > 0:
+            multi_buy_qty, multi_buy_total = qty, tot
+    except (TypeError, ValueError):
+        pass
+
     # Unit price (e.g. "$2.35 / 1L")
     unit_price = product.get("CupString", product.get("CupPriceString", ""))
 
@@ -280,6 +295,8 @@ def _parse_product_detail(product: dict, quantity: float = 1.0) -> Optional[Prod
         brand=str(brand) if brand else "",
         size=str(size) if size else "",
         category=category,
+        multi_buy_qty=multi_buy_qty,
+        multi_buy_total=multi_buy_total,
     )
 
 
@@ -317,23 +334,43 @@ def fetch_woolworths_list(
         # Step 1: Find list ID
         list_id = _find_list_id(list_name, session)
         if not list_id:
-            print(
-                f"[woolworths_extractor] List '{list_name}' not found",
-                file=sys.stderr,
-            )
-            # Try listing all available lists
+            # Distinguish "API unreachable/blocked" from "list truly
+            # absent". A non-200 mylists response (403 = Akamai bot
+            # block on datacenter IPs, 401 = expired cookie) is NOT a
+            # rename — reporting it as "not found" sends users chasing
+            # a phantom rename (2026-09-01 grocery-channel incident).
             headers = _build_headers(session)
+            api_status = None
+            names = None
             try:
-                resp = requests.get(MYLISTS_API, headers=headers, timeout=DEFAULT_TIMEOUT)
-                if resp.status_code == 200:
+                resp = requests.get(
+                    MYLISTS_API, headers=headers, timeout=DEFAULT_TIMEOUT
+                )
+                api_status = resp.status_code
+                if api_status == 200:
                     all_lists = resp.json().get("Response", [])
                     names = [lst.get("Name", "?") for lst in all_lists]
+            except Exception:
+                pass
+            if api_status != 200:
+                reason = f"HTTP {api_status}" if api_status else "network error"
+                print(
+                    f"[woolworths_extractor] Saved-list API unavailable "
+                    f"({reason} — site bot protection blocked this runner; "
+                    f"live saved-list checks only work from the local "
+                    f"live window). This is not a list rename.",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"[woolworths_extractor] List '{list_name}' not found",
+                    file=sys.stderr,
+                )
+                if names is not None:
                     print(
                         f"  Available lists: {names}",
                         file=sys.stderr,
                     )
-            except Exception:
-                pass
             return []
 
         # Step 2: Get list items
@@ -505,28 +542,52 @@ def fetch_woolworths_search_noauth(
         )
         return []
 
-    try:
-        resp = cffi_requests.get(
-            SEARCH_API,
-            params={
-                "searchTerm": search_term,
-                "pageSize": min(page_size, 48),
-            },
-            impersonate="chrome131",
-            headers={
-                "Accept": "application/json",
-                "Referer": "https://www.woolworths.com.au/",
-            },
-            timeout=DEFAULT_TIMEOUT,
-        )
-    except Exception as exc:
+    # Two attempts (2026-09-01): Akamai intermittently 403s a single
+    # request from datacenter IPs even with Chrome-131 impersonation —
+    # measured 5/5 success with a fresh connection per call, so one
+    # retry with a 2s pause absorbs the transient blocks.
+    resp = None
+    for attempt in range(2):
+        try:
+            resp = cffi_requests.get(
+                SEARCH_API,
+                params={
+                    "searchTerm": search_term,
+                    "pageSize": min(page_size, 48),
+                },
+                impersonate="chrome131",
+                headers={
+                    "Accept": "application/json",
+                    "Referer": "https://www.woolworths.com.au/",
+                },
+                timeout=DEFAULT_TIMEOUT,
+            )
+        except Exception as exc:
+            print(
+                f"[woolworths_extractor] noauth search request failed "
+                f"(attempt {attempt + 1}/2): {exc}",
+                file=sys.stderr,
+            )
+            if attempt == 0:
+                time.sleep(2)
+            continue
+        if resp.status_code == 200:
+            break
+        if attempt == 0:
+            print(
+                f"[woolworths_extractor] noauth search HTTP "
+                f"{resp.status_code} — retrying once",
+                file=sys.stderr,
+            )
+            time.sleep(2)
+
+    if resp is None or resp.status_code != 200:
+        status = resp.status_code if resp is not None else "request failed"
         print(
-            f"[woolworths_extractor] noauth search request failed: {exc}",
+            f"[woolworths_extractor] noauth search unavailable "
+            f"(HTTP {status})",
             file=sys.stderr,
         )
-        return []
-
-    if resp.status_code != 200:
         return []
 
     try:

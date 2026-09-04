@@ -78,11 +78,19 @@ class TestItemBlockUnit(unittest.TestCase):
     """item_block unit param — appended after truncation (A3/D-U2)."""
 
     def test_unit_appended_after_truncation_never_cut(self):
-        long_name = "Full Cream Milk Chocolate Organic Supreme"  # > 24 cells
-        block = tf.item_block(1, long_name, [], unit="200g")
+        # Width 60 (spec §10): a 42-cell name renders UNTRUNCATED; a
+        # 70-cell name still truncates with the unit never cut.
+        name_42 = "Full Cream Milk Chocolate Organic Supreme"
+        block = tf.item_block(1, name_42, [], unit="200g")
         first_line = block.split("\n")[0]
         self.assertTrue(first_line.endswith(" · 200g"))
-        self.assertIn("…", first_line)  # name was truncated, unit was not
+        self.assertNotIn("…", first_line)  # under the 60 budget
+
+        long_name = "A" * 70
+        block2 = tf.item_block(2, long_name, [], unit="200g")
+        first2 = block2.split("\n")[0]
+        self.assertTrue(first2.endswith(" · 200g"))
+        self.assertIn("…", first2)  # name was truncated, unit was not
 
     def test_unit_empty_string_shows_marker_note(self):
         block = tf.item_block(2, "Milk", [], unit="")
@@ -243,12 +251,26 @@ class TestStoreAndItemBlocks(unittest.TestCase):
         self.assertIn("🏠", lines[0])
         self.assertEqual(lines[1], "   " + prices[0])
 
-        long_name = "An Extremely Long Product Name That Will Not Fit"
+        long_name = "An Extremely Long Product Name That Will " \
+                    "Definitely Not Fit Any Single Line At All"
         out2 = tf.item_block(1, long_name, [])
         first = out2.split("\n")[0]
         # "N. " prefix + name cells <= MAX_NAME_WIDTH.
         self.assertLessEqual(tf._cells(first) - 3, tf.MAX_NAME_WIDTH)
         self.assertIn("…", first)
+
+    def test_item_block_full_name_under_60_untruncated(self):
+        """Spec §10: a 52-char name renders UNTRUNCATED (width 60)."""
+        name_52 = "AJI CRISPY FRY BREADING MIX ORIGINAL WITH " \
+                  "GRAVY MIX 62G"
+        self.assertLessEqual(len(name_52), 60)
+        out = tf.item_block(1, name_52, [])
+        self.assertIn(name_52, out)  # intact, no ellipsis
+
+    def test_max_name_width_is_60(self):
+        self.assertEqual(tf.MAX_NAME_WIDTH, 60)
+        # The fenced phone-fit budget stays 34 (spec §10).
+        self.assertEqual(tf.MAX_BLOCK_WIDTH, 34)
 
     def test_item_block_numbered_lines_indented(self):
         """Store lines carry a uniform 3-space indent."""
@@ -413,6 +435,17 @@ class TestRealFormatterInvariants(unittest.TestCase):
         self.assertNotIn("|---", output)
         self.assertNotIn("| # |", output)
         self.assertIn("3.61", output)
+
+
+class TestMultibuyTag(unittest.TestCase):
+    """Multi-buy display tag (spec §7.3 rule 2, S17)."""
+
+    def test_multibuy_tag_exact_text(self):
+        self.assertEqual(
+            tf.multibuy_tag(2, 6.00),
+            "🏷️ 2 for $6.00  [Note: must purchase 2+ units to "
+            "receive this price]",
+        )
 
 
 if __name__ == "__main__":

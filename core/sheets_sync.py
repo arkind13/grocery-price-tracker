@@ -504,6 +504,7 @@ def update_single_price(
         8. Else: read the full row, mutate price cell + H timestamp cell,
            write the single row back via _update_with_backoff.
         9. Return result dict with wrote=True, range_written set.
+        10. Q/R/S untouched (one-line rule merge — row already owns them).
     """
     store_lower = store.lower()
 
@@ -631,8 +632,7 @@ def update_single_price(
     full_row[price_col] = price
     full_row[LAST_UPDATED_COL] = ts
     if write_specials:
-        from extractors.specials_parser import classify_special
-        full_row[specials_col] = classify_special(is_special, special_desc)
+        full_row[specials_col] = _specials_cell(is_special, special_desc)
     # Truncate to target_width — the sheet row has 16 cols (A-P); gspread
     # rejects writing past the range.
     full_row = full_row[:target_width]
@@ -960,6 +960,10 @@ STORE_KEYWORD_COL = {"woolworths": 8, "coles": 9}
 # Keywords header for Col P (user-side aliases)
 KEYWORDS_HEADER = "Keywords"
 
+SUBCATEGORY_HEADER = "Sub_Category"   # Col Q (idx 16) — spec §3
+ITEM_CODE_HEADER = "Item_Code"        # Col R (idx 17)
+PREFERRED_HEADER = "Preferred"        # Col S (idx 18)
+
 
 def _col_letter(idx: int) -> str:
     """0-based column index -> sheet letter ('A'->0, 'P'->15, 'AA'->26).
@@ -1016,6 +1020,27 @@ def _append_alias(worksheet, header: list, row_index: int, alias: str) -> str:
     return range_name
 
 
+def _specials_cell(is_special, special_desc: str) -> str:
+    """Classify + encode a specials M/N cell (D25 + §7.2).
+
+    classify_special vocabulary first; when the promo parses to
+    product-specific multi-buy terms, the cell carries them
+    ("multi-buy 2/$6.00"). Mixed "any N" promos stay the bare
+    "multi-buy" marker (D-MB3 — informational only).
+    """
+    from core.multibuy import (
+        encode_multibuy_cell, is_mixed_promo, parse_multibuy,
+    )
+    from extractors.specials_parser import classify_special
+    kind = classify_special(bool(is_special), special_desc or "")
+    if kind == "multi-buy" and not is_mixed_promo(
+            special_desc or ""):
+        terms = parse_multibuy(special_desc or "")
+        if terms:
+            return encode_multibuy_cell(*terms)
+    return kind
+
+
 def add_product_row(
     generic_name: str,
     store: str,
@@ -1028,6 +1053,7 @@ def add_product_row(
     alias: str = "",
     is_special: bool = False,
     special_desc: str = "",
+    subcategory: str = "",
     dry_run: bool = False,
     allow_duplicate: bool = False,
     worksheet=None,
@@ -1062,6 +1088,8 @@ def add_product_row(
             (default "" — no alias written).
         is_special: the live item's specials flag (D25; default False).
         special_desc: the live item's specials text (D25).
+        subcategory: user override for Col Q ("" = classify from the
+            product name; "Eggs " normalises to "eggs").
         dry_run: if True, report the planned row without writing.
         allow_duplicate: skip the SIMILARITY merge (explicit
             "these are 2 different products" override). Exact-name
@@ -1181,12 +1209,18 @@ def add_product_row(
         header, SPECIALS_HEADER_BY_STORE.get(store_lower, ""))
 
     # Build the new row
+    subcategory_col = _find_col(header, SUBCATEGORY_HEADER)
+    item_code_col = _find_col(header, ITEM_CODE_HEADER)
+    preferred_col = _find_col(header, PREFERRED_HEADER)
     target_width = max(
         price_col + 1,
         LAST_UPDATED_COL + 1,
         (kw_col + 1) if kw_col is not None else 0,
         (keywords_col + 1) if keywords_col is not None else 0,
         (specials_col + 1) if specials_col is not None else 0,
+        (subcategory_col + 1) if subcategory_col is not None else 0,
+        (item_code_col + 1) if item_code_col is not None else 0,
+        (preferred_col + 1) if preferred_col is not None else 0,
         len(header),
     )
     new_row: list = [""] * target_width
@@ -1209,8 +1243,27 @@ def add_product_row(
     if keywords_col is not None and alias:
         new_row[keywords_col] = alias              # Col P
     if specials_col is not None:
-        from extractors.specials_parser import classify_special
-        new_row[specials_col] = classify_special(is_special, special_desc)
+        new_row[specials_col] = _specials_cell(is_special, special_desc)
+
+    # --- Q/R/S wiring (spec §5): every NEW row leaves with a
+    # sub-category, a permanent code, and an EMPTY Preferred cell. ---
+    from core.subcategory import (
+        NEEDS_REVIEW, classify_subcategory, normalize_subcategory,
+    )
+    label = normalize_subcategory(subcategory)
+    if subcategory_col is not None:
+        if not label:
+            hit, confidence = classify_subcategory(
+                generic_name, category)
+            label = hit if confidence >= 1.0 else NEEDS_REVIEW
+        new_row[subcategory_col] = label
+    item_code = ""
+    if item_code_col is not None and not dry_run:
+        from core.item_codes import reserve_code
+        item_code = reserve_code(worksheet, new_row_index)
+        new_row[item_code_col] = item_code
+    if preferred_col is not None:
+        new_row[preferred_col] = ""  # ingestion NEVER auto-sets P (D-P2)
 
     if dry_run:
         return {
@@ -1220,10 +1273,25 @@ def add_product_row(
 
     range_name = f"A{new_row_index}:{_col_letter(target_width - 1)}{new_row_index}"
     _update_with_backoff(worksheet, [new_row], range_name)
+    if item_code:
+        # Register + optimistic verify (§8.2): the A:S row write WAS
+        # the reservation; a concurrent duplicate is caught here.
+        from core.item_codes import confirm_code, verify_code
+        confirm_code(item_code, new_row_index)
+        if not verify_code(worksheet, new_row_index, item_code):
+            # Concurrent writer grabbed the same code: regenerate and
+            # rewrite ONLY this row's R cell, then re-verify.
+            from core.item_codes import reserve_code
+            item_code = reserve_code(worksheet, new_row_index)
+            _update_with_backoff(
+                worksheet, [[item_code]],
+                f"R{new_row_index}")
+            confirm_code(item_code, new_row_index)
 
     return {
         "wrote": True, "row_index": new_row_index,
         "range_written": range_name, "error": "",
+        "item_code": item_code,
     }
 
 

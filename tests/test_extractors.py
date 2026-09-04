@@ -99,6 +99,38 @@ class TestProductItem(unittest.TestCase):
         self.assertEqual(t[6], "Test Brand")   # Brand_Type
 
 
+class TestProductItemMultiBuy(unittest.TestCase):
+    """Multi-buy fields on ProductItem (plan §S11, D-MB2)."""
+
+    def test_product_item_multibuy_defaults_zero(self):
+        from extractors.models import ProductItem
+
+        item = ProductItem(store="woolworths", raw_name="Test Milk",
+                           price=4.50)
+        self.assertEqual(item.multi_buy_qty, 0)
+        self.assertEqual(item.multi_buy_total, 0.0)
+
+    def test_product_item_multibuy_roundtrip_dict(self):
+        from extractors.models import ProductItem
+
+        item = ProductItem(store="woolworths", raw_name="Test Milk",
+                           price=3.00, multi_buy_qty=2,
+                           multi_buy_total=6.00)
+        d = item.to_dict()
+        self.assertEqual(d["multi_buy_qty"], 2)
+        self.assertEqual(d["multi_buy_total"], 6.00)
+
+    def test_to_tuple_length_unchanged(self):
+        # Q/R/S are written by sheets_sync, not by the model: the
+        # tuple stays 12 columns (A..L only).
+        from extractors.models import ProductItem
+
+        item = ProductItem(store="coles", raw_name="Test Item",
+                           price=2.00, multi_buy_qty=3,
+                           multi_buy_total=9.00)
+        self.assertEqual(len(item.to_tuple()), 12)
+
+
 # =========================================================================
 # Test SessionManager
 # =========================================================================
@@ -549,6 +581,77 @@ class TestHub(unittest.TestCase):
 # =========================================================================
 # Main
 # =========================================================================
+class TestExtractorMultiBuyCapture(unittest.TestCase):
+    """D-MB2 best-effort multi-buy capture (plan §S13, probe
+    2026-09-04: Coles carries pricing.multiBuyPromotion; WW payload
+    unverified -> documented degradation hook)."""
+
+    def test_ww_multibuy_captured_when_present(self):
+        # S12 outcome B: the WW payload was NOT verifiable live
+        # (API 403), so the hook degrades: even when a MultiBuy key
+        # appears, capture stays 0/0.0 until keys are proven (D-MB2).
+        from extractors.woolworths_extractor import _parse_product_detail
+        product = {
+            "DisplayName": "Test Cola 2L",
+            "Price": 6.00,
+            "IsAvailable": True,
+            "MultiBuy": {"Quantity": 2, "TotalPrice": 9.00},
+        }
+        item = _parse_product_detail(product)
+        self.assertEqual(item.multi_buy_qty, 0)
+        self.assertEqual(item.multi_buy_total, 0.0)
+
+    def test_ww_multibuy_absent_defaults_zero(self):
+        from extractors.woolworths_extractor import _parse_product_detail
+        product = {
+            "DisplayName": "Test Cola 2L",
+            "Price": 6.00,
+            "IsAvailable": True,
+        }
+        item = _parse_product_detail(product)
+        self.assertEqual(item.multi_buy_qty, 0)
+        self.assertEqual(item.multi_buy_total, 0.0)
+
+    def test_ww_multibuy_garbage_tolerated(self):
+        from extractors.woolworths_extractor import _parse_product_detail
+        product = {
+            "DisplayName": "Test Cola 2L",
+            "Price": 6.00,
+            "IsAvailable": True,
+            "MultiBuy": {"Quantity": "x", "TotalPrice": None},
+        }
+        item = _parse_product_detail(product)
+        self.assertEqual(item.multi_buy_qty, 0)
+        self.assertEqual(item.multi_buy_total, 0.0)
+
+    def test_coles_multibuy_captured_when_present(self):
+        from extractors.coles_extractor import _parse_search_result
+        item_dict = {
+            "name": "Coke Zero 10x375ml",
+            "pricing": {
+                "now": 23.00,
+                "multiBuyPromotion": {
+                    "type": "MultibuyMultiSku",
+                    "minQuantity": 2,
+                    "reward": 11.50,
+                },
+            },
+        }
+        item = _parse_search_result(item_dict)
+        self.assertEqual(item.multi_buy_qty, 2)
+        self.assertEqual(item.multi_buy_total, 11.50)
+
+    def test_coles_multibuy_absent_defaults_zero(self):
+        from extractors.coles_extractor import _parse_search_result
+        item_dict = {
+            "name": "Bundaberg 4x375ml",
+            "pricing": {"now": 7.95},
+        }
+        item = _parse_search_result(item_dict)
+        self.assertEqual(item.multi_buy_qty, 0)
+        self.assertEqual(item.multi_buy_total, 0.0)
+
+
 if __name__ == "__main__":
     result = unittest.main(verbosity=2, exit=False)
     print(f"\n{'='*60}")

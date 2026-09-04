@@ -399,6 +399,11 @@ The most complex tool. Tracks Australian supermarket prices (Woolworths, Coles, 
 | `wednesday` | `[--source docx]` (live RETIRED 2026-09-02 — refused at dispatch; see `lostbattle.md`) `[--dry-run]` `[--no-scp]` `[--no-telegram]` `[--no-prompt]` | Full pipeline. **STARTS WITH THE TO-DO LIST (2026-09-03 user flow):** Step 0 pulls + union-merges + pushes back the queue, then prints the to-do list — add those items on the store website lists, re-paste the docx lists, type `done` (auto-skips with no TTY / `--no-prompt`). Then: parse lists → **Step 1c auto-heal** links exact sheet names (writing keywords) → match/sync prices → **Step 3b two-strike dead-row auto-delete:** both-dead rows deleted only when a PREVIOUS run saw them dead (`data/delete_candidates.json`; deletions archived to `data/deleted_rows.json`) → **Step 3c TO-DO TALLY:** to-do entries whose sheet row now carries the keyword are cleared, and the UPDATED to-do list prints → resolve lists + scp → Telegram post (to-do FIRST, then unmatched, wool/coles missing, **missed pricing** — GROUPED Woolworths / Coles / Both-stores headers with per-item codes + updated week counts, then forgotten as a COUNT) → specials report → **Step 9** mirrors the queue back to the VPS. **Docx is the ONLY live source** — the live window was retired after the lost store-bot war; the manual website adds during the pause replace the flush |
 | `backfill-keywords` | — | Backfill Col P keywords from existing data |
 | `backfill-sizes` | `[--dry-run]` | One-time Col C (size) backfill parsed from Col A/I/J names; fills only blank cells, never overwrites |
+| `shop` | `--items "a, b, c"` | Shopping-list compare: resolves each item to its sub-category, auto-picks the preferred (P) row, asks ONE question when none is preferred |
+| `prefer` | `--code ABC` / `--pick N` | Sets the Preferred (P) row for a sub-category; resumes a pending shop run |
+| `subcategories` | — | Lists sub-category labels + live row counts |
+| `backfill-subcategories` | `[--dry-run]` | One-time Col Q backfill; classifier-confident labels only, else "needs review"; never overwrites |
+| `backfill-codes` | `[--dry-run]` | One-time Col R Item-Code backfill; unique permanent codes; idempotent |
 
 > **Routing rule (critical):** `compare X in/at woolworths and coles` must always route to `compare --items "X"` (sheet-first), NEVER `search` (live-only). The `grocery-price/SKILL.md` enforces this.
 
@@ -518,6 +523,9 @@ The tracker reads/writes a Google Sheet (`GROCERY_SPREADSHEET_ID = 16INuFvOUVUY3
 | I/J/K | Store keywords | Exact-match keywords for sync path (Wool/Coles/Aldi) |
 | M/N/O | Specials/rewards flags | |
 | P | Keywords | Alias list (delimiter-separated; two-pass lookup target) |
+| Q | Sub_Category | Granular cluster (bread, shredded cheese, eggs); "needs review" marker |
+| R | Item_Code | Permanent 3-letter row ID, A–Z minus I/L/O, no repeats |
+| S | Preferred | "P" flag; at most one per sub-category; set only via prefer |
 
 ### Woolworths always-on display discounts
 
@@ -580,6 +588,50 @@ TEAM_DISCOUNT_ENABLED = False   🟢 Woolworths  $4.00
 `compare`/`recipe` accept `--team-discount` / `--no-team-discount` to force
 discounts on/off for a single call without touching the switch (their
 default is to follow `TEAM_DISCOUNT_ENABLED`).
+
+### Multi-buy pricing (2026-09-04)
+
+"2 for $6.00" promos carry real per-unit rates, applied everywhere a
+price is compared or shown:
+
+- **Rate math:** `rate = bundle total / qty` (`core/multibuy.py`):
+  2 for $6.00 → $3.00 per unit. Totals, cheapest-store math, and WW
+  display discounts all compute from the effective rate (§7.3).
+- **Mandatory note:** whenever a displayed price is multi-buy-derived,
+  the tag `🏷️ 2 for $6.00  [Note: must purchase 2+ units to receive
+  this price]` and a totals footnote are shown.
+- **Sheet cells (M/N):** product-specific promos are stored WITH terms
+  as `multi-buy 2/$6.00`; the bare legacy `multi-buy` marker stays
+  informational only.
+- **Mixed promos (D-MB3):** cross-range "Any 2 | $9" bundles have no
+  true per-product price — they are display-only and NEVER feed rate
+  math.
+- **Live degradation (D-MB2):** when a store payload carries no
+  multi-buy data (or, for Woolworths, the keys are unverified), live
+  paths fall back to normal pricing; the docx/sheet paths carry
+  multi-buy alone. Promo fields are never invented.
+
+### Shopping list & preferences (2026-09-04)
+
+`shop --items "eggs, apples, bread"` compares a whole shopping list
+against your stored preferences — full flow in
+[PROJECT-MAP.md](PROJECT-MAP.md) §6F. The preference state machine:
+
+- **S4 — preferred known:** the sub-category's Preferred (P) row is
+  compared automatically.
+- **S1 — no preference yet:** the CLI asks ONE numbered question
+  (full names + 3-letter codes) and saves a pending run.
+- **S0 — not tracked:** you get a keyword suggestion for the normal
+  `search --add-item` flow instead.
+- **S5 — specific variant requested:** you get the comparison plus a
+  switch/keep warning; "keep" writes nothing.
+- **S3 — answer:** `prefer --code ABC` (or `--pick N`) sets P and
+  finishes the halted run (24h window).
+
+`prefer` is the ONLY writer of the Preferred column — ingestion never
+auto-sets P, and the Wednesday sync never touches it. Note:
+`Item_Code` (Col R) is a DIFFERENT namespace from the to-do queue
+codes — `prefer ABC` and `todo done ABC` never collide.
 
 ### Live APIs used
 
@@ -678,7 +730,9 @@ print(fenced_table(
 ))
 ```
 
-Width budgets: `MAX_NAME_WIDTH = 24` (product names), `MAX_BLOCK_WIDTH = 34` (fenced blocks, phone-fit). Emoji count as 2 cells (`_cells()`).
+Width budgets: `MAX_NAME_WIDTH = 60` — full product names everywhere;
+fenced tables stay 34 cells (`MAX_BLOCK_WIDTH = 34`, phone-fit). Emoji
+count as 2 cells (`_cells()`).
 
 ---
 

@@ -44,6 +44,12 @@ _FILE_MANIFEST: list[tuple[str, str]] = [
     # Parent repo
     ("grocery_price_cli.py", VPS_BASE),
     ("claw-skills/grocery-price/SKILL.md", VPS_SKILLS),
+    # 2026-09-03: the agent loads skills from the container-mounted
+    # claw-skills tree too — deploy BOTH copies or the agent keeps
+    # serving stale instructions (root cause of the "45 unmatched"
+    # regression after the live-lists fix).
+    ("claw-skills/grocery-price/SKILL.md",
+     f"{VPS_BASE}/claw-skills/grocery-price"),
     # Tracker core (Tasks 1-6)
     ("grocery-price-tracker/core/uom.py",
      f"{VPS_BASE}/grocery-price-tracker/core"),
@@ -52,6 +58,21 @@ _FILE_MANIFEST: list[tuple[str, str]] = [
     ("grocery-price-tracker/core/lookup.py",
      f"{VPS_BASE}/grocery-price-tracker/core"),
     ("grocery-price-tracker/core/price_comparator.py",
+     f"{VPS_BASE}/grocery-price-tracker/core"),
+    ("grocery-price-tracker/core/sheets_sync.py",
+     f"{VPS_BASE}/grocery-price-tracker/core"),
+    # 2026-09-04 Q/R/S + shop + multi-buy round (plan §S27)
+    ("grocery-price-tracker/core/subcategory.py",
+     f"{VPS_BASE}/grocery-price-tracker/core"),
+    ("grocery-price-tracker/core/multibuy.py",
+     f"{VPS_BASE}/grocery-price-tracker/core"),
+    ("grocery-price-tracker/core/item_codes.py",
+     f"{VPS_BASE}/grocery-price-tracker/core"),
+    ("grocery-price-tracker/core/preferences.py",
+     f"{VPS_BASE}/grocery-price-tracker/core"),
+    ("grocery-price-tracker/core/schema_upgrade.py",
+     f"{VPS_BASE}/grocery-price-tracker/core"),
+    ("grocery-price-tracker/core/telegram_format.py",
      f"{VPS_BASE}/grocery-price-tracker/core"),
     # Tracker extractors (Tasks 3/7/8)
     ("grocery-price-tracker/extractors/models.py",
@@ -80,6 +101,15 @@ _FILE_MANIFEST: list[tuple[str, str]] = [
     ("grocery-price-tracker/tests/test_cli.py",
      f"{VPS_BASE}/grocery-price-tracker/tests"),
     ("grocery-price-tracker/tests/test_live_window.py",
+     f"{VPS_BASE}/grocery-price-tracker/tests"),
+    # 2026-09-04 Q/R/S + shop + multi-buy round (plan §S27)
+    ("grocery-price-tracker/tests/test_subcategory.py",
+     f"{VPS_BASE}/grocery-price-tracker/tests"),
+    ("grocery-price-tracker/tests/test_multibuy.py",
+     f"{VPS_BASE}/grocery-price-tracker/tests"),
+    ("grocery-price-tracker/tests/test_item_codes.py",
+     f"{VPS_BASE}/grocery-price-tracker/tests"),
+    ("grocery-price-tracker/tests/test_preferences.py",
      f"{VPS_BASE}/grocery-price-tracker/tests"),
     # Automation assets (Task 11)
     ("grocery-price-tracker/scripts/deploy_vps.py",

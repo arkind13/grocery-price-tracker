@@ -10,15 +10,19 @@ from __future__ import annotations
 import copy
 import re
 import sys
+import tempfile
 import time as time_module
 import unittest
 from pathlib import Path
+from unittest import mock
 
 # Bootstrap sys.path so core/ and extractors/ are importable
 _HERE = Path(__file__).resolve().parent  # tests/
 _PROJECT = _HERE.parent  # grocery-price-tracker/
 if str(_PROJECT) not in sys.path:
     sys.path.insert(0, str(_PROJECT))
+
+import core.item_codes as item_codes
 
 from core.schema_upgrade import (
     EXPECTED_BASE_HEADERS,
@@ -1018,13 +1022,15 @@ class TestSpecialsFlagWrites(unittest.TestCase):
         self.assertEqual(res["range_written"], "A2:N2")
 
     def test_update_single_price_multi_buy(self):
+        # §7.2 (2026-09-04): product-specific FOR promos encode their
+        # terms into the M/N cell ("multi-buy 2/$4.00").
         ws = self._ws()
         res = update_single_price(
             "Oat Milk", "coles", 3.50, worksheet=ws,
             is_special=True, special_desc="2 for $4")
         self.assertTrue(res["wrote"])
         updated = ws.get_all_values()
-        self.assertEqual(updated[1][13], "multi-buy")
+        self.assertEqual(updated[1][13], "multi-buy 2/$4.00")
 
 
 class TestAddProductRowRequiredSize(unittest.TestCase):
@@ -1636,6 +1642,171 @@ class TestSyncPricesColCHeal(unittest.TestCase):
         self._run(ws2, item2, result2)
         row2 = ws2.updates[0][0][0]
         self.assertEqual(row2[2], "")
+
+
+class TestAddProductRowQRS(unittest.TestCase):
+    """Q/R/S wiring on add_product_row (spec §5 + plan §S9, §13.6)."""
+
+    HEADER_A_S = [
+        "Product_Name", "Category", "Size", "Woolworths_Price",
+        "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+        "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+        "Search_Keyword_Aldi", "Aldi_Refresh",
+        "Woolworths_Specials", "Coles_Specials", "Rewards_Points",
+        "Keywords",
+        "Sub_Category", "Item_Code", "Preferred",
+    ]
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        tmp_path = Path(self._tmp.name)
+        reg_patch = mock.patch.object(
+            item_codes, "REGISTRY_PATH", tmp_path / "registry.json")
+        lock_patch = mock.patch.object(
+            item_codes, "LOCK_PATH", tmp_path / ".item_code_lock")
+        reg_patch.start()
+        lock_patch.start()
+        self.addCleanup(reg_patch.stop)
+        self.addCleanup(lock_patch.stop)
+
+    def test_add_row_writes_qrs_full_header(self):
+        ws = FakeWorksheet([self.HEADER_A_S])
+        res = add_product_row(
+            "Woolworths 12 Extra Large Free Range Eggs 700g",
+            "woolworths", 5.00, size="700g", worksheet=ws)
+        self.assertTrue(res["wrote"])
+        self.assertTrue(res["item_code"])
+        # ONE full-row update, range covers A:S.
+        self.assertEqual(len(ws.updates), 1)
+        _values, range_name = ws.updates[0]
+        self.assertEqual(range_name, "A2:S2")
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][16], "eggs")     # Col Q classified
+        self.assertEqual(updated[1][17], res["item_code"])
+        self.assertEqual(updated[1][18], "")         # Col S empty
+        self.assertTrue(item_codes.is_valid_code(res["item_code"]))
+
+    def test_add_row_subcategory_override_flag(self):
+        ws = FakeWorksheet([self.HEADER_A_S])
+        res = add_product_row(
+            "Some Odd Named Thing 500g", "coles", 4.00, size="500g",
+            subcategory="Eggs ", worksheet=ws)
+        self.assertTrue(res["wrote"])
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][16], "eggs")  # normalised override
+
+    def test_add_row_unclassifiable_gets_needs_review(self):
+        ws = FakeWorksheet([self.HEADER_A_S])
+        res = add_product_row(
+            "AJI CRISPY FRY BREADING MIX ORIGINAL 62g", "coles", 3.00,
+            size="62g", worksheet=ws)
+        self.assertTrue(res["wrote"])
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][16], "needs review")
+
+    def test_add_row_without_qrs_header_unchanged_width(self):
+        header = [
+            "Product_Name", "Category", "Size", "Woolworths_Price",
+            "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+            "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+            "Search_Keyword_Aldi", "Aldi_Refresh",
+            "Woolworths_Specials", "Coles_Specials", "Rewards_Points",
+            "Keywords",
+        ]
+        ws = FakeWorksheet([header])
+        res = add_product_row(
+            "Fresh Milk 2L", "woolworths", 3.10, size="2L",
+            worksheet=ws)
+        self.assertTrue(res["wrote"])
+        # No Q/R/S headers: row still written, 16 cols wide (A:P).
+        _values, range_name = ws.updates[0]
+        self.assertEqual(range_name, "A2:P2")
+        self.assertEqual(res["item_code"], "")
+
+    def test_add_row_merge_leaves_qrs_untouched(self):
+        ws = FakeWorksheet([
+            self.HEADER_A_S,
+            ["Obela Classic Hommus 200g", "Dairy", "200g", "4.50",
+             "", "", "Obela", "", "obela hommus", "", "", "", "", "",
+             "", "hommus", "dip", "QRS", "P"],
+        ])
+        res = add_product_row(
+            "Woolworths Hommus Classic Obela 200g", "woolworths", 4.20,
+            brand="Obela", size="200g", worksheet=ws)
+        self.assertTrue(res["merged"])
+        # No new row; existing Q/R/S cells byte-identical.
+        updated = ws.get_all_values()
+        self.assertEqual(len(updated), 2)
+        self.assertEqual(updated[1][16], "dip")
+        self.assertEqual(updated[1][17], "QRS")
+        self.assertEqual(updated[1][18], "P")
+
+    def test_add_row_registry_confirmed(self):
+        ws = FakeWorksheet([self.HEADER_A_S])
+        res = add_product_row(
+            "Woolworths White Bread 650g", "woolworths", 2.40,
+            size="650g", worksheet=ws)
+        self.assertTrue(res["wrote"])
+        registry = item_codes.load_registry()
+        self.assertIn(res["item_code"], registry)
+        self.assertEqual(
+            registry[res["item_code"]]["row"], res["row_index"])
+
+
+class TestSpecialsCellCodec(unittest.TestCase):
+    """_specials_cell M/N encoding (D25 + §7.2, plan §S14)."""
+
+    def test_specials_cell_for_promo_encodes_terms(self):
+        from core.sheets_sync import _specials_cell
+        self.assertEqual(
+            _specials_cell(True, "2 for $6.00"), "multi-buy 2/$6.00")
+
+    def test_specials_cell_any_promo_stays_bare(self):
+        # Mixed "any N" promos are informational only (D-MB3).
+        from core.sheets_sync import _specials_cell
+        self.assertEqual(
+            _specials_cell(True, "Any 2 | $9"), "multi-buy")
+
+    def test_specials_cell_discount_unchanged(self):
+        from core.sheets_sync import _specials_cell
+        self.assertEqual(
+            _specials_cell(True, "Was $5.00, save $1.00"), "discount")
+        self.assertEqual(
+            _specials_cell(True, "Save $2.00"), "discount")
+
+    def test_specials_cell_no_unchanged(self):
+        from core.sheets_sync import _specials_cell
+        self.assertEqual(_specials_cell(False, ""), "no")
+
+    def test_decode_roundtrip_via_multibuy(self):
+        # The encoded cell decodes back to (qty, total) terms.
+        from core.sheets_sync import _specials_cell
+        from core.multibuy import decode_multibuy_cell
+        cell = _specials_cell(True, "2 for $6.00")
+        self.assertEqual(decode_multibuy_cell(cell), (2, 6.0))
+
+    def test_update_single_price_encodes_multibuy_cell(self):
+        # Site 2: update_single_price specials write carries terms.
+        header = [
+            "Product_Name", "Category", "Size", "Woolworths_Price",
+            "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+            "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+            "Search_Keyword_Aldi", "Aldi_Refresh",
+            "Woolworths_Specials", "Coles_Specials", "Rewards_Points",
+            "Keywords",
+        ]
+        ws = FakeWorksheet([
+            header,
+            ["Full Cream Milk", "Dairy", "2L", "4.00", "", "", "", "",
+             "", "", "", "", "no", "", "", ""],
+        ])
+        res = update_single_price(
+            "Full Cream Milk", "woolworths", 3.00,
+            is_special=True, special_desc="2 for $6.00", worksheet=ws)
+        self.assertTrue(res["wrote"])
+        updated = ws.get_all_values()
+        self.assertEqual(updated[1][12], "multi-buy 2/$6.00")  # Col M
 
 
 if __name__ == "__main__":

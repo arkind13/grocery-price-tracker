@@ -75,3 +75,115 @@ User-defined Wednesday flow implemented verbatim:
 All green except the 2 documented pre-existing date-flaky failures.
 Deployment: CLI + skill files scp'd to the VPS, md5 verified on both
 sides (bind-mounted — live for the next Wednesday run).
+
+
+---
+
+# Round 2026-09-04 — Sub-Categories (Q), Item-Codes (R), Preferred (S),
+# Multi-Buy & Full Names (03 Code Agent)
+
+Plan: `implementation-plan.md` (same folder). Branch
+`feature/qrs-shop-multibuy` in BOTH repos (inner tracker + parent
+`AI related`).
+
+## Steps done
+
+| Step | Result | Verification |
+|------|--------|--------------|
+| S0 | branches created both repos | `git branch --show-current` = feature/qrs-shop-multibuy |
+| S1 | core/subcategory.py + 13 tests | PASS |
+| S2 | core/multibuy.py + multibuy_tag helper + 15 tests | PASS |
+| S3/S4 | core/item_codes.py (pure + sheet layer) + 27 tests | PASS |
+| S5-S7 | core/preferences.py (read model, set_preferred, resolver) + 30 tests | PASS |
+| S8 | schema NEW_COLUMNS extended | dry-run on live sheet printed exactly planned_columns Q/R/S (read-only) |
+| S9 | add_product_row Q/R/S hook + 6 tests | PASS |
+| S10 | lookup.py additive Q/R/S metadata + 4 tests | PASS |
+| S11 | ProductItem multi_buy fields + 3 tests | PASS |
+| S12 | D-MB2 probe | SEE BELOW |
+| S13 | WW (outcome B hook) + Coles (multiBuyPromotion) capture + 5 tests | PASS |
+| S14 | _specials_cell codec on both write paths + 6 tests | PASS |
+| S15/S16 | comparator multibuy terms + effective-rate math + 8 tests | PASS |
+| S17 | MAX_NAME_WIDTH 60 + 4 updated/new tests | PASS |
+| S18 | display tag + totals footnote + 4 tests | PASS |
+| S19 | 5 CLI subcommands + --subcategory flags + stubs + 4 tests | PASS |
+| S20 | subcategories/backfill-subcategories/backfill-codes handlers + 6 tests | PASS |
+| S21 | shop handler + 7 tests | PASS |
+| S22 | prefer handler + resume + 7 tests | PASS |
+| S23 | lists needs-review + multi-P surfacing + 3 tests | PASS |
+| S24 | README schema/CLI tables + width + 2 new sections | grep 19 lines |
+| S25 | PROJECT-MAP command rows + section 6F + columns + 7-lists note | grep 6 lines |
+| S26 | SKILL.md 5 edits + catalogue regen | `python skills_doc.py --check` prints OK |
+
+## S12 probe outcome (2026-09-04, live, read-only)
+
+- **Woolworths: Outcome B.** WW search API returned 403 (no valid
+  session cookie on this machine) -> payload keys UNVERIFIED. Per plan,
+  the WW capture block degrades: `promo = {}` documented hook, fields
+  stay 0/0.0. Test `test_ww_multibuy_captured_when_present` asserts the
+  degradation (plan A-version test adapted to outcome B as the plan's
+  "handles both outcomes deterministically" clause requires).
+- **Coles: Outcome A.** Live Scrape.do probe:
+  `pricing.multiBuyPromotion` = {type, id, minQuantity, reward,
+  unitPriceDisplay}. Only `MultibuyMultiSku` observed (mixed-SKU);
+  `reward` = bundle TOTAL (e.g. Zero Sugar Coke 10x375ml: now $23,
+  reward 11.5, $3.07/L). Wired with the real keys
+  minQuantity/reward.
+
+## Test counts
+
+- Baseline (plan says 621; the tree also carried a separate uncommitted
+  "live-fill" feature, all green): **761 passed, 0 skipped** at start.
+- Final full suite: **913 passed, 0 failed, 0 skipped** (anaconda
+  Python; pytest). One transient test_optimizer F6 failure appeared in a
+  single mid-run full-suite pass and did not reproduce in 3 consecutive
+  full runs (shared data-file flake, not plan code).
+
+## Deviations / judgement calls (all caught by the plan's own tests)
+
+1. S1: the rule table lost the `\b` anchors its own docstring mandates
+   -> `\bbreads?\b` restored (breading/breadcrumbs negatives);
+   `corn chips` hoisted above the cheese family (mandatory test
+   "Supreme Cheese Corn Chips" -> "corn chips").
+2. S2: encode/decode roundtrip impossible via FOR_RE/ANY_RE (the cell
+   form "2/$6.00" contains no "for"/"any") -> decode gained a tiny
+   module-local _CELL_TERMS_RE fallback; encode form unchanged
+   (contract fixed in S14/README).
+3. S3/S4: nested locking (ensure_codes holds the advisory lock while
+   confirm_code re-acquires) self-deadlocked -> lock made
+   process-reentrant (cross-process O_EXCL semantics unchanged); the
+   lock test simulates foreign-process contention by resetting depth.
+4. S12/S13: the plan's WW keys (`MultiBuy.Quantity/TotalPrice`)
+   unverifiable live -> outcome B hook per plan; Coles keys adapted to
+   the REAL payload (`multiBuyPromotion.minQuantity/reward`).
+5. S14: pre-existing test_update_single_price_multi_buy expected the
+   bare "multi-buy" cell; updated to the new encoded form (spec-mandated
+   change of behaviour, section 7.2).
+6. S17: two pre-existing tests assumed 24-cell truncation (42/49-char
+   names); updated to width-60 semantics (52-char intact, >60 truncates)
+   per spec section 10.
+7. S19: `import re` added to grocery_price_cli.py (the _cmd_shop item
+   splitter needs it; the module never imported re).
+
+## Environment notes
+
+- System Python (3.13) lacks gspread/pytest -> all runs use
+  C:\Users\User.DESKTOP-R2G441H\anaconda3\python.exe.
+- S8 live dry-run and S12 probes are networked, read-only; both were
+  executed locally (S8 dry-run result recorded above).
+- NOT run here: S27 M1 live schema write, M2 live backfills, M3 deploy,
+  VPS sanity — awaiting explicit go (networked, sheet-mutating ops).
+
+
+---
+
+# S27 execution log (2026-09-04/05)
+
+- M1 schema append: done. dry-run planned exactly Q/R/S; live write added Q1:S1 (wrote=true); re-run: up to date.
+- M2 backfills: done. backfill-subcategories: 104 rows examined, 104 written in ONE batched update (68 confident + 36 needs review). backfill-codes: two issues hit and resolved:
+  1. save_registry os.replace raised WinError 5 twice (OneDrive/AV lock on a freshly-written tmp file in data/) after about 72 rows -> hardened save_registry with a 5-attempt PermissionError retry/backoff (still an atomic os.replace; Windows-only transient).
+  2. During recovery, the partially-built registry (72 entries) was overwritten by a diagnostic write (mistake) -> rebuilt the registry FROM THE LIVE SHEET via confirm_code per populated R cell (one-off temp-dir script), removed the diagnostic TEST entry. Final state verified: sheet has 104 unique valid codes; registry has exactly 104 entries matching the sheet; backfill-codes re-run: planned=0, skipped=104, failed=0 (idempotent).
+  Note: codes for rows deleted before the registry existed cannot be recovered (the file never contained them) - no rows were deleted between M2 start and recovery, so D-IC2 holds for everything ever written.
+- M3 deploy: done. deploy_vps.py manifest EXTENDED first with this round files (new core modules + tests + telegram_format + schema_upgrade - without them the VPS sheets_sync import would break). scp mode: all files OK; container restarted; in-container smoke check OK. Rule-04 skill sync: SKILL.md + claw_skills_easy.md scp'd to /home/ubuntu/openclaw/tasks/ai-tools/claw-skills/...; md5 verified identical on both sides (da90ec2a... / 193f5b7b...).
+- VPS sanity: container has no pytest (established state - testing runs locally per README); grocery_price_cli.py subcategories works in-container against the live sheet (68 confident labels + 36 needs review).
+- M4 full verification: 913 passed, 0 failed, 0 skipped (local).
+- Post-M4 fix (date-boundary flake): at the local-midnight roll to 2026-09-05, two PRE-EXISTING test_missed_pricing ledger tests failed (they seed local-date stamps while production week math uses UTC now; 21 local days measured as 20.x UTC days). Fixed test-side: UTC-anchored seeds (_days_ago_utc) + mirrored expectation helper (_weeks_label_utc); plus a test-enabling now= pass-through added to _cell_weeks (mirrors the existing injected-clock pattern of _weeks_without_price; callers unchanged). test_missed_pricing: 32 passed; full suite re-run green 913/0/0.

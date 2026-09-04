@@ -255,10 +255,12 @@ def _search_via_scrapedo_status(
     Chain semantics (spec B4 / §5.1):
         - breaker open  -> zero HTTP, status "breaker_open"
         - run cap hit   -> zero HTTP, status "cap_exceeded"
-        - 5xx / RequestException -> silent retry with a NEW session,
-          sleep(3) then sleep(6), exactly SCRAPEDO_MAX_ATTEMPTS attempts
-        - 401/403 AND every other 4xx (404, 429, ...) -> NEVER retried
-          (fail immediately; B4: retry on 5xx/timeout ONLY)
+        - 5xx / RequestException / 404 -> silent retry with a NEW
+          session, sleep(3) then sleep(6), exactly
+          SCRAPEDO_MAX_ATTEMPTS attempts (404 retried since 2026-09-01:
+          Coles' search route intermittently 404s per proxy session)
+        - other 4xx (400/401/403/429) -> NEVER retried (fail
+          immediately; B4: retry on transient errors ONLY)
         - 200 + __NEXT_DATA__ -> success (resets the breaker streak)
 
     Returns:
@@ -317,12 +319,21 @@ def _search_via_scrapedo_status(
             _breaker_record_failure()
             return [], "unavailable"
         if resp.status_code != 200:
-            if resp.status_code >= 500:
-                # B4: retry on 5xx/timeout ONLY — fresh session, backoff.
+            if resp.status_code >= 500 or resp.status_code == 404:
+                # B4: retry on 5xx/timeout — fresh session, backoff.
+                # 404 is retried too (2026-09-01): Coles' search route
+                # INTERMITTENTLY serves its "Sorry, the page you're
+                # looking for isn't here" error page with HTTP 404 on
+                # one proxy session while a fresh session gets 200 for
+                # the SAME query (verified via Scrape.do probes: q=
+                # falafel 404 then 200; q=hummus 404 while bread/
+                # chicken/yumis 200). A 404 here is a transient edge
+                # failure, not a permanent one.
                 _backoff_sleep(attempt)
                 continue
-            # 4xx (incl. 404/429): permanent for this run — no retry,
-            # store marked unavailable (Woolworths-only + ⚠️ line path).
+            # Other 4xx (400/401/403/429): permanent for this run —
+            # no retry, store marked unavailable (Woolworths-only +
+            # ⚠️ line path).
             print(
                 f"[coles_extractor] Scrape.do returned HTTP "
                 f"{resp.status_code} — not retrying",
@@ -440,6 +451,22 @@ def _parse_search_result(item: dict) -> Optional[ProductItem]:
         is_special = True
         special_desc = promotion_type.replace("_", " ").title()
 
+    # D-MB2 best-effort multi-buy capture (probe 2026-09-04: live
+    # payloads carry pricing.multiBuyPromotion = {type, minQuantity,
+    # reward}; reward is the bundle TOTAL). Absent -> defaults 0.
+    promo = (pricing or {}).get("multiBuyPromotion") or {}
+    if not isinstance(promo, dict):
+        promo = {}
+    multi_buy_qty = 0
+    multi_buy_total = 0.0
+    try:
+        qty = int(promo.get("minQuantity", 0) or 0)
+        tot = float(promo.get("reward", 0.0) or 0.0)
+        if qty >= 2 and tot > 0:
+            multi_buy_qty, multi_buy_total = qty, tot
+    except (TypeError, ValueError):
+        pass
+
     # Use description as fallback name if it's more descriptive
     display_name = name
     if description and description != name:
@@ -464,6 +491,8 @@ def _parse_search_result(item: dict) -> Optional[ProductItem]:
         size=str(size) if size else "",
         category=category,
         product_id=product_id,
+        multi_buy_qty=multi_buy_qty,
+        multi_buy_total=multi_buy_total,
     )
 
 

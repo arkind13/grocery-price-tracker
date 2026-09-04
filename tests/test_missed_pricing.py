@@ -367,6 +367,32 @@ def _days_ago(n):
     return (_dt.date.today() - _dt.timedelta(days=n)).isoformat()
 
 
+def _days_ago_utc(n):
+    """YYYY-MM-DD stamp n days before the UTC date.
+
+    The production week math (`_weeks_without_price`) compares against
+    UTC now, so ledger seeds must be anchored to the UTC calendar — a
+    local-date seed flakes whenever the local day is ahead of UTC
+    (2026-09-05 incident: 21 local days measured as 20.x UTC days).
+    """
+    import datetime as _dt
+    now_utc = _dt.datetime.now(_dt.timezone.utc)
+    return (now_utc.date() - _dt.timedelta(days=n)).isoformat()
+
+
+def _weeks_label_utc(date_str):
+    """Mirror of the production week math for a UTC-midnight seed:
+    whole 7-day buckets between UTC midnight of `date_str` and UTC now
+    ('new' below one bucket) — keeps expectations exact without
+    hardcoding a date."""
+    import datetime as _dt
+    parsed = _dt.datetime.fromisoformat(date_str).replace(
+        tzinfo=_dt.timezone.utc)
+    now = _dt.datetime.now(_dt.timezone.utc)
+    weeks = (now - parsed).days // 7
+    return "new" if weeks < 1 else f"{weeks} weeks"
+
+
 class TestMissedPricingAgesLedger(unittest.TestCase):
     """The ages ledger: seeded history -> correct label immediately;
     read-only callers never write; GONE rows drop out; the two-strike
@@ -382,18 +408,22 @@ class TestMissedPricingAgesLedger(unittest.TestCase):
                 encoding="utf-8"))
 
     def test_seeded_history_shows_two_weeks_immediately(self):
-        """Acceptance: a row failing since 14 days ago shows (2 weeks)
-        on the FIRST run, even though its cell anchor (N/A 2026-09-02)
-        would read (new) after the anchor reset."""
+        """Acceptance: a row failing since 14 days ago shows its
+        ledger-based week count on the FIRST run, even though its cell
+        anchor (N/A 2026-09-02) would read (new) after the anchor
+        reset. Seeded on the UTC calendar (production math) with the
+        expected label mirrored from the same math."""
+        first_seen = _days_ago_utc(14)
         with tempfile.TemporaryDirectory() as td:
             data_dir = Path(td)
-            self._seed(data_dir, {"Mismatch WW": _days_ago(14)})
+            self._seed(data_dir, {"Mismatch WW": first_seen})
             fix, _dead = gcli._classify_missed_pricing(
                 _SHEET[1:], persist_ages=True, data_dir=data_dir)
             entry = {e["generic"]: e for e in fix}["Mismatch WW"]
-            self.assertEqual(entry["weeks"], "2 weeks")
+            self.assertEqual(entry["weeks"],
+                             _weeks_label_utc(first_seen))
             self.assertEqual(
-                self._read(data_dir)["Mismatch WW"], _days_ago(14))
+                self._read(data_dir)["Mismatch WW"], first_seen)
 
     def test_new_failure_records_today_and_shows_new(self):
         """Genuinely-new failures (<7d) still show (new) and record
@@ -476,12 +506,13 @@ class TestMissedPricingAgesLedger(unittest.TestCase):
         """_cell_weeks: ledger date wins when present; without a
         ledger entry the anchor/Col-H fallback is unchanged."""
         today = _days_ago(0)
-        ages = {"Ledgered": _days_ago(21)}
+        first_seen = _days_ago_utc(21)
+        ages = {"Ledgered": first_seen}
         self.assertEqual(
             gcli._cell_weeks("N/A 2026-09-02",
                              last_updated="2026-09-02 10:00",
                              generic="Ledgered", ages=ages),
-            "3 weeks")
+            _weeks_label_utc(first_seen))
         self.assertEqual(
             gcli._cell_weeks("", last_updated=f"{today} 09:00",
                              generic="Other", ages=ages),

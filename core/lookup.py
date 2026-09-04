@@ -82,7 +82,15 @@ class LookupStatus(str, Enum):
     KEYWORD_ALIAS = "keyword_alias"    # Step 2 hit (Col P alias)
     CANDIDATES = "candidates"          # Step 3 — needs user pick
     LIVE_SEARCH = "live_search"        # Step 5 — live results, needs confirm
+    SHEET_AND_LIVE = "sheet_and_live"  # sheet prices kept + missing
+                                       # stores live-filled (compare auto;
+                                       # per-store sources on the result)
     NOT_FOUND = "not_found"            # Step 6 — both stores empty
+
+
+# The two priced stores (mirrors core.price_comparator.STORES; the
+# live-fill merge needs the order for deterministic source tags).
+STORES = ("woolworths", "coles")
 
 
 @dataclass(frozen=True)
@@ -95,12 +103,18 @@ class CandidateRow:
         brand: Col G value.
         size: Col C value.
         score: partial match score (higher = better).
+        subcategory: Col Q value (additive, spec §9; "" when absent).
+        item_code: Col R value ("" when absent).
+        preferred: Col S value ("" or "P").
     """
     row_index: int
     generic_name: str
     brand: str
     size: str
     score: int
+    subcategory: str = ""   # Col Q (additive, spec §9)
+    item_code: str = ""     # Col R
+    preferred: str = ""     # Col S ("" or "P")
 
 
 @dataclass(frozen=True)
@@ -130,6 +144,12 @@ class LookupResult:
             "missing_size" | "no_results_<store>" (Step 5 gate outcome).
         store_unavailable: stores not checked this run (e.g. Coles when
             Scrape.do is unavailable/breaker-open/cap-exceeded).
+        sources: store -> "sheet" | "live" for the prices dict.
+            Populated for SHEET_AND_LIVE results (the merged outcome);
+            single-source results derive it from the status.
+        subcategory: resolved row's Col Q (additive, spec §9).
+        item_code: resolved row's Col R ("" when absent).
+        preferred: resolved row's Col S ("" or "P").
     """
     query: str
     status: LookupStatus
@@ -146,6 +166,10 @@ class LookupResult:
     closest: dict = field(default_factory=dict)
     uom_reason: str = ""
     store_unavailable: list = field(default_factory=list)
+    sources: dict = field(default_factory=dict)
+    subcategory: str = ""   # resolved row's Col Q (additive)
+    item_code: str = ""     # resolved row's Col R
+    preferred: str = ""     # resolved row's Col S
 
 
 # ============================================================================
@@ -189,6 +213,9 @@ class LookupIndex:
 
         rewards_col = _find_col(header, REWARDS_HEADER)
         keywords_col = _find_col(header, KEYWORDS_HEADER)  # Col P
+        subcategory_col = _find_col(header, "Sub_Category")   # Q
+        item_code_col = _find_col(header, "Item_Code")        # R
+        preferred_col = _find_col(header, "Preferred")        # S
 
         _price_re = re.compile(r"(?:A\$|\$)\s*(\d+\.?\d*)")
 
@@ -246,6 +273,26 @@ class LookupIndex:
                 "specials": specials,
                 "rewards": rewards,
                 "aliases": aliases,
+                # Raw store-keyword cells (Col I/J) — let callers tell a
+                # missing KEYWORD from a missing PRICE (optimize confirm
+                # flow, 2026-09-03).
+                "ww_kw": (str(row[COL_KW_WOOL]).strip()
+                          if len(row) > COL_KW_WOOL else ""),
+                "coles_kw": (str(row[COL_KW_COLES]).strip()
+                             if len(row) > COL_KW_COLES else ""),
+                "subcategory": (str(row[subcategory_col]).strip()
+                                if subcategory_col is not None
+                                and len(row) > subcategory_col
+                                else ""),
+                "item_code": (str(row[item_code_col]).strip()
+                              .upper()
+                              if item_code_col is not None
+                              and len(row) > item_code_col
+                              else ""),
+                "preferred": (str(row[preferred_col]).strip()
+                              if preferred_col is not None
+                              and len(row) > preferred_col
+                              else ""),
             }
             self._rows.append(row_dict)
 
@@ -312,7 +359,9 @@ class LookupIndex:
         """Step 2b: token match in Col P.
 
         Checks if ALL significant tokens of the query appear in a Col P
-        alias's significant tokens (subset match). Returns the best match
+        alias's significant tokens (subset match), with singular/plural
+        normalisation on both sides ("apples" matches the alias token
+        "apple" — user report 2026-09-03). Returns the best match
         (highest token overlap) or None.
         """
         query_tokens = self._significant_tokens(query)
@@ -322,7 +371,15 @@ class LookupIndex:
         best_row: Optional[dict] = None
         best_overlap = 0
         for alias_tokens, row_dict in self._alias_token:
-            if query_tokens.issubset(alias_tokens):
+            alias_variants: set = set()
+            for token in alias_tokens:
+                alias_variants |= _token_variants(token)
+            # Every query token must be present in the alias, allowing
+            # singular/plural forms on either side ("apples" <-> "apple").
+            if all(
+                _token_variants(token) & alias_variants
+                for token in query_tokens
+            ):
                 overlap = len(query_tokens)
                 if overlap > best_overlap:
                     best_overlap = overlap
@@ -339,6 +396,8 @@ class LookupIndex:
             +2 if query_normalized is a substring of col_a_normalized
             +2 if col_a_normalized is a substring of query_normalized
             +1 per significant query word present in col_a_normalized
+                (singular/plural variants count — "apples" matches a
+                Col A containing "apple", user report 2026-09-03)
         Returns top `limit` candidates with score > 0, sorted by score
         descending then shortest Col A then lowest row_index.
         """
@@ -356,7 +415,7 @@ class LookupIndex:
             if norm_a in norm_query:
                 score += 2
             for token in tokens:
-                if token in norm_a:
+                if any(v in norm_a for v in _token_variants(token)):
                     score += 1
             if score > 0:
                 scored.append((score, row_dict))
@@ -375,6 +434,9 @@ class LookupIndex:
                 brand=rd.get("brand", ""),
                 size=rd.get("size", ""),
                 score=score,
+                subcategory=rd.get("subcategory", ""),
+                item_code=rd.get("item_code", ""),
+                preferred=rd.get("preferred", ""),
             )
             for score, rd in scored[:limit]
         ]
@@ -584,7 +646,7 @@ class LookupEngine:
         # Step 1: exact match on Col A or Col I/J/K
         exact = idx.find_exact(query)
         if exact is not None:
-            return LookupResult(
+            sheet_res = LookupResult(
                 query=query,
                 status=LookupStatus.EXACT_SHEET,
                 row_index=exact["row_index"],
@@ -592,17 +654,21 @@ class LookupEngine:
                 prices=dict(exact["prices"]),
                 specials=dict(exact["specials"]),
                 brand=exact.get("brand", ""),
+                subcategory=exact.get("subcategory", ""),
+                item_code=exact.get("item_code", ""),
+                preferred=exact.get("preferred", ""),
                 matched_names={s: exact["generic_name"]
                                for s in exact["prices"]},
                 matched_sizes={s: exact.get("size", "")
                                for s in exact["prices"]},
                 note=f"exact match: '{exact['generic_name']}'",
             )
+            return self._finish_sheet_result(sheet_res, query, interactive)
 
         # Step 2a: exact alias in Col P
         alias = idx.find_alias_exact(query)
         if alias is not None:
-            return LookupResult(
+            sheet_res = LookupResult(
                 query=query,
                 status=LookupStatus.KEYWORD_ALIAS,
                 row_index=alias["row_index"],
@@ -610,17 +676,21 @@ class LookupEngine:
                 prices=dict(alias["prices"]),
                 specials=dict(alias["specials"]),
                 brand=alias.get("brand", ""),
+                subcategory=alias.get("subcategory", ""),
+                item_code=alias.get("item_code", ""),
+                preferred=alias.get("preferred", ""),
                 matched_names={s: alias["generic_name"]
                                for s in alias["prices"]},
                 matched_sizes={s: alias.get("size", "")
                                for s in alias["prices"]},
                 note=f"Col P alias match: '{alias['generic_name']}'",
             )
+            return self._finish_sheet_result(sheet_res, query, interactive)
 
         # Step 2b: token match in Col P
         token_match = idx.find_alias_token(query)
         if token_match is not None:
-            return LookupResult(
+            sheet_res = LookupResult(
                 query=query,
                 status=LookupStatus.KEYWORD_ALIAS,
                 row_index=token_match["row_index"],
@@ -628,12 +698,16 @@ class LookupEngine:
                 prices=dict(token_match["prices"]),
                 specials=dict(token_match["specials"]),
                 brand=token_match.get("brand", ""),
+                subcategory=token_match.get("subcategory", ""),
+                item_code=token_match.get("item_code", ""),
+                preferred=token_match.get("preferred", ""),
                 matched_names={s: token_match["generic_name"]
                                for s in token_match["prices"]},
                 matched_sizes={s: token_match.get("size", "")
                                for s in token_match["prices"]},
                 note=f"Col P token match: '{token_match['generic_name']}'",
             )
+            return self._finish_sheet_result(sheet_res, query, interactive)
 
         # Step 3: partial candidates in Col A
         candidates = idx.find_candidates(query)
@@ -650,7 +724,7 @@ class LookupEngine:
             top = candidates[0]
             row_dict = idx.get_row(top.row_index)
             if row_dict is not None:
-                return LookupResult(
+                sheet_res = LookupResult(
                     query=query,
                     status=LookupStatus.EXACT_SHEET,
                     row_index=top.row_index,
@@ -658,15 +732,100 @@ class LookupEngine:
                     prices=dict(row_dict["prices"]),
                     specials=dict(row_dict["specials"]),
                     brand=row_dict.get("brand", ""),
+                    subcategory=row_dict.get("subcategory", ""),
+                    item_code=row_dict.get("item_code", ""),
+                    preferred=row_dict.get("preferred", ""),
                     matched_names={s: top.generic_name
                                    for s in row_dict["prices"]},
                     matched_sizes={s: row_dict.get("size", "")
                                    for s in row_dict["prices"]},
                     note=f"auto-picked candidate: '{top.generic_name}'",
                 )
+                return self._finish_sheet_result(
+                    sheet_res, query, interactive)
 
         # Step 5: live search (display-only; explicit adds happen via
         # `search --add-item` / `map --add` — spec §0.7 / B2)
+        return self._live_result(query)
+
+    def _finish_sheet_result(self, sheet_res: LookupResult, query: str,
+                             interactive: bool) -> LookupResult:
+        """Sheet resolution + live fill of missing stores (compare only).
+
+        A resolved row can still carry unusable prices (legacy rows
+        with unavailable / N-A / blank cells — user report 2026-09-03:
+        "bread"/"beef mince" never reached live search). For
+        NON-INTERACTIVE callers (compare auto mode) the MISSING stores
+        are live-searched and merged in: usable sheet prices are never
+        overwritten, and the merged result is tagged per store
+        (SHEET_AND_LIVE + sources) so the report labels each price
+        honestly. Interactive callers (the map resolve flow) keep the
+        pure sheet answer — list semantics are untouched.
+
+        Args:
+            sheet_res: the resolved sheet LookupResult (steps 1-3).
+            query: the original user-typed string.
+            interactive: False for compare auto mode; True keeps the
+                pure sheet result.
+
+        Returns:
+            LookupResult: the pure sheet result when complete,
+            interactive, or when live search adds nothing usable;
+            otherwise the SHEET_AND_LIVE merge.
+        """
+        if interactive:
+            return sheet_res
+        missing = [s for s in STORES if s not in sheet_res.prices]
+        if not missing:
+            return sheet_res
+        live = self._live_result(query)
+        additions = {s: live.prices[s] for s in missing
+                     if s in live.prices}
+        if not additions:
+            # Live search added nothing usable — keep the sheet answer.
+            return sheet_res
+        return LookupResult(
+            query=sheet_res.query,
+            status=LookupStatus.SHEET_AND_LIVE,
+            row_index=sheet_res.row_index,
+            generic_name=sheet_res.generic_name,
+            prices={**sheet_res.prices, **additions},
+            specials={**sheet_res.specials,
+                      **{s: live.specials[s] for s in additions
+                         if s in live.specials}},
+            brand=sheet_res.brand or live.brand,
+            live_items=list(live.live_items),
+            subcategory=sheet_res.subcategory,
+            item_code=sheet_res.item_code,
+            preferred=sheet_res.preferred,
+            matched_names={**sheet_res.matched_names,
+                           **{s: live.matched_names[s] for s in additions
+                              if s in live.matched_names}},
+            matched_sizes={**sheet_res.matched_sizes,
+                           **{s: live.matched_sizes[s] for s in additions
+                              if s in live.matched_sizes}},
+            store_unavailable=[s for s in live.store_unavailable
+                               if s in additions],
+            sources={**{s: "sheet" for s in sheet_res.prices},
+                     **{s: "live" for s in additions}},
+            note=(f"sheet prices kept; live-filled: "
+                  f"{', '.join(sorted(additions))}"),
+        )
+
+    def _live_result(self, query: str) -> LookupResult:
+        """Steps 5 -> 6: live search both stores (or honest not-found).
+
+        Extracted verbatim from the former find_product tail so the
+        sheet-result live-fill can reuse the exact same gate/found-block
+        behaviour.
+
+        Args:
+            query: the user-typed product name.
+
+        Returns:
+            LookupResult: LIVE_SEARCH (pair / single-sided / found-block)
+            or NOT_FOUND.
+        """
         ww_items, coles_items, coles_status = self._live_search_pair(query)
         ww_ranked = rank_live_results(query, ww_items)
         coles_ranked = rank_live_results(query, coles_items)

@@ -2,7 +2,8 @@
 """Idempotent column audit + upgrade for Products_Master worksheet.
 
 Adds Woolworths_Specials (M), Coles_Specials (N), Rewards_Points (O)
-when they are absent. Safe to run multiple times.
+when they are absent. Also appends Sub_Category (Q), Item_Code (R),
+Preferred (S). Safe to run multiple times.
 """
 from __future__ import annotations
 
@@ -35,6 +36,9 @@ NEW_COLUMNS = [
     "Coles_Specials",       # Col N
     "Rewards_Points",       # Col O
     "Keywords",             # Col P — user-side aliases (Phase 9.2)
+    "Sub_Category",         # Col Q — granular cluster (spec §3)
+    "Item_Code",            # Col R — permanent 3-letter row ID
+    "Preferred",            # Col S — "P" flag, one per sub-category
 ]
 
 

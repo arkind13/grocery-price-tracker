@@ -36,6 +36,9 @@ class ProductItem:
         product_id: Store product id captured at search time (e.g.
             Woolworths Stockcode/ArticleId, Coles id). Empty string when
             the store payload lacked one.
+        multi_buy_qty: Multi-buy bundle quantity (e.g. 2 in "2 for
+            $6.00"). 0 = no multi-buy (backwards compatible).
+        multi_buy_total: Multi-buy bundle total in AUD. 0.0 = none.
         timestamp: ISO-8601 timestamp of when this data was extracted.
     """
 
@@ -50,6 +53,8 @@ class ProductItem:
     size: str = ""
     brand: str = ""
     product_id: str = ""
+    multi_buy_qty: int = 0        # bundle qty; 0 = no multi-buy
+    multi_buy_total: float = 0.0  # bundle total $; 0.0 = none
     timestamp: str = field(default_factory=lambda: _now_iso())
 
     def to_dict(self) -> dict:

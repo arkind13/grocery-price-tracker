@@ -381,5 +381,138 @@ class TestLookupIndexEdgeCases(unittest.TestCase):
         self.assertIsNone(idx.get_row(999))
 
 
+class TestPluralTokenMatching(unittest.TestCase):
+    """Singular/plural token matching (user report 2026-09-03: the
+    basket query "apples" must find the sheet row "Royal Gala Apple
+    1 Kg" whose Col P alias is "royal gala apple")."""
+
+    def setUp(self):
+        header = ["Product_Name", "Category", "Size",
+                  "Woolworths_Price", "Coles_Price", "Brand_Type",
+                  "Last_Updated", "Search_Keyword_Woolworths",
+                  "Search_Keyword_Coles", "Keywords"]
+        rows = [
+            # Row 2: alias "royal gala apple" (singular "apple")
+            ["Royal Gala Apple 1 Kg", "Fruit & Veg", "1kg",
+             "$7.90", "N/A 2026-09-02", "",
+             "2026-01-15 09:00", "Woolworths Royal Gala Apple Punnet 1kg",
+             "Coles Royal Gala Apples 1kg", "royal gala apple"],
+            # Row 3: plural alias "beef mince" style
+            ["Beef Mince 500g", "Meat", "500g",
+             "", "", "",
+             "2026-01-15 09:00", "", "", "beef mince"],
+        ]
+        self.idx = LookupIndex(rows, header)
+
+    def test_alias_token_plural_query_matches_singular_alias(self):
+        row = self.idx.find_alias_token("apples")
+        self.assertIsNotNone(row)
+        self.assertEqual(row["generic_name"], "Royal Gala Apple 1 Kg")
+
+    def test_alias_token_singular_query_matches_plural_alias(self):
+        row = self.idx.find_alias_token("apple")
+        self.assertIsNotNone(row)
+        self.assertEqual(row["generic_name"], "Royal Gala Apple 1 Kg")
+
+    def test_alias_token_ies_plural_matches_y(self):
+        idx = LookupIndex(
+            [["Cherry 200g", "Fruit", "200g", "", "", "",
+              "", "", "", "cherry"]],
+            ["Product_Name", "Category", "Size", "Woolworths_Price",
+             "Coles_Price", "Brand_Type", "Last_Updated",
+             "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+             "Keywords"])
+        self.assertIsNotNone(idx.find_alias_token("cherries"))
+
+    def test_candidates_plural_query_finds_singular_col_a(self):
+        cands = self.idx.find_candidates("apples")
+        self.assertTrue(cands)
+        self.assertEqual(cands[0].generic_name, "Royal Gala Apple 1 Kg")
+
+    def test_non_matching_query_still_returns_none(self):
+        self.assertIsNone(self.idx.find_alias_token("socks"))
+
+
+class TestLookupQRSMetadata(unittest.TestCase):
+    """Additive Col Q/R/S metadata (spec §9 + plan §S10)."""
+
+    HEADER_A_S = [
+        "Product_Name",           # A
+        "Category",               # B
+        "Size",                   # C
+        "Woolworths_Price",       # D
+        "Coles_Price",            # E
+        "Aldi_Price",             # F
+        "Brand_Type",             # G
+        "Last_Updated",           # H
+        "Search_Keyword_Woolworths",  # I
+        "Search_Keyword_Coles",   # J
+        "Search_Keyword_Aldi",    # K
+        "Aldi_Refresh",           # L
+        "Woolworths_Specials",    # M
+        "Coles_Specials",         # N
+        "Rewards_Points",         # O
+        "Keywords",               # P
+        "Sub_Category",           # Q
+        "Item_Code",              # R
+        "Preferred",              # S
+    ]
+
+    def _ws(self):
+        rows = [
+            self.HEADER_A_S,
+            ["Oat Milk", "Dairy", "1L", "$4.50", "$4.20", "",
+             "Oatly", "2026-01-15 09:00",
+             "Oatly Barista 1L", "", "", "",
+             "Half Price", "", "", "oatly", "milk", "abc", "P"],
+            ["Sourdough", "Bakery", "650g", "$3.00", "", "",
+             "", "2026-01-15 09:00",
+             "", "", "", "",
+             "", "", "", "", "bread", "", ""],
+        ]
+        return FakeWorksheet(rows)
+
+    def test_index_carries_qrs_metadata(self):
+        idx = LookupIndex(self._ws().get_all_values()[1:],
+                          self.HEADER_A_S)
+        row = idx.get_row(2)
+        self.assertEqual(row["subcategory"], "milk")
+        self.assertEqual(row["item_code"], "ABC")  # uppercased
+        self.assertEqual(row["preferred"], "P")
+        empty = idx.get_row(3)
+        self.assertEqual(empty["subcategory"], "bread")
+        self.assertEqual(empty["item_code"], "")
+        self.assertEqual(empty["preferred"], "")
+
+    def test_candidates_carry_subcategory_and_code(self):
+        idx = LookupIndex(self._ws().get_all_values()[1:],
+                          self.HEADER_A_S)
+        cands = idx.find_candidates("oat milk")
+        self.assertTrue(cands)
+        top = cands[0]
+        self.assertEqual(top.subcategory, "milk")
+        self.assertEqual(top.item_code, "ABC")
+        self.assertEqual(top.preferred, "P")
+
+    def test_result_metadata_absent_headers_empty(self):
+        # 16-col fixture (no Q/R/S headers): engine resolves Step 1
+        # and the result metadata stays "" (absence-tolerant).
+        ws = _make_worksheet_with_header()
+        engine = LookupEngine(worksheet=ws)
+        result = engine.find_product("oat milk", interactive=True)
+        self.assertEqual(result.status, LookupStatus.EXACT_SHEET)
+        self.assertEqual(result.subcategory, "")
+        self.assertEqual(result.item_code, "")
+        self.assertEqual(result.preferred, "")
+
+    def test_result_carries_resolved_row_metadata(self):
+        engine = LookupEngine(worksheet=self._ws())
+        result = engine.find_product("oat milk", interactive=True)
+        self.assertEqual(result.status, LookupStatus.EXACT_SHEET)
+        self.assertEqual(result.subcategory, "milk")
+        self.assertEqual(result.item_code, "ABC")
+        self.assertEqual(result.preferred, "P")
+
+
 if __name__ == "__main__":
     unittest.main()

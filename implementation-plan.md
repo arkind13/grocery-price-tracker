@@ -1,2485 +1,2566 @@
-# Implementation Plan — Units Always Visible (Col C = the single unit source)
+# Implementation Plan — Sub-Categories (Q), Item-Codes (R), Preferred (S), Multi-Buy & Full Names
 
-- **Date:** 2026-09-01
-- **Pipeline stage:** 02 Plan (this doc) → 03 Code → 04 Architect Checker
-- **Source spec:** `grocery-price-tracker/architecture-spec.md` (LOCKED,
-  user-confirmed 2026-09-01). Rules A/B/C and decisions D-U1…D-U4 are
-  BINDING. 03 Code executes this plan literally; do not re-litigate.
-- **Baseline:** full suite **504 passed / 0 failed / 0 skipped**
-  (`test.md` closeout 2026-08-31, independently re-verified twice).
-  Regression bar: full suite green, 0 failed, 0 skipped, count ≥ 504
-  + new tests.
-- **Python:** Anaconda interpreter only. `python` is NOT on PATH. In
-  PowerShell always invoke as `& "$env:USERPROFILE\anaconda3\python.exe"`
-  (shorthand `$PY` below). **Never `pip install`** — stdlib + existing
-  deps only; this cycle adds ZERO new dependencies.
-- **Working directory for ALL commands (Local Terminal):**
-  `C:\Users\User.DESKTOP-R2G441H\Documents\AI related` (referred to as
-  `<ROOT>`). Tests bootstrap `sys.path` themselves, so pytest resolves
-  both `grocery-price-tracker` and the sibling `grocery_price_cli.py`.
-- **Command shorthand:** `$PY = & "$env:USERPROFILE\anaconda3\python.exe"`.
+- **Date:** 2026-09-04
+- **Stage:** 02 Plan (this doc) → 03 Code → 04 Architect Checker
+- **Binding input:** `architecture-spec.md` (same folder) — §12 file
+  boundaries and §13 verification are CONTRACT. Decisions D-SC1…D-X1
+  apply as written (spec §11 open items are resolved by this plan:
+  D-IC1 letters-only codes per D-IC1 rationale; D-P1 new `shop`
+  command; taxonomy seed delivered in §3 below and in `core/subcategory.py`).
+- **Baseline:** full test suite green at 621 tests (spec §13.8).
 
 ---
 
-## 0. Repo layout + the CLI location mismatch (spec §7 NOTE — binding)
+## 0. Conventions (binding for 03 Code)
 
-```
-<ROOT>/                                        ← working dir for ALL commands
-├── grocery_price_cli.py                       ← IN SCOPE, lives OUTSIDE the
-│                                                 repo root (3201 lines today)
-├── telegram_gateway/                          ← frozen (separate repo)
-└── grocery-price-tracker/                     ← the git repo
-    ├── architecture-spec.md                   ← binding spec
-    ├── implementation-plan.md                 ← THIS FILE (overwrites prior cycle)
-    ├── core/                                  ← telegram_format, price_comparator,
-    │                                             sheets_sync, searched_items,
-    │                                             add_to_list, missing_items_tracker,
-    │                                             specials_reporter (all in scope)
-    ├── extractors/                            ← frozen (already return .size)
-    ├── tests/                                 ← all test files in scope
-    └── data/                                  ← JSON queues (runtime)
-```
+### 0.1 Paths
 
-**Mismatch flag (spec §7 NOTE):** `deploy_vps.py:45` expects
-`grocery_price_cli.py` in the repo root, but the file lives at `<ROOT>`.
-This cycle modifies it AT ITS CURRENT PATH ONLY (README §9 "pending
-migration" zone). The repo root has NO copy today (verified by glob).
-Deploy implication is recorded in §7 (Ops) — no copy is made as part of
-the code steps.
-
-**Frozen (MUST NOT modify — spec §7):** `core/uom.py`, `core/lookup.py`
-(verify-only), `core/extractors/*`, `core/name_matcher.py`, sheet schema,
-`.env` handling, `telegram_gateway/`, `app.py`, `local_sync.py`.
-
----
-
-## 1. Plan-level resolutions (spec-silent points; binding for 03 Code)
-
-| # | Question | Resolution |
-|---|----------|------------|
-| P1 | How does `item_block` know a caller wants no unit segment (search flow shows units on store lines, A1)? | `item_block(..., unit: str \| None = None)`. `None` (default) → NO segment appended (legacy callers unchanged). ANY string — including `""` — appends `unit_suffix(unit)` AFTER truncation. The comparator (A3) ALWAYS passes a string, so compare titles always show unit or marker. |
-| P2 | A2 says ` — <name> <unit_tag> (<source>)` — with ⚠️? | No. A2's formula uses plain `unit_tag` (no ⚠️, no `·`). The ` · ⚠️ unit unavailable` form (spec §3 formatting rule) applies to the inline ` · `-separated surfaces: A1, A4, A5, A6, A7, A8, A9 and the A3 title tag. |
-| P3 | Non-interactive add with no resolvable unit: fail fast — but how does the user ever supply the unit one-shot? | NEW optional `--unit UNIT` flag on BOTH `search` and `map` parsers (mechanism behind the spec's error text "pass a size or the marker"). Interactive TTY sessions get the ask-once prompt (D-U4) instead; Claw relays the question when it sees the fail-fast error, then re-runs with `--unit`. |
-| P4 | B6 wants missing-queue entries to copy size from the source store's sheet row, but `MatchResult` has no size field and `core/name_matcher.py` is frozen. | `update_missing_items(..., *, sizes_by_generic: dict \| None = None)`. Callers pass `{generic_name: Col C value}` built from the sheet. New entries get `"size"` (may be `""`, which displays as the note). No migration of old entries (read-as-blank per spec §2). |
-| P5 | A9: the Wednesday txt files (`unmatched.txt`, `wool_missing.txt`, `coles_missing.txt`) are MACHINE-parsed by the `map` flows — appending units there would corrupt `map wool`/`map coles` searches. | txt files keep their exact current line format. Units are appended ONLY on the Telegram resolve-list display lines (parallel `*_display` lists passed to `_post_weekly_summary`). This is the single correctness trap of A9; do not "simplify" it. |
-| P6 | Queue `add_entry` defaults when the caller passes no size. | Blank → canonical marker normalization INSIDE `add_entry` (entries ALWAYS carry `"size"`). Fail-fast applies only to `add_product_row` (sheet writes), exactly as spec B1 states. |
-| P7 | A7 scope. | `format_specials_report` sheet lines + the `_cmd_specials` live saved-list block. `get_active_specials` dicts gain a `"size"` key (read Col C). The separate `rewards` report is NOT in spec A7's anchor list — untouched. |
-| P8 | Marker case-insensitivity. | `unit_tag` treats the marker phrase case-insensitively as input; the OUTPUT marker is always exact lowercase `unit unavailable` (spec §2). |
-
----
-
-## 2. Data contract (spec §2 — implemented once, in S1)
-
-| Item | Value |
+| Thing | Absolute path |
 |---|---|
-| Canonical marker | `unit unavailable` (exact lowercase) |
-| `core/telegram_format.py : UNIT_UNAVAILABLE` | `str` constant |
-| `core/telegram_format.py : unit_tag(size: str \| None) -> str` | trimmed size, or marker when blank/whitespace/marker |
-| `core/telegram_format.py : unit_suffix(size: str \| None) -> str` | `" · 1L"` or `" · ⚠️ unit unavailable"` (single composition over `unit_tag`) |
-| Col C states | real size = known; marker = assessed-unknown; blank = legacy (displays identically to marker) |
-| UOM gate | UNCHANGED — verified in S0.2: `parse_size("unit unavailable") is None` |
-| Sheet column constant | `core/sheets_sync.py : SIZE_COL = 2` (Col C, 0-based) |
+| Project root (repo) | `C:\Users\User.DESKTOP-R2G441H\Documents\AI related\grocery-price-tracker` |
+| CLI entry (OUTSIDE repo; in parent repo) | `C:\Users\User.DESKTOP-R2G441H\Documents\AI related\grocery_price_cli.py` |
+| Skill file (OUTSIDE repo; in parent repo) | `C:\Users\User.DESKTOP-R2G441H\Documents\AI related\claw-skills\grocery-price\SKILL.md` |
+| Skill catalogue regenerator | `C:\Users\User.DESKTOP-R2G441H\Documents\AI related\skills_doc.py` |
+| Parent repo (tracks CLI + claw-skills) | `C:\Users\User.DESKTOP-R2G441H\Documents\AI related` (its own git repo) |
+
+Two nested git repos exist. `grocery-price-tracker` files are
+committed in the inner repo; `grocery_price_cli.py` and
+`claw-skills/**` in the parent repo (`AI related`). Never move files.
+
+### 0.2 Test & verify commands
+
+- Tests run from the project root:
+  `python -m pytest tests/<file>.py -q` (fallback: `python -m unittest tests.<file> -v`).
+- Compile check: `python -m py_compile <file>`.
+- Shell is Windows PowerShell 5.1. Use `cmd1; if ($?) { cmd2 }` for
+  dependent chains. Commands below marked **[Local]** run in the
+  project root; **[VPS]** run on the remote host over ssh.
+
+### 0.3 Hard rules
+
+- **Zero-skip tests:** every test case in §Test Plan is MANDATORY. No
+  `@skip`, no `xfail`, no commenting out. Full suite must stay green
+  after every step.
+- MUST NOT modify (spec §12): `core/uom.py`, `core/name_matcher.py`,
+  `telegram_gateway/`, `app.py`, `local_sync.py`, `.env` handling,
+  `core/searched_items.py`, `core/add_to_list.py`, sheet columns A–P
+  semantics. Read-only reuse is fine.
+- Every new/changed function gets a docstring (what/args/returns/
+  raises) per coding standards. Max line 88 chars (Python).
+- No secrets in code/logs; `.env` only via existing `_load_env()`.
+- MANDATORY after ANY `claw-skills/` edit (rule
+  `.kilo/rules/04-claw-skills-doc-sync.md`): run `python skills_doc.py`
+  then `python skills_doc.py --check` (must print `OK`), commit BOTH
+  `SKILL.md` and `claw-skills/claw_skills_easy.md`, sync both to VPS.
+  A skill change without this is INCOMPLETE.
+
+### 0.4 Step size
+
+Each step touches ≤2 files and ≤~50 modified lines. NEW-file steps
+may add up to ~120 lines of complete module code in one go where
+splitting would leave a broken import target; those steps are marked
+**(new file — complete code)** and their tests land in the same step
+or the immediately following one.
 
 ---
 
-## 3. Build order (fixed)
+## 1. Step overview (execution order)
 
-```
-S0 baseline → S1 → S2 (foundation)
-→ S3 → S4 → S5 → S6 → S7 → S8 (Rule A display)
-→ S9 → S10 → S11 → S12 → S13 → S14 → S15 → S16 (Rule B writes + A9)
-→ S17 (Rule C heal) → S18 (docs) → S19 (closeout verification)
-```
+| # | Step | Files | Depends on |
+|---|---|---|---|
+| S0 | Git branch | — | — |
+| S1 | Subcategory taxonomy module + tests | `core/subcategory.py`†, `tests/test_subcategory.py`† | — |
+| S2 | Multi-buy module + tests | `core/multibuy.py`†, `tests/test_multibuy.py`† | — |
+| S3 | Item-codes pure core + tests | `core/item_codes.py`†, `tests/test_item_codes.py`† | — |
+| S4 | Item-codes sheet layer + tests | `core/item_codes.py`, `tests/test_item_codes.py` | S3 |
+| S5 | Preferences read model + prompts + tests | `core/preferences.py`†, `tests/test_preferences.py`† | S1 |
+| S6 | `set_preferred` write + tests | `core/preferences.py`, `tests/test_preferences.py` | S5 |
+| S7 | Pending-run IO + shop resolver + tests | `core/preferences.py`, `tests/test_preferences.py` | S6 |
+| S8 | Schema: append Q/R/S | `core/schema_upgrade.py` | — |
+| S9 | `add_product_row` Q/R/S hook + tests | `core/sheets_sync.py`, `tests/test_sheets_sync.py` | S1, S4 |
+| S10 | Lookup row metadata + tests | `core/lookup.py`, `tests/test_lookup.py` | S1 |
+| S11 | `ProductItem` multi-buy fields + tests | `extractors/models.py`, `tests/test_extractors.py` | — |
+| S12 | D-MB2 live payload probe | none (read-only) | — |
+| S13 | WW/Coles best-effort capture | `extractors/woolworths_extractor.py`, `extractors/coles_extractor.py` | S11, S12 |
+| S14 | M/N multi-buy cell codec on write paths + tests | `core/sheets_sync.py`, `tests/test_sheets_sync.py` | S2 |
+| S15 | Comparator: terms on BasketItem + tests | `core/price_comparator.py`, `tests/test_comparator.py` | S2 |
+| S16 | Comparator: effective-rate math + tests | `core/price_comparator.py`, `tests/test_comparator.py` | S15 |
+| S17 | telegram_format: multibuy tag + width 60 + tests | `core/telegram_format.py`, `tests/test_telegram_format.py` | S2 |
+| S18 | Comparator display + footnote + tests | `core/price_comparator.py`, `tests/test_comparator.py` | S16, S17 |
+| S19 | CLI parsers (5 new commands + `--subcategory`) + tests | `grocery_price_cli.py`, `tests/test_cli.py` | S1–S7 |
+| S20 | `subcategories` + `backfill-subcategories` + `backfill-codes` handlers | `grocery_price_cli.py`, `tests/test_cli.py` | S19 |
+| S21 | `shop` handler + tests | `grocery_price_cli.py`, `tests/test_cli.py` | S20 |
+| S22 | `prefer` handler + tests | `grocery_price_cli.py`, `tests/test_cli.py` | S21 |
+| S23 | `lists` surfacing (needs review + multi-P) + tests | `grocery_price_cli.py`, `tests/test_cli.py` | S20 |
+| S24 | README | `README.md` | S20–S22 |
+| S25 | PROJECT-MAP §6F | `PROJECT-MAP.md` | S24 |
+| S26 | SKILL.md + catalogue regen + tests log | `claw-skills/grocery-price/SKILL.md`, `claw-skills/claw_skills_easy.md`, `test.md` | S25 |
+| S27 | Deploy + one-time ops + full verification | — | all |
 
-Each step: 1–2 files, ≤ 50 modified lines, its own mandatory tests and
-deterministic verify command. If a verify fails, FIX BEFORE MOVING ON.
-Never batch steps.
-
-**Edit mechanics for 03 Code:** the ANCHOR blocks below are quoted from
-the 2026-09-01 file state. Line numbers are informational — they DRIFT as
-edits land. Always locate edits by the quoted anchor TEXT (unique in
-file), not by line number. After each edit, run the step's verify command.
-
----
-
-## S0 — Baseline (no modifications)
-
-**S0.1 Full suite green.**
-```powershell
-$PY = & "$env:USERPROFILE\anaconda3\python.exe"
-$PY -m pytest grocery-price-tracker/tests/ -q
-```
-Expected: `504 passed`, 0 failed, 0 skipped. Record the number.
-
-**S0.2 UOM gate invariant (spec §2, frozen).**
-```powershell
-$PY -c "import sys; sys.path.insert(0, 'grocery-price-tracker'); from core.uom import parse_size; assert parse_size('unit unavailable') is None; print('gate-ok')"
-```
-Expected stdout: `gate-ok`.
-
-**S0.3 Both entry files compile.**
-```powershell
-$PY -m py_compile grocery_price_cli.py; $PY -m py_compile grocery-price-tracker/core/telegram_format.py
-```
-Expected: no output, exit 0.
+† = new file.
 
 ---
 
-## S1 — Foundation: `UNIT_UNAVAILABLE`, `unit_tag`, `unit_suffix`
+## 2. Seed taxonomy (spec §11 open item 3 — resolved here)
 
-**Files:** `grocery-price-tracker/core/telegram_format.py` (edit),
-`grocery-price-tracker/tests/test_telegram_format.py` (append tests).
+Source: 56 Woolworths master names in `woolworths_master_comparison.csv`
++ spec-mandated example labels (bread, apples, eggs, shredded cheese,
+cheese slice). Rows the rules miss get `needs review` — NEVER a guess
+(D-SC2). Ordering principle: **compound labels before their generic
+parent** (`cheese slice` before `cheese`; `corn chips` before
+`potato chips`); boundary-safe patterns so `breading`/`breadcrumbs`
+never match `bread`. 65 labels below (spec said ~50 — this covers all
+56 CSV names plus spec examples).
 
-**Edit 1 — insert after the `kv()` function (anchor: the full `kv` block
-ending `return f"{label} {SEP} {value}"`):**
+Full rule table lives in S1 (complete code). Summary of labels:
+
+`cheese slice, shredded cheese, cream cheese, mozzarella, parmesan,
+feta, crackers, cheese, greek yoghurt, yoghurt, eggs, long life milk,
+milk, iced coffee, coffee syrup, coffee, spring onion, onion, bananas,
+blueberries, raspberries, strawberries, apples, capsicum, cucumber,
+tomato, fresh herbs, potatoes, salad, bread, croissant, pancake mix,
+muffins, juice, mineral water, spring water, water, energy drink,
+liquid breakfast, sports drink, soft drink, chocolate bar, chocolate
+spread, chocolate, chewing gum, mints, corn chips, potato chips,
+popcorn, biscuits, slices, lollies, ice cream, frozen snacks, frozen
+berries, sugar, cereal, pasta, rice, flour, oil, sauce, spread, pads,
+hand warmers`
+
+---
+
+## 3. Implementation steps
+
+### S0 — Git branch **[Local]**
+
+```powershell
+git -C "grocery-price-tracker" status --short          # must be clean
+git -C "grocery-price-tracker" checkout -b feature/qrs-shop-multibuy
+```
+
+Verify: `git -C "grocery-price-tracker" branch --show-current`
+prints `feature/qrs-shop-multibuy`. The parent repo
+(`AI related`) stays on its current branch; CLI/skill edits are
+committed there on the same feature name:
+`git checkout -b feature/qrs-shop-multibuy` (run in `AI related`).
+
+---
+
+### S1 — `core/subcategory.py` (new file — complete code) + tests
+
+**Files:** NEW `core/subcategory.py`, NEW `tests/test_subcategory.py`.
+
+Complete module content:
 
 ```python
-# Canonical Col C marker for "unit assessed, unknown" (architecture-spec
-# §2 — the user's own words, exact lowercase phrase). Blank Col C means
-# "legacy, not yet assessed"; both DISPLAY identically via unit_tag().
-UNIT_UNAVAILABLE = "unit unavailable"
+#!/usr/bin/env python3
+"""Canonical sub-category taxonomy for Products_Master Col Q (§3, §4).
+
+Ordered regex -> label rules, specific before generic (first match
+wins). No rule match -> caller writes the literal marker NEEDS_REVIEW
+(D-SC2 — never a silent guess). New clusters are one line in
+_RULE_DEFS (D-SC1). Normalisation: lowercase, trim, collapse
+whitespace/underscores/hyphens to single spaces.
+
+Boundary-safe patterns: \\bbreads?\\b can NOT match "breading" or
+"breadcrumbs" (the letter after "bread" is a word char, so the \\b
+fails) — spec §4 mandates this.
+"""
+from __future__ import annotations
+
+import re
+
+SUBCATEGORY_HEADER = "Sub_Category"   # Col Q (0-based idx 16)
+NEEDS_REVIEW = "needs review"         # literal marker (D-SC2)
+CONFIDENT_THRESHOLD = 0.75            # rule hit = 1.0 >= threshold
 
 
-def unit_tag(size: str | None) -> str:
-    """Return the display text for a package size (Rule A, spec §2).
+def normalize_subcategory(s: str) -> str:
+    """Lowercase, trim, collapse whitespace/_/- to single spaces.
 
     Args:
-        size: raw size string (Col C value, live listing size, or a
-            queue entry's "size" key). None-safe.
+        s: raw sub-category text (user flag, Col Q cell, label).
 
     Returns:
-        str: the trimmed size when one is known; else the canonical
-        marker "unit unavailable". Blank, whitespace-only, and the
-        marker itself (any case) all map to the marker.
+        str: canonical form ("Shredded_Cheese" -> "shredded cheese").
     """
-    text = str(size or "").strip()
-    if not text or text.lower() == UNIT_UNAVAILABLE:
-        return UNIT_UNAVAILABLE
-    return text
+    text = str(s or "").strip().lower()
+    text = re.sub(r"[_\-\s]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
-def unit_suffix(size: str | None) -> str:
-    """Return the inline unit segment for a product-mention line.
+# (pattern, label) — ORDER IS BINDING: first match wins; compounds
+# BEFORE generic parents ("cheese slice" before "cheese").
+_RULE_DEFS: list[tuple[str, str]] = [
+    # --- cheese (compounds first) ---
+    (r"cheese\s*slice", "cheese slice"),
+    (r"shredded\s*cheese|grated\s*cheese", "shredded cheese"),
+    (r"cream\s*cheese", "cream cheese"),
+    (r"mozzarella", "mozzarella"),
+    (r"parmesan", "parmesan"),
+    (r"feta", "feta"),
+    (r"cheese\s*&?\s*cracker|crackers?", "crackers"),
+    (r"cheese", "cheese"),
+    # --- dairy ---
+    (r"greek\s*yogh?urt", "greek yoghurt"),
+    (r"yogh?urt", "yoghurt"),
+    (r"eggs?", "eggs"),
+    (r"long\s*life\s*milk|uht", "long life milk"),
+    (r"milk", "milk"),
+    (r"iced\s*coffee", "iced coffee"),
+    (r"coffee\s*syrup", "coffee syrup"),
+    (r"coffee", "coffee"),
+    # --- fruit & veg ---
+    (r"spring\s*onion", "spring onion"),
+    (r"onions?", "onion"),
+    (r"bananas?", "bananas"),
+    (r"blueberries", "blueberries"),
+    (r"raspberries", "raspberries"),
+    (r"strawberries", "strawberries"),
+    (r"apples?", "apples"),
+    (r"capsicum", "capsicum"),
+    (r"cucumbers?", "cucumber"),
+    (r"tomatoes?", "tomato"),
+    (r"coriander|fresh\s*herbs?|herbs?", "fresh herbs"),
+    (r"potatoes?", "potatoes"),
+    (r"lettuce|salad\s*mix", "salad"),
+    # --- bakery ---
+    (r"breads?", "bread"),
+    (r"croissants?", "croissant"),
+    (r"pancake\s*mix", "pancake mix"),
+    (r"muffins?", "muffins"),
+    # --- drinks ---
+    (r"juice", "juice"),
+    (r"mineral\s*water", "mineral water"),
+    (r"spring\s*water", "spring water"),
+    (r"water", "water"),
+    (r"energy\s*drink", "energy drink"),
+    (r"liquid\s*breakfast", "liquid breakfast"),
+    (r"sports?\s*drink", "sports drink"),
+    (r"soft\s*drink|soda", "soft drink"),
+    # --- snacks / confectionery ---
+    (r"chocolate\s*bar", "chocolate bar"),
+    (r"choc\s*hazelnut|hazelnut\s*chocolate|chocolate\s*spread",
+     "chocolate spread"),
+    (r"chocolate", "chocolate"),
+    (r"chewing\s*gum", "chewing gum"),
+    (r"mints?", "mints"),
+    (r"corn\s*chips", "corn chips"),
+    (r"potato\s*chips|grain\s*waves|grainwaves|chips", "potato chips"),
+    (r"popcorn", "popcorn"),
+    (r"biscuits?|quadratini", "biscuits"),
+    (r"choc\s*slice|cake\s*slice|slices?", "slices"),
+    (r"loll(ie)?s|lolly", "lollies"),
+    # --- freezer ---
+    (r"ice\s*cream|frozen\s*dessert", "ice cream"),
+    (r"frozen\s*snacks?|nuggets?|pickers|frozen\s*veg", "frozen snacks"),
+    (r"frozen\s*berries", "frozen berries"),
+    # --- pantry ---
+    (r"sugar", "sugar"),
+    (r"cereal", "cereal"),
+    (r"pasta", "pasta"),
+    (r"rice", "rice"),
+    (r"flour", "flour"),
+    (r"oil", "oil"),
+    (r"sauce", "sauce"),
+    (r"spread", "spread"),
+    # --- household / other ---
+    (r"pads?|tampon", "pads"),
+    (r"hand\s*warmers?", "hand warmers"),
+]
 
-    Single composition over unit_tag (DRY — one source for the marker).
+SUBCATEGORY_RULES: list[tuple[re.Pattern, str]] = [
+    (re.compile(p), label) for p, label in _RULE_DEFS
+]
+
+
+def classify_subcategory(
+    name: str, category_hint: str = ""
+) -> tuple[str, float]:
+    """Classify a product name into a sub-category label.
 
     Args:
-        size: raw size string (None-safe).
+        name: product name (Col A style).
+        category_hint: coarse Col B category — accepted for future
+            use; NEVER rescues a non-match (D-SC2).
 
     Returns:
-        str: " · 1L" for a known size; " · ⚠️ unit unavailable" for an
-        unknown one (spec §3 formatting rule — silent omission banned).
+        (label, confidence): ("", 0.0) when no rule matches — the
+        CALLER then writes NEEDS_REVIEW. A rule hit returns
+        (label, 1.0).
     """
-    if unit_tag(size) == UNIT_UNAVAILABLE:
-        return f" {SEP} ⚠️ {UNIT_UNAVAILABLE}"
-    return f" {SEP} {unit_tag(size)}"
-```
+    text = normalize_subcategory(name)
+    if not text:
+        return ("", 0.0)
+    for pattern, label in SUBCATEGORY_RULES:
+        if pattern.search(text):
+            return (label, 1.0)
+    return ("", 0.0)
 
-**Tests — append to `tests/test_telegram_format.py` (new class after
-`TestHeaderAndDividers`):**
 
-```python
-class TestUnitTag(unittest.TestCase):
-    """unit_tag / unit_suffix — the Rule A data contract (spec §2)."""
-
-    def test_unit_tag_real_sizes_pass_through_trimmed(self):
-        self.assertEqual(tf.unit_tag("1L"), "1L")
-        self.assertEqual(tf.unit_tag("  250g "), "250g")
-        self.assertEqual(tf.unit_tag("6 x 170g"), "6 x 170g")
-
-    def test_unit_tag_empty_none_and_marker_map_to_marker(self):
-        for raw in ("", "   ", None, "unit unavailable",
-                    "Unit Unavailable", "UNIT UNAVAILABLE"):
-            self.assertEqual(tf.unit_tag(raw), "unit unavailable")
-
-    def test_unit_suffix_known_and_unknown_exact_strings(self):
-        self.assertEqual(tf.unit_suffix("1L"), " · 1L")
-        self.assertEqual(tf.unit_suffix(""), " · ⚠️ unit unavailable")
-        self.assertEqual(tf.unit_suffix(None), " · ⚠️ unit unavailable")
-
-    def test_unit_suffix_marker_input_shows_warning_note(self):
-        self.assertEqual(
-            tf.unit_suffix("unit unavailable"),
-            " · ⚠️ unit unavailable",
-        )
-```
-
-**Verify:**
-```powershell
-$PY -m pytest grocery-price-tracker/tests/test_telegram_format.py -q
-$PY -m py_compile grocery-price-tracker/core/telegram_format.py
-```
-
----
-
-## S2 — `item_block` gains the `unit` param (A3 groundwork)
-
-**Files:** `grocery-price-tracker/core/telegram_format.py` (edit),
-`grocery-price-tracker/tests/test_telegram_format.py` (append tests).
-
-**Edit — replace the `item_block` signature + body head. ANCHOR (old):**
-
-```python
-def item_block(
-    index: int,
-    name: str,
-    prices: list[str],
-    home_brand: bool = False,
-) -> str:
-    """Build one numbered list-style item with indented store lines.
-
-    Args:
-        index: 1-based item number.
-        name: product name (truncated to MAX_NAME_WIDTH cells).
-        prices: pre-rendered store_line() strings, one per store.
-        home_brand: append the 🏠 Woolworths home-brand marker.
+def all_labels() -> list[str]:
+    """Distinct labels in rule order (deduped) — for `subcategories`.
 
     Returns:
-        str: multi-line block, e.g.
-        "2. Full Cream Milk 2L  🏠\\n   🟢 Woolworths  $3.32".
+        list[str]: labels in precedence order.
     """
-    title = truncate(str(name or ""), MAX_NAME_WIDTH)
-    first = f"{index}. {title}"
-    if home_brand:
-        first += "  🏠"
-    lines = [first]
+    seen: set = set()
+    out: list[str] = []
+    for _pattern, label in SUBCATEGORY_RULES:
+        if label not in seen:
+            seen.add(label)
+            out.append(label)
+    return out
 ```
 
-**NEW:**
+`tests/test_subcategory.py` (new) — mandatory cases:
 
 ```python
-def item_block(
-    index: int,
-    name: str,
-    prices: list[str],
-    home_brand: bool = False,
-    unit: str | None = None,
-) -> str:
-    """Build one numbered list-style item with indented store lines.
+class TestNormalize(unittest.TestCase):
+    def test_normalize_collapses_case_underscore_hyphen(self)
+    def test_normalize_empty_returns_empty(self)
+
+class TestClassify(unittest.TestCase):
+    def test_spec_examples(self):           # eggs/bread/apples/...
+    def test_compound_before_generic(self): # "Hillview Cheese Slices
+        # Full Fat 500g" -> "cheese slice" (NOT "cheese"/"slices")
+    def test_breading_not_bread(self):      # "AJI CRISPY FRY BREADING
+        # MIX ORIGINAL" -> ("", 0.0) -> caller writes needs review
+    def test_breadcrumbs_not_bread(self)
+    def test_corn_chips_before_potato_chips(self)  # "Supreme Cheese
+        # Corn Chips" -> "corn chips"
+    def test_confidence_is_1_or_0(self)
+    def test_category_hint_never_rescues(self)
+
+class TestAllLabels(unittest.TestCase):
+    def test_labels_ordered_deduped_nonempty(self)
+    def test_spec_mandated_labels_present(self)  # 5 labels §2
+```
+
+**Verify:**
+`python -m py_compile core/subcategory.py`
+`python -m pytest tests/test_subcategory.py -q`
+
+---
+
+### S2 — `core/multibuy.py` (new file — complete code) + tests
+
+**Files:** NEW `core/multibuy.py`, NEW `tests/test_multibuy.py`.
+
+```python
+#!/usr/bin/env python3
+"""Multi-buy ("2 for $6.00") parsing, rates, display — spec §7.
+
+Display + math ONLY; never touches core/uom.py (§7.3 rule 5).
+Parsing REUSES extractors.specials_parser FOR_RE / ANY_RE (no regex
+duplication, spec §12). Mixed-product "Any N" promos parse to terms
+but are INFORMATIONAL ONLY (D-MB3): callers must gate rate math on
+is_mixed_promo().
+"""
+from __future__ import annotations
+
+from extractors.specials_parser import ANY_RE, FOR_RE
+
+MULTIBUY_PREFIX = "multi-buy"  # M/N cell vocabulary prefix (D25)
+
+
+def parse_multibuy(desc: str) -> tuple[int, float] | None:
+    """Parse "2 for $6.00" / "Any 2 | $9" style promo text.
 
     Args:
-        index: 1-based item number.
-        name: product name (truncated to MAX_NAME_WIDTH cells).
-        prices: pre-rendered store_line() strings, one per store.
-        home_brand: append the 🏠 Woolworths home-brand marker.
-        unit: package size for the unit tag (Rule A, spec A3/D-U2).
-            None = caller manages units elsewhere (NO segment appended);
-            any string — including "" — appends unit_suffix(unit) AFTER
-            truncation so the tag is never cut off.
+        desc: specials text (docx line, live special_desc, M/N cell).
 
     Returns:
-        str: multi-line block, e.g.
-        "2. Full Cream Milk 2L  🏠 · 1L\\n   🟢 Woolworths  $3.32".
+        (qty, bundle_total) with qty >= 2 and total > 0, else None.
     """
-    title = truncate(str(name or ""), MAX_NAME_WIDTH)
-    first = f"{index}. {title}"
-    if home_brand:
-        first += "  🏠"
-    if unit is not None:
-        first += unit_suffix(unit)
-    lines = [first]
-```
-
-**Tests — append:**
-
-```python
-class TestItemBlockUnit(unittest.TestCase):
-    """item_block unit param — appended after truncation (A3/D-U2)."""
-
-    def test_unit_appended_after_truncation_never_cut(self):
-        long_name = "Full Cream Milk Chocolate Organic Supreme"  # > 24 cells
-        block = tf.item_block(1, long_name, [], unit="200g")
-        first_line = block.split("\n")[0]
-        self.assertTrue(first_line.endswith(" · 200g"))
-        self.assertIn("…", first_line)  # name was truncated, unit was not
-
-    def test_unit_empty_string_shows_marker_note(self):
-        block = tf.item_block(2, "Milk", [], unit="")
-        self.assertIn(" · ⚠️ unit unavailable", block.split("\n")[0])
-
-    def test_unit_none_appends_nothing(self):
-        self.assertEqual(
-            tf.item_block(3, "Milk", []).split("\n")[0], "3. Milk")
-```
-
-**Verify:**
-```powershell
-$PY -m pytest grocery-price-tracker/tests/test_telegram_format.py -q
-```
-
----
-
-## S3 — A2: `_identity_suffix` size segment ALWAYS present
-
-**Files:** `grocery-price-tracker/core/price_comparator.py` (edit),
-`grocery-price-tracker/tests/test_comparator.py` (append + update).
-
-**Edit — replace the whole `_identity_suffix` body. ANCHOR (old):**
-
-```python
-    matched_name = item.matched_names.get(store, "")
-    if not matched_name:
-        return ""
-    size = item.matched_sizes.get(store, "")
-    source = item.sources.get(store, "sheet")
-    if size:
-        return f" — {matched_name} {size} ({source})"
-    return f" — {matched_name} ({source})"
-```
-
-**NEW:**
-
-```python
-    from core.telegram_format import unit_tag
-    matched_name = item.matched_names.get(store, "")
-    if not matched_name:
-        return ""
-    # Rule A: the size segment is ALWAYS present — real size or the
-    # explicit marker (plain text here; the ⚠️ form is reserved for
-    # the ·-separated surfaces, spec §3 / plan P2).
-    size = unit_tag(item.matched_sizes.get(store, ""))
-    source = item.sources.get(store, "sheet")
-    return f" — {matched_name} {size} ({source})"
-```
-
-Also update the function docstring line `The size segment is omitted
-when the matched product has no size.` → `The size segment is ALWAYS
-present (Rule A): real size via unit_tag, else "unit unavailable".`
-
-**Existing-test update (mandatory):** grep the file for
-`_identity_suffix` and for exact suffix strings like
-`f" — {name} ({source})"` expectations — every no-size branch assertion
-gains ` unit unavailable` before ` ({source})`.
-```
-Grep pattern "_identity_suffix|unit unavailable" in tests/test_comparator.py
-```
-
-**Tests — append:**
-
-```python
-class TestIdentitySuffixAlwaysUnit(unittest.TestCase):
-    """A2: the size segment is always present (Rule A)."""
-
-    def _item(self, sizes, names=None):
-        from core.price_comparator import BasketItem
-        return BasketItem(
-            name="milk",
-            prices={"woolworths": 3.0, "coles": 3.5},
-            sources={"woolworths": "sheet", "coles": "sheet"},
-            matched_names=names or {
-                "woolworths": "Milk 1L", "coles": "Milk 1L"},
-            matched_sizes=sizes,
-        )
-
-    def test_size_present_when_known(self):
-        from core.price_comparator import _identity_suffix
-        suffix = _identity_suffix(self._item({"woolworths": "1L"}),
-                                  "woolworths")
-        self.assertEqual(suffix, " — Milk 1L 1L (sheet)")
-
-    def test_marker_present_when_missing(self):
-        from core.price_comparator import _identity_suffix
-        suffix = _identity_suffix(self._item({}), "woolworths")
-        self.assertEqual(suffix, " — Milk 1L unit unavailable (sheet)")
-
-    def test_empty_when_no_matched_name(self):
-        from core.price_comparator import _identity_suffix
-        suffix = _identity_suffix(self._item({}, names={}), "woolworths")
-        self.assertEqual(suffix, "")
-```
-
-(Note: R3 accepted — names that embed the size may show it twice.)
-
-**Verify:**
-```powershell
-$PY -m pytest grocery-price-tracker/tests/test_comparator.py -q
-```
-
----
-
-## S4 — A3 + A4: compare title tag + found-block size
-
-**Files:** `grocery-price-tracker/core/price_comparator.py` (edit),
-`grocery-price-tracker/tests/test_comparator.py` (append + update).
-
-**Edit 1 (A4) — `_found_block_lines` store line. ANCHOR (old):**
-
-```python
-    from core.telegram_format import warn
-    lines = [warn("No matching product — sizes don't compare.")]
-    for store in ("woolworths", "coles"):
-        found = item.closest.get(store)
-        if not found:
-            continue
-        label = _FOUND_LABELS.get(store, f"{store.capitalize()}:")
-        pad = " " * max(0, _FOUND_LABEL_WIDTH - len(label))
-        lines.append(f"   {label}{pad}{found.get('name', '')}")
-```
-
-**NEW:**
-
-```python
-    from core.telegram_format import unit_suffix, warn
-    lines = [warn("No matching product — sizes don't compare.")]
-    for store in ("woolworths", "coles"):
-        found = item.closest.get(store)
-        if not found:
-            continue
-        label = _FOUND_LABELS.get(store, f"{store.capitalize()}:")
-        pad = " " * max(0, _FOUND_LABEL_WIDTH - len(label))
-        # A4: closest[store]["size"] exists — always surface it (Rule A).
-        lines.append(
-            f"   {label}{pad}{found.get('name', '')}"
-            f"{unit_suffix(found.get('size', ''))}")
-```
-
-**Edit 2 (A3) — `format_report` item_block call. ANCHOR (old):**
-
-```python
-        lines.append(item_block(
-            i, item.name, store_lines,
-            home_brand=item.is_woolworths_home_brand,
-        ))
-```
-
-**NEW:**
-
-```python
-        # A3: title shows Woolworths' size when present, else Coles'
-        # (store lines in A2 show each store's own). Always a string →
-        # the tag (or the ⚠️ marker note) is NEVER omitted.
-        unit = (
-            item.matched_sizes.get("woolworths")
-            or item.matched_sizes.get("coles")
-            or ""
-        )
-        lines.append(item_block(
-            i, item.name, store_lines,
-            home_brand=item.is_woolworths_home_brand,
-            unit=unit,
-        ))
-```
-
-**Existing-test update:** grep `test_comparator.py` for
-`item_block|format_report` exact-string assertions — compare report
-titles now carry ` · <unit>` / ` · ⚠️ unit unavailable`.
-
-**Tests — append:**
-
-```python
-class TestReportUnitSurfaces(unittest.TestCase):
-    """A3/A4: title tag survives truncation; found-block shows size."""
-
-    def test_found_block_shows_store_size_and_marker(self):
-        from core.price_comparator import BasketItem, _found_block_lines
-        item = BasketItem(
-            name="flour", prices={}, sources={}, closest={
-                "woolworths": {"name": "Flour Plain", "size": "1kg"},
-                "coles": {"name": "Coles Flour", "size": ""},
-            })
-        lines = _found_block_lines(item)
-        self.assertTrue(any(ln.endswith(" · 1kg") for ln in lines))
-        self.assertTrue(
-            any(" · ⚠️ unit unavailable" in ln for ln in lines))
-
-    def test_format_report_title_tag_survives_truncation(self):
-        from core.price_comparator import BasketItem, ComparisonReport,
-        ...
-```
-
-(03 Code: implement the second test concretely — build a
-`ComparisonReport` with one `BasketItem` whose `name` is 30+ cells and
-`matched_sizes={"woolworths": "200g"}`; assert the rendered first line
-of its block `endswith(" · 200g")` and contains `…`. Follow the
-existing `ComparisonReport(...)` construction pattern already used in
-`test_comparator.py`.)
-
-**Verify:**
-```powershell
-$PY -m pytest grocery-price-tracker/tests/test_comparator.py -q
-$PY -m py_compile grocery-price-tracker/core/price_comparator.py
-```
-
----
-
-## S5 — A7: specials report unit tags
-
-**Files:** `grocery-price-tracker/core/specials_reporter.py` (edit),
-`grocery-price-tracker/tests/test_specials_flags.py` (append).
-
-**Edit 1 — `get_active_specials` result dict carries size. ANCHOR (old):**
-
-```python
-            results.append({
-                "name": name,
-                "store": store_key,
-                "special_desc": cell,
-                "price": price,
-                "brand": brand,
-                "row_index": sheet_row,
-            })
-```
-
-**NEW (same block plus one key):**
-
-```python
-            results.append({
-                "name": name,
-                "store": store_key,
-                "special_desc": cell,
-                "price": price,
-                "brand": brand,
-                "row_index": sheet_row,
-                "size": str(row[2]).strip() if len(row) > 2 else "",
-            })
-```
-
-**Edit 2 — `format_specials_report` item name line. ANCHOR (old):**
-
-```python
-        lines.append(f"{i}. {s['name']}")
-```
-
-**NEW:**
-
-```python
-        # A7 (Rule A): every item line carries the unit tag.
-        lines.append(f"{i}. {s['name']}{unit_suffix(s.get('size', ''))}")
-```
-
-**Edit 3 — extend the local import. ANCHOR (old):**
-`    from core.telegram_format import header`
-**NEW:**
-`    from core.telegram_format import header, unit_suffix`
-
-**Tests — append to `test_specials_flags.py` (uses its existing
-FakeWorksheet pattern; if absent, mirror the one in `test_cli.py`):**
-
-```python
-class TestSpecialsUnitTags(unittest.TestCase):
-    """A7: specials lines always carry the unit tag (Rule A)."""
-
-    def test_format_specials_report_appends_unit_and_marker(self):
-        from core.specials_reporter import format_specials_report
-        out = format_specials_report([
-            {"name": "Oat Milk", "store": "coles", "price": 2.0,
-             "special_desc": "was $3", "brand": "", "size": "1L"},
-            {"name": "Bread", "store": "coles", "price": 1.0,
-             "special_desc": "", "brand": "", "size": ""},
-        ])
-        self.assertIn("1. Oat Milk · 1L", out)
-        self.assertIn("2. Bread · ⚠️ unit unavailable", out)
-
-    def test_get_active_specials_carries_col_c_size(self):
-        from core.specials_reporter import get_active_specials
-        ws = _FakeSpecialsWorksheet(...)  # rows: A=name, C=size, N=flag
-        rows = get_active_specials(worksheet=ws)
-        assert rows and rows[0]["size"] == "1L"
-```
-
-(03 Code: build the fake worksheet rows so Col C=index 2 holds `"1L"`
-and one row holds `""`; assert both the `"size"` key and the rendered
-` ⚠️ unit unavailable` line.)
-
-**Verify:**
-```powershell
-$PY -m pytest grocery-price-tracker/tests/test_specials_flags.py -q
-$PY -m py_compile grocery-price-tracker/core/specials_reporter.py
-```
-
----
-
-## S6 — B5 + A8: `searched_items` always carries + shows size
-
-**Files:** `grocery-price-tracker/core/searched_items.py` (edit),
-`grocery-price-tracker/tests/test_searched_items.py` (append + update).
-
-**Edit 1 — import. ANCHOR (old):**
-`from core.telegram_format import header, subheader`
-**NEW:**
-`from core.telegram_format import UNIT_UNAVAILABLE, header, subheader, unit_suffix`
-
-**Edit 2 — module docstring line. ANCHOR (old):**
-`The "size" key is present only when a size was captured at add time.`
-**NEW:**
-`Every NEW entry carries "size" (real value or the "unit unavailable"
-marker); legacy entries without the key read as blank and display the
-note (Rule A/B).`
-
-**Edit 3 — `add_entry` always stores size. ANCHOR (old):**
-
-```python
-    size_clean = str(size or "").strip()
-    if size_clean:
-        entry["size"] = size_clean
-    entries = load_pending()
-```
-
-**NEW:**
-
-```python
-    # B5: every NEW entry carries "size" — blank normalises to the
-    # canonical marker (add paths resolve beforehand; this is the
-    # last-resort backstop, plan P6).
-    entry["size"] = str(size or "").strip() or UNIT_UNAVAILABLE
-    entries = load_pending()
-```
-
-**Edit 4 — `render_show` entry line. ANCHOR (old):**
-
-```python
-        for entry in store_entries:
-            segments = [store, entry.get("keyword", "")]
-            size = entry.get("size", "")
-            if size:
-                segments.append(size)
-            segments.append(f"[{entry.get('code', '')}]")
-            blocks.append(" · ".join(segments))
-```
-
-**NEW:**
-
-```python
-        for entry in store_entries:
-            # A8 (Rule A): unit segment ALWAYS present; legacy entries
-            # without a "size" key read as blank -> the ⚠️ note.
-            blocks.append(
-                " · ".join([store, entry.get("keyword", "")])
-                + unit_suffix(entry.get("size", ""))
-                + f" [{entry.get('code', '')}]")
-```
-
-**Existing-test update:** grep `test_searched_items.py` for
-`"size"` assertions expecting the key to be ABSENT after `add_entry`
-with `size=""` — now expect `"size": "unit unavailable"`. Also update
-`render_show` exact-line assertions.
-
-**Tests — append:**
-
-```python
-class TestSearchedItemsSizeContract(unittest.TestCase):
-    """B5/A8: size always stored; show always renders the tag."""
-
-    def test_add_entry_blank_size_stores_marker(self):
-        # patch si.SEARCHED_ITEMS_PATH to a tmp file first (existing
-        # setUp pattern in this file)
-        result = si.add_entry("coles", "Beans 400g", "Beans 400g")
-        self.assertEqual(result["entry"]["size"], "unit unavailable")
-
-    def test_show_renders_unit_and_marker(self):
-        # seed the patched queue file with:
-        #   {"store": "coles", "keyword": "Beans 400g", "code": "AAA",
-        #    "generic_name": "Beans 400g", "size": "400g", ...}
-        #   {"store": "woolworths", "keyword": "Milk", "code": "BBB",
-        #    "generic_name": "Milk"}                      # legacy: no key
-        out = si.render_show()
-        self.assertIn(" · 400g [AAA]", out)
-        self.assertIn(" · ⚠️ unit unavailable [BBB]", out)
-```
-
-(03 Code: reuse the file's existing tmp-path patching fixture for
-`SEARCHED_ITEMS_PATH` / tombstones; the tests above are behavioural
-specs, wire them to that fixture.)
-
-**Verify:**
-```powershell
-$PY -m pytest grocery-price-tracker/tests/test_searched_items.py -q
-```
-
----
-
-## S7 — B4 + A8: `add_to_list` entry schema + show rendering
-
-**Files:** `grocery-price-tracker/core/add_to_list.py` (edit),
-`grocery-price-tracker/tests/test_add_to_list.py` (append + update).
-
-**Edit 1 — import. ANCHOR (old):**
-`from core.telegram_format import header, subheader`
-**NEW:**
-`from core.telegram_format import UNIT_UNAVAILABLE, header, subheader, unit_suffix`
-
-**Edit 2 — module docstring entry shape. ANCHOR (old):**
-
-```
-    Entry shape (JSON list, insertion order preserved):
-        {"store": "woolworths", "keyword": "Woolworths Beef Mince 500g",
-         "generic_name": "Woolworths Beef Mince 500g",
-         "added_at": "2026-08-28T02:00:00.000000+00:00"}
-```
-
-**NEW (adds the size key to the documented shape):**
-
-```
-    Entry shape (JSON list, insertion order preserved):
-        {"store": "woolworths", "keyword": "Woolworths Beef Mince 500g",
-         "generic_name": "Woolworths Beef Mince 500g", "size": "500g",
-         "added_at": "2026-08-28T02:00:00.000000+00:00"}
-
-    Every NEW entry carries "size" (real value or the "unit
-    unavailable" marker, Rule B); legacy entries without the key read
-    as blank and display the note (Rule A).
-```
-
-**Edit 3 — `add_entry` signature + entry dict. ANCHOR (old):**
-
-```python
-def add_entry(store: str, keyword: str, generic_name: str) -> dict:
-```
-
-**NEW:**
-
-```python
-def add_entry(store: str, keyword: str, generic_name: str,
-              size: str = "") -> dict:
-```
-
-And inside, ANCHOR (old):
-
-```python
-    entry = {
-        "store": store_key,
-        "keyword": kw,
-        "generic_name": gn,
-        "added_at": datetime.now(timezone.utc).isoformat(),
-    }
-```
-
-**NEW:**
-
-```python
-    entry = {
-        "store": store_key,
-        "keyword": kw,
-        "generic_name": gn,
-        # B4: always present; blank normalises to the marker (P6).
-        "size": str(size or "").strip() or UNIT_UNAVAILABLE,
-        "added_at": datetime.now(timezone.utc).isoformat(),
-    }
-```
-
-(Also extend the `Args:` docstring with
-`size (str): package size (real value or marker; "" → marker).`)
-
-**Edit 4 — `render_show` entry line. ANCHOR (old):**
-`            blocks.append(f"{counter}) {entry.get('keyword', '')}")`
-**NEW:**
-```python
-            blocks.append(
-                f"{counter}) {entry.get('keyword', '')}"
-                f"{unit_suffix(entry.get('size', ''))}")
-```
-
-**Edit 5 — `render_remaining_flat` line. ANCHOR (old):**
-`        lines.append(f"{i}) {entry.get('keyword', '')} ({store})")`
-**NEW:**
-```python
-        lines.append(
-            f"{i}) {entry.get('keyword', '')}"
-            f"{unit_suffix(entry.get('size', ''))} ({store})")
-```
-
-**Existing-test update:** grep `test_add_to_list.py` for
-`add_entry(` and entry-shape/assertEqual-dict assertions — new entries
-now include `"size"`. Positional 3-arg calls keep working (default).
-
-**Tests — append:**
-
-```python
-class TestAddToListSizeContract(unittest.TestCase):
-    """B4/A8: size param always stored; renders tag / marker note."""
-
-    def test_add_entry_stores_real_and_marker_size(self):
-        r1 = atl.add_entry("coles", "Beans 400g", "Beans", size="400g")
-        r2 = atl.add_entry("woolworths", "Milk", "Milk")  # no size
-        self.assertEqual(r1["entry"]["size"], "400g")
-        self.assertEqual(r2["entry"]["size"], "unit unavailable")
-
-    def test_render_show_and_remaining_show_unit(self):
-        # seed patched ADD_TO_LIST_PATH with one entry carrying
-        # "size": "500g" and one legacy entry with no "size" key
-        show = atl.render_show()
-        self.assertIn(") Beans · 500g", show)
-        flat = atl.render_remaining_flat(atl.ordered_entries())
-        self.assertIn(" · ⚠️ unit unavailable", flat)
-```
-
-(Wire to the file's existing tmp-path fixture as in S6.)
-
-**Verify:**
-```powershell
-$PY -m pytest grocery-price-tracker/tests/test_add_to_list.py -q
-```
-
----
-
-## S8 — CLI display surfaces: A1, A5, A6
-
-**Files:** `grocery_price_cli.py` (edit),
-`grocery-price-tracker/tests/test_cli.py` (append + update).
-
-**Edit 1 — extend the module-level style-kit import. ANCHOR (old):**
-
-```python
-from core.telegram_format import (                  # noqa: E402
-    header, subheader, fenced_table, item_block, store_line,
-    kv, money, warn, ok, fail, tail, truncate, divider,
-    HEAVY_DIVIDER, HEAVY_DIVIDER_WIDTH,
-)
-```
-
-**NEW:**
-
-```python
-from core.telegram_format import (                  # noqa: E402
-    header, subheader, fenced_table, item_block, store_line,
-    kv, money, warn, ok, fail, tail, truncate, divider,
-    unit_tag, unit_suffix, UNIT_UNAVAILABLE,
-    HEAVY_DIVIDER, HEAVY_DIVIDER_WIDTH,
-)
-```
-
-**Edit 2 (A1) — `_size_suffix` inside `_cmd_search`. ANCHOR (old):**
-
-```python
-    def _size_suffix(item) -> str:
-        return f" · {item.size}" if getattr(item, "size", "") else ""
-```
-
-**NEW:**
-
-```python
-    def _size_suffix(item) -> str:
-        # A1 (Rule A): never silently omit — unit_suffix yields
-        # " · 1L" or " · ⚠️ unit unavailable".
-        return unit_suffix(getattr(item, "size", "") or "")
-```
-
-**Edit 3 (A5) — interactive candidate lines in `_map_unmatched_item`.
-ANCHOR (old):**
-
-```python
-        for i, c in enumerate(result.candidates, 1):
-            brand = f" ({c.brand})" if c.brand else ""
-            print(f"    {i}) {c.generic_name}{brand} [score {c.score}]")
-```
-
-**NEW:**
-
-```python
-        for i, c in enumerate(result.candidates, 1):
-            brand = f" ({c.brand})" if c.brand else ""
-            print(f"    {i}) {c.generic_name}{brand}"
-                  f"{unit_suffix(getattr(c, 'size', '') or '')} "
-                  f"[score {c.score}]")
-```
-
-**Edit 4 (A5) — non-interactive candidate lines in
-`_resolve_and_print_unmatched`. ANCHOR (old):**
-
-```python
-        for i, c in enumerate(result.candidates or [], 1):
-            brand = f" ({c.brand})" if c.brand else ""
-            print(f"    {i}) {c.generic_name}{brand} [score {c.score}]")
-```
-
-**NEW:**
-
-```python
-        for i, c in enumerate(result.candidates or [], 1):
-            brand = f" ({c.brand})" if c.brand else ""
-            print(f"    {i}) {c.generic_name}{brand}"
-                  f"{unit_suffix(getattr(c, 'size', '') or '')} "
-                  f"[score {c.score}]")
-```
-
-**Edit 5 (A6) — `_print_queue_confirmation`. ANCHOR (old):**
-
-```python
-    store = str(entry.get("store", "")).strip().capitalize()
-    code = entry.get("code", "")
-    print(f"Queued for Wednesday: '{entry.get('keyword', '')}' "
-          f"({store}) [{code}]")
-```
-
-**NEW:**
-
-```python
-    store = str(entry.get("store", "")).strip().capitalize()
-    code = entry.get("code", "")
-    # A6: ack shows the unit — 'X' · 200g (Coles) [KAT]; legacy
-    # entries without "size" show the ⚠️ note.
-    print(f"Queued for Wednesday: '{entry.get('keyword', '')}'"
-          f"{unit_suffix(entry.get('size', ''))} ({store}) [{code}]")
-```
-
-**Existing-test update:** grep `test_cli.py` for
-`Queued for Wednesday|_size_suffix|score ` exact-output assertions and
-update expected strings.
-
-**Tests — append:**
-
-```python
-class TestCliUnitSurfaces(unittest.TestCase):
-    """A1/A5/A6 CLI display units."""
-
-    def test_print_queue_confirmation_with_and_without_size(self):
-        import grocery_price_cli as gpc
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            gpc._print_queue_confirmation(
-                {"store": "coles", "keyword": "Beans", "code": "KAT",
-                 "size": "400g"})
-            gpc._print_queue_confirmation(
-                {"store": "coles", "keyword": "Milk", "code": "RUM"})
-        out = buf.getvalue()
-        self.assertIn("Queued for Wednesday: 'Beans' · 400g (Coles) [KAT]",
-                      out)
-        self.assertIn(
-            "Queued for Wednesday: 'Milk' · ⚠️ unit unavailable "
-            "(Coles) [RUM]", out)
-```
-
-**Verify:**
-```powershell
-$PY -m pytest grocery-price-tracker/tests/test_cli.py -q
-$PY -m py_compile grocery_price_cli.py
-```
-
----
-
-## S9 — Rule B resolver `_resolve_add_unit` + `--unit` flags
-
-**Files:** `grocery_price_cli.py` (edit),
-`grocery-price-tracker/tests/test_cli.py` (append).
-
-**Edit 1 — insert the resolver directly AFTER the `_queue_searched_item`
-function (anchor: its final lines
-`    return entry` + blank line before `def _cmd_search`):**
-
-```python
-_UNIT_REQUIRED_ERROR = "unit is required: pass a size or the marker"
-
-
-def _resolve_add_unit(name: str, live_size: str = "", *,
-                      override: str = "", interactive: bool | None = None,
-                      _input=input) -> str:
-    """Resolve the unit for an add (Rule B chain, spec §4).
-
-    Order: (1) explicit override (--unit flag), (2) live listing size,
-    (3) size parsed from the product name via _SIZE_PATTERN, (4) ask
-    the user once (D-U4; blank or 'unknown' -> marker), else fail fast
-    (non-interactive one-shot runs, spec R1).
-
-    Args:
-        name (str): the product name being added.
-        live_size (str): the live listing's size field ("" when absent).
-        override (str): explicit --unit value ("" when not given).
-        interactive (bool | None): force interactive mode; None =
-            auto-detect via stdin TTY.
-        _input: injectable input() for tests.
-
-    Returns:
-        str: a real size ("1L") or the canonical marker
-        "unit unavailable".
+    text = str(desc or "")
+    match = FOR_RE.search(text) or ANY_RE.search(text)
+    if not match:
+        return None
+    qty = int(match.group(1))
+    total = float(match.group(2))
+    if qty < 2 or total <= 0:
+        return None
+    return (qty, total)
+
+
+def is_mixed_promo(desc: str) -> bool:
+    """True when ONLY the cross-range "any N" marker is present.
+
+    Mixed-product bundles have no true per-product price (D-MB3) —
+    informational text only, never a rate.
+    """
+    text = str(desc or "")
+    return bool(ANY_RE.search(text)) and not FOR_RE.search(text)
+
+
+def effective_unit_rate(qty: int, total: float) -> float:
+    """Bundle per-unit rate: total / qty (6.00 / 2 = 3.00).
 
     Raises:
-        ValueError: _UNIT_REQUIRED_ERROR when nothing resolved and the
-        session is non-interactive.
+        ValueError: qty < 2 or total <= 0.
     """
-    for candidate in (str(override or "").strip(),
-                      str(live_size or "").strip()):
-        if candidate:
-            return candidate
-    from core.name_matcher import _SIZE_PATTERN
-    m = _SIZE_PATTERN.search(name or "")
-    if m:
-        return m.group(1).strip()
-    if interactive is None:
-        try:
-            interactive = sys.stdin.isatty()
-        except (ValueError, OSError):
-            interactive = False
-    if not interactive:
-        raise ValueError(_UNIT_REQUIRED_ERROR)
-    answer = str(_input(
-        f"What unit is {name}? e.g. 1L / 250g / 5 pack — "
-        f"reply, or 'unknown': ")).strip()
-    if not answer or answer.lower() == "unknown":
-        return UNIT_UNAVAILABLE
-    return answer
+    if qty < 2 or total <= 0:
+        raise ValueError("multi-buy needs qty >= 2 and total > 0")
+    return round(total / qty, 2)
+
+
+def encode_multibuy_cell(qty: int, total: float) -> str:
+    """D25 prefix + parseable terms: "multi-buy 2/$6.00" (§7.2)."""
+    return f"{MULTIBUY_PREFIX} {qty}/${total:.2f}"
+
+
+def decode_multibuy_cell(cell: str) -> tuple[int, float] | None:
+    """Decode an M/N cell into (qty, total).
+
+    Returns None for: empty cell, non-multi-buy cell, legacy bare
+    "multi-buy" (no terms — informational only), unparsable terms.
+    """
+    text = str(cell or "").strip()
+    if not text.lower().startswith(MULTIBUY_PREFIX):
+        return None
+    return parse_multibuy(text)
+
+
+def is_multibuy_cell(cell: str) -> bool:
+    """True for ANY cell starting with the prefix (incl. bare legacy)."""
+    return str(cell or "").strip().lower().startswith(MULTIBUY_PREFIX)
+
+
+def format_multibuy_note(qty: int, total: float) -> str:
+    """Mandatory display tag, EXACT text (§7.3 rule 2).
+
+    Delegates to core.telegram_format.multibuy_tag so the note text
+    has ONE source of truth (§12 telegram_format helper).
+    """
+    from core.telegram_format import multibuy_tag
+    return multibuy_tag(qty, total)
 ```
 
-**Edit 2 — `search` parser gains `--unit`. ANCHOR (old):**
+`tests/test_multibuy.py` — mandatory cases (spec §13.5):
+
+- `test_parse_for_style` ("2 for $6.00" → (2, 6.0))
+- `test_parse_any_style` ("Any 2 | $9" → (2, 9.0))
+- `test_parse_negative_cream_for_men` ("Cream For Men" → None — the
+  spec's canonical false-positive case; FOR_RE requires a digit)
+- `test_parse_negative_qty_one` ("1 for $3.00" → None)
+- `test_is_mixed_promo_true_for_any_only` / `..._false_for_for`
+- `test_effective_rate_six_over_two` (6.00/2 → 3.00)
+- `test_effective_rate_raises_on_bad_args`
+- `test_encode_decode_roundtrip` ("multi-buy 2/$6.00")
+- `test_decode_bare_legacy_cell_returns_none`
+- `test_decode_non_multibuy_returns_none` ("discount", "", "no")
+- `test_is_multibuy_cell_bare_and_terms`
+- `test_format_note_exact_text` → contains
+  `🏷️ 2 for $6.00  [Note: must purchase 2+ units to receive this price]`
+  (requires S17's telegram_format helper — until then, write this
+  test with the tag text inline and switch it to the helper in S17;
+  simplest: implement S17's 3-line helper FIRST in this step by also
+  touching `core/telegram_format.py` — allowed: 2 files/step. Do
+  that: add the helper now, defer only the width change.)
+
+**This step therefore also adds to `core/telegram_format.py`**
+(after the `SEP = "·"` block, ~line 57):
 
 ```python
-    sp2.add_argument("--add-item", type=int, default=None, metavar="N",
-                     help="Queue the Nth displayed result for Wednesday "
-                          "(sheet row + searched-items queue; explicit add)")
-    sp2.set_defaults(func=_cmd_search)
-```
+# Multi-buy tag (spec §7.3 rule 2) — EXACT mandatory note text.
+MULTIBUY_NOTE = "[Note: must purchase 2+ units to receive this price]"
 
-**NEW:**
 
-```python
-    sp2.add_argument("--add-item", type=int, default=None, metavar="N",
-                     help="Queue the Nth displayed result for Wednesday "
-                          "(sheet row + searched-items queue; explicit add)")
-    sp2.add_argument("--unit", default=None, metavar="UNIT",
-                     help="Unit for --add-item when the result has none "
-                          "(e.g. 1L / 250g / 5 pack, or the literal "
-                          "'unit unavailable')")
-    sp2.set_defaults(func=_cmd_search)
-```
+def multibuy_tag(qty: int, total: float) -> str:
+    """Render '🏷️ N for $X.XX  [Note: must purchase 2+ units …]'.
 
-**Edit 3 — `map` parser gains `--unit`. ANCHOR (old):**
+    Args:
+        qty: bundle quantity (>= 2).
+        total: bundle total price.
 
-```python
-    mp.add_argument("--keyword", type=str, default=None, metavar="STORE_NAME",
-                    help="Non-interactive: save STORE_NAME as store keyword (wool/coles only), advance")
-    mp.set_defaults(func=_cmd_map)
-```
-
-**NEW:**
-
-```python
-    mp.add_argument("--keyword", type=str, default=None, metavar="STORE_NAME",
-                    help="Non-interactive: save STORE_NAME as store keyword (wool/coles only), advance")
-    mp.add_argument("--unit", default=None, metavar="UNIT",
-                    help="Unit for --add when the result has none "
-                         "(e.g. 1L / 250g / 5 pack, or the literal "
-                         "'unit unavailable')")
-    mp.set_defaults(func=_cmd_map)
-```
-
-**Tests — append:**
-
-```python
-class TestResolveAddUnit(unittest.TestCase):
-    """Rule B unit resolution chain (spec §4, D-U4, R1)."""
-
-    def test_override_then_live_size_win(self):
-        r = gpc._resolve_add_unit("Milk", "1L", override="2L")
-        self.assertEqual(r, "2L")
-        self.assertEqual(gpc._resolve_add_unit("Milk", "1L"), "1L")
-
-    def test_name_parse_falls_through(self):
-        self.assertEqual(
-            gpc._resolve_add_unit("Devondale Milk 2L", ""), "2L")
-
-    def test_noninteractive_fails_fast_with_exact_error(self):
-        with self.assertRaises(ValueError) as ctx:
-            gpc._resolve_add_unit("Milk", "", interactive=False)
-        self.assertEqual(
-            str(ctx.exception),
-            "unit is required: pass a size or the marker")
-
-    def test_interactive_ask_once_unknown_and_blank_write_marker(self):
-        replies = iter(["unknown", "  "])
-        fake_input = lambda prompt: next(replies)  # noqa: E731
-        self.assertEqual(
-            gpc._resolve_add_unit(
-                "Milk", "", interactive=True, _input=fake_input),
-            "unit unavailable")
-        self.assertEqual(
-            gpc._resolve_add_unit(
-                "Milk", "", interactive=True, _input=fake_input),
-            "unit unavailable")
-
-    def test_interactive_answer_returned_verbatim(self):
-        self.assertEqual(
-            gpc._resolve_add_unit(
-                "Milk", "", interactive=True,
-                _input=lambda prompt: "5 pack"),
-            "5 pack")
+    Returns:
+        str: the mandatory multi-buy display tag.
+    """
+    return f"🏷️ {qty} for ${total:.2f}  {MULTIBUY_NOTE}"
 ```
 
 **Verify:**
-```powershell
-$PY -m pytest grocery-price-tracker/tests/test_cli.py -k resolve_add_unit -q
-$PY -m py_compile grocery_price_cli.py
-```
+`python -m py_compile core/multibuy.py core/telegram_format.py`
+`python -m pytest tests/test_multibuy.py tests/test_telegram_format.py -q`
 
 ---
 
-## S10 — B1 (sheet side): `add_product_row` size becomes REQUIRED
+### S3 — `core/item_codes.py` pure core (new file — complete code) + tests
 
-**Files:** `grocery-price-tracker/core/sheets_sync.py` (edit),
-`grocery-price-tracker/tests/test_sheets_sync.py` (update + append).
-
-**Edit 1 — module import. ANCHOR (old):**
-`from core.name_matcher import KeywordIndex  # for _normalize reuse`
-**NEW:**
-`from core.name_matcher import KeywordIndex, _SIZE_PATTERN  # _normalize reuse + size parse`
-
-**Edit 2 — Section A constant. ANCHOR (old):**
+**Files:** NEW `core/item_codes.py`, NEW `tests/test_item_codes.py`.
 
 ```python
-PRICE_COL = {"woolworths": 3, "coles": 4}   # D, E
-LAST_UPDATED_COL = 7                                     # H
-```
+#!/usr/bin/env python3
+"""Permanent 3-letter Item-Codes for Products_Master Col R (§3, §8.2).
 
-**NEW:**
+Codes: 3 DISTINCT letters from CODE_ALPHABET (A–Z minus I, L, O),
+unique across live rows AND the registry; deleted-row codes are
+NEVER reused (D-IC2). Separate namespace from queue codes (D-IC3).
 
-```python
-PRICE_COL = {"woolworths": 3, "coles": 4}   # D, E
-SIZE_COL = 2                                             # C (unit column)
-LAST_UPDATED_COL = 7                                     # H
-```
+Concurrency: local processes serialise on an advisory lock file;
+VPS-vs-local races resolve via optimistic verify-and-regenerate
+(D-IC4). Capacity 23*22*21 = 10,626 codes (§8.2).
+"""
+from __future__ import annotations
 
-**Edit 3 — signature. ANCHOR (old, inside `add_product_row` params):**
-`    size: str = "",`
-**NEW:**
-`    size: str,`
+import itertools
+import json
+import os
+import random
+import re
+import tempfile
+import time
+from datetime import datetime, timezone
+from pathlib import Path
 
-**Edit 4 — docstring arg line. ANCHOR (old):**
-`        size: size string for Col C (default "").`
-**NEW:**
-```python
-        size: REQUIRED Col C value — a real size ("1L") or the
-            canonical marker "unit unavailable" (Rule B, spec B1).
-```
+CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ"  # 23 letters (no I, L, O)
+CODE_LENGTH = 3
+MAX_GENERATE_ATTEMPTS = 200
 
-**Edit 5 — fail-fast validation. ANCHOR (old):**
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+REGISTRY_PATH = DATA_DIR / "item_code_registry.json"  # patchable
+LOCK_PATH = DATA_DIR / ".item_code_lock"              # advisory
+LOCK_STALE_SECONDS = 60
+LOCK_TIMEOUT_SECONDS = 10
 
-```python
-    if price <= 0:
-        return {
-            "wrote": False, "row_index": None, "range_written": "",
-            "error": "price must be > 0",
-        }
-```
+ITEM_CODE_HEADER = "Item_Code"  # Col R (0-based idx 17)
+ITEM_CODE_COL = 17
 
-**NEW (append a size check immediately after this block):**
+_CODE_RE = re.compile(r"^[A-Z]{3}$")
 
-```python
-    if price <= 0:
-        return {
-            "wrote": False, "row_index": None, "range_written": "",
-            "error": "price must be > 0",
-        }
-    size_clean = str(size or "").strip()
-    if not size_clean:
-        return {
-            "wrote": False, "row_index": None, "range_written": "",
-            "error": "unit is required: pass a size or the marker",
-        }
-```
 
-**Edit 6 — row build. ANCHOR (old):**
-
-```python
-    new_row[0] = generic_name.strip()             # Col A
-    if category:
-        new_row[1] = category                      # Col B
-    if size:
-        new_row[2] = size                          # Col C
-```
-
-**NEW:**
-
-```python
-    new_row[0] = generic_name.strip()             # Col A
-    if category:
-        new_row[1] = category                      # Col B
-    new_row[SIZE_COL] = size_clean                 # Col C (always set)
-```
-
-**Existing-test update (mandatory before running the suite):**
-```
-Grep "add_product_row(" in tests/test_sheets_sync.py and in
-grocery_price_cli.py — every call site needs an explicit size=
-argument (use a real size like "1L" or the marker string).
-```
-In tests: calls that previously relied on the default `size=""` now
-pass `size="1L"` (or `"unit unavailable"` where a marker case is
-asserted). No behavioural expectation changes other than Col C being
-populated.
-
-**Tests — append to `test_sheets_sync.py`:**
-
-```python
-class TestAddProductRowRequiredSize(unittest.TestCase):
-    """B1: empty size is rejected; marker is accepted (fail-fast)."""
-
-    def test_blank_size_rejected_with_exact_error(self):
-        from core.sheets_sync import add_product_row
-        res = add_product_row("Milk", "coles", 3.0, size="   ",
-                              worksheet=FakeWorksheet([...]))
-        self.assertFalse(res["wrote"])
-        self.assertEqual(
-            res["error"], "unit is required: pass a size or the marker")
-
-    def test_marker_accepted_and_written_to_col_c(self):
-        from core.sheets_sync import add_product_row
-        ws = FakeWorksheet([...])
-        res = add_product_row("Milk", "coles", 3.0,
-                              size="unit unavailable", worksheet=ws)
-        self.assertTrue(res["wrote"])
-        written = ws.updates[0][0][0]
-        self.assertEqual(written[2], "unit unavailable")
-```
-
-(03 Code: give `FakeWorksheet` the same header/rows the file's existing
-`add_product_row` tests use.)
-
-**Verify:**
-```powershell
-$PY -m pytest grocery-price-tracker/tests/test_sheets_sync.py -q
-```
-
----
-
-## S11 — B1/B2 (CLI side): resolve-before-write in both add routes
-
-**Files:** `grocery_price_cli.py` (edit),
-`grocery-price-tracker/tests/test_cli.py` (append + update).
-
-**Edit 1 (B1) — `_search_add_item`. ANCHOR (old):**
-
-```python
-    chosen = displayed[n - 1]
-    store = chosen.store.lower()
-
-    # Sheet row first; Col I/J stays EMPTY (interpretation 0.4).
-    _load_env()
-```
-
-**NEW:**
-
-```python
-    chosen = displayed[n - 1]
-    store = chosen.store.lower()
-
-    # Rule B: resolve the unit BEFORE any write (live size -> name
-    # parse -> --unit -> ask -> fail-fast; spec §4).
-    try:
-        unit = _resolve_add_unit(
-            chosen.raw_name,
-            getattr(chosen, "size", "") or "",
-            override=getattr(args, "unit", None) or "")
-    except ValueError as exc:
-        print(f"Error: {exc} — re-run with --unit \"1L\" or "
-              f"--unit \"unit unavailable\"", file=sys.stderr)
-        return 1
-
-    # Sheet row first; Col I/J stays EMPTY (interpretation 0.4).
-    _load_env()
-```
-
-Then in the same function, ANCHOR (old):
-
-```python
-            brand=chosen.brand,
-            size=chosen.size,
-```
-
-**NEW:**
-
-```python
-            brand=chosen.brand,
-            size=unit,
-```
-
-And ANCHOR (old):
-
-```python
-    _queue_searched_item(
-        store, chosen.raw_name, chosen.raw_name,
-        store_product_id=getattr(chosen, "product_id", "") or "",
-        size=getattr(chosen, "size", "") or "")
-    return 0
-```
-
-**NEW:**
-
-```python
-    _queue_searched_item(
-        store, chosen.raw_name, chosen.raw_name,
-        store_product_id=getattr(chosen, "product_id", "") or "",
-        size=unit)
-    return 0
-```
-
-**Edit 2 (B2) — `_add_from_live_search` signature + resolution. ANCHOR
-(old):**
-
-```python
-def _add_from_live_search(result, original_query: str) -> None:
-    """Explicit add of a live-search result to the sheet + Queue 2.
-```
-
-**NEW:**
-
-```python
-def _add_from_live_search(result, original_query: str,
-                          unit_override: str = "") -> bool:
-    """Explicit add of a live-search result to the sheet + Queue 2.
-```
-
-(Extend the docstring: `Returns: bool — True when the row was written
-and queued; False on any failure (error already printed).`)
-
-Then ANCHOR (old):
-
-```python
-    # Use the live result's store for the price column
-    store = best.store.lower()
-    try:
-        res = add_product_row(
-            generic_name=best.raw_name,
-            store=store,
-            price=best.price,
-            brand=best.brand,
-            size=best.size,
-```
-
-**NEW:**
-
-```python
-    # Use the live result's store for the price column
-    store = best.store.lower()
-    # Rule B: resolve the unit BEFORE the write (B2). Non-interactive
-    # callers pass unit_override (--unit); interactive sessions ask.
-    try:
-        unit = _resolve_add_unit(
-            best.raw_name, getattr(best, "size", "") or "",
-            override=unit_override)
-    except ValueError as exc:
-        print(f"  {exc} — re-run with --unit \"1L\" or "
-              f"--unit \"unit unavailable\"")
+def is_valid_code(code: str) -> bool:
+    """True: 3 uppercase letters, alphabet-legal, no repeated letter."""
+    text = str(code or "").strip().upper()
+    if len(text) != CODE_LENGTH or not _CODE_RE.match(text):
         return False
+    if any(ch not in CODE_ALPHABET for ch in text):
+        return False
+    return len(set(text)) == CODE_LENGTH
+
+
+def load_registry(path=None) -> dict:
+    """Read the registry JSON; missing/corrupt -> {} (queue pattern)."""
+    path = Path(path) if path else REGISTRY_PATH
+    if not path.exists():
+        return {}
     try:
-        res = add_product_row(
-            generic_name=best.raw_name,
-            store=store,
-            price=best.price,
-            brand=best.brand,
-            size=unit,
-```
-
-And the queue + failure tails of the same function, ANCHOR (old):
-
-```python
-            _queue_searched_item(
-                store, best.raw_name, best.raw_name,
-                store_product_id=getattr(best, "product_id", "") or "",
-                size=getattr(best, "size", "") or "")
-        else:
-            print(f"  Add failed: {res.get('error', 'unknown')}")
-    except Exception as exc:
-        print(f"  add_product_row failed: {exc}")
-```
-
-**NEW:**
-
-```python
-            _queue_searched_item(
-                store, best.raw_name, best.raw_name,
-                store_product_id=getattr(best, "product_id", "") or "",
-                size=unit)
-            return True
-        else:
-            print(f"  Add failed: {res.get('error', 'unknown')}")
-    except Exception as exc:
-        print(f"  add_product_row failed: {exc}")
-    return False
-```
-
-**Edit 3 — non-interactive `map unmatched --add` call site. ANCHOR
-(old):**
-
-```python
-            _add_from_live_search(result, name)
-        else:
-```
-
-**NEW:**
-
-```python
-            if not _add_from_live_search(
-                    result, name,
-                    unit_override=getattr(args, "unit", None) or ""):
-                return 1
-        else:
-```
-
-(The interactive call site `_add_from_live_search(result, name)` in
-`_map_unmatched_item` stays as-is: TTY sessions ask via the resolver.)
-
-**Existing-test update:** grep `test_cli.py` for
-`_search_add_item|_add_from_live_search` — fake chosen/live items now
-need a size, a size-bearing name, `--unit`, or an expected fail-fast.
-
-**Tests — append:**
-
-```python
-class TestAddRoutesResolveUnit(unittest.TestCase):
-    """B1/B2: add routes resolve the unit before any write."""
-
-    def test_search_add_item_fails_fast_without_unit(self):
-        args = argparse.Namespace(add_item=1, expand=False, unit=None)
-        chosen = SimpleNamespace(
-            store="Coles", raw_name="Milk", price=3.0, brand="",
-            size="", category="", is_special=False, special_desc="",
-            product_id="")
-        rc = gpc._search_add_item(args, "milk", [chosen])
-        self.assertEqual(rc, 1)  # non-TTY under pytest -> fail fast
-
-    def test_search_add_item_uses_flag_unit(self):
-        # patch gpc.add_product_row (module: core.sheets_sync) and
-        # gpc._queue_searched_item; assert both received size="2L"
-        args = argparse.Namespace(add_item=1, expand=False, unit="2L")
-        chosen = SimpleNamespace(
-            store="Coles", raw_name="Milk", price=3.0, brand="",
-            size="", category="", is_special=False, special_desc="",
-            product_id="")
-        with patch("core.sheets_sync.add_product_row") as apr, \
-             patch.object(gpc, "_queue_searched_item") as qsi:
-            apr.return_value = {"wrote": True, "row_index": 9}
-            rc = gpc._search_add_item(args, "milk", [chosen])
-        self.assertEqual(rc, 0)
-        self.assertEqual(apr.call_args.kwargs["size"], "2L")
-        self.assertEqual(qsi.call_args.kwargs["size"], "2L")
-```
-
-(03 Code: `_load_env()` runs inside `_search_add_item`; keep the
-existing env-patching pattern this file already uses for search tests.)
-
-**Verify:**
-```powershell
-$PY -m pytest grocery-price-tracker/tests/test_cli.py -q
-$PY -m py_compile grocery_price_cli.py
-```
-
----
-
-## S12 — B3/C.1: `update_single_price` gains `size` + blank-Col C backfill
-
-**Files:** `grocery-price-tracker/core/sheets_sync.py` (edit),
-`grocery-price-tracker/tests/test_sheets_sync.py` (append).
-
-**Edit 1 — signature. ANCHOR (old):**
-
-```python
-def update_single_price(
-    product_name: str,
-    store: str,
-    price: float,
-    *,
-    dry_run: bool = False,
-    is_special: Optional[bool] = None,
-    special_desc: str = "",
-    worksheet=None,
-) -> dict:
-```
-
-**NEW:**
-
-```python
-def update_single_price(
-    product_name: str,
-    store: str,
-    price: float,
-    *,
-    dry_run: bool = False,
-    is_special: Optional[bool] = None,
-    special_desc: str = "",
-    size: str = "",
-    worksheet=None,
-) -> dict:
-```
-
-(Extend the docstring Args with:
-`size: Rule B resolved unit — written to a BLANK Col C in the same
-row write; a non-empty Col C is never modified (spec §5.3).`)
-
-**Edit 2 — backfill block + width. ANCHOR (old):**
-
-```python
-    target_width = max(price_col + 1, LAST_UPDATED_COL + 1)
-    if write_specials:
-        # Widen past M/N so the flag cell is inside the written range.
-        target_width = max(target_width, specials_col + 1)
-    while len(full_row) < target_width:
-        full_row.append("")
-    full_row[price_col] = price
-    full_row[LAST_UPDATED_COL] = ts
-```
-
-**NEW:**
-
-```python
-    target_width = max(price_col + 1, LAST_UPDATED_COL + 1, SIZE_COL + 1)
-    if write_specials:
-        # Widen past M/N so the flag cell is inside the written range.
-        target_width = max(target_width, specials_col + 1)
-    while len(full_row) < target_width:
-        full_row.append("")
-    # Rule B/C.1: fill a BLANK Col C in the same row write (atomic,
-    # no extra API call). Explicit size (marker allowed) wins;
-    # otherwise parse from the matched name. Non-empty Col C is
-    # NEVER modified (spec §5.3). Parse-based writes are real sizes
-    # only — no marker is ever guessed here (D-U3).
-    size_clean = str(size or "").strip()
-    if not size_clean:
-        m = _SIZE_PATTERN.search(product_name or "")
-        size_clean = m.group(1).strip() if m else ""
-    col_c = (str(full_row[SIZE_COL]).strip()
-             if len(full_row) > SIZE_COL else "")
-    if size_clean and not col_c:
-        full_row[SIZE_COL] = size_clean
-    full_row[price_col] = price
-    full_row[LAST_UPDATED_COL] = ts
-```
-
-**Tests — append:**
-
-```python
-class TestUpdateSinglePriceBackfill(unittest.TestCase):
-    """C.1: blank Col C healed in the same write; never overwritten."""
-
-    def test_blank_col_c_backfilled_once_from_explicit_size(self):
-        ws = FakeWorksheet([
-            ["Name", "Cat", "Size", "WW", "Coles", "", "Brand", "TS"],
-            ["Milk", "", "", "", "", "", "", ""],
-        ])
-        from core.sheets_sync import update_single_price
-        res = update_single_price("Milk", "coles", 3.0,
-                                  size="1L", worksheet=ws)
-        self.assertTrue(res["wrote"])
-        row = ws.updates[0][0][0]
-        self.assertEqual(row[2], "1L")
-
-    def test_second_run_writes_nothing_new_to_col_c(self):
-        ws = FakeWorksheet([
-            ["Name", "Cat", "Size", "WW", "Coles", "", "Brand", "TS"],
-            ["Milk", "", "1L", "", "", "", "", ""],
-        ])
-        from core.sheets_sync import update_single_price
-        update_single_price("Milk", "coles", 3.5,
-                            size="unit unavailable", worksheet=ws)
-        row = ws.updates[0][0][0]
-        self.assertEqual(row[2], "1L")  # non-empty Col C untouched
-
-    def test_name_parse_backfills_when_no_size_param(self):
-        ws = FakeWorksheet([
-            ["Name", "Cat", "Size", "WW", "Coles", "", "Brand", "TS"],
-            ["Milk 2L", "", "", "", "", "", "", ""],
-        ])
-        from core.sheets_sync import update_single_price
-        update_single_price("Milk 2L", "coles", 3.0, worksheet=ws)
-        self.assertEqual(ws.updates[0][0][0][2], "2L")
-```
-
-**Verify:**
-```powershell
-$PY -m pytest grocery-price-tracker/tests/test_sheets_sync.py -q
-```
-
----
-
-## S13 — B3 (CLI side): map wool/coles add paths carry size
-
-**Files:** `grocery_price_cli.py` (edit),
-`grocery-price-tracker/tests/test_cli.py` (append).
-
-**Edit 1 — `_queue_add_to_list` size param. ANCHOR (old):**
-
-```python
-def _queue_add_to_list(store: str, generic_name: str, keyword: str) -> None:
-```
-
-**NEW:**
-
-```python
-def _queue_add_to_list(store: str, generic_name: str, keyword: str,
-                       size: str = "") -> None:
-```
-
-(Extend the docstring Args with
-`size (str): Rule B resolved unit (stored on the queue entry).`)
-And ANCHOR (old): `        result = atl.add_entry(store, keyword, generic_name)`
-**NEW:** `        result = atl.add_entry(store, keyword, generic_name, size=size)`
-
-**Edit 2 — interactive `_map_store_item` add branch. ANCHOR (old):**
-
-```python
-    if action in ("a", "add"):
-        # Update the price for this generic name in the sheet
-        from core.sheets_sync import update_single_price
-        best = results[0]
-        try:
-            res = update_single_price(item, store, best.price)
-            if res.get("found"):
-                print(ok(f"Updated {store} price for '{item}' "
-                         f"(row {res.get('row_index')}): ${best.price:.2f}"))
-                _queue_add_to_list(store, item, best.raw_name)
-```
-
-**NEW:**
-
-```python
-    if action in ("a", "add"):
-        # Update the price for this generic name in the sheet
-        from core.sheets_sync import update_single_price
-        best = results[0]
-        # Rule B: resolve the unit (live size -> name parse -> ask).
-        try:
-            unit = _resolve_add_unit(
-                best.raw_name, getattr(best, "size", "") or "")
-        except ValueError as exc:
-            print(f"  {exc}")
-            return _prompt_action(
-                "[a]dd [na] [keyword] [s]kip [stop] [done]")
-        try:
-            res = update_single_price(item, store, best.price, size=unit)
-            if res.get("found"):
-                print(ok(f"Updated {store} price for '{item}' "
-                         f"(row {res.get('row_index')}): ${best.price:.2f}"))
-                _queue_add_to_list(store, item, best.raw_name, size=unit)
-```
-
-**Edit 3 — non-interactive `map wool/coles --add` branch. ANCHOR
-(old):**
-
-```python
-            best = results[0]
-            from core.sheets_sync import update_single_price
-            try:
-                res = update_single_price(
-                    item, store, best.price,
-                    is_special=best.is_special,
-                    special_desc=best.special_desc)
-                if res.get("found"):
-                    print(ok(f"Updated {store} price for '{item}' "
-                             f"(row {res.get('row_index')}): ${best.price:.2f}"))
-                    _queue_add_to_list(store, item, best.raw_name)
-```
-
-**NEW:**
-
-```python
-            best = results[0]
-            # Rule B: resolve the unit (--unit -> live size -> name
-            # parse -> fail-fast; interactive sessions ask instead).
-            try:
-                unit = _resolve_add_unit(
-                    best.raw_name,
-                    getattr(best, "size", "") or "",
-                    override=getattr(args, "unit", None) or "")
-            except ValueError as exc:
-                print(f"Error: {exc} — re-run with --unit \"1L\" or "
-                      f"--unit \"unit unavailable\"", file=sys.stderr)
-                return 1
-            from core.sheets_sync import update_single_price
-            try:
-                res = update_single_price(
-                    item, store, best.price,
-                    is_special=best.is_special,
-                    special_desc=best.special_desc,
-                    size=unit)
-                if res.get("found"):
-                    print(ok(f"Updated {store} price for '{item}' "
-                             f"(row {res.get('row_index')}): ${best.price:.2f}"))
-                    _queue_add_to_list(store, item, best.raw_name,
-                                       size=unit)
-```
-
-**Tests — append:**
-
-```python
-class TestMapAddCarriesUnit(unittest.TestCase):
-    """B3: wool/coles add passes size to the row write and the queue."""
-
-    def test_noninteractive_add_passes_unit_to_write_and_queue(self):
-        # patch _search_store_with_fallback -> [SimpleNamespace(
-        #   raw_name="Milk 2L", price=3.0, size="", is_special=False,
-        #   special_desc="", brand="")],
-        # patch core.sheets_sync.update_single_price -> {"found": True,
-        #   "row_index": 5}, patch gpc._queue_add_to_list,
-        # patch gpc._advance_and_show -> 0; feed a minimal args
-        # Namespace + items/progress fixtures as existing map tests do.
-        ...
-        self.assertEqual(
-            usp.call_args.kwargs["size"], "2L")  # name-parsed
-        self.assertEqual(qal.call_args.kwargs["size"], "2L")
-```
-
-(03 Code: wire this following the existing `_cmd_map_noninteractive`
-test fixtures in `test_cli.py`; assert via the patched call kwargs as
-sketched.)
-
-**Verify:**
-```powershell
-$PY -m pytest grocery-price-tracker/tests/test_cli.py -q
-$PY -m py_compile grocery_price_cli.py
-```
-
----
-
-## S14 — B7/C.1: `sync_prices` heals blank Col C in the batch write
-
-**Files:** `grocery-price-tracker/core/sheets_sync.py` (edit),
-`grocery-price-tracker/tests/test_sheets_sync.py` (append).
-
-**Edit — inside the matched-row loop. ANCHOR (old):**
-
-```python
-        row = rows[list_idx]
-        row[PRICE_COL[result.store]] = item.price
-```
-
-**NEW:**
-
-```python
-        row = rows[list_idx]
-        row[PRICE_COL[result.store]] = item.price
-
-        # Rule B/C.1: heal a blank Col C in the same batch write —
-        # live item size first, then parse from the item's raw name.
-        # NEVER writes the marker; a non-empty Col C is untouched
-        # (D-U3 / spec §5.3). Rows are pre-padded to width >= 8, so
-        # Col C (index 2) is always inside the written range.
-        col_c = (str(row[SIZE_COL]).strip()
-                 if len(row) > SIZE_COL else "")
-        if not col_c:
-            live_size = str(getattr(item, "size", "") or "").strip()
-            if not live_size:
-                m = _SIZE_PATTERN.search(
-                    str(getattr(item, "raw_name", "") or ""))
-                live_size = m.group(1).strip() if m else ""
-            if live_size:
-                row[SIZE_COL] = live_size
-```
-
-**Tests — append (spec §8.6):**
-
-```python
-class TestSyncPricesColCHeal(unittest.TestCase):
-    """B7/C.1: sync heals blank Col C; never overwrites, no marker."""
-
-    def _run(self, ws, item, result):
-        from core.sheets_sync import sync_prices
-        return sync_prices([result], [item], worksheet=ws)
-
-    def test_blank_col_c_healed_from_item_size(self):
-        # header + one row with blank Col C; MatchResult matched to
-        # row 2; ProductItem(size="600g") -> written row[2] == "600g"
-        ...
-
-    def test_blank_col_c_healed_from_raw_name_parse(self):
-        # ProductItem(size="", raw_name="Bread 650g") -> "650g"
-        ...
-
-    def test_nonempty_col_c_untouched_and_no_marker_written(self):
-        # row Col C "1L"; item size "2L" -> stays "1L";
-        # unparseable item (size="", raw_name="Herbs") -> stays ""
-        ...
-```
-
-(03 Code: reuse the existing `sync_prices` FakeWorksheet fixtures in
-this file; assert on `ws.updates[0][0]` rows. All three cases are
-mandatory.)
-
-**Verify:**
-```powershell
-$PY -m pytest grocery-price-tracker/tests/test_sheets_sync.py -q
-```
-
----
-
-## S15 — B6: missing-items queues carry `"size"`
-
-**Files:** `grocery-price-tracker/core/missing_items_tracker.py` (edit),
-`grocery-price-tracker/tests/test_cli.py` (append — the tracker tests
-live there).
-
-**Edit 1 — signature + docstring. ANCHOR (old):**
-
-```python
-def update_missing_items(
-    woolworths_results: list,
-    coles_results: list,
-) -> dict:
-```
-
-**NEW:**
-
-```python
-def update_missing_items(
-    woolworths_results: list,
-    coles_results: list,
-    *,
-    sizes_by_generic: dict | None = None,
-) -> dict:
-```
-
-(Extend the docstring: `sizes_by_generic (dict | None): optional map
-of generic_name (Col A) -> Col C size, built from the source store's
-sheet rows. New entries copy it into "size" (may be ""). Plan P4 —
-MatchResult itself has no size field and name_matcher is frozen.`)
-
-**Edit 2 — Woolworths-missing new entry. ANCHOR (old):**
-
-```python
-        else:
-            entry = {
-                "product_name": rn,
-                "normalized_key": key,
-                "source_store": "coles",
-                "first_seen": now,
-                "last_seen": now,
-                "count": 1,
-            }
-            ww_queue.append(entry)
-```
-
-**NEW:**
-
-```python
-        else:
-            entry = {
-                "product_name": rn,
-                "normalized_key": key,
-                "source_store": "coles",
-                # B6: copy the source store's Col C size ("" reads as
-                # the note downstream — spec §2).
-                "size": str(
-                    (sizes_by_generic or {}).get(gn, "")).strip(),
-                "first_seen": now,
-                "last_seen": now,
-                "count": 1,
-            }
-            ww_queue.append(entry)
-```
-
-**Edit 3 — Coles-missing new entry. Same pattern; ANCHOR (old):**
-
-```python
-        else:
-            entry = {
-                "product_name": rn,
-                "normalized_key": key,
-                "source_store": "woolworths",
-                "first_seen": now,
-                "last_seen": now,
-                "count": 1,
-            }
-            coles_queue.append(entry)
-```
-
-**NEW:**
-
-```python
-        else:
-            entry = {
-                "product_name": rn,
-                "normalized_key": key,
-                "source_store": "woolworths",
-                "size": str(
-                    (sizes_by_generic or {}).get(gn, "")).strip(),
-                "first_seen": now,
-                "last_seen": now,
-                "count": 1,
-            }
-            coles_queue.append(entry)
-```
-
-**Tests — append to `test_cli.py` (next to the existing
-`update_missing_items` tests; reuse their fixture):**
-
-```python
-class TestMissingTrackerCarriesSize(unittest.TestCase):
-    """B6: new queue entries copy size from sizes_by_generic."""
-
-    def test_new_entries_carry_size_and_blank(self):
-        # existing MatchResult fixture: one coles-only + one
-        # woolworths-only matched item
-        sizes = {"Beef Mince": "500g", "Oat Milk": ""}
-        result = mit.update_missing_items(
-            ww_results, coles_results, sizes_by_generic=sizes)
-        ...
-        # assert the new entries' "size" values match the map
-```
-
-(03 Code: mirror `test_update_missing_items_symmetric_disjoint`
-fixtures; patch the queue paths to tmp files as that test does.)
-
-**Verify:**
-```powershell
-$PY -m pytest grocery-price-tracker/tests/test_cli.py -k missing -q
-$PY -m py_compile grocery-price-tracker/core/missing_items_tracker.py
-```
-
----
-
-## S16 — A9: Wednesday displays + unmatched queue display
-
-**Files:** `grocery_price_cli.py` (edit),
-`grocery-price-tracker/tests/test_cli.py` (append).
-
-> **P5 TRAP:** txt files keep their machine format. Units are added
-> ONLY to the Telegram display lines.
-
-**Edit 1 — display helpers, inserted after `_chunk_list_message`
-(anchor: its final lines `    return out` + blank line before
-`def _post_weekly_summary`):**
-
-```python
-def _unmatched_display_line(entry: dict) -> str:
-    """Telegram resolve-list line for one pending unmapped entry (A9)."""
-    size = (entry.get("classification") or {}).get("size", "")
-    return (f"{entry.get('raw_name', '')} [{entry.get('store', '')}]"
-            f"{unit_suffix(size)}")
-
-
-def _unmatched_display_lines(pending: list) -> list:
-    """Telegram resolve-list lines for pending unmapped entries (A9)."""
-    return [_unmatched_display_line(e) for e in pending]
-
-
-def _missing_display_line(generic: str, size: str) -> str:
-    """Telegram resolve-list line for one wool/coles-missing row (A9)."""
-    return f"{generic}{unit_suffix(size)}"
-```
-
-**Edit 2 — unmatched block rebuild (keeps the forgotten-items print).
-ANCHOR (old):**
-
-```python
-    pending = get_pending_mappings()
-    unmatched_lines = [
-        f"{e.get('raw_name', '')} [{e.get('store', '')}]"
-        for e in pending
-    ]
-    # Exclude items the user permanently forgot via `map unmatched --forget`.
-    ignored = _read_ignored_items(data_dir)
-    if ignored:
-        before = len(unmatched_lines)
-        unmatched_lines = [ln for ln in unmatched_lines if ln not in ignored]
-        if before != len(unmatched_lines):
-            print(f"  (excluded {before - len(unmatched_lines)} forgotten items)")
-```
-
-**NEW:**
-
-```python
-    pending = get_pending_mappings()
-    # Exclude items the user permanently forgot via `map unmatched --forget`.
-    ignored = set(_read_ignored_items(data_dir))
-
-    def _machine_line(e: dict) -> str:
-        return f"{e.get('raw_name', '')} [{e.get('store', '')}]"
-
-    pending_visible = [e for e in pending
-                       if _machine_line(e) not in ignored]
-    if len(pending_visible) != len(pending):
-        print(f"  (excluded {len(pending) - len(pending_visible)} "
-              f"forgotten items)")
-    # Machine lines feed unmatched.txt (parsed by `map unmatched`);
-    # display lines carry units for Telegram only (plan P5).
-    unmatched_lines = [_machine_line(e) for e in pending_visible]
-    unmatched_display = _unmatched_display_lines(pending_visible)
-```
-
-**Edit 3 — wool/coles missing build loop. ANCHOR (old):**
-
-```python
-    wool_missing_lines = []
-    coles_missing_lines = []
-    if not args.dry_run:
-        # Re-read the sheet to compare keyword columns I and J per row
-        ws = connect_worksheet()
-        all_values = ws.get_all_values()
-        rows = all_values[1:] if len(all_values) > 1 else []
-        for row in rows:
-            generic = row[0].strip() if row else ""
-            if not generic:
-                continue
-            ww_kw = row[_WW_KW_COL].strip() if len(row) > _WW_KW_COL else ""
-            coles_kw = row[_COLES_KW_COL].strip() if len(row) > _COLES_KW_COL else ""
-            # "NA" (set by the `na` action) counts as populated -> excluded.
-            if coles_kw and not ww_kw:
-                wool_missing_lines.append(generic)
-            if ww_kw and not coles_kw:
-                coles_missing_lines.append(generic)
-```
-
-**NEW:**
-
-```python
-    wool_missing_lines = []
-    coles_missing_lines = []
-    wool_missing_display = []   # Telegram-only lines with units (P5)
-    coles_missing_display = []
-    if not args.dry_run:
-        # Re-read the sheet to compare keyword columns I and J per row
-        ws = connect_worksheet()
-        all_values = ws.get_all_values()
-        rows = all_values[1:] if len(all_values) > 1 else []
-        for row in rows:
-            generic = row[0].strip() if row else ""
-            if not generic:
-                continue
-            size_c = row[2].strip() if len(row) > 2 else ""
-            ww_kw = row[_WW_KW_COL].strip() if len(row) > _WW_KW_COL else ""
-            coles_kw = row[_COLES_KW_COL].strip() if len(row) > _COLES_KW_COL else ""
-            # "NA" (set by the `na` action) counts as populated -> excluded.
-            if coles_kw and not ww_kw:
-                wool_missing_lines.append(generic)
-                wool_missing_display.append(
-                    _missing_display_line(generic, size_c))
-            if ww_kw and not coles_kw:
-                coles_missing_lines.append(generic)
-                coles_missing_display.append(
-                    _missing_display_line(generic, size_c))
-```
-
-**Edit 4 — pass display lists to Telegram. ANCHOR (old):**
-
-```python
-            _post_weekly_summary(bot_token, summary_text, [
-                ("Unmatched", unmatched_lines),
-                ("Woolworths missing", wool_missing_lines),
-                ("Coles missing", coles_missing_lines),
-```
-
-**NEW:**
-
-```python
-            _post_weekly_summary(bot_token, summary_text, [
-                ("Unmatched", unmatched_display),
-                ("Woolworths missing", wool_missing_display),
-                ("Coles missing", coles_missing_display),
-```
-
-**Edit 5 — flush failed/parked lines carry the queue entry's unit.
-ANCHOR (old):**
-
-```python
-                    for failed_item in failed:
-                        summary_lines.append(
-                            fail(f"- {failed_item.get('keyword', '')}"))
-                    for parked_item in parked:
-                        summary_lines.append(
-                            fail(f"- {parked_item.get('keyword', '')} "
-                                 f"(parked)"))
-```
-
-**NEW:**
-
-```python
-                    for failed_item in failed:
-                        summary_lines.append(
-                            fail(f"- {failed_item.get('keyword', '')}"
-                                 f"{unit_suffix(failed_item.get('size', ''))}"))
-                    for parked_item in parked:
-                        summary_lines.append(
-                            fail(f"- {parked_item.get('keyword', '')} "
-                                 f"(parked)"
-                                 f"{unit_suffix(parked_item.get('size', ''))}"))
-```
-
-**Edit 6 — `_cmd_unmatched` detail join always shows the size tag.
-ANCHOR (old):**
-
-```python
-        detail = " · ".join(
-            str(v) for v in (
-                cls.get("brand", ""),
-                cls.get("size", ""),
-                cls.get("category", ""),
-            ) if v
-        )
-```
-
-**NEW:**
-
-```python
-        # A9: unit_tag never returns "" -> the size segment ALWAYS
-        # shows (real size or the marker note, Rule A).
-        detail = " · ".join(
-            str(v) for v in (
-                cls.get("brand", ""),
-                unit_tag(cls.get("size", "")),
-                cls.get("category", ""),
-            ) if v
-        )
-```
-
-**Tests — append:**
-
-```python
-class TestWednesdayDisplayUnits(unittest.TestCase):
-    """A9: display lines carry units; machine lines stay clean (P5)."""
-
-    def test_missing_display_line_known_and_unknown(self):
-        self.assertEqual(
-            gpc._missing_display_line("Milk", "1L"), "Milk · 1L")
-        self.assertEqual(
-            gpc._missing_display_line("Herbs", ""),
-            "Herbs · ⚠️ unit unavailable")
-
-    def test_unmatched_display_lines_use_classification_size(self):
-        pending = [{"raw_name": "Beans 400g",
-                    "store": "coles",
-                    "classification": {"brand": "", "size": "400g",
-                                       "category": ""}},
-                   {"raw_name": "Herbs",
-                    "store": "woolworths",
-                    "classification": {}}]
-        lines = gpc._unmatched_display_lines(pending)
-        self.assertEqual(lines[0], "Beans 400g [coles] · 400g")
-        self.assertEqual(lines[1],
-                         "Herbs [woolworths] · ⚠️ unit unavailable")
-```
-
-**Existing-test update:** grep `test_cli.py` for wednesday-summary
-assertions touching `unmatched_lines|wool_missing_lines` — counts and
-machine formats are unchanged; only `_post_weekly_summary` inputs
-change (display variants).
-
-**Verify:**
-```powershell
-$PY -m pytest grocery-price-tracker/tests/test_cli.py -q
-$PY -m py_compile grocery_price_cli.py
-```
-
----
-
-## S17 — Rule C.2: `backfill-sizes` command
-
-**Files:** `grocery_price_cli.py` (edit),
-`grocery-price-tracker/tests/test_cli.py` (append).
-
-**Edit 1 — parser entry, inserted after the `backfill-home-brands`
-block (anchor: `bh.set_defaults(func=_cmd_backfill_home_brands)`):**
-
-```python
-    bsz = sub.add_parser(
-        "backfill-sizes",
-        help="One-time Col C (size) backfill parsed from Col A/I/J "
-             "names; fills only blank cells, never overwrites",
-    )
-    bsz.add_argument("--dry-run", action="store_true",
-                     help="Print planned writes; no sheet mutation")
-    bsz.set_defaults(func=_cmd_backfill_sizes)
-```
-
-**Edit 2 — size column constant, next to the backfill constants.
-ANCHOR (old):**
-
-```python
-# Column indices in Products_Master (0-based) for the backfill.
-_KEYWORDS_COL = 15      # P (Keywords — user-query aliases)
-```
-
-**NEW:**
-
-```python
-# Column indices in Products_Master (0-based) for the backfill.
-_SIZE_COL_BF = 2        # C (size — the unit column)
-_KEYWORDS_COL = 15      # P (Keywords — user-query aliases)
-```
-
-**Edit 3 — handler, inserted between `_cmd_backfill_keywords` and
-`_cmd_backfill_home_brands` (anchor: the comment banner line
-`# Handler: _cmd_backfill_home_brands — Col G home-brand classifier
-backfill`):**
-
-```python
-def _cmd_backfill_sizes(args) -> int:
-    """One-time Col C (size) backfill parsed from Col A/I/J (spec §5.2).
-
-    Fills ONLY blank Col C cells whose size is parseable via
-    name_matcher._SIZE_PATTERN from Col A, then Col I, then Col J.
-    Non-empty Col C cells are NEVER modified (Rule C.3); unparseable
-    rows stay blank and display the note (D-U3 — no guessed sizes, no
-    bulk marker write). ONE batched update for all planned cells.
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_registry(registry: dict, path=None) -> None:
+    """Atomic registry write (tempfile + os.replace)."""
+    path = Path(path) if path else REGISTRY_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(registry, fh, indent=2, sort_keys=True)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+
+
+def retired_codes(registry: dict) -> set:
+    """Every code EVER assigned (live + deleted rows) — never reuse."""
+    return {str(code).upper() for code in registry}
+
+
+def generate_codes(
+    existing: set, n: int = 1, *, rng=None, seed: str = ""
+) -> list[str]:
+    """Generate n distinct codes not in `existing` (§8.2).
+
+    Deterministic when `seed` given (random.Random(seed)); on attempt
+    exhaustion falls back to a sequential scan of the sorted
+    permutation space. Uniqueness is guaranteed by check-then-take,
+    not by the seed.
+
+    Raises:
+        RuntimeError: the whole 10,626-code space is taken.
     """
-    _load_env()
-    from core.sheets_client import connect_worksheet
-    from core.name_matcher import _SIZE_PATTERN
+    taken = {str(c).upper() for c in existing}
+    rng = rng if rng is not None else random.Random(seed or None)
+    out: list[str] = []
+    for _ in range(int(n)):
+        code = None
+        for _attempt in range(MAX_GENERATE_ATTEMPTS):
+            cand = "".join(rng.sample(CODE_ALPHABET, CODE_LENGTH))
+            if cand not in taken:
+                code = cand
+                break
+        if code is None:
+            space = map(
+                "".join,
+                itertools.permutations(sorted(CODE_ALPHABET),
+                                       CODE_LENGTH),
+            )
+            code = next((c for c in space if c not in taken), None)
+        if code is None:
+            raise RuntimeError("item-code space exhausted (10,626)")
+        taken.add(code)
+        out.append(code)
+    return out
 
-    ws = connect_worksheet()
-    all_values = ws.get_all_values()
-    rows = all_values[1:] if len(all_values) > 1 else []
 
-    planned = []          # (row_index_1based, generic, size)
-    skipped_set = 0       # Col C already non-empty
-    left_blank = 0        # blank Col C, nothing parseable
-    for i, row in enumerate(rows):
-        row_index = i + 2
-        generic = row[0].strip() if len(row) > 0 else ""
-        current = (row[_SIZE_COL_BF].strip()
-                   if len(row) > _SIZE_COL_BF else "")
-        if current:
-            skipped_set += 1
+class _advisory_lock:
+    """Local-only O_CREAT|O_EXCL file lock (steals after 60s stale).
+
+    VPS-vs-local races are NOT covered — the verify step in
+    reserve/confirm handles those (D-IC4).
+    """
+
+    def __enter__(self) -> "_advisory_lock":
+        LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+        deadline = time.time() + LOCK_TIMEOUT_SECONDS
+        while True:
+            try:
+                self._fd = os.open(
+                    str(LOCK_PATH),
+                    os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                )
+                os.write(self._fd, str(os.getpid()).encode())
+                return self
+            except FileExistsError:
+                try:
+                    if time.time() - LOCK_PATH.stat().st_mtime > \
+                            LOCK_STALE_SECONDS:
+                        LOCK_PATH.unlink()
+                        continue
+                except OSError:
+                    pass
+                if time.time() > deadline:
+                    raise TimeoutError(
+                        "item-code lock busy >10s "
+                        "(data/.item_code_lock)")
+                time.sleep(0.1)
+
+    def __exit__(self, *exc) -> None:
+        try:
+            os.close(self._fd)
+        finally:
+            try:
+                LOCK_PATH.unlink()
+            except OSError:
+                pass
+```
+
+`tests/test_item_codes.py` — mandatory cases (spec §13.2):
+
+- `test_is_valid_code_accepts_abc` / rejects `ABA` (repeat), `AB` ,
+  `ABCD`, `ABI`/`ABL`/`ABO` (excluded letters), lowercase handled
+- `test_alphabet_excludes_i_l_o` (23 letters, exact string)
+- `test_generate_codes_unique_and_valid` (n=200, `existing=set()`)
+- `test_generate_codes_avoids_existing`
+- `test_generate_codes_deterministic_with_seed`
+- `test_registry_roundtrip_atomic` (save → load; corrupt JSON → {})
+- `test_retired_codes_uppercased`
+
+**Verify:**
+`python -m py_compile core/item_codes.py`
+`python -m pytest tests/test_item_codes.py -q`
+
+---
+
+### S4 — `core/item_codes.py` sheet layer (append to S3 module) + tests
+
+**Files:** `core/item_codes.py` (append), `tests/test_item_codes.py`
+(append). Reuse the `FakeWorksheet` pattern from
+`tests/test_cli.py:51-77` (copy the class into this test file).
+
+Append to `core/item_codes.py`:
+
+```python
+def sheet_codes(worksheet) -> set:
+    """Live valid Col R values — ONE get_all_values read."""
+    values = worksheet.get_all_values()
+    codes: set = set()
+    for row in values[1:]:
+        cell = (str(row[ITEM_CODE_COL]).strip().upper()
+                if len(row) > ITEM_CODE_COL else "")
+        if cell and is_valid_code(cell):
+            codes.add(cell)
+    return codes
+
+
+def _spreadsheet_id(worksheet) -> str:
+    """Best-effort spreadsheet id for seeding ("" when unknown)."""
+    sheet = getattr(worksheet, "spreadsheet", None)
+    return str(getattr(sheet, "id", "") or "")
+
+
+def reserve_code(worksheet, row_index: int) -> str:
+    """Pick + return ONE unused code for a NEW row (§8.2).
+
+    NO sheet write here: add_product_row includes the code in its
+    atomic A:S row write (§5); call confirm_code after that write.
+    Taken-set = registry (retired) + live Col R.
+    """
+    with _advisory_lock():
+        registry = load_registry()
+        taken = retired_codes(registry) | sheet_codes(worksheet)
+        seed = f"{_spreadsheet_id(worksheet)}:{len(registry)}"
+        return generate_codes(taken, 1, seed=seed)[0]
+
+
+def confirm_code(
+    code: str, row_index: int, *, spreadsheet_id: str = ""
+) -> None:
+    """Persist a code AFTER its row write succeeded (idempotent).
+
+    Raises:
+        RuntimeError: the code is already registered to a DIFFERENT
+        row — caller regenerates and retries (optimistic loop).
+    """
+    with _advisory_lock():
+        registry = load_registry()
+        entry = registry.get(str(code).upper())
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        if entry and entry.get("row") == row_index:
+            return
+        if entry:
+            raise RuntimeError(
+                f"item code {code} already registered to row "
+                f"{entry.get('row')} — collision; regenerate")
+        registry[str(code).upper()] = {
+            "row": row_index, "assigned_at": now,
+            "sheet": spreadsheet_id,
+        }
+        save_registry(registry)
+
+
+def verify_code(worksheet, row_index: int, code: str) -> bool:
+    """Re-read Col R: True when `row_index` holds `code` AND no other
+    row does (optimistic concurrency check, §8.2)."""
+    values = worksheet.get_all_values()
+    owners = []
+    for i, row in enumerate(values[1:], start=2):
+        cell = (str(row[ITEM_CODE_COL]).strip().upper()
+                if len(row) > ITEM_CODE_COL else "")
+        if cell == str(code).upper():
+            owners.append(i)
+    return owners == [row_index]
+
+
+def ensure_codes(worksheet, *, dry_run: bool = False) -> dict:
+    """Backfill: assign codes to every named row with empty Col R.
+
+    Computes the full assignment in memory first, single-cell write
+    per row R{row}, one final verify re-read; collisions regenerate
+    (§8.1 batch discipline, §8.2 loop).
+
+    Returns:
+        dict {planned, written, skipped, failed, codes: list[str]}.
+    """
+    sid = _spreadsheet_id(worksheet)
+    values = worksheet.get_all_values()
+    with _advisory_lock():
+        registry = load_registry()
+        taken = retired_codes(registry) | sheet_codes(worksheet)
+        planned: list[tuple[int, str]] = []
+        skipped = 0
+        for i, row in enumerate(values[1:], start=2):
+            cell = (str(row[ITEM_CODE_COL]).strip().upper()
+                    if len(row) > ITEM_CODE_COL else "")
+            if cell:
+                skipped += 1
+                continue
+            if not (row and str(row[0]).strip()):
+                continue
+            code = generate_codes(taken, 1, seed=f"{sid}:{i}")[0]
+            taken.add(code)
+            planned.append((i, code))
+        if dry_run or not planned:
+            return {"planned": len(planned), "written": 0,
+                    "skipped": skipped, "failed": 0,
+                    "codes": [c for _r, c in planned]}
+        written = failed = 0
+        for row_index, code in planned:
+            try:
+                worksheet.update(values=[[code]],
+                                 range_name=f"R{row_index}")
+                written += 1
+            except Exception:
+                failed += 1
+                continue
+            confirm_code(code, row_index, spreadsheet_id=sid)
+        # Verify pass: concurrent duplicate -> regenerate once (D-IC4)
+        for row_index, code in planned:
+            if verify_code(worksheet, row_index, code):
+                continue
+            alt = generate_codes(
+                taken | {code}, 1,
+                seed=f"{sid}:fix{row_index}")[0]
+            worksheet.update(values=[[alt]],
+                             range_name=f"R{row_index}")
+            confirm_code(alt, row_index, spreadsheet_id=sid)
+            taken.add(alt)
+        return {"planned": len(planned), "written": written,
+                "skipped": skipped, "failed": failed,
+                "codes": [c for _r, c in planned]}
+```
+
+Mandatory test cases (spec §13.2):
+
+- `test_sheet_codes_reads_col_r` (FakeWorksheet with header A..S)
+- `test_reserve_code_unused_and_registered_avoided`
+- `test_confirm_code_idempotent_same_row` /
+  `test_confirm_code_collision_raises`
+- `test_verify_code_true_single_owner` /
+  `test_verify_code_false_on_injected_collision` (simulate the
+  concurrent writer: mutate the fake so another row holds the code)
+- `test_ensure_codes_backfills_all_empty_named_rows` — 200-row
+  synthetic fixture: all codes unique, valid shape, no I/L/O, no
+  repeated letter; registry entries == written count
+- `test_ensure_codes_idempotent_second_run` (second run planned=0,
+  skipped=all)
+- `test_ensure_codes_dry_run_writes_nothing`
+- `test_lock_roundtrip` (enter/exit removes lock file; nested second
+  lock raises TimeoutError quickly — patch LOCK_TIMEOUT_SECONDS=0.2)
+
+**Verify:**
+`python -m py_compile core/item_codes.py`
+`python -m pytest tests/test_item_codes.py -q`
+
+---
+
+### S5 — `core/preferences.py` read model + prompts (new file — complete code) + tests
+
+**Files:** NEW `core/preferences.py`, NEW `tests/test_preferences.py`.
+
+```python
+#!/usr/bin/env python3
+"""Col Q/R/S read model, prompts, and the single P writer (§6, §8).
+
+Single-writer rule (§8.3): EVERY 'P' write goes through
+set_preferred. Wednesday sync never touches S; `prefer` is the only
+writer. Sheet-side multi-P corruption is DETECTED (topmost P wins
+until `prefer --code` fixes it) — never auto-deleted.
+"""
+from __future__ import annotations
+
+from core.subcategory import NEEDS_REVIEW, normalize_subcategory
+
+SUBCATEGORY_HEADER = "Sub_Category"   # Col Q (idx 16)
+ITEM_CODE_HEADER = "Item_Code"        # Col R (idx 17)
+PREFERRED_HEADER = "Preferred"        # Col S (idx 18)
+SUBCATEGORY_COL = 16
+ITEM_CODE_COL = 17
+PREFERRED_COL = 18
+PREFERRED_MARK = "P"
+
+
+def _col_index(header: list, name: str):
+    """Header name -> 0-based index (case-insensitive), else None."""
+    for idx, cell in enumerate(header):
+        if str(cell).strip().lower() == name.lower():
+            return idx
+    return None
+
+
+def read_qrs(worksheet) -> list[dict]:
+    """ONE get_all_values read -> per-row Q/R/S dicts (§9 read model).
+
+    Rows with empty Col A are skipped. Missing Q/R/S headers yield
+    empty-string fields (header-driven, robust to absence).
+
+    Returns:
+        list[dict]: {row_index, name, subcategory, item_code,
+        preferred} — subcategory/``item_code`` normalised (code
+        uppercased), preferred as-is ("" or "P").
+    """
+    values = worksheet.get_all_values()
+    header = values[0] if values else []
+    q = _col_index(header, SUBCATEGORY_HEADER)
+    r = _col_index(header, ITEM_CODE_HEADER)
+    s = _col_index(header, PREFERRED_HEADER)
+    rows: list[dict] = []
+    for i, row in enumerate(values[1:], start=2):
+        name = str(row[0]).strip() if len(row) > 0 else ""
+        if not name:
             continue
-        size = ""
-        for col in (0, 8, 9):  # Col A, Col I, Col J
-            if len(row) > col:
-                m = _SIZE_PATTERN.search(row[col])
-                if m:
-                    size = m.group(1).strip()
-                    break
-        if generic and size:
-            planned.append((row_index, generic, size))
+        rows.append({
+            "row_index": i,
+            "name": name,
+            "subcategory": (normalize_subcategory(str(row[q]))
+                            if q is not None and len(row) > q else ""),
+            "item_code": (str(row[r]).strip().upper()
+                          if r is not None and len(row) > r else ""),
+            "preferred": (str(row[s]).strip()
+                          if s is not None and len(row) > s else ""),
+        })
+    return rows
+
+
+def find_by_code(rows: list[dict], code: str):
+    """First row whose item_code equals `code` (uppercased), or None."""
+    want = str(code or "").strip().upper()
+    for row in rows:
+        if row["item_code"] == want:
+            return row
+    return None
+
+
+def get_preferred(rows: list[dict], subcategory: str):
+    """The P-flagged row for a sub-category; multi-P -> TOPMOST P
+    (§8.3 repair rule); no P -> None."""
+    sub = normalize_subcategory(subcategory)
+    flagged = [r for r in rows
+               if r["subcategory"] == sub
+               and r["preferred"] == PREFERRED_MARK]
+    if not flagged:
+        return None
+    return min(flagged, key=lambda r: r["row_index"])
+
+
+def list_subcategory_options(
+    rows: list[dict], subcategory: str
+) -> list[tuple[int, str, str]]:
+    """All rows of a sub-category as (row_index, name, code) tuples."""
+    sub = normalize_subcategory(subcategory)
+    return [(r["row_index"], r["name"], r["item_code"])
+            for r in rows if r["subcategory"] == sub]
+
+
+def detect_multi_p(rows: list[dict]) -> list[dict]:
+    """Sub-categories with >1 P: [{subcategory, rows: [...]}] (§8.3)."""
+    by_sub: dict = {}
+    for r in rows:
+        if r["preferred"] == PREFERRED_MARK and r["subcategory"]:
+            by_sub.setdefault(r["subcategory"], []).append(r)
+    return [{"subcategory": s, "rows": rs}
+            for s, rs in sorted(by_sub.items()) if len(rs) > 1]
+
+
+def render_disambiguation_prompt(
+    subcategory: str, options: list[tuple[int, str, str]]
+) -> str:
+    """EXACT §6.4 prompt text — never rephrase, never truncate names."""
+    lines = [f"Sub-Category: {subcategory} - Which one would you "
+             f"like to make your preferred item?"]
+    for n, (_row, name, code) in enumerate(options, 1):
+        lines.append(f"{n} - {name} - {code}")
+    lines.append("Or: Not in list? Provide another keyword for "
+                 "live search.")
+    return "\n".join(lines)
+
+
+def render_override_warning(name: str, subcategory: str) -> str:
+    """EXACT §6.5 warning text — relay verbatim."""
+    return (f"⚠️ Warning: [{name}] is not your preferred item for "
+            f"sub-category [{subcategory}].\n"
+            "Would you like to switch your preferred item in the "
+            "sheet?\n"
+            "Reply 'switch' to make it preferred, or 'keep' to "
+            "continue without switching.")
+```
+
+`tests/test_preferences.py` — mandatory cases (spec §13.3/13.4):
+
+- `test_read_qrs_parses_all_three_columns` (FakeWorksheet, header
+  A..S, 3 data rows)
+- `test_read_qrs_missing_headers_yield_empty_fields`
+- `test_get_preferred_returns_p_row` / `test_get_preferred_none`
+- `test_get_preferred_multi_p_topmost_wins_no_deletion`
+- `test_list_subcategory_options_shape`
+- `test_detect_multi_p_finds_only_excess`
+- `test_prompt_exact_text` — golden compare against the §6.4 block:
+
+```
+Sub-Category: eggs - Which one would you like to make your preferred item?
+1 - Woolworths 12 Extra Large Free Range Eggs 700g - ABC
+2 - Coles 700g Free Range Eggs XL - DEF
+Or: Not in list? Provide another keyword for live search.
+```
+
+- `test_override_warning_exact_text` (§6.5 golden)
+
+**Verify:**
+`python -m py_compile core/preferences.py`
+`python -m pytest tests/test_preferences.py -q`
+
+---
+
+### S6 — `set_preferred` (append to preferences) + tests
+
+**Files:** `core/preferences.py` (append), `tests/test_preferences.py`
+(append).
+
+```python
+def set_preferred(worksheet, code: str) -> dict:
+    """Clear-then-set ONE 'P' in `code`'s sub-category (§8.1).
+
+    Steps: read Q+S -> compute the full S-vector for the
+    sub-category's row span (non-members keep their existing S value
+    so OTHER sub-categories' flags are never clobbered) -> ONE range
+    write S{top}:S{bottom} -> re-read verify (exactly one P).
+
+    Args:
+        worksheet: connected gspread Worksheet.
+        code: 3-letter Item-Code (case-insensitive).
+
+    Returns:
+        dict {wrote, row_index, subcategory, cleared,
+        range_written, error} — error non-empty on any abort.
+    """
+    want = str(code or "").strip().upper()
+    if not want:
+        return {"wrote": False, "row_index": None, "subcategory": "",
+                "cleared": 0, "range_written": "",
+                "error": "code is required"}
+    rows = read_qrs(worksheet)
+    target = find_by_code(rows, want)
+    if target is None:
+        return {"wrote": False, "row_index": None, "subcategory": "",
+                "cleared": 0, "range_written": "",
+                "error": f"no row holds item-code {want}"}
+    sub = target["subcategory"]
+    if not sub:
+        return {"wrote": False, "row_index": target["row_index"],
+                "subcategory": "", "cleared": 0, "range_written": "",
+                "error": "row has no sub-category "
+                         "(run backfill-subcategories)"}
+    by_index = {r["row_index"]: r for r in rows}
+    members = {r["row_index"] for r in rows
+               if r["subcategory"] == sub}
+    top = min(members)
+    bottom = max(members)
+    vector: list[list[str]] = []
+    cleared = 0
+    for idx in range(top, bottom + 1):
+        row = by_index.get(idx)
+        if idx not in members:
+            # Preserve other sub-categories' flags (never clobber).
+            vector.append([row["preferred"] if row else ""])
+        elif idx == target["row_index"]:
+            vector.append([PREFERRED_MARK])
         else:
-            left_blank += 1
+            if row and row["preferred"] == PREFERRED_MARK:
+                cleared += 1
+            vector.append([""])
+    range_name = f"S{top}:S{bottom}"
+    worksheet.update(values=vector, range_name=range_name)
+    # Verify: exactly one P, on the target row (§8.1 step 4).
+    check = read_qrs(worksheet)
+    flags = [r for r in check
+             if r["subcategory"] == sub
+             and r["preferred"] == PREFERRED_MARK]
+    if len(flags) != 1 or flags[0]["row_index"] != target["row_index"]:
+        return {"wrote": False, "row_index": target["row_index"],
+                "subcategory": sub, "cleared": cleared,
+                "range_written": range_name,
+                "error": "verify failed — check the sheet manually"}
+    return {"wrote": True, "row_index": target["row_index"],
+            "subcategory": sub, "cleared": cleared,
+            "range_written": range_name, "error": ""}
+```
 
-    print(header("Backfill Sizes (Col C)", "📋"))
+Mandatory tests (spec §13.3):
+
+- `test_set_preferred_sets_and_clears_sibling_one_write` — two rows
+  in "eggs", set P on second: exactly ONE `update` call observed with
+  range `S2:S3`, final state `["", "P"]`
+- `test_set_preferred_interleaved_other_subcategory_preserved` —
+  rows ordered eggs/milk/eggs; setting eggs P must NOT clear milk's P
+  (S-vector carries milk's P through)
+- `test_set_preferred_unknown_code_errors`
+- `test_set_preferred_row_without_subcategory_errors`
+- `test_set_preferred_verify_failure_detected` (FakeWorksheet
+  subclass that corrupts S on write → wrote=False + error)
+
+**Verify:**
+`python -m pytest tests/test_preferences.py -q`
+
+---
+
+### S7 — Pending-run IO + shop resolver (append to preferences) + tests
+
+**Files:** `core/preferences.py` (append),
+`tests/test_preferences.py` (append).
+
+```python
+import json  # (place at module top with the other imports)
+
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+PENDING_PATH = DATA_DIR / "shop_pending.json"  # patchable
+PENDING_STALE_HOURS = 24
+
+
+def load_pending(path=None):
+    """Load the halted-run file; None when absent/corrupt (D-P3)."""
+    from pathlib import Path
+    path = Path(path) if path else PENDING_PATH
+    if not path.exists():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def save_pending(pending: dict, path=None) -> None:
+    """Atomic write (tempfile + os.replace) — queue JSON pattern."""
+    import os
+    import tempfile
+    from pathlib import Path
+    path = Path(path) if path else PENDING_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(pending, fh, indent=2)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+
+
+def clear_pending(path=None) -> None:
+    """Remove the pending file (missing_ok)."""
+    from pathlib import Path
+    path = Path(path) if path else PENDING_PATH
+    try:
+        path.unlink()
+    except OSError:
+        pass
+
+
+def is_stale(pending: dict, *, now=None) -> bool:
+    """True when the run started > PENDING_STALE_HOURS ago (§6.3)."""
+    from datetime import datetime, timedelta, timezone
+    try:
+        started = datetime.fromisoformat(str(pending.get("started_at")))
+    except ValueError:
+        return True
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    now = now or datetime.now(timezone.utc)
+    return now - started > timedelta(hours=PENDING_STALE_HOURS)
+
+
+def resolve_shop_items(worksheet, items: list[str]) -> dict:
+    """Deterministic shop read-side state machine (§6.2 steps 2-5).
+
+    Category mode: normalised item equals a live Col Q value OR a
+    taxonomy label (core.subcategory.all_labels). Product mode:
+    exact Col A match (lookup-chain Step 1 equivalence); no exact
+    match falls through to compare with the raw text.
+
+    Args:
+        worksheet: connected gspread Worksheet.
+        items: user/agent-normalised item strings.
+
+    Returns:
+        dict with keys:
+          compare: list[(user_item, col_a_name)] — price these rows;
+          halted:  list[{item, subcategory,
+                       options: [(row, name, code)]}] (S1);
+          cold:    list[{item, subcategory}] (S0);
+          warns:   list[{item, name, subcategory}] (S5 override);
+          notes:   list[str] — multi-P ⚠️ lines (§8.3).
+    """
+    from core.subcategory import all_labels
+    rows = read_qrs(worksheet)
+    norm_map = {}  # normalised Col A -> row (first wins)
+    for r in rows:
+        key = normalize_subcategory(r["name"])
+        norm_map.setdefault(key, r)
+    sub_labels = {normalize_subcategory(x) for x in all_labels()}
+    for r in rows:
+        if r["subcategory"]:
+            sub_labels.add(r["subcategory"])
+
+    compare: list = []
+    halted: list = []
+    cold: list = []
+    warns: list = []
+    notes: list = []
+    for item in items:
+        key = normalize_subcategory(item)
+        if key in sub_labels:  # ---- category mode (S4/S1/S0) ----
+            members = [r for r in rows if r["subcategory"] == key]
+            if not members:
+                cold.append({"item": item, "subcategory": key})
+                continue
+            flagged = [r for r in members
+                       if r["preferred"] == PREFERRED_MARK]
+            if len(flagged) > 1:
+                topmost = min(flagged,
+                              key=lambda r: r["row_index"])
+                notes.append(
+                    f"⚠️ sub-category '{key}' has "
+                    f"{len(flagged)} P flags — topmost (row "
+                    f"{topmost['row_index']}) wins until "
+                    f"'prefer --code {topmost['item_code']}' fixes it")
+                flagged = [topmost]
+            if flagged:
+                compare.append((item, flagged[0]["name"]))
+            else:
+                halted.append({
+                    "item": item, "subcategory": key,
+                    "options": [(r["row_index"], r["name"],
+                                 r["item_code"])
+                                for r in members],
+                })
+        else:  # ---- product mode (S5) ----
+            hit = norm_map.get(key)
+            if hit is not None and hit["subcategory"]:
+                pref = get_preferred(rows, hit["subcategory"])
+                if pref is None or pref["row_index"] != \
+                        hit["row_index"]:
+                    warns.append({"item": item, "name": hit["name"],
+                                  "subcategory":
+                                  hit["subcategory"]})
+            compare.append((item, hit["name"] if hit else item))
+    return {"compare": compare, "halted": halted, "cold": cold,
+            "warns": warns, "notes": notes}
+```
+
+(Tidy the inline imports to the module top during implementation —
+`json`, `os`, `tempfile`, `datetime`, `Path` are placed once.)
+
+Mandatory tests (spec §13.4):
+
+- `test_pending_roundtrip_and_clear` (save → load → clear → None)
+- `test_pending_corrupt_reads_none`
+- `test_is_stale_true_after_24h` / `test_is_stale_false_fresh`
+  (inject `now`)
+- `test_resolve_category_mode_with_p_autoselects` (S4)
+- `test_resolve_category_mode_no_p_halts_with_options` (S1 → options
+  list exact shape)
+- `test_resolve_category_mode_zero_rows_cold` (S0)
+- `test_resolve_product_mode_warns_on_different_preferred` (S5)
+- `test_resolve_product_mode_no_warning_when_preferred_matches`
+- `test_resolve_multi_p_note_and_topmost_wins` (§8.3)
+- `test_resolve_mixed_list_end_to_end` (eggs w/ P + apples w/o P +
+  unknown → compare 1, halted 1, cold 1, warns 0)
+
+**Verify:**
+`python -m pytest tests/test_preferences.py -q`
+
+---
+
+### S8 — Schema upgrade: append Q/R/S
+
+**Files:** `core/schema_upgrade.py` (2 edits).
+
+Edit 1 — docstring line 4 area: extend the module docstring sentence
+`Adds Woolworths_Specials (M), ... when they are absent.` with
+`Also appends Sub_Category (Q), Item_Code (R), Preferred (S)`.
+
+Edit 2 — replace the `NEW_COLUMNS` block at lines 33-38:
+
+```python
+NEW_COLUMNS = [
+    "Woolworths_Specials",  # Col M
+    "Coles_Specials",       # Col N
+    "Rewards_Points",       # Col O
+    "Keywords",             # Col P — user-side aliases (Phase 9.2)
+    "Sub_Category",         # Col Q — granular cluster (spec §3)
+    "Item_Code",            # Col R — permanent 3-letter row ID
+    "Preferred",            # Col S — "P" flag, one per sub-category
+]
+```
+
+Idempotency is inherited: `audit_schema` matches by normalized
+header, `upgrade_schema` appends only missing columns. The live run
+is manual step M1 (§Ops) — NOT part of the test suite (network).
+
+**Verify:**
+`python -m py_compile core/schema_upgrade.py`
+`python core/schema_upgrade.py --dry-run` — **[Local, networked;
+read-only]** prints `"planned_columns": ["Sub_Category",
+"Item_Code", "Preferred"]` before M1, `"up to date"` after.
+
+---
+
+### S9 — `add_product_row` Q/R/S hook
+
+**Files:** `core/sheets_sync.py`, `tests/test_sheets_sync.py`.
+
+Edit 1 — constants: after `KEYWORDS_HEADER = "Keywords"` (~line 961)
+insert:
+
+```python
+SUBCATEGORY_HEADER = "Sub_Category"   # Col Q (idx 16) — spec §3
+ITEM_CODE_HEADER = "Item_Code"        # Col R (idx 17)
+PREFERRED_HEADER = "Preferred"        # Col S (idx 18)
+```
+
+Edit 2 — signature: in `def add_product_row(` (line 1019), after
+`special_desc: str = "",` (line 1030) insert one kwarg:
+
+```python
+    subcategory: str = "",
+```
+
+Edit 3 — row build: after the specials block (lines 1211-1213
+ending `new_row[specials_col] = classify_special(...)`) insert:
+
+```python
+    # --- Q/R/S wiring (spec §5): every NEW row leaves with a
+    # sub-category, a permanent code, and an EMPTY Preferred cell. ---
+    from core.subcategory import (
+        NEEDS_REVIEW, classify_subcategory, normalize_subcategory,
+    )
+    subcategory_col = _find_col(header, SUBCATEGORY_HEADER)
+    item_code_col = _find_col(header, ITEM_CODE_HEADER)
+    preferred_col = _find_col(header, PREFERRED_HEADER)
+    label = normalize_subcategory(subcategory)
+    if subcategory_col is not None:
+        if not label:
+            hit, confidence = classify_subcategory(
+                generic_name, category)
+            label = hit if confidence >= 1.0 else NEEDS_REVIEW
+        new_row[subcategory_col] = label
+    item_code = ""
+    if item_code_col is not None and not dry_run:
+        from core.item_codes import reserve_code
+        item_code = reserve_code(worksheet, new_row_index)
+        new_row[item_code_col] = item_code
+    if preferred_col is not None:
+        new_row[preferred_col] = ""  # ingestion NEVER auto-sets P (D-P2)
+```
+
+Edit 4 — `target_width` (lines 1184-1191): add three entries to the
+`max(...)` call, before `len(header),`:
+
+```python
+        (subcategory_col + 1) if subcategory_col is not None else 0,
+        (item_code_col + 1) if item_code_col is not None else 0,
+        (preferred_col + 1) if preferred_col is not None else 0,
+```
+
+Edit 5 — after the range write (line 1222
+`_update_with_backoff(worksheet, [new_row], range_name)`) insert:
+
+```python
+    if item_code:
+        # Register + optimistic verify (§8.2): the A:S row write WAS
+        # the reservation; a concurrent duplicate is caught here.
+        from core.item_codes import confirm_code, verify_code
+        confirm_code(item_code, new_row_index)
+        if not verify_code(worksheet, new_row_index, item_code):
+            # Concurrent writer grabbed the same code: regenerate and
+            # rewrite ONLY this row's R cell, then re-verify.
+            from core.item_codes import reserve_code
+            item_code = reserve_code(worksheet, new_row_index)
+            _update_with_backoff(
+                worksheet, [[item_code]],
+                f"R{new_row_index}")
+            confirm_code(item_code, new_row_index)
+```
+
+(Extend the success return dict with `"item_code": item_code`.)
+
+MERGE PATH GUARD: `update_single_price` (line 463) gets NO Q/R/S
+write — add one comment line in its docstring Behavior list:
+`10. Q/R/S untouched (one-line rule merge — row already owns them).`
+
+Mandatory tests in `tests/test_sheets_sync.py` (spec §13.6):
+
+- `test_add_row_writes_qrs_full_header` — header A..S; new row
+  range `A{r}:S{r}` in ONE update; Q = classified label; R = valid
+  code; S = `""`
+- `test_add_row_subcategory_override_flag` — `subcategory="Eggs "`
+  → Q = `eggs`
+- `test_add_row_unclassifiable_gets_needs_review`
+- `test_add_row_without_qrs_header_unchanged_width` — 16-col header:
+  row still written, no crash (header-driven absence)
+- `test_add_row_merge_leaves_qrs_untouched` — similar-name merge
+  path: `update_single_price` called; Q/R/S cells of the existing
+  row byte-identical; no new row
+- `test_add_row_registry_confirmed` — registry file (patch
+  `REGISTRY_PATH` to tmp) contains the code after write
+
+**Verify:**
+`python -m pytest tests/test_sheets_sync.py -q`
+
+---
+
+### S10 — `core/lookup.py` additive row metadata
+
+**Files:** `core/lookup.py`, `tests/test_lookup.py`.
+
+Edit 1 — `CandidateRow` (lines 96-111): add three defaulted fields
+after `score: int`:
+
+```python
+    subcategory: str = ""   # Col Q (additive, spec §9)
+    item_code: str = ""     # Col R
+    preferred: str = ""     # Col S ("" or "P")
+```
+
+Edit 2 — `LookupIndex.__init__` (lines 181-268): after
+`keywords_col = _find_col(header, KEYWORDS_HEADER)` (~line 203) add:
+
+```python
+        subcategory_col = _find_col(header, "Sub_Category")   # Q
+        item_code_col = _find_col(header, "Item_Code")        # R
+        preferred_col = _find_col(header, "Preferred")        # S
+```
+
+and extend the `row_dict` literal (lines 251-268) with:
+
+```python
+                "subcategory": (str(row[subcategory_col]).strip()
+                                if subcategory_col is not None
+                                and len(row) > subcategory_col
+                                else ""),
+                "item_code": (str(row[item_code_col]).strip()
+                              .upper()
+                              if item_code_col is not None
+                              and len(row) > item_code_col
+                              else ""),
+                "preferred": (str(row[preferred_col]).strip()
+                              if preferred_col is not None
+                              and len(row) > preferred_col
+                              else ""),
+```
+
+Edit 3 — `find_candidates` (line 363): pass the three fields at the
+`CandidateRow(...)` construction (grep `CandidateRow(` inside
+`find_candidates`; the row dict keys above are the values).
+
+Edit 4 — `LookupResult` (lines 145-160): add three defaulted fields
+after `sources: dict`:
+
+```python
+    subcategory: str = ""   # resolved row's Col Q (additive)
+    item_code: str = ""     # resolved row's Col R
+    preferred: str = ""     # resolved row's Col S
+```
+
+and populate them in `_finish_sheet_result` (line 708) wherever the
+result is rebuilt with a known `row_index` (copy from the row dict;
+defaulted construction sites elsewhere need no change — additive).
+
+Mandatory tests (`tests/test_lookup.py`):
+
+- `test_index_carries_qrs_metadata`
+- `test_candidates_carry_subcategory_and_code`
+- `test_result_metadata_absent_headers_empty` (16-col fixture)
+- `test_chain_order_unchanged` — existing tests prove this; assert
+  no new failures (full file run)
+
+**Verify:**
+`python -m pytest tests/test_lookup.py -q`
+
+---
+
+### S11 — `ProductItem` multi-buy fields
+
+**Files:** `extractors/models.py`, `tests/test_extractors.py`.
+
+Replace the field block (lines 42-53) ending with
+`timestamp: str = field(default_factory=lambda: _now_iso())` —
+insert BEFORE `timestamp`:
+
+```python
+    multi_buy_qty: int = 0        # bundle qty; 0 = no multi-buy
+    multi_buy_total: float = 0.0  # bundle total $; 0.0 = none
+```
+
+Docstring: append two attribute lines after `product_id:` (lines
+36-38):
+
+```python
+        multi_buy_qty: Multi-buy bundle quantity (e.g. 2 in "2 for
+            $6.00"). 0 = no multi-buy (backwards compatible).
+        multi_buy_total: Multi-buy bundle total in AUD. 0.0 = none.
+```
+
+Mandatory tests (`tests/test_extractors.py`):
+
+- `test_product_item_multibuy_defaults_zero` — every existing
+  constructor call site stays valid (defaults)
+- `test_product_item_multibuy_roundtrip_dict` —
+  `to_dict()` carries both keys
+- `test_to_tuple_length_unchanged` — still 12 columns (A..L only;
+  Q/R/S are written by sheets_sync, not by the model)
+
+**Verify:**
+`python -m pytest tests/test_extractors.py -q`
+
+---
+
+### S12 — D-MB2 live payload probe (read-only, MANUAL gate)
+
+**[Local]** Read-only probe; writes nothing; decides S13's capture
+keys. Run one live search per store and dump the RAW product payload
+keys related to promos:
+
+```powershell
+python -c "from extractors.hub import *; import json, sys; sys.exit(0)"
+python grocery_price_cli.py search --product "soft drink"
+```
+
+Then, to inspect raw payloads, add NOTHING to the repo — run a
+throwaway probe in the temp dir
+(`C:\Users\USER~1.DES\AppData\Local\Temp\kilo`):
+
+```powershell
+python -c "import sys, json; sys.path.insert(0, r'C:\Users\User.DESKTOP-R2G441H\Documents\AI related\grocery-price-tracker'); from extractors import woolworths_extractor as w; from extractors import coles_extractor as c; print([n for n in dir(w) if 'search' in n.lower()]); print([n for n in dir(c) if 'search' in n.lower()])"
+```
+
+Record (in `test.md` log): which payload keys carry multi-buy data
+(WW candidates: `MultiBuy`, `PromotionId`, `WasPrice`-level siblings;
+Coles: `pricing.now`-level siblings). Outcome A: keys exist → wire
+them in S13. Outcome B: no keys → S13 wires NOTHING and live paths
+degrade to normal pricing (D-MB2) — docx/sheet paths carry multi-buy
+alone. NEVER invent promo fields.
+
+**Manual step — requires live network + `.env`. No test depends on
+its outcome (S13 handles both outcomes deterministically).**
+
+---
+
+### S13 — WW/Coles best-effort multi-buy capture
+
+**Files:** `extractors/woolworths_extractor.py`,
+`extractors/coles_extractor.py`. CONDITIONED on S12's recorded keys.
+
+Woolworths — inside the specials block (lines 239-251,
+`# Specials` … `special_desc = f"Save ${float(savings):.2f}"`),
+append AFTER the `special_desc` chain (keep existing logic
+untouched):
+
+```python
+    # D-MB2 best-effort multi-buy capture: ONLY when the payload
+    # really carries it (probe 2026-09-04). Absent -> defaults 0.
+    multi_buy_qty = 0
+    multi_buy_total = 0.0
+    promo = product.get("MultiBuy") or {}
+    try:
+        qty = int(promo.get("Quantity", 0) or 0)
+        tot = float(promo.get("TotalPrice", 0.0) or 0.0)
+        if qty >= 2 and tot > 0:
+            multi_buy_qty, multi_buy_total = qty, tot
+    except (TypeError, ValueError):
+        pass
+```
+
+and pass `multi_buy_qty=multi_buy_qty,
+multi_buy_total=multi_buy_total` into the `ProductItem(...)`
+constructor (line 272). **If S12 outcome B: replace the `promo.get`
+line with `promo = {}` — the block degrades to 0/0.0 and stays as
+the documented hook.**
+
+Coles — locate the `pricing` mapping (grep `pricing` in
+`extractors/coles_extractor.py`; the spec verified it maps
+`pricing.now/was/onlineSpecial`). Apply the same pattern:
+`promo = (pricing or {}).get("multiBuy") or {}` with analogous
+qty/total keys, defaulting 0/0.0, passed to its `ProductItem`.
+
+Mandatory tests (`tests/test_extractors.py`):
+
+- `test_ww_multibuy_captured_when_present` (fake product dict with
+  `MultiBuy` → fields set)
+- `test_ww_multibuy_absent_defaults_zero` (no key → 0/0.0)
+- `test_ww_multibuy_garbage_tolerated` (`Quantity: "x"` → 0/0.0, no
+  raise)
+- `test_coles_multibuy_captured_when_present` /
+  `test_coles_multibuy_absent_defaults_zero`
+
+**Verify:**
+`python -m pytest tests/test_extractors.py -q`
+
+---
+
+### S14 — M/N multi-buy cell encoding on write paths
+
+**Files:** `core/sheets_sync.py`, `tests/test_sheets_sync.py`.
+
+Two call sites classify specials into M/N:
+
+1. `add_product_row` line ~1213:
+   `new_row[specials_col] = classify_special(is_special, special_desc)`
+2. `update_single_price` specials write (grep
+   `classify_special(` in sheets_sync — one site inside
+   `update_single_price`).
+
+Introduce ONE shared writer (insert above `add_product_row`):
+
+```python
+def _specials_cell(is_special, special_desc: str) -> str:
+    """Classify + encode a specials M/N cell (D25 + §7.2).
+
+    classify_special vocabulary first; when the promo parses to
+    product-specific multi-buy terms, the cell carries them
+    ("multi-buy 2/$6.00"). Mixed "any N" promos stay the bare
+    "multi-buy" marker (D-MB3 — informational only).
+    """
+    from core.multibuy import (
+        encode_multibuy_cell, is_mixed_promo, parse_multibuy,
+    )
+    from extractors.specials_parser import classify_special
+    kind = classify_special(bool(is_special), special_desc or "")
+    if kind == "multi-buy" and not is_mixed_promo(
+            special_desc or ""):
+        terms = parse_multibuy(special_desc or "")
+        if terms:
+            return encode_multibuy_cell(*terms)
+    return kind
+```
+
+Then replace BOTH call sites' `classify_special(is_special,
+special_desc)` with `_specials_cell(is_special, special_desc)`.
+
+Mandatory tests (`tests/test_sheets_sync.py`):
+
+- `test_specials_cell_for_promo_encodes_terms`
+  ("2 for $6.00" → `multi-buy 2/$6.00`)
+- `test_specials_cell_any_promo_stays_bare` ("Any 2 | $9" →
+  `multi-buy`)
+- `test_specials_cell_discount_unchanged` (was/save → `discount`)
+- `test_specials_cell_no_unchanged`
+- `test_decode_roundtrip_via_multibuy` (cell decodes back to (2,
+  6.0))
+
+**Verify:**
+`python -m pytest tests/test_sheets_sync.py tests/test_multibuy.py -q`
+
+---
+
+### S15 — Comparator: multi-buy terms on BasketItem
+
+**Files:** `core/price_comparator.py`, `tests/test_comparator.py`.
+
+Edit 1 — `BasketItem` (after `specials: dict` line 57):
+
+```python
+    multibuy: dict = field(default_factory=dict)
+    # store -> (qty, bundle_total) for RATE-ELIGIBLE multi-buy terms
+    # (mixed "any N" promos are display-only and never appear here).
+```
+
+Edit 2 — module helper (insert above `compare_basket`, ~line 118):
+
+```python
+def effective_price(item: BasketItem, store: str) -> float:
+    """Math price for a store: multi-buy effective unit rate when
+    rate-eligible terms exist (§7.3 rule 1), else the raw price.
+
+    Args:
+        item: the BasketItem.
+        store: "woolworths" | "coles".
+
+    Returns:
+        float: effective unit price in AUD.
+    """
+    terms = item.multibuy.get(store)
+    if terms:
+        from core.multibuy import effective_unit_rate
+        return effective_unit_rate(terms[0], terms[1])
+    return item.prices[store]
+```
+
+Edit 3 — decode during the step-3 rebuild loop (lines 189-207):
+inside the `for i, item in enumerate(items):` loop, before the
+rebuild, compute terms; add `multibuy=mb,` to the `BasketItem(...)`
+rebuild (the loop's comment at lines 200-201 exists precisely
+because dropped fields bite):
+
+```python
+        from core.multibuy import (
+            decode_multibuy_cell, is_mixed_promo, parse_multibuy,
+        )
+        mb: dict = {}
+        for store in item.prices:
+            desc = str(item.specials.get(store, "") or "")
+            terms = decode_multibuy_cell(desc)  # sheet cell first
+            if terms is None:
+                terms = parse_multibuy(desc)    # live desc fallback
+            if terms and not is_mixed_promo(desc):
+                mb[store] = terms
+```
+
+Mandatory tests (`tests/test_comparator.py`):
+
+- `test_effective_price_uses_rate_when_terms`
+- `test_effective_price_raw_when_no_terms`
+- `test_decode_sheet_cell_and_live_desc_paths` (BasketItem built
+  via `_gather_lookup_prices` with FakeWorksheet-style rows; assert
+  `item.multibuy["woolworths"] == (2, 6.0)`)
+- `test_mixed_any_promo_never_yields_terms` (specials "Any 2 | $9"
+  → `multibuy == {}`)
+
+**Verify:**
+`python -m pytest tests/test_comparator.py -q`
+
+---
+
+### S16 — Comparator: effective-rate math in totals/winner
+
+**Files:** `core/price_comparator.py`, `tests/test_comparator.py`.
+
+Edit 1 — step-4 raw_totals loop (lines 216-219): replace
+
+```python
+            if store in item.prices:
+                total += item.prices[store]
+```
+
+with
+
+```python
+            if store in item.prices:
+                total += effective_price(item, store)
+```
+
+Edit 2 — step-5 discount feed (lines 236-241): replace
+`"price": item.prices["woolworths"],` with
+`"price": effective_price(item, "woolworths"),` (WW display
+discounts apply AFTER rate computation, display-only — §7.3 rule 4).
+
+Edit 3 — format_report discount_items feed (line 804): replace
+`raw_price = item.prices["woolworths"]` with
+`raw_price = effective_price(item, "woolworths")`.
+
+Winner/totals/`optimize` all flow from `raw_totals`/`final_totals` —
+no other math changes (§7.3 rule 1).
+
+Mandatory tests (spec §13.5):
+
+- `test_multibuy_rate_flips_winner` — item priced WW $3.50 (multi-buy
+  2/$6.00 → $3.00/u) vs Coles $3.20: WW wins
+- `test_multibuy_totals_use_effective_rate` — raw_totals reflect
+  3.00, not 3.50
+- `test_normal_pricing_unchanged_without_multibuy` — golden on an
+  existing fixture (regression)
+- `test_ww_discounts_apply_after_rate` — discounted WW line computes
+  from 3.00
+
+**Verify:**
+`python -m pytest tests/test_comparator.py -q`
+
+---
+
+### S17 — telegram_format: `MAX_NAME_WIDTH = 60` + tests
+
+**Files:** `core/telegram_format.py`, `tests/test_telegram_format.py`.
+(The `multibuy_tag` helper already landed in S2.)
+
+Edit — line 47: `MAX_NAME_WIDTH = 24` → `MAX_NAME_WIDTH = 60`.
+`MAX_BLOCK_WIDTH = 34` (line 48) UNCHANGED (§10). Update the
+adjacent comment (line 46) to:
+`# Width budgets (spec §3 + §10): names full up to 60 cells; fenced
+# phone-fit tables stay 34.`
+
+`item_block` (line 355) keeps calling
+`truncate(name, MAX_NAME_WIDTH)` — no signature change.
+
+Mandatory test updates (`tests/test_telegram_format.py`):
+
+- UPDATE every test that assumes 24-cell truncation (lines ~78-93,
+  ~237-251): a 52-char name ("AJI CRISPY FRY BREADING MIX ORIGINAL
+  WITH GRAVY MIX 62G" = 52 chars) renders UNTRUNCATED
+- `test_max_name_width_is_60` — `self.assertEqual(tf.MAX_NAME_WIDTH,
+  60)`
+- `test_fenced_table_truncates_with_ellipsis` (line 130) stays green
+  (34-cell budget untouched — spec §13.7)
+- `test_multibuy_tag_exact_text`
+
+**Verify:**
+`python -m pytest tests/test_telegram_format.py -q`
+
+---
+
+### S18 — Comparator display: tag + mandatory footnote
+
+**Files:** `core/price_comparator.py`, `tests/test_comparator.py`.
+
+Edit 1 — WW line (format_report lines 722-736): compute `eff =
+effective_price(item, "woolworths")`, use it in BOTH branches
+(`format_discounted_price(eff, ...)` / `f"${eff:.2f}"`), and when
+`"woolworths" in item.multibuy` append the tag:
+
+```python
+            if "woolworths" in item.multibuy:
+                from core.telegram_format import multibuy_tag
+                q, t = item.multibuy["woolworths"]
+                ww += f"  {multibuy_tag(q, t)}"
+```
+
+Edit 2 — Coles line (lines 737-746): same pattern with
+`effective_price(item, "coles")` and the tag.
+
+Edit 3 — totals footnote (after the fenced table append, line 789):
+
+```python
+    # §7.3 rule 2: totals footnote carries the mandatory note when
+    # ANY displayed price is multi-buy-derived.
+    if any(item.multibuy for item in report.items):
+        from core.telegram_format import MULTIBUY_NOTE
+        lines.append(f"🏷️ Multi-buy rates applied. {MULTIBUY_NOTE}")
+        lines.append("")
+```
+
+Mandatory tests (spec §13.5):
+
+- `test_multibuy_line_shows_rate_tag_and_note` — rendered block
+  contains `$3.00`, `🏷️ 2 for $6.00`, and the exact note text
+- `test_totals_footnote_present_with_multibuy` / `..._absent_without`
+- `test_non_multibuy_lines_unchanged` (regression golden)
+
+**Verify:**
+`python -m pytest tests/test_comparator.py -q`
+
+---
+
+### S19 — CLI parsers: 5 new commands + `--subcategory` flags
+
+**Files:** `grocery_price_cli.py`, `tests/test_cli.py`.
+
+Edit 1 — `build_parser()` (line 45): after the `backfill-sizes`
+block (`bsz = sub.add_parser(` … line 300-307) insert:
+
+```python
+    shp = sub.add_parser(
+        "shop",
+        help="Shopping-list compare with sub-category preferences")
+    shp.add_argument("--items", required=True, metavar="LIST",
+                     help="Comma-separated item list")
+    shp.set_defaults(func=_cmd_shop)
+
+    pfr = sub.add_parser(
+        "prefer",
+        help="Set the preferred (P) row for a sub-category")
+    pfr.add_argument("--code", default=None, metavar="CODE",
+                     help="3-letter Item-Code (Col R)")
+    pfr.add_argument("--pick", type=int, default=None, metavar="N",
+                     help="Option number from a pending shop run")
+    pfr.set_defaults(func=_cmd_prefer)
+
+    sct = sub.add_parser(
+        "subcategories",
+        help="List sub-category labels + live row counts")
+    sct.set_defaults(func=_cmd_subcategories)
+
+    bsc = sub.add_parser(
+        "backfill-subcategories",
+        help="One-time Col Q backfill via the classifier")
+    bsc.add_argument("--dry-run", action="store_true", default=False)
+    bsc.set_defaults(func=_cmd_backfill_subcategories)
+
+    bcd = sub.add_parser(
+        "backfill-codes",
+        help="One-time Col R Item-Code backfill")
+    bcd.add_argument("--dry-run", action="store_true", default=False)
+    bcd.set_defaults(func=_cmd_backfill_codes)
+```
+
+Edit 2 — search parser (lines 91-108): after `--allow-duplicate`
+add:
+
+```python
+    sp2.add_argument("--subcategory", default=None, metavar="TEXT",
+                     help="Override the Col Q classifier for --add-item")
+```
+
+Edit 3 — map parser (lines 222-246): after `--unit` add the same
+`--subcategory` argument on `mp`.
+
+Edit 4 — `_search_add_item` add_product_row call (lines 2121-2133):
+add one kwarg line after `special_desc=chosen.special_desc,`:
+
+```python
+            subcategory=getattr(args, "subcategory", "") or "",
+```
+
+Edit 5 — `_add_from_live_search` (line 4536): add kwarg
+`subcategory: str = ""` to its signature; pass
+`subcategory=subcategory,` into its `add_product_row` call (line
+4580). In `_cmd_map_noninteractive` (line 4980), pass
+`subcategory=getattr(args, "subcategory", "") or ""` at its
+`_add_from_live_search(...)` call site. (optimize `--confirm …+add`
+and Wednesday Step 1c auto-link reuse these same call sites — the
+hook inside `add_product_row` covers every remaining path, spec §5.)
+
+Temporary stubs (S19 only, replaced in S20-S22 — keep suite green):
+
+```python
+def _cmd_shop(args) -> int:        # replaced in S21
+    print("Error: shop not implemented yet.", file=sys.stderr)
+    return 1
+
+
+def _cmd_prefer(args) -> int:      # replaced in S22
+    print("Error: prefer not implemented yet.", file=sys.stderr)
+    return 1
+
+
+def _cmd_subcategories(args) -> int:        # replaced in S20
+    print("Error: subcategories not implemented yet.", file=sys.stderr)
+    return 1
+
+
+def _cmd_backfill_subcategories(args) -> int:   # replaced in S20
+    print("Error: backfill-subcategories not implemented yet.",
+          file=sys.stderr)
+    return 1
+
+
+def _cmd_backfill_codes(args) -> int:           # replaced in S20
+    print("Error: backfill-codes not implemented yet.", file=sys.stderr)
+    return 1
+```
+
+Mandatory tests (`tests/test_cli.py`):
+
+- `test_parser_has_five_new_commands`
+- `test_search_parser_accepts_subcategory_flag`
+- `test_map_parser_accepts_subcategory_flag`
+- `test_stub_handlers_return_1` (removed in S20-22)
+
+**Verify:**
+`python -m py_compile ..\grocery_price_cli.py` (from project root;
+adjust path as needed: `python -m py_compile "C:\Users\User.DESKTOP-R2G441H\Documents\AI related\grocery_price_cli.py"`)
+`python -m pytest tests/test_cli.py -q`
+
+---
+
+### S20 — Handlers: `subcategories`, `backfill-subcategories`, `backfill-codes`
+
+**Files:** `grocery_price_cli.py` (replace 3 stubs),
+`tests/test_cli.py`.
+
+`_cmd_subcategories` (replace stub):
+
+```python
+def _cmd_subcategories(args) -> int:
+    """Taxonomy labels + live per-label row counts (agent ref, §6.6)."""
+    _load_env()
+    from core.subcategory import NEEDS_REVIEW, all_labels
+    from core.preferences import read_qrs
+    from core.sheets_client import connect_worksheet
+    print(header("Sub-Categories", "🗂️"))
     print()
-    print(kv("Rows examined", str(len(rows))))
+    try:
+        rows = read_qrs(connect_worksheet())
+    except Exception as exc:
+        print(warn(f"Sheet unavailable ({exc}) — labels only."))
+        rows = []
+    counts: dict = {}
+    for r in rows:
+        label = r["subcategory"] or NEEDS_REVIEW
+        counts[label] = counts.get(label, 0) + 1
+    for label in all_labels():
+        print(kv(label, str(counts.get(label, 0))))
+    for label in sorted(set(counts) - set(all_labels())
+                        - {NEEDS_REVIEW}):
+        print(kv(f"{label} (sheet-only)", str(counts[label])))
+    print(kv(NEEDS_REVIEW, str(counts.get(NEEDS_REVIEW, 0))))
+    return 0
+```
+
+`_cmd_backfill_subcategories` (replace stub; mirrors
+`_cmd_backfill_sizes` at lines 5671-5735):
+
+```python
+def _cmd_backfill_subcategories(args) -> int:
+    """One-time Col Q backfill (§5): classifier fills ONLY empty Q
+    cells — confident labels, else the literal "needs review".
+    NEVER overwrites a non-empty Q. ONE batched update."""
+    _load_env()
+    from core.subcategory import (
+        CONFIDENT_THRESHOLD, NEEDS_REVIEW, classify_subcategory,
+    )
+    from core.sheets_client import connect_worksheet
+    ws = connect_worksheet()
+    values = ws.get_all_values()
+    planned = []       # (row_index, label)
+    skipped_set = 0
+    for i, row in enumerate(values[1:], start=2):
+        name = str(row[0]).strip() if len(row) > 0 else ""
+        current = str(row[16]).strip() if len(row) > 16 else ""
+        hint = str(row[1]).strip() if len(row) > 1 else ""
+        if current or not name:
+            if current:
+                skipped_set += 1
+            continue
+        label, confidence = classify_subcategory(name, hint)
+        planned.append(
+            (i, label if confidence >= CONFIDENT_THRESHOLD
+             else NEEDS_REVIEW))
+    filled = sum(1 for _r, lbl in planned if lbl != NEEDS_REVIEW)
+    review = len(planned) - filled
+    print(header("Backfill Sub-Categories (Col Q)", "🗂️"))
+    print()
+    print(kv("Rows examined", str(len(values) - 1)))
     print(kv("Planned writes", str(len(planned))))
-    print(kv("Skipped (Col C already set)", str(skipped_set)))
-    print(kv("Left blank (no parseable size)", str(left_blank)))
+    print(kv("Filled (confident)", str(filled)))
+    print(kv("needs review", str(review)))
+    print(kv("Skipped (Col Q already set)", str(skipped_set)))
     print()
-    for row_index, generic, size in planned:
-        print(f"{row_index}. {truncate(generic, 30)} · {EM_DASH} → {size}")
+    if args.dry_run:
+        print(warn("[DRY RUN] no sheet write"))
+        return 0
+    if planned:
+        ws.batch_update([
+            {"range": f"Q{r}", "values": [[lbl]]}
+            for r, lbl in planned
+        ])
+        print(f"Wrote {len(planned)} Col Q cell(s) in one batched "
+              f"update.")
+    return 0
+```
 
+`_cmd_backfill_codes` (replace stub):
+
+```python
+def _cmd_backfill_codes(args) -> int:
+    """One-time Col R backfill (§5): item_codes.ensure_codes does the
+    reserve-write-verify loop; prints the count; idempotent."""
+    _load_env()
+    from core.item_codes import ensure_codes
+    from core.sheets_client import connect_worksheet
+    print(header("Backfill Item-Codes (Col R)", "🏷️"))
+    print()
+    result = ensure_codes(connect_worksheet(),
+                          dry_run=bool(args.dry_run))
+    print(kv("Planned", str(result["planned"])))
+    print(kv("Written", str(result["written"])))
+    print(kv("Skipped (code already set)", str(result["skipped"])))
+    print(kv("Failed", str(result["failed"])))
     if args.dry_run:
         print()
         print(warn("[DRY RUN] no sheet write"))
-        return 0
-    if not planned:
-        print()
-        print("Nothing to write.")
-        return 0
-    ws.batch_update([
-        {"range": f"C{row_index}", "values": [[size]]}
-        for row_index, _generic, size in planned
-    ])
-    print()
-    print(f"Wrote {len(planned)} Col C cell(s) in one batched update.")
     return 0
 ```
 
-**Tests — append (FakeWorksheet needs a `batch_update` method — extend
-the local fake or subclass it in the test):**
+Mandatory tests (`tests/test_cli.py`, patch
+`core.sheets_client.connect_worksheet` to a FakeWorksheet and
+`REGISTRY_PATH`/`LOCK_PATH` to tmp):
 
-```python
-class _BatchFakeWorksheet(FakeWorksheet):
-    def batch_update(self, updates):
-        self.batch_updates = updates
-
-class TestBackfillSizes(unittest.TestCase):
-    """C.2: fills only parseable blanks; never touches non-empty C."""
-
-    def _args(self, dry_run):
-        return argparse.Namespace(dry_run=dry_run)
-
-    def test_plans_only_blank_parseable_rows(self):
-        ws = _BatchFakeWorksheet([
-            ["Name", "Cat", "Size", "WW", "Coles", "", "Brand", "TS",
-             "", "", "", "", "", "", "", ""],
-            ["Milk 2L", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
-            ["Herbs", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
-            ["Bread", "", "650g", "", "", "", "", "", "", "", "", "", "", "", "", ""],
-        ])
-        with patch("core.sheets_client.connect_worksheet",
-                   return_value=ws), \
-             patch.object(gpc, "_load_env"):
-            with contextlib.redirect_stdout(io.StringIO()) as out:
-                rc = gpc._cmd_backfill_sizes(self._args(dry_run=True))
-        self.assertEqual(rc, 0)
-        self.assertIn("Planned writes · 1", out.getvalue())
-        self.assertIn("Left blank (no parseable size) · 1",
-                      out.getvalue())
-        self.assertIn("Skipped (Col C already set) · 1", out.getvalue())
-
-    def test_live_run_batches_single_cell_ranges(self):
-        ws = _BatchFakeWorksheet([...same rows...])
-        with patch("core.sheets_client.connect_worksheet",
-                   return_value=ws), \
-             patch.object(gpc, "_load_env"):
-            with contextlib.redirect_stdout(io.StringIO()):
-                rc = gpc._cmd_backfill_sizes(self._args(dry_run=False))
-        self.assertEqual(rc, 0)
-        self.assertEqual(
-            ws.batch_updates,
-            [{"range": "C2", "values": [["2L"]]}])
-```
-
-(03 Code: pad the fake rows to 16 columns exactly as sketched; the
-`_load_env` import site in the handler is `core.sheets_client` — patch
-accordingly, matching how existing backfill tests in this file handle
-env, if they exist; otherwise the pattern above is authoritative.)
+- `test_subcategories_prints_labels_and_counts`
+- `test_backfill_subcategories_fills_confident_only` — 3 empty-Q
+  rows (2 classifiable, 1 "BREADING MIX") → 2 labels + 1 `needs
+  review`; non-empty Q untouched (spec §13.6/D-SC2)
+- `test_backfill_subcategories_never_overwrites`
+- `test_backfill_subcategories_dry_run_writes_nothing`
+- `test_backfill_codes_assigns_unique_codes` + idempotent re-run
+- `test_backfill_codes_dry_run_writes_nothing`
 
 **Verify:**
+`python -m pytest tests/test_cli.py -q`
+
+---
+
+### S21 — Handler: `_cmd_shop`
+
+**Files:** `grocery_price_cli.py` (replace stub),
+`tests/test_cli.py`.
+
+```python
+def _cmd_shop(args) -> int:
+    """shop --items "…": preference state machine around
+    compare_basket (§6.2). Deterministic; sheet-mode pricing for
+    resolved rows; halts render the §6.4 prompt exactly."""
+    items = [i.strip() for i in re.split(r"[,;]+", args.items or "")
+             if i.strip()]
+    if not items:
+        print("Error: --items is required (comma-separated list).",
+              file=sys.stderr)
+        return 1
+    _load_env()
+    from core.sheets_client import connect_worksheet
+    from core.preferences import (
+        PENDING_STALE_HOURS, resolve_shop_items, save_pending,
+        render_disambiguation_prompt, render_override_warning,
+    )
+    from core.price_comparator import compare_basket, format_report
+    ws = connect_worksheet()
+    plan = resolve_shop_items(ws, items)
+    for note in plan["notes"]:
+        print(warn(note))
+    if plan["compare"]:
+        names = [name for _item, name in plan["compare"]]
+        report = compare_basket(names, mode="sheet", worksheet=ws)
+        print(format_report(report))
+        print()
+    for entry in plan["halted"]:
+        print(render_disambiguation_prompt(
+            entry["subcategory"], entry["options"]))
+        print()
+    for entry in plan["cold"]:
+        print(f"💬 '{entry['item']}' has no tracked products yet — "
+              f"provide a keyword to live-search it (search "
+              f"--product \"…\"), or drop it from this run.")
+        print()
+    for entry in plan["warns"]:
+        print(render_override_warning(
+            entry["name"], entry["subcategory"]))
+        print()
+    if plan["halted"]:
+        from datetime import datetime, timezone
+        pending = {
+            "started_at": datetime.now(timezone.utc).isoformat(
+                timespec="seconds"),
+            "items": items,
+            "halted": plan["halted"],
+        }
+        save_pending(pending)
+        print(warn(
+            f"{len(plan['halted'])} item(s) halted — reply with a "
+            f"code or option number via 'prefer --code ABC' / "
+            f"'prefer --pick N' to finish (pending run saved, "
+            f"{PENDING_STALE_HOURS}h window)."))
+    return 0
+```
+
+Mandatory tests (`tests/test_cli.py`; patch worksheet + comparator):
+
+- `test_shop_autoselects_preferred` (S4: table renders, P row priced)
+- `test_shop_halts_with_exact_prompt` (S1: stdout contains the §6.4
+  golden block verbatim; pending file written with the options)
+- `test_shop_cold_item_offer` (S0 line)
+- `test_shop_override_warning_exact_text` (S5 golden §6.5)
+- `test_shop_multi_p_note_topmost` (§8.3)
+- `test_shop_empty_items_errors` (exit 1)
+- `test_shop_completed_items_render_with_halts` (mixed list: table +
+  prompt both present)
+
+**Verify:**
+`python -m pytest tests/test_cli.py -q`
+
+---
+
+### S22 — Handler: `_cmd_prefer`
+
+**Files:** `grocery_price_cli.py` (replace stub),
+`tests/test_cli.py`.
+
+```python
+def _cmd_prefer(args) -> int:
+    """prefer --code ABC / --pick N: set P (S3), then resume a
+    pending shop run for that entry (§6.3)."""
+    if not args.code and args.pick is None:
+        print("Error: pass --code ABC or --pick N.",
+              file=sys.stderr)
+        return 1
+    _load_env()
+    from core.sheets_client import connect_worksheet
+    from core.preferences import (
+        clear_pending, is_stale, load_pending, save_pending,
+        set_preferred,
+    )
+    from core.price_comparator import compare_basket, format_report
+    code = (args.code or "").strip().upper()
+    pending = load_pending()
+    stale = pending is None or is_stale(pending)
+    if stale and pending is not None:
+        print(warn("Pending shop run is stale (>24h) — discarded; "
+                   "re-run 'shop' for a fresh comparison."))
+        clear_pending()
+        pending = None
+    if not code and pending:
+        code = _pick_pending_code(pending, args.pick)
+        if not code:
+            print("Error: --pick N matched no pending option.",
+                  file=sys.stderr)
+            return 1
+    ws = connect_worksheet()
+    res = set_preferred(ws, code)
+    if not res.get("wrote"):
+        print(f"Error: {res.get('error', 'unknown')}",
+              file=sys.stderr)
+        return 1
+    print(ok(f"Preferred set: {code} (row {res['row_index']}, "
+             f"sub-category '{res['subcategory']}', "
+             f"{res['cleared']} sibling flag(s) cleared)."))
+    if pending:
+        _resume_pending(ws, pending, code)
+    return 0
+
+
+def _pick_pending_code(pending: dict, pick: int) -> str:
+    """Resolve --pick N against pending halted options (§6.4)."""
+    for entry in pending.get("halted", []):
+        options = entry.get("options", [])
+        if options and 1 <= pick <= len(options):
+            return str(options[pick - 1][2]).upper()
+    return ""
+
+
+def _resume_pending(ws, pending: dict, code: str) -> None:
+    """Finish the halted run: compare the resolved entry, drop it
+    from the pending file (clear when empty) (§6.3 S3->S4)."""
+    from core.price_comparator import compare_basket, format_report
+    halted = [e for e in pending.get("halted", [])
+              if any(str(o[2]).upper() == code
+                     for o in e.get("options", []))]
+    if halted:
+        print()
+        print(format_report(compare_basket(
+            [halted[0]["item"]], mode="sheet", worksheet=ws)))
+    remaining = [e for e in pending.get("halted", []) if e not in
+                 halted]
+    if remaining:
+        pending["halted"] = remaining
+        save_pending(pending)
+    else:
+        from core.preferences import clear_pending
+        clear_pending()
+```
+
+Mandatory tests (spec §13.4):
+
+- `test_prefer_standalone_sets_p` (no pending → write + confirm line;
+  exit 0)
+- `test_prefer_pick_resolves_pending_option` (S2 → S3 write)
+- `test_prefer_resumes_and_clears_pending` (table printed; pending
+  file gone)
+- `test_prefer_keeps_other_halted_entries`
+- `test_prefer_stale_pending_discarded` (started_at 25h ago → warn +
+  cleared, still sets P)
+- `test_prefer_unknown_code_errors` (exit 1)
+- `test_prever_requires_code_or_pick` (exit 1) — name it
+  `test_prefer_requires_code_or_pick`
+
+**Verify:**
+`python -m pytest tests/test_cli.py -q`
+
+---
+
+### S23 — `lists` surfacing: needs review + multi-P
+
+**Files:** `grocery_price_cli.py`, `tests/test_cli.py`.
+
+In `_cmd_lists` (line 430): the function already does ONE
+`get_all_values()`; compute from those SAME rows (spec §9 — no
+second read). Insert before its final `return 0` (locate with
+`def _cmd_lists` and the last return):
+
+```python
+    # §8.3 + D-SC2 surfacing: needs-review sub-categories and
+    # multi-P corruption are visible in `lists` (never auto-fixed).
+    needs_review = sum(
+        1 for row in rows[1:]
+        if len(row) > 16 and str(row[16]).strip().lower()
+        == "needs review")
+    if needs_review:
+        print()
+        print(warn(f"🗂️ {needs_review} row(s) with sub-category "
+                   f"'needs review' — run 'subcategories' to view, "
+                   f"re-classify via prefer/backfill."))
+    flags: dict = {}
+    for i, row in enumerate(rows[1:], start=2):
+        if len(row) > 18 and str(row[18]).strip() == "P":
+            sub = (str(row[16]).strip().lower()
+                   if len(row) > 16 else "")
+            if sub:
+                flags.setdefault(sub, []).append(i)
+    for sub, row_indexes in sorted(flags.items()):
+        if len(row_indexes) > 1:
+            print(warn(f"⚠️ sub-category '{sub}' has {len(row_indexes)}"
+                       f" P flags (rows {row_indexes}) — topmost wins; "
+                       f"fix with 'prefer --code'."))
+```
+
+NOTE: adapt `rows`/variable names to whatever `_cmd_lists` actually
+holds its `all_values` in (read the function first; the block must
+use that variable). If `_cmd_lists` has no direct rows variable,
+patch minimal: reuse its existing data without a new API call.
+
+Mandatory tests (`tests/test_cli.py`):
+
+- `test_lists_shows_needs_review_count`
+- `test_lists_warns_on_multi_p`
+- `test_lists_silent_when_clean`
+
+**Verify:**
+`python -m pytest tests/test_cli.py tests/test_lists_cmd.py -q`
+
+---
+
+### S24 — README updates (spec §14.1)
+
+**Files:** `README.md`.
+
+1. **Sheet schema table** (rows exist at lines 515-520, `| A |…|
+   | P |…|`): append after the `| P |` row:
+
+```markdown
+| Q | Sub_Category | Granular cluster (bread, shredded cheese, eggs); "needs review" marker |
+| R | Item_Code | Permanent 3-letter row ID, A–Z minus I/L/O, no repeats |
+| S | Preferred | "P" flag; at most one per sub-category; set only via prefer |
+```
+
+2. **CLI table** (row pattern at line 401): append five rows in the
+   same `| `command` | flags | description |` shape used there:
+
+```markdown
+| `shop` | `--items "a, b, c"` | Shopping-list compare: resolves each item to its sub-category, auto-picks the preferred (P) row, asks ONE question when none is preferred |
+| `prefer` | `--code ABC` / `--pick N` | Sets the Preferred (P) row for a sub-category; resumes a pending shop run |
+| `subcategories` | — | Lists sub-category labels + live row counts |
+| `backfill-subcategories` | `[--dry-run]` | One-time Col Q backfill; classifier-confident labels only, else "needs review"; never overwrites |
+| `backfill-codes` | `[--dry-run]` | One-time Col R Item-Code backfill; unique permanent codes; idempotent |
+```
+
+3. **Telegram Style Kit** section: add
+   `MAX_NAME_WIDTH = 60 — full product names everywhere; fenced
+   tables stay 34 cells.`
+4. **New "Multi-buy pricing" section** (after the specials/discounts
+   content): rate math (`rate = total / qty`), the mandatory note
+   text, M/N cell form `multi-buy 2/$6.00`, D-MB2 degradation (live
+   paths fall back to normal pricing when payloads carry no
+   multi-buy), D-MB3 (mixed "any N" informational only).
+5. **New "Shopping list & preferences" section**: pointer to
+   PROJECT-MAP §6F; the S0–S5 state machine in five bullet lines;
+   `Item_Code ≠ queue codes` note.
+
+**Verify:** markdown renders (eyeball); grep:
+
 ```powershell
-$PY -m pytest grocery-price-tracker/tests/test_cli.py -k backfill_sizes -q
-$PY -m py_compile grocery_price_cli.py
+Select-String -Path README.md -Pattern "Sub_Category|Item_Code|shop|prefer" | Measure-Object -Line
 ```
 
 ---
 
-## S18 — Docs sync
+### S25 — PROJECT-MAP §6F (spec §14.2)
 
-**Files:** `grocery-price-tracker/PROJECT-MAP.md`, `grocery-price-tracker/README.md`
-(behaviour notes only — the architect already updated them 2026-09-01).
+**Files:** `PROJECT-MAP.md`.
 
-Add/adjust (≤ 15 lines each file):
-1. `backfill-sizes` command in the command list (one line, next to
-   `backfill-keywords`).
-2. `--unit` flag on `search --add-item` and `map --add` (one line).
-3. Col C contract sentence: "Col C is the unit column; every add path
-   fills it (real size or the literal `unit unavailable`); blank =
-   legacy — displays as ` · ⚠️ unit unavailable` everywhere."
+1. **§5 commands table** (line 172 area): add the five command rows
+   (same plain-language style as the `backfill-sizes` row).
+2. **New §6F** after §6E (line 255, before `## 7.`):
 
-**Verify (deterministic):**
-```powershell
-$PY -c "from pathlib import Path; r = Path('grocery-price-tracker/README.md').read_text(encoding='utf-8'); assert 'backfill-sizes' in r and '--unit' in r; print('docs-ok')"
+```markdown
+### F. Shopping list (shop) — the preference flow
+
+1. You send a list ("eggs, apples, bread"). The agent normalises each
+   item to a sub-category (or a specific product) and calls
+   `shop --items "…"`.
+2. Each sub-category with a Preferred (P) row is compared
+   automatically using that row.
+3. No P yet? The CLI asks ONE question (the numbered prompt with
+   full names + codes). Reply with a code or number → `prefer` sets
+   P and finishes the comparison.
+4. Not tracked at all? Offer a keyword → normal `search --add-item`
+   flow; the new row arrives with Q/R/S filled and S empty — the
+   next `shop` asks the one question (nothing is ever auto-preferred).
+5. Asked for a specific variant that is NOT your preferred? You get
+   the comparison plus the switch/keep warning. "keep" writes
+   nothing.
+Item-Code (Col R) is a DIFFERENT namespace from queue codes: `prefer
+ABC` vs `todo done ABC` never collide.
 ```
+
+3. **§2 sheet columns** (line 66 area): extend the Products_Master
+   column description with Q/R/S (one line each).
+4. **"The 7 lists" section** (line 11): add note
+   `needs review` sub-categories surface in `lists`.
+
+**Verify:** `Select-String -Path PROJECT-MAP.md -Pattern "6F|Item-Code|needs review"`.
 
 ---
 
-## S19 — Closeout verification (all mandatory, zero-skip)
+### S26 — SKILL.md + catalogue regen + test.md log (spec §14.3-4)
+
+**Files:** `claw-skills/grocery-price/SKILL.md`,
+`claw-skills/claw_skills_easy.md` (generated),
+`grocery-price-tracker/test.md`.
+
+SKILL.md edits (sections by current heading lines):
+
+1. `## Subcommands → user intent` (line 31): add three rows —
+   shopping list → `shop --items`; "make X my usual/preferred" →
+   `prefer --code ABC`; "what sub-categories exist" →
+   `subcategories`.
+2. `### NL → subcommand mappings` (line 160): add
+   `"eggs, apples, bread" / "shop for …" → shop --items "…"`,
+   `"ABC is my usual" / "make ABC preferred" → prefer --code ABC`.
+3. `### Disambiguation` (line 226): add — when `shop` prints the
+   numbered sub-category prompt, relay it **VERBATIM, never rephrase
+   codes or numbers**; when the user replies with a code/number,
+   call `prefer --code X` / `prefer --pick N`. Same for the
+   switch/keep warning (§6.5 text): relay verbatim; route "switch"
+   to `prefer --code <requested row's code>`; "keep" → nothing.
+4. `## Hard rules` (line 273): add — never invent multi-buy prices
+   (the CLI derives them); always forward the multi-buy note with
+   the price; keep the B5 never-browse rule unchanged.
+5. `## Normalisation` note under `## How to answer` (line 122):
+   normalise list items against `subcategories` output before
+   calling `shop` (§6.1 contract).
+
+MANDATORY catalogue sync (rule 04) — **[Local]** from
+`C:\Users\User.DESKTOP-R2G441H\Documents\AI related`:
 
 ```powershell
-# 19.1 Full suite (regression bar: >= 504 + new, 0 failed, 0 skipped)
-$PY -m pytest grocery-price-tracker/tests/ -q
-
-# 19.2 Spec §8 verification matrix, targeted
-$PY -m pytest grocery-price-tracker/tests/test_telegram_format.py -k "unit" -q
-$PY -m pytest grocery-price-tracker/tests/test_comparator.py -q
-$PY -m pytest grocery-price-tracker/tests/test_sheets_sync.py -q
-$PY -m pytest grocery-price-tracker/tests/test_searched_items.py -q
-$PY -m pytest grocery-price-tracker/tests/test_add_to_list.py -q
-$PY -m pytest grocery-price-tracker/tests/test_cli.py -q
-
-# 19.3 UOM gate still frozen (spec §2)
-$PY -c "import sys; sys.path.insert(0, 'grocery-price-tracker'); from core.uom import parse_size; assert parse_size('unit unavailable') is None; print('gate-ok')"
-
-# 19.4 Frozen files untouched (git, from the repo dir)
-git -C grocery-price-tracker status --porcelain
-git -C grocery-price-tracker diff --stat -- core/uom.py core/lookup.py core/name_matcher.py core/extractors
-# Expected: empty diff for the frozen paths.
-
-# 19.5 CLI compiles + smoke (help text lists backfill-sizes)
-$PY -m py_compile grocery_price_cli.py
-$PY grocery_price_cli.py --help
+python skills_doc.py
+python skills_doc.py --check
 ```
 
-**Optional git checkpoint (ONLY if the user/pipeline requests commits —
-never commit unprompted):**
-```powershell
-git -C grocery-price-tracker add -A
-git -C grocery-price-tracker commit -m "Units always visible: unit_tag everywhere, force Col C on adds, backfill-sizes"
-```
-(Note: `grocery_price_cli.py` lives OUTSIDE this git repo — see §7 Ops.)
+`--check` MUST print `OK` (exit 0). Both files are then committed
+together and synced to the VPS in S27.
+
+`test.md` (project root): append this round's execution log — steps
+done, probe outcome (S12), test counts before/after, any deviations.
+
+**Verify:**
+`python skills_doc.py --check` prints `OK`.
 
 ---
 
-## 4. Mandatory test matrix (spec §8 → steps; zero-skip enforcement)
+### S27 — Deploy & one-time operations
 
-| Spec §8 check | Implemented by | Test location |
+Order matters: schema first (M1), then backfills (M2), then code
+deploy (M3), then verification (M4).
+
+**M1 — Schema append (manual, ONE time) [Local, networked]**
+
+```powershell
+python core/schema_upgrade.py --dry-run    # expect planned Q/R/S
+python core/schema_upgrade.py              # writes Q1:S1 headers
+python core/schema_upgrade.py --dry-run    # expect "up to date"
+```
+
+Idempotent; A–P data untouched (existing audit logic, spec §13.1).
+
+**M2 — Backfills (manual, ONE time) [Local, networked]**
+
+```powershell
+python ..\grocery_price_cli.py backfill-subcategories --dry-run
+python ..\grocery_price_cli.py backfill-subcategories
+python ..\grocery_price_cli.py backfill-codes --dry-run
+python ..\grocery_price_cli.py backfill-codes
+```
+
+(Correct CLI invocation per existing conventions — run from the
+project root with the CLI path used today, e.g.
+`python ..\grocery_price_cli.py …` or the absolute path.)
+
+**M3 — Deploy code to VPS [Local]**
+
+```powershell
+python scripts/deploy_vps.py            # scp mode (default)
+```
+
+Skill files (mandatory rule 04) — scp BOTH to
+`/home/ubuntu/openclaw/tasks/ai-tools/claw-skills/grocery-price/`
+and the parent catalogue dir respectively, then verify md5 on both
+sides (the rule's exact requirement):
+
+```powershell
+scp "claw-skills\grocery-price\SKILL.md" ubuntu@<vps>:/home/ubuntu/openclaw/tasks/ai-tools/claw-skills/grocery-price/SKILL.md
+scp "claw-skills\claw_skills_easy.md" ubuntu@<vps>:/home/ubuntu/openclaw/tasks/ai-tools/claw-skills/claw_skills_easy.md
+# md5 verify local vs remote for both files (certutil / md5sum)
+```
+
+**[VPS]** After deploy: no backfill re-run needed (M2 wrote the
+shared sheet once). Sanity:
+
+```bash
+cd /home/ubuntu/openclaw/tasks/ai-tools/grocery-price-tracker
+python3 -m pytest tests/ -q      # or the VPS's established runner
+python3 grocery_price_cli.py subcategories
+```
+
+**M4 — Full verification (§13 matrix) [Local]**
+
+```powershell
+python -m pytest tests/ -q        # full suite: 621 baseline + new,
+                                  # ZERO skips (0 skipped in summary)
+```
+
+**Commits (after each phase, concise messages):**
+
+```powershell
+# inner repo (grocery-price-tracker)
+git add core/ extractors/ tests/ README.md PROJECT-MAP.md test.md implementation-plan.md
+git commit -m "Q/R/S + shop + multi-buy: core modules, ingestion, comparator, tests"
+# parent repo (AI related) — CLI + skill
+git add grocery_price_cli.py claw-skills/grocery-price/SKILL.md claw-skills/claw_skills_easy.md
+git commit -m "grocery CLI: shop/prefer/subcategories/backfills + skill contract"
+```
+
+Review `git diff --staged` for secrets before every commit
+(security rule). Push/PR only when explicitly requested.
+
+---
+
+## 4. Test plan (all MANDATORY — zero-skip)
+
+### 4.1 Unit (new modules)
+
+| Target | Cases (min) | File |
 |---|---|---|
-| 1. unit_tag: real / blank / None / marker / whitespace | S1 | `test_telegram_format.py::TestUnitTag` |
-| 2. Search display: ` · 200g` / ` · ⚠️ unit unavailable` exact | S1 (helper) + S8 (surface) | TestUnitTag + TestCliUnitSurfaces |
-| 3. Title tag survives 24-cell truncation; no no-size branch in `_identity_suffix`; found-block shows `closest` size | S2, S3, S4 | TestItemBlockUnit, TestIdentitySuffixAlwaysUnit, TestReportUnitSurfaces |
-| 4. `add_product_row` rejects empty size; accepts marker | S10 | TestAddProductRowRequiredSize |
-| 5. Queue round-trip: entry JSON has `"size"`; show prints tag; legacy entry prints note | S6, S7, S11 | TestSearchedItemsSizeContract, TestAddToListSizeContract, TestAddRoutesResolveUnit |
-| 6. `update_single_price` backfills blank Col C exactly once | S12 | TestUpdateSinglePriceBackfill (3 cases) |
-| 7. Full suite green | S19.1 | — |
+| normalize/classify/all_labels | §S1 list: spec examples, compound-before-generic, breading/breadcrumbs negatives, hint-never-rescues, 0/1 confidence | `tests/test_subcategory.py` |
+| multibuy codec | §S2 list: FOR/ANY parse, Cream For Men negative, qty=1 negative, rate math + raises, encode/decode roundtrip, bare legacy, mixed-promo flag, exact note | `tests/test_multibuy.py` |
+| item codes | §S3-S4 list: validity (alphabet, distinct, length), 200-code uniqueness, determinism, registry IO, reserve/confirm/verify, injected-collision retry, ensure_codes 200-row fixture, idempotency, lock | `tests/test_item_codes.py` |
+| preferences | §S5-S7 list: read_qrs, get_preferred (+multi-P topmost), options, prompt/warning EXACT goldens, set_preferred one-write + interleave preservation + verify-failure, pending IO + 24h staleness, resolver S0/S1/S4/S5 + multi-P + mixed list | `tests/test_preferences.py` |
 
-Additional mandatory coverage beyond §8 (plan-required):
-resolver chain + fail-fast + ask-once (S9), map add pass-through
-(S13), sync heal no-marker/no-overwrite (S14), tracker size copy
-(S15), Wednesday display vs machine lines (S16), backfill-sizes
-plan/batch/idempotence (S17).
+### 4.2 Functional (updated surfaces)
 
-**Zero-skip rule:** no `unittest.skip`, no `pytest.mark.skip`, no
-`-k` exclusions in S19.1. Every test added above MUST run and pass.
-
----
-
-## 5. Error boundaries & edge cases (binding)
-
-1. `_resolve_add_unit` NEVER guesses: no name-parse hit and no
-   interactive answer → exact error `unit is required: pass a size or
-   the marker` (spec B1 text). Wrapper prints add the `--unit` hint.
-2. `add_product_row` with blank/whitespace `size` → returns
-   `{"wrote": False, "error": "unit is required: pass a size or the
-   marker"}` — does NOT raise (callers already handle the dict shape).
-3. Marker in Col C: accepted everywhere (writes, backfill param);
-   NEVER written by an automated parse path (sync/backfill parse only
-   real sizes — D-U3).
-4. Non-empty Col C is NEVER modified by `update_single_price`,
-   `sync_prices`, or `backfill-sizes` (Rule C.3).
-5. Queue writes stay non-fatal after a successful price write
-   (`_queue_add_to_list` / `_queue_searched_item` print errors, never
-   raise) — preserved from current behaviour.
-6. Legacy queue entries without `"size"`: `.get("size", "")` → blank →
-   ⚠️ note. No migration scripts.
-7. Wednesday txt file formats are UNCHANGED (machine-parsed by map
-   flows); only Telegram display lines gain units (P5).
-8. `unit_tag(None)` and `unit_suffix(None)` are safe (str-cast first).
-
----
-
-## 6. File-by-file change budget
-
-| File (absolute path) | Steps | Approx. lines changed |
+| Target | Cases | File |
 |---|---|---|
-| `<ROOT>\grocery-price-tracker\core\telegram_format.py` | S1, S2 | +55 |
-| `<ROOT>\grocery-price-tracker\core\price_comparator.py` | S3, S4 | ~25 |
-| `<ROOT>\grocery-price-tracker\core\specials_reporter.py` | S5 | ~8 |
-| `<ROOT>\grocery-price-tracker\core\searched_items.py` | S6 | ~20 |
-| `<ROOT>\grocery-price-tracker\core\add_to_list.py` | S7 | ~18 |
-| `<ROOT>\grocery-price-tracker\core\sheets_sync.py` | S10, S12, S14 | ~45 |
-| `<ROOT>\grocery-price-tracker\core\missing_items_tracker.py` | S15 | ~12 |
-| `<ROOT>\grocery_price_cli.py` | S8, S9, S11, S13, S16, S17 | ~150 total (6 visits, each ≤ 50) |
-| `<ROOT>\grocery-price-tracker\tests\*` (7 files) | alongside each step | tests only |
-| `<ROOT>\grocery-price-tracker\PROJECT-MAP.md`, `README.md` | S18 | ≤ 15 each |
+| add_product_row | Q/R/S on create (one A:S write), --subcategory override, needs-review path, absent-header degradation, merge leaves Q/R/S, registry confirm | `tests/test_sheets_sync.py` |
+| specials cell | FOR→encoded terms, ANY→bare, discount/no unchanged | `tests/test_sheets_sync.py` |
+| lookup | Q/R/S metadata on index/candidates/results; absent headers; chain order regression | `tests/test_lookup.py` |
+| extractors | ProductItem defaults + dict roundtrip + tuple length; WW/Coles multi-buy capture present/absent/garbage | `tests/test_extractors.py` |
+| comparator | terms decode (cell + live desc), mixed-ANY excluded, winner flip via rate, totals on rate, WW discount after rate, display tag + note, footnote presence, regression goldens | `tests/test_comparator.py` |
+| telegram_format | width 60, 52-char name intact, fenced 34 untouched, multibuy tag exact | `tests/test_telegram_format.py` |
+| CLI | parsers, subcategories, both backfills (+dry-run), shop (S0/S1/S4/S5/multi-P/mixed), prefer (standalone/pick/resume/stale/errors), lists surfacing | `tests/test_cli.py` |
 
-Frozen and untouched (verified in S19.4): `core/uom.py`,
-`core/lookup.py`, `core/name_matcher.py` (import-only usage of
-`_SIZE_PATTERN`), `core/extractors/*`, `telegram_gateway/`, `app.py`,
-`local_sync.py`, sheet schema, `.env` handling.
+### 4.3 Integration (composition, still mock-free networkless)
+
+- shop → compare_basket(sheet) → format_report with a preferred row
+  AND a multi-buy cell in the same run: table + footnote + no prompt.
+- search --add-item flow (mocked live results): row created with
+  Q/R/S; subsequent shop hits S1 and halts (S6 end-to-end).
+- prefer --pick → pending consumed → completed table printed.
+
+### 4.4 Failure modes (mandatory)
+
+- Concurrent-writer simulation: FakeWorksheet that injects a
+  duplicate code between write and verify → regenerate path taken;
+  final state unique (spec §13.2).
+- Two-P corruption fixture: detection line, topmost wins, NO
+  deletion (spec §13.3).
+- Stale pending (>24h): reported + discarded, pointer to re-run
+  (spec §13.4).
+- Registry collision on confirm_code → RuntimeError → caller retry.
+- set_preferred verify mismatch → wrote=False, actionable error.
+- Corrupt `shop_pending.json` / registry JSON → treated as empty.
+- Lock contention → TimeoutError with actionable message.
+- Empty/whitespace `--items`, unknown `--code`, out-of-range
+  `--pick` → exit 1 with stderr messages.
+
+### 4.5 Verification matrix (spec §13 → steps)
+
+| §13 | Covered by |
+|---|---|
+| 1 schema | S8 + M1 (dry-run → upgrade → up to date) |
+| 2 codes | S3/S4 tests + M2 |
+| 3 preferences | S6 tests (one write-range observed, two-P fixture) |
+| 4 state machine | S7/S21/S22 golden tests (exact §6.4/§6.5) |
+| 5 multi-buy | S2/S14/S15/S16/S18 tests |
+| 6 ingestion | S9 tests (all paths funnel through add_product_row; merge untouched) |
+| 7 truncation | S17 tests (52-char full; fenced ≤34) |
+| 8 full suite | M4 — 621 baseline + new files, zero skips |
 
 ---
 
-## 7. Ops / deployment notes
+## 5. Rollback
 
-**Local Terminal only (all steps above).** Nothing in this cycle
-touches the VPS directly. After 03/04 complete:
+- Phase-level: `git revert` the phase commit(s) in each repo; sheet
+  Q/R/S columns are additive — leaving them in place harms nothing
+  (readers are header-driven and absence-tolerant).
+- Data-level: Q/R/S values can be cleared with a manual sheet
+  select+delete; registry `data/item_code_registry.json` is a local
+  file (delete to reset). No A–P data is ever rewritten by this
+  feature except explicit price updates that already existed.
 
-1. **CLI copy-to-root mismatch (spec §7 NOTE):** `deploy_vps.py:45`
-   expects `grocery_price_cli.py` inside the repo root. Before any
-   VPS deploy, the updated CLI must be copied there (deterministic,
-   Local Terminal, user-initiated deploy only):
-   ```powershell
-   Copy-Item "grocery_price_cli.py" "grocery-price-tracker\grocery_price_cli.py"
-   ```
-   This is a DEPLOY-time step, not part of S1–S18 (the working copy
-   stays at `<ROOT>` per README §9 "pending migration").
-2. **Live-sheet `backfill-sizes` run (manual, user-confirmed):**
-   mutates the real sheet; requires `.env`. Run dry-run first, review
-   the plan, then run live:
-   ```powershell
-   $PY grocery_price_cli.py backfill-sizes --dry-run
-   $PY grocery_price_cli.py backfill-sizes
-   ```
-3. **Remote VPS:** no commands this cycle. Wednesday sync/scp flows
-   pick up the new behaviour on the next local run automatically.
+## 6. Out of scope (guards for 03 Code)
 
----
-
-## 8. Risks tracked (carried from spec §9)
-
-- **R1:** `--add-item` / `map --add` one-shot runs without a resolvable
-  unit now FAIL FAST with an actionable `--unit` hint (deliberate;
-  D-U4 ask-once covers interactive sessions; Claw relays the question).
-- **R2:** size strings are display-only text; `1L` vs `1 L` drift is
-  acceptable — `parse_size` normalises where comparability matters.
-- **R3:** Col A names that embed the unit plus a Col C unit show the
-  unit twice on compare titles — accepted this cycle.
-- **R-new (this plan):** Wednesday txt formats are load-bearing for the
-  map flows — guarded by P5 and the S16 machine/display split.
-
-**Rollback:** every step is a small forward edit in one git repo +
-one sibling file; `git -C grocery-price-tracker checkout -- <path>`
-reverts repo files; the CLI is reverted from its git history only if
-it has been committed outside this cycle — otherwise keep the S-step
-edits inverted manually per the ANCHOR/NEW pairs above.
+- 4-letter code widening (§8.2 future decision).
+- Any `core/uom.py` change; any `telegram_gateway/` change (its
+  `add_product_row` call gains Q/R/S via the hook, untouched).
+- Auto-setting P anywhere; Wednesday writing S; reusing deleted
+  codes; persisting derived rates.

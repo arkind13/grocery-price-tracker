@@ -447,7 +447,8 @@ class TestComparator(unittest.TestCase):
 
         resolver = RecipeResolver(worksheet=ws)
         with patch(
-            "extractors.woolworths_extractor.fetch_woolworths_search",
+            "extractors.woolworths_extractor."
+            "fetch_woolworths_search_noauth",
             side_effect=stub_ww_search,
         ), patch(
             "extractors.coles_extractor.fetch_coles_search",
@@ -472,7 +473,8 @@ class TestComparator(unittest.TestCase):
 
         resolver = RecipeResolver(worksheet=ws)
         with patch(
-            "extractors.woolworths_extractor.fetch_woolworths_search",
+            "extractors.woolworths_extractor."
+            "fetch_woolworths_search_noauth",
             side_effect=stub_search,
         ), patch(
             "extractors.coles_extractor.fetch_coles_search",
@@ -879,9 +881,11 @@ class TestUomReportMatrix(unittest.TestCase):
             return compare_basket(names, mode="auto", worksheet=ws, **kwargs)
 
     def _live(self, names, ww, coles, **kwargs):
-        """compare_basket(mode=live) with the legacy fns patched."""
+        """compare_basket(mode=live) with the live fns patched (the
+        noauth curl_cffi search replaced the legacy cookie search,
+        2026-09-01)."""
         with patch(
-            "extractors.woolworths_extractor.fetch_woolworths_search",
+            "extractors.woolworths_extractor.fetch_woolworths_search_noauth",
             side_effect=lambda t, **kw: ww,
         ), patch(
             "extractors.coles_extractor.fetch_coles_search",
@@ -1195,8 +1199,9 @@ class TestReportUnitSurfaces(unittest.TestCase):
 
     def test_format_report_title_tag_survives_truncation(self):
         from core.price_comparator import ComparisonReport, format_report
+        # Width 60 (spec §10): a 42-cell name renders UNTRUNCATED.
         item = BasketItem(
-            name="Full Cream Milk Chocolate Organic Supreme",  # > 24 cells
+            name="Full Cream Milk Chocolate Organic Supreme",
             prices={"woolworths": 3.0, "coles": 3.5},
             sources={"woolworths": "sheet", "coles": "sheet"},
             matched_sizes={"woolworths": "200g"},
@@ -1205,7 +1210,20 @@ class TestReportUnitSurfaces(unittest.TestCase):
         block_line = next(
             ln for ln in out.split("\n") if ln.startswith("1. "))
         self.assertTrue(block_line.endswith(" · 200g"))
-        self.assertIn("…", block_line)  # name truncated, tag never cut
+        self.assertNotIn("…", block_line)  # full name kept
+
+        # A 70-cell name still truncates; the unit tag is never cut.
+        item_long = BasketItem(
+            name="B" * 70,
+            prices={"woolworths": 3.0, "coles": 3.5},
+            sources={"woolworths": "sheet", "coles": "sheet"},
+            matched_sizes={"woolworths": "200g"},
+        )
+        out2 = format_report(ComparisonReport(items=[item_long]))
+        line2 = next(
+            ln for ln in out2.split("\n") if ln.startswith("1. "))
+        self.assertTrue(line2.endswith(" · 200g"))
+        self.assertIn("…", line2)  # name truncated, tag never cut
 
     def test_format_report_title_shows_marker_when_no_sizes(self):
         from core.price_comparator import ComparisonReport, format_report
@@ -1251,6 +1269,166 @@ class TestIdentitySuffixAlwaysUnit(unittest.TestCase):
         from core.price_comparator import _identity_suffix
         suffix = _identity_suffix(self._item({}, names={}), "woolworths")
         self.assertEqual(suffix, "")
+
+
+class TestComparatorMultiBuyTerms(unittest.TestCase):
+    """Multi-buy terms on BasketItem + effective_price (§7.3, S15)."""
+
+    def test_effective_price_uses_rate_when_terms(self):
+        from core.price_comparator import effective_price
+        item = BasketItem(
+            name="cola", prices={"woolworths": 3.50},
+            specials={"woolworths": "2 for $6.00"},
+            multibuy={"woolworths": (2, 6.00)},
+        )
+        self.assertEqual(effective_price(item, "woolworths"), 3.00)
+
+    def test_effective_price_raw_when_no_terms(self):
+        from core.price_comparator import effective_price
+        item = BasketItem(
+            name="cola", prices={"woolworths": 3.50},
+            specials={"woolworths": "Save $1.00"},
+        )
+        self.assertEqual(effective_price(item, "woolworths"), 3.50)
+
+    def test_decode_sheet_cell_and_live_desc_paths(self):
+        # Sheet-cell path: Col M holds the ENCODED cell form; the
+        # live-desc fallback covers raw "2 for $6.00" text.
+        header = _make_header()
+        header.extend(["Keywords"])
+        rows = [
+            header,
+            ["Cola 2L", "Drinks", "2L", "$3.50", "", "", "", "",
+             "", "", "", "", "multi-buy 2/$6.00", "", "", ""],
+            ["Juice 1L", "Drinks", "1L", "$2.00", "", "", "", "",
+             "", "", "", "", "2 for $3.00", "", "", ""],
+        ]
+        ws = FakeWorksheet(rows)
+        report = compare_basket("Cola 2L, Juice 1L", mode="sheet",
+                                worksheet=ws)
+        cola, juice = report.items[0], report.items[1]
+        self.assertEqual(cola.multibuy["woolworths"], (2, 6.0))
+        self.assertEqual(juice.multibuy["woolworths"], (2, 3.0))
+
+    def test_mixed_any_promo_never_yields_terms(self):
+        # D-MB3: mixed "any N" promos are display-only — no terms.
+        header = _make_header()
+        rows = [
+            header,
+            ["Sunbites", "Snacks", "200g", "$4.00", "", "", "", "",
+             "", "", "", "", "Any 2 | $9", "", ""],
+        ]
+        ws = FakeWorksheet(rows)
+        report = compare_basket("Sunbites", mode="sheet", worksheet=ws)
+        self.assertEqual(report.items[0].multibuy, {})
+
+
+class TestComparatorEffectiveRateMath(unittest.TestCase):
+    """Effective-rate math in totals/winner (§7.3 rule 1, S16)."""
+
+    def _ws_two_items(self):
+        """WW $3.50 with multi-buy 2/$6.00 (= $3.00/u) vs Coles $3.20;
+        plus a second plain item so totals cover both stores."""
+        header = _make_header()
+        rows = [
+            header,
+            ["Cola 2L", "Drinks", "2L", "$3.50", "$3.20", "",
+             "", "", "", "", "", "", "multi-buy 2/$6.00", "", ""],
+            ["Milk 2L", "Dairy", "2L", "$3.00", "$3.00", "",
+             "", "", "", "", "", "", "", ""],
+        ]
+        return FakeWorksheet(rows)
+
+    def test_multibuy_rate_flips_winner(self):
+        report = compare_basket("Cola 2L", mode="sheet",
+                                worksheet=self._ws_two_items(),
+                                team_discount=False)
+        # WW effective 3.00 beats Coles 3.20 despite the higher tag.
+        self.assertEqual(report.cheapest_store, "woolworths")
+
+    def test_multibuy_totals_use_effective_rate(self):
+        report = compare_basket("Cola 2L", mode="sheet",
+                                worksheet=self._ws_two_items(),
+                                team_discount=False)
+        self.assertEqual(report.raw_totals["woolworths"], 3.00)
+        self.assertEqual(report.raw_totals["coles"], 3.20)
+
+    def test_normal_pricing_unchanged_without_multibuy(self):
+        # Regression golden: items without terms price at raw cells.
+        report = compare_basket("Milk 2L", mode="sheet",
+                                worksheet=self._ws_two_items(),
+                                team_discount=False)
+        self.assertEqual(report.raw_totals["woolworths"], 3.00)
+        self.assertEqual(report.raw_totals["coles"], 3.00)
+
+    def test_ww_discounts_apply_after_rate(self):
+        # The WW display-discount block computes from the effective
+        # 3.00 rate, not the raw 3.50 tag.
+        report = compare_basket("Cola 2L", mode="sheet",
+                                worksheet=self._ws_two_items(),
+                                team_discount=True)
+        self.assertTrue(report.team_discount_applied)
+        expected = round(3.00 * (1 - 0.05), 2)
+        self.assertEqual(report.final_totals["woolworths"], expected)
+
+
+class TestComparatorMultiBuyDisplay(unittest.TestCase):
+    """Display tag + mandatory footnote (§7.3 rule 2, S18)."""
+
+    def _ws(self):
+        header = _make_header()
+        rows = [
+            header,
+            ["Cola 2L", "Drinks", "2L", "$3.50", "$3.20", "",
+             "", "", "", "", "", "", "multi-buy 2/$6.00", "", ""],
+        ]
+        return FakeWorksheet(rows)
+
+    def test_multibuy_line_shows_rate_tag_and_note(self):
+        report = compare_basket("Cola 2L", mode="sheet",
+                                worksheet=self._ws(),
+                                team_discount=False)
+        out = format_report(report)
+        self.assertIn("$3.00", out)            # effective rate shown
+        self.assertIn("🏷️ 2 for $6.00", out)   # the tag
+        self.assertIn("[Note: must purchase 2+ units to receive this "
+                      "price]", out)            # exact note text
+
+    def test_totals_footnote_present_with_multibuy(self):
+        report = compare_basket("Cola 2L", mode="sheet",
+                                worksheet=self._ws(),
+                                team_discount=False)
+        out = format_report(report)
+        self.assertIn("Multi-buy rates applied.", out)
+
+    def test_totals_footnote_absent_without(self):
+        header = _make_header()
+        rows = [
+            header,
+            ["Milk 2L", "Dairy", "2L", "$3.00", "$3.00", "",
+             "", "", "", "", "", "", "", ""],
+        ]
+        report = compare_basket("Milk 2L", mode="sheet",
+                                worksheet=FakeWorksheet(rows),
+                                team_discount=False)
+        out = format_report(report)
+        self.assertNotIn("Multi-buy rates applied.", out)
+        self.assertNotIn("🏷️ 2 for $", out)
+
+    def test_non_multibuy_lines_unchanged(self):
+        # Regression golden: plain items render exactly as before.
+        header = _make_header()
+        rows = [
+            header,
+            ["Milk 2L", "Dairy", "2L", "$3.00", "$3.00", "",
+             "", "", "", "", "", "", "", ""],
+        ]
+        report = compare_basket("Milk 2L", mode="sheet",
+                                worksheet=FakeWorksheet(rows),
+                                team_discount=False)
+        out = format_report(report)
+        self.assertIn("$3.00", out)
+        self.assertNotIn("multi-buy", out.lower())
 
 
 if __name__ == "__main__":

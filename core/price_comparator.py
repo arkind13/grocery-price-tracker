@@ -55,6 +55,9 @@ class BasketItem:
     prices: dict = field(default_factory=dict)
     sources: dict = field(default_factory=dict)
     specials: dict = field(default_factory=dict)
+    multibuy: dict = field(default_factory=dict)
+    # store -> (qty, bundle_total) for RATE-ELIGIBLE multi-buy terms
+    # (mixed "any N" promos are display-only and never appear here).
     brand: str = ""
     is_woolworths_home_brand: bool = False
     matched_names: dict = field(default_factory=dict)
@@ -115,6 +118,24 @@ class ComparisonReport:
 # ============================================================================
 # Section D: compare_basket()
 # ============================================================================
+
+
+def effective_price(item: BasketItem, store: str) -> float:
+    """Math price for a store: multi-buy effective unit rate when
+    rate-eligible terms exist (§7.3 rule 1), else the raw price.
+
+    Args:
+        item: the BasketItem.
+        store: "woolworths" | "coles".
+
+    Returns:
+        float: effective unit price in AUD.
+    """
+    terms = item.multibuy.get(store)
+    if terms:
+        from core.multibuy import effective_unit_rate
+        return effective_unit_rate(terms[0], terms[1])
+    return item.prices[store]
 
 
 def compare_basket(
@@ -190,11 +211,23 @@ def compare_basket(
     for i, item in enumerate(items):
         if not item.is_woolworths_home_brand:
             hb = is_woolworths_home_brand(item.name, item.brand)
+            from core.multibuy import (
+                decode_multibuy_cell, is_mixed_promo, parse_multibuy,
+            )
+            mb: dict = {}
+            for store in item.prices:
+                desc = str(item.specials.get(store, "") or "")
+                terms = decode_multibuy_cell(desc)  # sheet cell first
+                if terms is None:
+                    terms = parse_multibuy(desc)    # live desc fallback
+                if terms and not is_mixed_promo(desc):
+                    mb[store] = terms
             items[i] = BasketItem(
                 name=item.name,
                 prices=dict(item.prices),
                 sources=dict(item.sources),
                 specials=dict(item.specials),
+                multibuy=mb,
                 brand=item.brand,
                 is_woolworths_home_brand=hb,
                 # Carry the B3 fields through the rebuild or they are
@@ -215,7 +248,7 @@ def compare_basket(
         count = 0
         for item in items:
             if store in item.prices:
-                total += item.prices[store]
+                total += effective_price(item, store)
                 count += 1
             else:
                 not_available[store].append(item.name)
@@ -237,7 +270,9 @@ def compare_basket(
             woolworths_items_for_discount.append({
                 "name": item.name,
                 "brand": item.brand,
-                "price": item.prices["woolworths"],
+                # §7.3 rule 4: WW display discounts apply AFTER rate
+                # computation (display-only).
+                "price": effective_price(item, "woolworths"),
             })
 
     if team_discount and woolworths_items_for_discount:
@@ -394,9 +429,15 @@ def _gather_live_prices(names: list[str]) -> list[BasketItem]:
     via a gate-passing pair; otherwise the found-block data (closest
     top-ranked product per returning store) is captured with no prices.
 
+    Woolworths uses the noauth curl_cffi search (2026-09-01): the
+    legacy cookie-based fetch_woolworths_search is Akamai-blocked
+    (HTTP 403, silent empty) on server runners.
+
     Swallow network errors (store absent from that side's results).
     """
-    from extractors.woolworths_extractor import fetch_woolworths_search
+    from extractors.woolworths_extractor import (
+        fetch_woolworths_search_noauth,
+    )
     from extractors.coles_extractor import fetch_coles_search
     from core.lookup import select_live_pair
 
@@ -404,7 +445,9 @@ def _gather_live_prices(names: list[str]) -> list[BasketItem]:
     for name in names:
         ww_results: list = []
         try:
-            ww_results = fetch_woolworths_search(name, page_size=5) or []
+            ww_results = (
+                fetch_woolworths_search_noauth(name, page_size=5) or []
+            )
         except Exception as exc:
             print(
                 f"[price_comparator] woolworths live failed "
@@ -560,6 +603,18 @@ def _gather_lookup_prices(
                 closest = dict(result.closest)
                 uom_reason = result.uom_reason
                 store_unavailable = list(result.store_unavailable)
+            elif result.status == LookupStatus.SHEET_AND_LIVE:
+                # Merged (2026-09-03): usable sheet prices kept, missing
+                # stores live-filled — result.sources is authoritative
+                # per store, so each price is labelled honestly.
+                prices = dict(result.prices)
+                sources = dict(result.sources) or {
+                    store: "sheet" for store in prices}
+                specials = dict(result.specials)
+                brand = result.brand
+                matched_names = dict(result.matched_names)
+                matched_sizes = dict(result.matched_sizes)
+                store_unavailable = list(result.store_unavailable)
 
         items.append(BasketItem(
             name=name,
@@ -700,13 +755,18 @@ def format_report(report: ComparisonReport) -> str:
     for i, item in enumerate(report.items[:25], 1):
         store_lines = []
         if "woolworths" in item.prices:
+            eff = effective_price(item, "woolworths")
             if report.team_discount_applied:
                 ww = format_discounted_price(
-                    item.prices["woolworths"],
+                    eff,
                     item.is_woolworths_home_brand,
                 )
             else:
-                ww = f"${item.prices['woolworths']:.2f}"
+                ww = f"${eff:.2f}"
+            if "woolworths" in item.multibuy:
+                from core.telegram_format import multibuy_tag
+                q, t = item.multibuy["woolworths"]
+                ww += f"  {multibuy_tag(q, t)}"
             ww_was = was_price_from_special_desc(
                 item.specials.get("woolworths", "")
             )
@@ -715,12 +775,19 @@ def format_report(report: ComparisonReport) -> str:
                 was=f"${ww_was:.2f}" if ww_was is not None else None,
             ))
         if "coles" in item.prices:
+            eff = effective_price(item, "coles")
+            if "coles" in item.multibuy:
+                from core.telegram_format import multibuy_tag
+                q, t = item.multibuy["coles"]
+                coles = (f"${eff:.2f}  {multibuy_tag(q, t)}")
+            else:
+                coles = f"${eff:.2f}"
             coles_was = was_price_from_special_desc(
                 item.specials.get("coles", "")
             )
             store_lines.append(store_line(
                 "coles",
-                f"${item.prices['coles']:.2f}"
+                coles
                 + _identity_suffix(item, "coles"),
                 was=f"${coles_was:.2f}" if coles_was is not None else None,
             ))
@@ -767,6 +834,12 @@ def format_report(report: ComparisonReport) -> str:
         ["Store", "Raw", "Final"], totals_rows, box=True
     ))
     lines.append("")
+    # §7.3 rule 2: totals footnote carries the mandatory note when
+    # ANY displayed price is multi-buy-derived.
+    if any(item.multibuy for item in report.items):
+        from core.telegram_format import MULTIBUY_NOTE
+        lines.append(f"🏷️ Multi-buy rates applied. {MULTIBUY_NOTE}")
+        lines.append("")
 
     # Discounts — consume the shared engine per item (NO inline recompute).
     # compact=True: the sub-block lists ONLY home-brand and extra-discount
@@ -781,7 +854,9 @@ def format_report(report: ComparisonReport) -> str:
         for item in report.items:
             if "woolworths" not in item.prices:
                 continue
-            raw_price = item.prices["woolworths"]
+            # §7.3 rule 4: display discounts compute from the
+            # effective (multi-buy rate) price, not the raw cell.
+            raw_price = effective_price(item, "woolworths")
             outcome = discounted_woolworths_price(
                 raw_price, item.is_woolworths_home_brand
             )

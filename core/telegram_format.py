@@ -43,8 +43,9 @@ from __future__ import annotations
 import unicodedata
 from datetime import datetime
 
-# Width budgets (spec §3): product-name column and fenced-block total.
-MAX_NAME_WIDTH = 24
+# Width budgets (spec §3 + §10): names full up to 60 cells; fenced
+# phone-fit tables stay 34.
+MAX_NAME_WIDTH = 60
 MAX_BLOCK_WIDTH = 34
 
 # Divider vocabulary (spec §2.2).
@@ -55,6 +56,22 @@ LIGHT_DIVIDER_WIDTH = 10
 
 # Inline separator.
 SEP = "·"
+
+# Multi-buy tag (spec §7.3 rule 2) — EXACT mandatory note text.
+MULTIBUY_NOTE = "[Note: must purchase 2+ units to receive this price]"
+
+
+def multibuy_tag(qty: int, total: float) -> str:
+    """Render '🏷️ N for $X.XX  [Note: must purchase 2+ units …]'.
+
+    Args:
+        qty: bundle quantity (>= 2).
+        total: bundle total price.
+
+    Returns:
+        str: the mandatory multi-buy display tag.
+    """
+    return f"🏷️ {qty} for ${total:.2f}  {MULTIBUY_NOTE}"
 
 # Em dash / minus / ellipsis used across outputs (importable by callers).
 EM_DASH = "\u2014"

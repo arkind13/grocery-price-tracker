@@ -19,6 +19,11 @@
 | **Ignored** | Junk you said "forget" to. Never shown again. |
 | **No-price report** | "Neither store has a real price for this row for N weeks." Your cue to delete dead products from the sheet. |
 
+> **Sub-categories (2026-09-04):** rows whose sub-category is
+> `needs review` surface as a count in the `lists` output — run
+> `subcategories` to view the taxonomy, `prefer`/`backfill-subcategories`
+> to fix them (never auto-fixed).
+
 > **Not a 7th list:** "Pending links" (`unmapped_queue.json`, shown by
 > the `unmapped` command) is the STORAGE LEDGER BEHIND the Unmatched
 > list — the same items at their storage stage, plus ignored junk that
@@ -37,6 +42,7 @@
 | Command | Its job | Writes to the sheet? | What happens next |
 |---------|---------|----------------------|-------------------|
 | `compare` | Price battle for things you name (sheet first, live websites as backup) | Never | Nothing — look only |
+| `optimize` | Weekly-basket planner: one Woolworths trip vs a split Woolworths/Coles plan (5+ items only — smaller lists use `compare`) | Never | Nothing — look only |
 | `search` | Live look at both store websites (3 results per store) | Never | Nothing — look only |
 | `search --add-item N` | Save result N | Yes — price, and a new row ONLY if the product is genuinely new (one-line rule) | Goes on the **Searched** list → you add it on the store website → clears automatically next Wednesday |
 | `update` | Write one price by hand | Yes — one price cell | Nothing further |
@@ -77,7 +83,7 @@ GOOGLE SHEET "Products_Master": one row per product, prices per store
 - **Telegram** — where you chat. Claw translates your words into CLI commands.
 - **VPS** — the server that runs the CLI for day-to-day questions (compare, search, specials, map).
 - **Local Windows PC** — the only place the Wednesday run and the browser login window happen.
-- **Google Sheet** — the memory. Columns: A = product name, C = unit/size (e.g. `1L`, `250g`, `5 pack` — every product mention shows this, or says `unit unavailable` when unknown), D/E/F = prices (Woolworths/Coles/Aldi). A price cell can also hold a marker: `N/A 2026-09-02` (not in that store's list) or `unavailable 2026-09-02` (listed but no usable price) — the date is how the no-price list counts weeks. G = brand, H = updated, I/J/K = store keywords (how the system recognises a product on each store's list), M/N/O = specials/rewards, P = aliases (other names you might type).
+- **Google Sheet** — the memory. Columns: A = product name, C = unit/size (e.g. `1L`, `250g`, `5 pack` — every product mention shows this, or says `unit unavailable` when unknown), D/E/F = prices (Woolworths/Coles/Aldi). A price cell can also hold a marker: `N/A 2026-09-02` (not in that store's list) or `unavailable 2026-09-02` (listed but no usable price) — the date is how the no-price list counts weeks. G = brand, H = updated, I/J/K = store keywords (how the system recognises a product on each store's list), M/N/O = specials/rewards, P = aliases (other names you might type), Q = Sub_Category (granular cluster like `eggs`, `bread`; `needs review` when unsure), R = Item_Code (permanent 3-letter row ID), S = Preferred (the "P" flag — at most one per sub-category).
 
 ---
 
@@ -85,19 +91,19 @@ GOOGLE SHEET "Products_Master": one row per product, prices per store
 
 ```
         DURING THE WEEK (Telegram chat)                    WEDNESDAY (local PC)
-  ┌──────────────────────────────────────┐      ┌─────────────────────────────────────┐
+  ┌──────────────────────────────┐      ┌──────────────────────────────────────────┐
   │ "compare milk in woolworths+coles"   │      │ python grocery_price_cli.py         │
-  │  -> sheet first, live fallback       │      │        wednesday --source live      │
+  │  -> sheet first, live fallback       │      │        wednesday                    │
   │ "search chocolate protein milk"      │      │  1. pull + merge queues (VPS/local) │
-  │  -> live websites, 3 per store       │      │  2. browser login (you, once)       │
-  │ "add item 2"  -> ONE item saved:     │      │  3. FLUSH: queued items go ONTO     │
-  │     new row if new, else price       │ ───> │     the store website lists         │
-  │     on the existing line + queue     │      │  4. FETCH: read ALL list pages      │
-  │     entry [KAT] (one-line rule)      │      │  5. auto-link exact names, match,   │
+  │  -> live websites, 3 per store       │      │  2. PAUSE: you add the queued items │
+  │ "add item 2"  -> ONE item saved:     │      │     on the store websites, paste    │
+  │     new row if new, else price       │ ───> │     the updated lists into the      │
+  │     on the existing line + queue     │      │     .docx files, type done          │
+  │     entry [KAT] (one-line rule)      │      │  3. auto-link exact names, match,   │
   │ "remove KAT"  -> undo that one item  │      │     OVERWRITE all prices            │
-  │ (do nothing -> NOTHING is saved)     │      │  6. specials report                  │
-  └──────────────────────────────────────┘      │  7. Telegram summary + 7 lists       │
-                                                └─────────────────────────────────────┘
+  │ (do nothing -> NOTHING is saved)     │      │  4. specials report                 │
+  └──────────────────────────────────────┘      │  5. Telegram summary + 7 lists      │
+                                                └──────────────────────────────────────┘
 ```
 
 Key rule (by design): **nothing is ever saved automatically.** A search or
@@ -131,9 +137,11 @@ Notes:
   e.g. `KAT`). Codes exist ONLY on queued items — never on plain search or
   compare results. Removed codes are retired for 7 days so an old "remove X"
   message can never hit a new item.
-- The to-do list (4) and the searched list (5) are slowly converging: once the
-  live window is proven, everything can flow through the searched list and the
-  manual to-do list can be retired (planned, not done yet).
+- The to-do list (4) and the searched list (5) were planned to converge
+  via the live window (auto-add on the store websites). With live mode
+  retired (2026-09-02), the to-do list stays: the Wednesday docx pause
+  is the manual flush, and `add-to-list done` (which also saves the
+  store keyword) is the drain.
 - Supporting files (not lists you manage): `list_action_progress.json` (map
   session position), `live_snapshots/` (Wednesday website-list copies),
   `searched_item_code_tombstones.json` (retired codes),
@@ -149,6 +157,7 @@ the same commands for you):
 | Command | Plain meaning |
 |---------|---------------|
 | `compare --items "milk"` | Price battle between stores for things you name. Checks YOUR SHEET first; falls back to live websites. Only fair pairs count (same pack size within 20%). |
+| `optimize --items "milk, eggs, …"` | The weekly-shop planner (needs 5+ items). Prices from YOUR SHEET first, then classifies the rest: items already queued on the searched/to-do lists = no action needed (Wednesday handles them); close substitutes on the sheet are used read-only (labelled); the remaining gaps are listed for your confirmation (A = Coles missing, B = Woolworths missing, C = no pricing — each with a 3-letter code) before any live search. Confirming writes only PRICES into existing rows — and if a side still carries a stale keyword (price was N/A), the wrong keyword is CLEARED and the correct product goes on the to-do list so you verify the website list; sides with no keyword stay on the wool/coles missing lists until resolved via map (that writes the keyword); not-on-sheet items are compared only unless you add `+add` (then new row + searched-list entry). Then it says either "one Woolworths trip" or exactly which items at which store as numbered buy lists with 💵 subtotals and the item-vs-item savings (every per-item gap adds — a $10 win can't be cancelled by a $10 loss). Under $3 of movement → one trip; ties go to Woolworths. |
 | `search --product "X"` | Live look at both store websites. Up to 3 results per store. Saves nothing. Ends with a reminder that you can reply "add item N". |
 | `search --product "X" --add-item 2` | The explicit save: result 2 becomes a sheet row (store keyword left empty on purpose). **One-line rule:** if the SAME product is already on the sheet (word order / store-brand wording / pack wording ignored — `5 pack` and `70g` of the same item are ONE product), the price is updated on that existing row instead and nothing is queued. Only a same-unit different-size (200g vs 400g, beyond 20%) keeps lines apart; 33g vs 35g match. Add `--allow-duplicate` when you really want a second line. |
 | `search --product "X" --expand` | Show up to 8 results per store instead of 3. Still saves nothing. |
@@ -162,10 +171,15 @@ the same commands for you):
 | `map wool --na` | Mark a product permanently not-available at Woolworths (same for coles). |
 | `add-to-list show / done --items "1,KAT"` | See / clear the manual website-add to-do list (entries carry the exact store names + 3-letter codes). **`done` = "I added it on the website"** — it clears the reminder AND saves the exact store name as the row's keyword, so the next Wednesday sync matches the item immediately. `done` accepts numbers and codes mixed. |
 | `searched-items show / remove --items "KAT,RUM" / clear` | See / remove / empty the searched list (Wednesday queue). Items also clear by themselves the moment they show up on your store lists (Wednesday Step 1b). |
-| `live-refresh [--flush-only] [--fetch-only] [--recapture]` | LOCAL ONLY. The browser window: login, push queued items onto the store website lists, read all list pages into snapshots. `--recapture` redoes the one-time "training". |
-| `wednesday [--source docx\|live] [--no-prompt]` | The full Wednesday pipeline (see §6). Default `docx` = paste flow, now WITH a pause: it shows the queue first, waits while you add those items on the store websites and paste the updated lists, then syncs on `done`. `live` = the browser-window flow. |
+| `live-refresh [--flush-only] [--fetch-only] [--recapture]` | **RETIRED (2026-09-02), shelved not deleted.** Was the browser window: login, push queued items onto the store website lists, read all list pages into snapshots. Its job is now done by hand during the Wednesday docx pause. Code kept for a future breakthrough — see `lostbattle.md` before touching it. |
+| `wednesday [--source docx] [--no-prompt]` | The full Wednesday pipeline (see §6). **Docx is the ONLY mode now** — it shows the queue first, waits while you add those items on the store websites and paste the updated lists, then syncs on `done`. ~~Live mode~~ RETIRED 2026-09-02 (the browser-window war was lost — see `lostbattle.md`). |
 | `backfill-keywords` | Fill the alias column (P) from existing data. |
 | `backfill-sizes` | Fill empty unit cells (C) by parsing sizes out of product names. Never overwrites a filled cell; unparseable cells stay blank and show "unit unavailable" in answers. |
+| `shop --items "eggs, apples"` | Shopping-list compare (see §6F): auto-picks your preferred row per sub-category; asks one question when it can't. |
+| `prefer --code ABC` / `prefer --pick N` | Make that row your preferred (P) item for its sub-category, then finish any pending shop run. |
+| `subcategories` | List the sub-category labels and how many sheet rows each has. |
+| `backfill-subcategories` | One-time fill of empty sub-category cells (Q) using the classifier; unsure rows get the literal "needs review" — never a guess, never overwrites. |
+| `backfill-codes` | One-time fill of empty item-code cells (R) with unique permanent 3-letter codes. |
 
 **Unit rule (everywhere):** any time a product is mentioned — search,
 compare, recipe, specials, the queues, the Wednesday lists — its unit
@@ -213,22 +227,16 @@ can't find one, and writes `unit unavailable` if you reply "unknown".
    report in the specials-wool topic. The healed lists + debt queue are
    pushed to the VPS so Telegram sessions see exactly the same state.
 
-### C. Wednesday, live way — every week, not just the first
-`python grocery_price_cli.py wednesday --source live`
-1. Step 0 pulls the queues from the VPS and MERGES them with the local
-   copies (nothing is lost on either side); the merged copies are pushed
-   back so both machines always show the same queue.
-2. Opens a real Chrome window; YOU log into Woolworths and Coles once
-   (2FA included). The login is remembered until it expires.
-3. Flush: everything in the to-do + searched lists is added to your
-   "Price Compare" lists ON THE STORE WEBSITES (needs the one-time training, §7).
-4. Fetch: reads ALL pages of both lists (30-page safety cap) into snapshots.
-5. Gate: if the snapshots came back incomplete it STOPS before touching the sheet.
-6. Sync: same overwrite rules as docx (found → price; absent → `N/A <date>`;
-   unpriced → `unavailable <date>`); unknown items -> Unmatched; one-store
-   items -> Wool/Coles missing.
-7. Specials report + summary posted to Telegram; queues mirrored back to
-   the VPS so consumption propagates.
+### C. Wednesday, live way — RETIRED (2026-09-02)
+> The browser-window flow (`wednesday --source live`) is **retired**:
+> the fight to automate store logins and the "add to list" click was
+> lost after ~16 hours (Akamai bot manager + Chrome 136 profile
+> security). The CLI refuses `--source live` with a pointer to
+> `lostbattle.md`. Everything this flow did is now covered by the
+> docx way (§B): the pause is your flush (you add the queued items on
+> the store websites), the pasted lists are your fetch. The code and
+> tests are shelved, not deleted — the revival conditions are listed
+> in `lostbattle.md`.
 
 ### D. Resolve sessions (map) — one reply per item
 Claw shows one item at a time with the system's best information:
@@ -259,19 +267,35 @@ session says so and offers pick/forget/skip instead of garbage results.
 live. Items the sheet knows are shown with plain prices (Woolworths display
 prices always carry the 5% team discount; the sheet stores raw prices).
 
+### F. Shopping list (shop) — the preference flow
+
+1. You send a list ("eggs, apples, bread"). The agent normalises each
+   item to a sub-category (or a specific product) and calls
+   `shop --items "…"`.
+2. Each sub-category with a Preferred (P) row is compared
+   automatically using that row.
+3. No P yet? The CLI asks ONE question (the numbered prompt with
+   full names + codes). Reply with a code or number → `prefer` sets
+   P and finishes the comparison.
+4. Not tracked at all? Offer a keyword → normal `search --add-item`
+   flow; the new row arrives with Q/R/S filled and S empty — the
+   next `shop` asks the one question (nothing is ever auto-preferred).
+5. Asked for a specific variant that is NOT your preferred? You get
+   the comparison plus the switch/keep warning. "keep" writes
+   nothing.
+Item-Code (Col R) is a DIFFERENT namespace from queue codes: `prefer
+ABC` vs `todo done ABC` never collide.
+
 ---
 
-## 7. The one-time "training" (discovery capture)
+## 7. The one-time "training" (discovery capture) — SHELVED with live mode
 
-Before the system can push items onto the store website lists (step C.3), it
-must ONCE learn, per store, the exact website API call for "add to list" and
-how list pages are numbered. That knowledge is saved in
-`data/live_api_capture.json`. The code refuses to guess without it. It is
-captured automatically during the first live-window run, and
-`live-refresh --recapture` redoes it if a store changes its website.
-Status: the capture file exists and per-store captures have been trained
-on this machine — check `live-refresh` per-store `Discovery:` status lines
-for the current state.
+The capture file (`data/live_api_capture.json`) holds the exact website
+API call for "add to list" per store, learned during the live-window
+experiments. With live mode retired (2026-09-02) nothing reads it —
+it stays as a proven artifact for any future revival (the API call
+itself was verified correct; delivery was the lost battle). See
+`lostbattle.md`.
 
 ---
 
@@ -285,7 +309,8 @@ for the current state.
 split, specials columns M/N, queue sync, the Wednesday pause + auto-clear,
 the one-line rule, sync overwrite semantics, the no-price list, Wednesday
 exact-name auto-linking, debt auto-heal + price enrichment, one-reply map
-picks, and the aldi guard — see `test.md` for every round.)
+picks, the aldi guard, and the smart-basket optimizer (optimize) — see
+`test.md` for every round.)
 
 ---
 
