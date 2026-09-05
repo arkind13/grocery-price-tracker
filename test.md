@@ -360,3 +360,5 @@ Implementation plan: `implementation-plan.md` (binding revision
    (bot lacks Manage Topics). The plan's DM fallback is active;
    provisioning retries automatically on every later
    `--provision-topic` run (baked into future Friday diagnostics).
+| PASS | S30 VPS sync | scp CLI + core/extractors + 3 skill files; md5sum both sides; `docker restart openclaw-core`; `local-deals --dry-run` smoke | all 3 skill md5s match (fce2d042…, 46249820…, 58467348…); container restarted; smoke ran fetch→vision→render end-to-end (⚠️ lines expected: boards not yet published) |
+| PASS | S33 VPS cron | idempotent install script via ssh stdin; `crontab -l | grep friday-gate`; `local-deals --friday-gate` outside window | `INSTALLED`; line `*/15 * * * * docker exec … local-deals --friday-gate >> /home/ubuntu/scripts/local_deals.log 2>&1` verified; Saturday run: EXIT_CODE=0, silent, no state written |
