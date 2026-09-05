@@ -81,7 +81,7 @@ grocery-price-tracker/                      ← ULTIMATE PROJECT ROOT (this fold
 │  │  Docker container: openclaw-core  (image openclaw-core:sketch)│ │
 │  │  OpenClaw gateway 2026.6.34  (Node, /app/openclaw.mjs)       │ │
 │  │   ├─ Telegram channel (@ClawArkindBot)                      │ │
-│  │   ├─ Agent model: openrouter/qwen/qwen3.7-flash             │ │
+│  │   ├─ Agent model: glm-5.3-flash             │ │
 │  │   ├─ Control API: port 18789 (in-container)                 │ │
 │  │   └─ Skills loaded from /app/tasks/ai-tools/claw-skills/   │ │
 │  │       (bind-mount ← /home/ubuntu/openclaw/tasks/ai-tools/)  │ │
@@ -311,7 +311,7 @@ The VPS runs the OpenClaw gateway inside a Docker container (`openclaw-core`). T
 - **Version:** OpenClaw 2026.6.34
 - **Gateway mode:** `local`
 - **Control API port:** `18789` (in-container, not published to host — reached via `docker exec`)
-- **Agent model:** `openrouter/qwen/qwen3.7-flash` (thinking=medium)
+- **Agent model:** `glm-5.3-flash` (thinking=medium)
 - **Telegram bot:** `@ClawArkindBot` (token in env `TELEGRAM_CLAW_BOT`)
 - **Allowlisted DM chat:** `1594431983` (owner)
 - **Skills dir:** `/app/tasks/ai-tools/claw-skills` (bind-mounted)
@@ -327,7 +327,7 @@ The VPS runs the OpenClaw gateway inside a Docker container (`openclaw-core`). T
 | `channels.telegram.allowFrom` | `[1594431983]` |
 | `commands.ownerAllowFrom` | `["telegram:1594431983"]` |
 | `skills.load.extraDirs` | `["/app/tasks/ai-tools/claw-skills"]` |
-| `agents.defaults.model.primary` | `openrouter/qwen/qwen3.7-flash` |
+| `agents.defaults.model.primary` | `glm-5.3-flash` |
 
 ### State (inside container, `/home/node/.openclaw/`)
 
@@ -650,6 +650,99 @@ against your stored preferences — full flow in
 auto-sets P, and the Wednesday sync never touches it. Note:
 `Item_Code` (Col R) is a DIFFERENT namespace from the to-do queue
 codes — `prefer ABC` and `todo done ABC` never collide.
+
+### Local deals — Friday Mt Druitt shops (2026-09-05)
+
+`local-deals` reads the public Facebook price boards of four local
+shops — Dunya Butchery, Merjan Brothers Quality Meats, Fruitopia Mt
+Druitt, Abu Salim Fruit Market — and turns them into a Telegram
+report plus a `Local_Deals` sheet tab:
+
+1. **Fetch:** Scrape.do renders each shop's Facebook photos tab
+   (logged-out, AU exit node). Signed CDN URLs are downloaded exactly
+   as captured (only `&amp;` is unescaped). Per-run Scrape.do cap: 40
+   credits.
+2. **Vision:** ONE vision call per post (all photos attached) parses
+   the board into strict-JSON deals. Model chain: GLM (zlm endpoint)
+   → OpenRouter GLM → OpenRouter Gemini, hard 2-attempt cap per post.
+3. **Freshness:** boards with a printed end date in the past are
+   dropped; undated boards are kept.
+4. **Tab rebuild:** the `Local_Deals` tab is wiped + rewritten every
+   run (idempotent). Equivalent in-domain items share one row
+   (word-order-insensitive, variety-aware); bulk/multi-buy cells hold
+   note text while a unit-price store keeps its numeric cell.
+5. **Domain-gated compare:** butcheries compare ONLY against raw
+   meat/chicken master rows; fruit shops ONLY against fruit & veg
+   rows. Out-of-domain items are recorded and shown but never
+   compared. Alerts fire strictly above a 20% saving; variety
+   conflicts (generic vs "Royal Gala") print "variety differs —
+   verify" instead of alerting. Bulk/multi-buy never enter the maths.
+6. **Telegram:** Post 1 = standouts (with the "Extra stop worth it"
+   line when one store saves > $3.00); Post 2 = every shop's full
+   board in natural order. No message ever exceeds 4000 chars.
+
+Subcommands: `local-deals` (flags: `--stores`, `--dry-run`,
+`--no-telegram`, `--refresh-catalogue`, `--friday-gate`,
+`--provision-topic`) and `backfill-halal-check` (below). The Friday
+cron runs with `--friday-gate` so it sends once per Friday inside the
+05:00-05:59 Sydney window. Every Telegram message prints a
+secret-free receipt line (`[telegram] ok message_id=…`) for auditing.
+
+Secrets used: `SCRAPEDO_API_KEY`, `zlm_url`/`zlm_claw`,
+`OPENROUTER_API_KEY`, `TELEGRAM_CLAW_BOT`,
+`TELEGRAM_LOCAL_DEALS_TOPIC_ID` (set automatically by
+`--provision-topic`).
+
+### Halal rules (2026-09-05)
+
+Raw meat/chicken queries are **halal-by-default**:
+
+- Generic terms ("chicken breast", "lamb") resolve through a halal-
+  scoped view of the sheet: non-marked meat rows become invisible.
+  Prepared foods ("chicken salt", "beef stock") are never treated as
+  meat terms.
+- A positive `halal` marker lives in Col P (Keywords) — manual marks
+  and LLM-verified marks are EQUAL. A product whose name contains
+  "halal" is treated as marked.
+- The 3-tier fallback chain: sheet → live search restricted to halal
+  products (each top candidate verified by an LLM web check; >= 0.8
+  confidence auto-adds the row, <= 20 checks per run, 90-day verdict
+  cache in `data/halal_status.json`) → the Local_Deals butchery tab
+  ("🔪 Local butcher (halal): …") → a clean "not available this
+  week" message. Negatives NEVER touch the sheet — they live only in
+  the ledger.
+- The shopping list (`shop`/`optimize`) runs a halal gate:
+  non-marked rows in auto-checked sub-categories are EXCLUDED with
+  the note `excluded (non-halal — database only)`; unverified rows
+  fail safe as `halal unverified — verify manually`.
+- Halal rows in an auto-checked sub-category are always Preferred
+  (single-writer `set_preferred` refuses a non-halal P while a halal
+  sibling exists).
+
+#### Extension points (add shops / widen domains)
+
+Each of these is ONE constant edit — no other code changes:
+
+1. `BUTCHERY_DOMAIN` / `PRODUCE_SUBCATEGORIES` + `FRUITSHOP_COARSE`
+   in `grocery-price-tracker/core/local_deals.py` — add a
+   sub-category label to widen what a butchery/fruit shop may be
+   compared against (e.g. move "chicken schnitzel" in). Note: after
+   S23 `BUTCHERY_DOMAIN` is imported from
+   `core/halal.py::HALAL_CHECK_CATEGORIES` — edit THAT set.
+2. `HALAL_CHECK_CATEGORIES` in
+   `grocery-price-tracker/core/halal.py` — add a category to the
+   automatic halal checks.
+3. `MEAT_PROTEIN_WORDS` / `MEAT_CUT_WORDS` /
+   `PREPARED_EXCLUSIONS` in `grocery-price-tracker/core/halal.py`
+   (`is_meat_term`) — add query words (e.g. fish names).
+4. `_RULE_DEFS` in `grocery-price-tracker/core/subcategory.py` — add
+   taxonomy rules so new item kinds classify.
+5. `STORES` in
+   `grocery-price-tracker/extractors/fb_flyer_fetch.py` — add a shop
+   (plus its tab column in `core/local_deals.py::STORE_COLUMNS`).
+6. `STORE_SITES` in
+   `grocery-price-tracker/extractors/shop_site_catalogue.py` — add a
+   shop website (WooCommerce Store API).
 
 ### Live APIs used
 

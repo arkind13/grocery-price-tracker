@@ -1095,6 +1095,7 @@ def add_product_row(
     subcategory: str = "",
     dry_run: bool = False,
     allow_duplicate: bool = False,
+    halal_confirmed: bool = False,
     worksheet=None,
 ) -> dict:
     """Append a new product row to the bottom of Products_Master.
@@ -1133,6 +1134,9 @@ def add_product_row(
         allow_duplicate: skip the SIMILARITY merge (explicit
             "these are 2 different products" override). Exact-name
             duplicates are always refused.
+        halal_confirmed: caller-verified halal status for the NEW row
+            (tier-2 auto-add passes True); drives the keep-apart
+            guard + the Col P/S ingestion hook.
         worksheet: optional pre-connected worksheet.
 
     Returns:
@@ -1191,6 +1195,7 @@ def add_product_row(
                         f"already tracked (row {row_index}: "
                         f"'{existing}') — use update/map instead of "
                         f"adding a duplicate"),
+                    "halal_pending_check": False,
                 }
 
     # --- one-line rule (2026-09-02) ---
@@ -1201,6 +1206,10 @@ def add_product_row(
     # explicit user override for genuinely different products.
     if not allow_duplicate:
         from core.name_matcher import is_same_product
+        from core.halal import is_halal_row as _is_halal_row
+        kw_col_guard = _find_col(header, KEYWORDS_HEADER)
+        new_halal = bool(halal_confirmed) or _is_halal_row(
+            "", generic_name)
         similar_idx: Optional[int] = None
         similar_name = ""
         for row_index, row in enumerate(data_rows, start=2):
@@ -1208,6 +1217,14 @@ def add_product_row(
             if not existing:
                 continue
             if is_same_product(generic_name, existing):
+                col_p = (str(row[kw_col_guard]).strip()
+                         if (kw_col_guard is not None
+                             and len(row) > kw_col_guard) else "")
+                if new_halal != _is_halal_row(col_p, existing):
+                    # keep-apart (§12.6): a halal-brand row and a
+                    # store-brand row of the same food must never
+                    # collapse — marker status differs -> skip.
+                    continue
                 similar_idx = row_index
                 similar_name = existing
                 break
@@ -1238,6 +1255,7 @@ def add_product_row(
                 "store_keyword_empty": kw_empty,
                 "range_written": range_written,
                 "error": merged.get("error", ""),
+                "halal_pending_check": False,
             }
 
     new_row_index = len(data_rows) + 2  # 1-based (row 1 = header)
@@ -1303,13 +1321,31 @@ def add_product_row(
         from core.item_codes import reserve_code
         item_code = reserve_code(worksheet, new_row_index)
         new_row[item_code_col] = item_code
+    # --- halal ingestion hook (§12.1 rule 6, S20 edit 3) ---
+    from core.halal import (
+        HALAL_MARKER, is_auto_halal_scope, is_halal_row,
+    )
+    row_is_halal = bool(halal_confirmed) or is_halal_row(
+        "", generic_name)
+    if row_is_halal and keywords_col is not None:
+        aliases = [a for a in str(new_row[keywords_col] or "")
+                   .split("|") if a.strip()]
+        if HALAL_MARKER not in aliases:
+            aliases.append(HALAL_MARKER)
+        new_row[keywords_col] = "|".join(aliases)
+    row_halal_auto = row_is_halal and is_auto_halal_scope(label)
     if preferred_col is not None:
-        new_row[preferred_col] = ""  # ingestion NEVER auto-sets P (D-P2)
+        # D-P2 stands EXCEPT the halal hook (§12.1 rule 6b): a
+        # confirmed-halal row in an auto-scope sub-category takes P.
+        new_row[preferred_col] = "P" if row_halal_auto else ""
+    halal_pending_check = bool(
+        is_auto_halal_scope(label) and not row_is_halal)
 
     if dry_run:
         return {
             "wrote": False, "row_index": new_row_index,
             "range_written": "", "error": "",
+            "halal_pending_check": halal_pending_check,
         }
 
     range_name = f"A{new_row_index}:{_col_letter(target_width - 1)}{new_row_index}"
@@ -1329,10 +1365,21 @@ def add_product_row(
                 f"R{new_row_index}")
             confirm_code(item_code, new_row_index)
 
+    if row_halal_auto and item_code:
+        # Clear a non-halal P in this sub-category via the single
+        # writer (clear-then-set semantics preserved; §12.1 6c).
+        from core.preferences import set_preferred
+        try:
+            set_preferred(worksheet, item_code)
+        except Exception as exc:  # noqa: BLE001 — P alignment is
+            # best-effort; the row + marker are already written.
+            print(f"[add_product_row] halal P-align skipped: "
+                  f"{exc.__class__.__name__}")
     return {
         "wrote": True, "row_index": new_row_index,
         "range_written": range_name, "error": "",
         "item_code": item_code,
+        "halal_pending_check": halal_pending_check,
     }
 
 

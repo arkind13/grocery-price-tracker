@@ -3525,5 +3525,144 @@ class TestPreferCmd(unittest.TestCase):
         self.assertIn("--code ABC or --pick N", err.getvalue())
 
 
+class TestLocalDealsCLI(unittest.TestCase):
+    """S14: local-deals subcommand wiring (§14.11)."""
+
+    def test_local_deals_parser_flags_exist(self):
+        """The subcommand exposes every bound flag."""
+        import grocery_price_cli as gpc
+        parser = gpc.build_parser()
+        args = parser.parse_args([
+            "local-deals", "--stores", "dunya,merjan",
+            "--dry-run", "--no-telegram", "--refresh-catalogue",
+            "--friday-gate", "--provision-topic",
+        ])
+        self.assertEqual(args.stores, "dunya,merjan")
+        self.assertTrue(args.dry_run)
+        self.assertTrue(args.no_telegram)
+        self.assertTrue(args.refresh_catalogue)
+        self.assertTrue(args.friday_gate)
+        self.assertTrue(args.provision_topic)
+        self.assertEqual(args.func, gpc._cmd_local_deals)
+
+    def test_local_deals_dispatch_calls_run_local_deals(self):
+        """Dispatch maps args; a CLOSED friday gate runs nothing."""
+        import grocery_price_cli as gpc
+        args = argparse.Namespace(
+            stores="dunya, merjan", dry_run=True, no_telegram=True,
+            refresh_catalogue=False, friday_gate=False,
+            provision_topic=False)
+        with patch("core.local_deals.run_local_deals",
+                   return_value=0) as run:
+            rc = gpc._cmd_local_deals(args)
+        self.assertEqual(rc, 0)
+        run.assert_called_once_with(
+            stores=["dunya", "merjan"], dry_run=True,
+            send_telegram=False, refresh_catalogue=False)
+
+        # Closed gate: outside window -> 0, run NEVER called.
+        args_gated = argparse.Namespace(
+            stores=None, dry_run=False, no_telegram=False,
+            refresh_catalogue=False, friday_gate=True,
+            provision_topic=False)
+        with patch("core.local_deals.friday_gate_open",
+                   return_value=False), \
+             patch("core.local_deals.run_local_deals") as run2, \
+             patch("core.local_deals.friday_gate_mark_fired") as mk:
+            rc = gpc._cmd_local_deals(args_gated)
+        self.assertEqual(rc, 0)
+        run2.assert_not_called()
+        mk.assert_not_called()
+
+
+class TestBackfillHalalCheckCLI(unittest.TestCase):
+    """S24: backfill-halal-check wiring + shop/optimize gate."""
+
+    def test_backfill_halal_check_parser_flags(self):
+        """--dry-run/--limit/--force exist and dispatch."""
+        import grocery_price_cli as gpc
+        parser = gpc.build_parser()
+        args = parser.parse_args(
+            ["backfill-halal-check", "--dry-run", "--limit", "5",
+             "--force"])
+        self.assertTrue(args.dry_run)
+        self.assertEqual(args.limit, 5)
+        self.assertTrue(args.force)
+        self.assertEqual(args.func, gpc._cmd_backfill_halal_check)
+
+    def test_backfill_dispatch_calls_backfill_mock(self):
+        """Handler maps args onto backfill_halal_checks."""
+        import grocery_price_cli as gpc
+        args = argparse.Namespace(dry_run=True, limit=7, force=False)
+        with patch("core.sheets_client.connect_worksheet",
+                   return_value=MagicMock()), \
+             patch("core.halal.backfill_halal_checks",
+                   return_value={"checked": 0, "marked": 0,
+                                 "excluded": 0, "deferred": 0,
+                                 "notes": []}) as bf:
+            rc = gpc._cmd_backfill_halal_check(args)
+        self.assertEqual(rc, 0)
+        self.assertEqual(bf.call_args.kwargs,
+                         {"dry_run": True, "limit": 7,
+                          "force": False})
+
+    def test_shop_prints_excluded_non_halal_note(self):
+        """shop prints the exclusion note for gated-out items."""
+        import grocery_price_cli as gpc
+        args = argparse.Namespace(items="beef mince", mode="sheet",
+                                  list_name=None)
+        plan = {"compare": [("beef mince", "Plain Beef Mince")],
+                "halted": [], "notes": [], "cold": [],
+                "warns": []}
+        gate = {"included": [], "notes": [],
+                "excluded": [("Plain Beef Mince",
+                              "excluded (non-halal — database "
+                              "only)")]}
+        with patch.object(gpc, "_load_env"), \
+             patch("core.sheets_client.connect_worksheet",
+                   return_value=MagicMock()), \
+             patch("core.preferences.resolve_shop_items",
+                   return_value=plan), \
+             patch("core.halal.halal_list_gate", return_value=gate):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                gpc._cmd_shop(args)
+        self.assertIn("Plain Beef Mince — excluded (non-halal",
+                      buf.getvalue())
+
+    def test_optimize_drops_excluded_from_totals(self):
+        """optimize removes gated-out names before basket maths."""
+        import grocery_price_cli as gpc
+        args = argparse.Namespace(
+            items="beef mince,milk", mode="auto",
+            min_saving=None, team_discount=0.0, confirm=False)
+        gate = {"included": ["milk"], "notes": [],
+                "excluded": [("beef mince",
+                              "excluded (non-halal — database "
+                              "only)")]}
+        with patch.object(gpc, "_load_env"), \
+             patch("core.sheets_client.connect_worksheet",
+                   return_value=MagicMock()), \
+             patch("core.halal.halal_list_gate",
+                   return_value=gate), \
+             patch.object(gpc, "_compare_with_retry",
+                          return_value=MagicMock(
+                              items=[], warnings=[],
+                              not_available=[])) as cmp_mock, \
+             patch("core.basket_confirm.build_index",
+                   return_value={}), \
+             patch("core.basket_confirm.resolve_rows",
+                   return_value=[]):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf), \
+                 contextlib.redirect_stderr(io.StringIO()):
+                try:
+                    gpc._cmd_optimize(args)
+                except SystemExit:
+                    pass
+        self.assertIn("beef mince — excluded (non-halal",
+                      buf.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

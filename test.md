@@ -287,3 +287,76 @@ plan missed that third call site (gap found and closed).
   193f5b7b... — catalogue output unchanged by this round's edits,
   `skills_doc.py --check` OK). In-container `todo show` against the
   live sheet: clean render, no false (m) marks.
+
+
+---
+
+# test.md — Phase 2: Local Store Specials + Halal rules
+# (03 Code Agent, 2026-09-05)
+
+Implementation plan: `implementation-plan.md` (binding revision
+2026-09-05 07:38 — autonomous execution §9). Final suite:
+**1075 passed + 34 subtests, zero skips** (baseline was 925 + 34).
+
+## Environment setup (before S0)
+
+| Status | Item | Command | Output |
+|---|---|---|---|
+| PASS | pip deps | `python -m pip install gspread requests python-docx tzdata google-auth google-auth-oauthlib google-auth-httplib2 pytest` | installed (were missing locally) |
+| PASS | UTF-8 console | `$env:PYTHONUTF8="1"` | Windows cp1252 crashed on emoji in CLI output — env fix only, no code change |
+
+## Execution log
+
+| Status | Test Name | Command Run | Output/Error Logs |
+|---|---|---|---|
+| PASS | S0 baseline | `python -m pytest tests/ -q` | 925 passed, 34 subtests passed |
+| PASS | S1 connect_spreadsheet | `python -m py_compile core/sheets_client.py; python -m pytest tests/test_sheets_conn.py -q` | 1 passed |
+| PASS | S2 fb_flyer_fetch chunk 1 | `python -m py_compile extractors/fb_flyer_fetch.py` | OK |
+| PASS | S3 fb_flyer_fetch chunk 2 | `python -m py_compile extractors/fb_flyer_fetch.py` | OK |
+| PASS | S4 test_fb_fetch | `python -m pytest tests/test_fb_fetch.py -q` | 16 passed (fixture bug fixed in TEST: distinct photo ids + literal post markers; CODE fix: position-based post grouping per §1.4.7 + real-FB basename regex `\d{6,}_\d+_\d+(_\d+)?(_n)?` and plausible-cstp size guard — plan sketch never advanced bucket idx and real FB ids broke the 4-group regex; §6 rule: code wrong, not test) |
+| PASS | S5 shop_site_catalogue | `python -m py_compile extractors/shop_site_catalogue.py` | OK |
+| PASS | S6 flyer_vision chunk 1 | `python -m py_compile core/flyer_vision.py` | OK |
+| PASS | S7 flyer_vision chunk 2 | `python -m py_compile core/flyer_vision.py` | OK |
+| PASS | S8 test_flyer_vision | `python -m pytest tests/test_flyer_vision.py -q` | 18 passed (truncation test routed through extract_json — production path) |
+| PASS | S9 local_deals chunk 1 | `python -m py_compile core/local_deals.py` | OK |
+| PASS | S10 local_deals chunk 2 (tab builder) | `python -m py_compile core/local_deals.py` + build_rows sanity snippet | sections correct; verbatim em-dash notes verified |
+| PASS | S11 local_deals chunk 3 (matching) | `python -m py_compile core/local_deals.py` + detection sanity snippet | 21.3% alert fires; nugget gate blocks; Oreo untouched |
+| PASS | S12 local_deals chunk 4 (render/deliver/run) | `python -m py_compile core/local_deals.py` + render sanity snippets | Post1/Post2 formats match spec §9 samples |
+| PASS | S13 test_local_deals | `python -m pytest tests/test_local_deals.py -q` | 50 passed |
+| PASS | S14 CLI local-deals | `python -m py_compile grocery_price_cli.py; python -m pytest tests/test_cli.py -q` | 152 passed |
+| PASS | S31 topic provisioning | `python ../grocery_price_cli.py local-deals --provision-topic --dry-run` | `topic creation blocked (HTTP 400) — DM fallback; retries next run` ("not enough rights to create a topic") — plan §9 S31.5 fallback engaged; NOT a failure; `--provision-topic` retried later completes it once the bot can manage topics |
+| PASS | S32 first live fire | `python ../grocery_price_cli.py local-deals` | `[telegram] ok message_id=1201/1202/1203 chat=1594431983 thread=dm`; exit 1 (partial store failures, report still sent = PASS per §9 S32); `data/local_deals_first_fire.json` contains all three message_ids |
+| PASS | S32 gate check | `Select-String -Path .\data\local_deals_first_fire.json -Pattern '"message_id"'` | 3 hits |
+| PASS | S15 meat taxonomy | `python -m pytest tests/test_subcategory.py -q` then full suite | 26 passed; 1022 total |
+| PASS | S16-S18 core/halal | `python -m py_compile core/halal.py` | OK (3 chunks) |
+| PASS | S19 test_halal part 1 | `python -m pytest tests/test_halal.py -q` | 10 passed |
+| PASS | S20 sheets_sync hooks | `python -m pytest tests/test_sheets_sync.py -q` | 106 passed |
+| PASS | S21 preferences guard | `python -m pytest tests/test_preferences.py -q` | 36 passed |
+| PASS | S22 lookup intercept | `python -m pytest tests/test_lookup.py -q` | 35 passed |
+| PASS | S23 domain unification | `python -m pytest tests/test_local_deals.py tests/test_halal.py -q` | 60 passed |
+| PASS | S24 halal tests p2 + CLI wiring | `python -m pytest tests/test_halal.py tests/test_cli.py -q` | 30 + 156 passed |
+| PASS | S26 skills + doc-sync | `python skills_doc.py && python skills_doc.py --check` | wrote 205 lines; `OK: claw_skills_easy.md is current.` exit 0 |
+| PASS | S27 README | suite re-run (README-only change) | 1075 passed |
+| PASS | S28 PROJECT-MAP + test.md | this log + PROJECT-MAP sections | done |
+| PASS | S29 final gate | `python -m pytest tests/ -q` + `python -m py_compile` (all touched files) + `python skills_doc.py --check` | 1075 passed + 34 subtests; compile clean; doc-sync OK |
+
+## Deviations (all §6-resolved: code wrong, not test)
+
+1. `fb_flyer_fetch._group_by_post`: plan sketch never advanced the
+   bucket index (all images landed in group 0). Implemented the
+   §1.4.7 semantics the EC1 test pins (position-based assignment).
+2. `PHOTO_ID_RE`: plan sketch required 4 numeric groups; real FB
+   basenames are `{id}_{big}_{big}(_n).jpg` (3 groups). Regex
+   widened; plus a plausibility guard (<=9999 px) on cstp sizes —
+   FB emits degenerate `cstp=mx{hugeId}x{hugeId}` renditions that
+   serve 2.5 KB placeholders.
+3. `tests/test_local_deals.py::test_tier3_butchery_reader_domain_only`
+   lives in `tests/test_halal.py` instead — `core.halal` is a Part-2
+   dependency; the plan itself notes "re-run in test_halal too".
+4. `query_local_butchers` classifies Col A names via
+   `core.subcategory` (the Local_Deals tab has no Sub_Category
+   column) — same §8.4 outcome, correct mechanism.
+5. S31 topic creation is rights-blocked in the current group
+   (bot lacks Manage Topics). The plan's DM fallback is active;
+   provisioning retries automatically on every later
+   `--provision-topic` run (baked into future Friday diagnostics).

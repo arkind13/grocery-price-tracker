@@ -15,6 +15,7 @@ import time as time_module
 import unittest
 from pathlib import Path
 from unittest import mock
+from unittest.mock import patch
 
 # Bootstrap sys.path so core/ and extractors/ are importable
 _HERE = Path(__file__).resolve().parent  # tests/
@@ -1901,6 +1902,95 @@ class TestMultibuyPriceCell(unittest.TestCase):
         updated = ws.get_all_values()
         self.assertEqual(updated[1][4], 11.5)  # 23.00 / 2 deal rate
         self.assertEqual(updated[1][13], "multi-buy 2/$23.00")
+
+
+class TestAddProductRowHalalHooks(unittest.TestCase):
+    """S20: halal keep-apart + Col P/S ingestion hook (§12.6)."""
+
+    HEADER = TestAddProductRowOneLineRule.HEADER + [
+        "Sub_Category", "Item_Code", "Preferred",
+    ]
+
+    def _ws(self, col_p=""):
+        rows = [
+            self.HEADER,
+            ["Obela Classic Hommus 200g", "Dairy", "200g", "4.50",
+             "", "", "Obela", "", "obela hommus", "", "", "", "", "",
+             "", col_p, "", "", ""],
+        ]
+        return FakeWorksheet(rows)
+
+    def test_marked_vs_unmarked_twins_do_not_merge(self):
+        """Different halal status -> NEVER merge (keep-apart)."""
+        from core.sheets_sync import add_product_row
+        ws = self._ws(col_p="fresh|halal")
+        res = add_product_row(
+            "Obela Hommus Classic 200g", "woolworths", 4.20,
+            brand="Obela", size="200g", worksheet=ws)
+        self.assertTrue(res["wrote"])
+        self.assertNotEqual(res.get("existing_name"),
+                            "Obela Classic Hommus 200g")
+        self.assertEqual(len(ws.get_all_values()), 3)
+
+    def test_same_status_products_merge_marker_survives(self):
+        """Same halal status -> merge; the marker survives via
+        _append_alias."""
+        from core.sheets_sync import add_product_row
+        ws = self._ws(col_p="fresh|halal")
+        res = add_product_row(
+            "Obela Hommus Classic 200g", "woolworths", 4.20,
+            brand="Obela", size="200g", alias="dip",
+            halal_confirmed=True, worksheet=ws)
+        self.assertTrue(res["merged"])
+        updated = ws.get_all_values()
+        self.assertIn("halal", updated[1][15].split("|"))
+        self.assertIn("dip", updated[1][15].split("|"))
+
+    def test_halal_confirmed_add_writes_marker_and_P(self):
+        """Tier-2 auto-add: Col P gains 'halal'; auto-scope -> P."""
+        from core.sheets_sync import add_product_row
+        ws = FakeWorksheet([self.HEADER])
+        res = add_product_row(
+            "Halal Beef Mince BrandX 500g", "woolworths", 9.50,
+            size="500g", halal_confirmed=True, worksheet=ws)
+        self.assertTrue(res["wrote"])
+        updated = ws.get_all_values()
+        self.assertIn("halal", updated[1][15].split("|"))
+        self.assertEqual(updated[1][18], "P")
+
+    def test_halal_add_clears_non_halal_P_in_subcategory(self):
+        """P-alignment goes through set_preferred (single writer)."""
+        from core.sheets_sync import add_product_row
+        ws = FakeWorksheet([self.HEADER])
+        with patch("core.preferences.set_preferred",
+                   return_value={"wrote": True}) as sp:
+            res = add_product_row(
+                "Halal Beef Mince BrandX 500g", "woolworths", 9.50,
+                size="500g", halal_confirmed=True, worksheet=ws)
+        self.assertTrue(res["wrote"])
+        sp.assert_called_once()
+
+    def test_auto_scope_unknown_row_flagged_pending_check(self):
+        """Non-marked auto-scope add -> halal_pending_check True."""
+        from core.sheets_sync import add_product_row
+        ws = FakeWorksheet([self.HEADER])
+        res = add_product_row(
+            "Woolworths Beef Mince 1kg", "woolworths", 11.0,
+            size="1kg", worksheet=ws)
+        self.assertTrue(res["wrote"])
+        self.assertTrue(res["halal_pending_check"])
+
+    def test_dry_run_writes_nothing_including_halal_fields(self):
+        """dry_run: no write; result still carries the flag key."""
+        from core.sheets_sync import add_product_row
+        ws = FakeWorksheet([self.HEADER])
+        res = add_product_row(
+            "Halal Beef Mince BrandX 500g", "woolworths", 9.50,
+            size="500g", halal_confirmed=True, dry_run=True,
+            worksheet=ws)
+        self.assertFalse(res["wrote"])
+        self.assertEqual(len(ws.get_all_values()), 1)
+        self.assertIn("halal_pending_check", res)
 
 
 if __name__ == "__main__":

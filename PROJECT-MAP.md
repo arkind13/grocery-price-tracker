@@ -276,6 +276,35 @@ session says so and offers pick/forget/skip instead of garbage results.
 live. Items the sheet knows are shown with plain prices (Woolworths display
 prices always carry the 5% team discount; the sheet stores raw prices).
 
+### Local deals (Friday)
+
+`local-deals` reads the Facebook price boards of four local shops
+(Dunya Butchery, Merjan Brothers, Fruitopia, Abu Salim), parses them
+with a vision model, rebuilds the `Local_Deals` tab (wiped weekly —
+B7), compares in-domain items against Woolworths/Coles sheet prices
+(>20% = standout), and posts TWO Telegram messages: standouts, then
+every shop's full board. Butcheries only compare against raw meat;
+fruit shops only against produce — everything else is shown but never
+compared. The Friday cron (05:00-05:59 Sydney, once per Friday) uses
+`--friday-gate`; any-day manual runs are fine. Failures degrade to
+"⚠️ No prices found this week: …" lines — never silence.
+
+### Halal resolution chain
+
+Raw meat/chicken queries are halal-by-default. Tier 1: the sheet's
+halal-visible rows (non-marked meat rows are invisible; prepared
+foods like "chicken salt" never count as meat). Tier 2: a live halal
+search where each top candidate is verified by an LLM web check
+(>= 0.8 confidence auto-adds the row with a `halal` Col P marker +
+Preferred; <= 20 checks/run, 90-day cache). Tier 3: the Local_Deals
+butchery tab ("🔪 Local butcher (halal): …" — domain-only, prepared
+items never answer). Nothing found -> a clean "not available this
+week". Negatives live ONLY in `data/halal_status.json`, never on the
+sheet. `shop`/`optimize` run a halal gate: non-marked auto-scope rows
+are excluded ("excluded (non-halal — database only)"), unverified
+ones fail safe. `backfill-halal-check` sweeps unknown rows through
+the same LLM check.
+
 ### F. Shopping list (shop) — the preference flow
 
 1. You send a list ("eggs, apples, bread"). The agent normalises each

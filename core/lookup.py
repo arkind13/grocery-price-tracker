@@ -604,6 +604,8 @@ class LookupEngine:
     def __init__(self, worksheet=None) -> None:
         self._worksheet = worksheet
         self._index: Optional[LookupIndex] = None
+        self._raw_rows = None
+        self._header = None
 
     def _ensure_index(self) -> LookupIndex:
         """Build LookupIndex from the worksheet (lazy, once)."""
@@ -618,11 +620,37 @@ class LookupEngine:
             raise RuntimeError("Products_Master sheet is empty")
         header = all_values[0]
         rows = all_values[1:]
+        self._raw_rows = rows
+        self._header = header
         self._index = LookupIndex(rows, header)
         return self._index
 
+    def _halal_scoped_index(self) -> "LookupIndex":
+        """Halal-visible view: halal-marked rows PLUS rows outside
+        the auto-halal scope (non-halal meat rows are invisible to
+        generic meat terms — §12.2). Read-only filter over the SAME
+        values; ranking logic untouched.
+        """
+        from core.halal import is_auto_halal_scope, is_halal_row
+        from core.sheets_sync import _find_col
+        q = _find_col(self._header, "Sub_Category")
+        p = _find_col(self._header, "Keywords")
+        visible = []
+        for row in self._raw_rows:
+            sub = (str(row[q]).strip() if q is not None
+                   and len(row) > q else "")
+            col_p = (str(row[p]).strip() if p is not None
+                     and len(row) > p else "")
+            name = str(row[0]).strip() if row else ""
+            if is_auto_halal_scope(sub) and not is_halal_row(col_p,
+                                                             name):
+                continue
+            visible.append(row)
+        return LookupIndex(visible, self._header)
+
     def find_product(self, query: str, *,
-                     interactive: bool = True) -> LookupResult:
+                     interactive: bool = True,
+                     _halal_chain: bool = False) -> LookupResult:
         """Run the lookup chain Steps 1 -> 2 -> 3 -> 5 -> 6 for one query.
 
         Args:
@@ -630,6 +658,12 @@ class LookupEngine:
             interactive: if True (default), Step 3 returns candidates for
                 the caller to present for user selection. If False, Step 3
                 auto-picks the top candidate (used by compare --mode auto).
+            _halal_chain: private recursion guard for the halal tier
+                chain — chain mode injects the 'halal ' prefix into
+                Step 5 and returns the plain live result so
+                resolve_halal_item can verify candidates (prevents
+                resolve_halal_item <-> find_product infinite
+                recursion).
 
         Returns:
             LookupResult with the terminal status.
@@ -664,6 +698,14 @@ class LookupEngine:
                 note=f"exact match: '{exact['generic_name']}'",
             )
             return self._finish_sheet_result(sheet_res, query, interactive)
+
+        # --- PART-2 halal intercept (§12.4): generic raw-meat terms
+        # resolve halal-scoped. Step 1 exact matches are UNSCOPED —
+        # a full non-halal name is a database query (D-H4). ---
+        from core.halal import is_meat_term
+        halal_scoped = is_meat_term(query)
+        if halal_scoped:
+            idx = self._halal_scoped_index()
 
         # Step 2a: exact alias in Col P
         alias = idx.find_alias_exact(query)
@@ -744,8 +786,17 @@ class LookupEngine:
                 return self._finish_sheet_result(
                     sheet_res, query, interactive)
 
-        # Step 5: live search (display-only; explicit adds happen via
-        # `search --add-item` / `map --add` — spec §0.7 / B2)
+        # Step 5: live search — PART-2: raw-meat queries run the
+        # halal fallback chain (sheet -> live+LLM-verify -> butchery);
+        # chain mode (_halal_chain) injects the 'halal ' prefix and
+        # returns the plain live result to resolve_halal_item.
+        if halal_scoped:
+            from core.halal import (
+                halal_search_suffix, resolve_halal_item,
+            )
+            if _halal_chain:
+                return self._live_result(halal_search_suffix(query))
+            return resolve_halal_item(query, worksheet=self._worksheet)
         return self._live_result(query)
 
     def _finish_sheet_result(self, sheet_res: LookupResult, query: str,

@@ -154,3 +154,44 @@ if __name__ == "__main__":
     except Exception as exc:
         print(f"\n[FAIL] Probe failed: {exc}", file=sys.stderr)
         sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# 4. Offline unit test for core.sheets_client.connect_spreadsheet (S1)
+# ---------------------------------------------------------------------------
+def test_connect_spreadsheet_returns_handle_and_appends_nothing():
+    """connect_spreadsheet opens by key and NEVER writes/appends.
+
+    Mocks gspread entirely; asserts open_by_key receives the env id,
+    the Spreadsheet handle is returned (not a worksheet), and the
+    missing-env path raises RuntimeError with the established
+    secret-free wording.
+    """
+    from unittest.mock import MagicMock, patch
+
+    import pytest
+
+    import core.sheets_client as sheets_client
+
+    fake_client = MagicMock(name="gspread_client")
+    fake_sheet = MagicMock(name="spreadsheet_handle")
+    fake_client.open_by_key.return_value = fake_sheet
+
+    with patch.object(sheets_client, "_load_env"), \
+         patch.object(sheets_client, "_build_credentials"), \
+         patch.dict(os.environ,
+                    {"GROCERY_SPREADSHEET_ID": "test-env-id-123"},
+                    clear=False), \
+         patch("gspread.authorize", return_value=fake_client):
+        result = sheets_client.connect_spreadsheet()
+
+    fake_client.open_by_key.assert_called_once_with("test-env-id-123")
+    assert result is fake_sheet
+
+    # Env var missing -> RuntimeError (wording shape asserted)
+    with patch.object(sheets_client, "_load_env"), \
+         patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("GROCERY_SPREADSHEET_ID", None)
+        with pytest.raises(RuntimeError) as excinfo:
+            sheets_client.connect_spreadsheet()
+    assert "GROCERY_SPREADSHEET_ID is not set" in str(excinfo.value)

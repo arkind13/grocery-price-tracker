@@ -173,5 +173,79 @@ class TestAllLabels(unittest.TestCase):
         self.assertNotIn(NEEDS_REVIEW, all_labels())
 
 
+class TestMeatTaxonomy(unittest.TestCase):
+    """S15: meat & poultry labels (spec §12.3) + domain-set edges."""
+
+    def test_beef_mince_variants(self):
+        for name in ("Beef Mince", "Beef Mince Premium",
+                     "Minced Beef 500g"):
+            self.assertEqual(classify_subcategory(name)[0],
+                             "beef mince")
+
+    def test_chicken_cuts(self):
+        pairs = [
+            ("Chicken Breast Fillet", "chicken breast"),
+            ("Chicken Thigh Cutlets", "chicken thigh"),
+            ("Chicken Drumsticks", "chicken drumstick"),
+            ("Chicken Wing", "chicken wings"),
+            ("Chicken Wings 1kg", "chicken wings"),
+        ]
+        for name, label in pairs:
+            self.assertEqual(classify_subcategory(name)[0], label)
+
+    def test_whole_chicken_both_orders(self):
+        self.assertEqual(classify_subcategory("Whole Chicken")[0],
+                         "whole chicken")
+        self.assertEqual(classify_subcategory("Chicken Whole")[0],
+                         "whole chicken")
+
+    def test_diced_beef_both_orders(self):
+        self.assertEqual(classify_subcategory("Beef Diced")[0],
+                         "beef diced")
+        self.assertEqual(classify_subcategory("Diced Beef")[0],
+                         "beef diced")
+
+    def test_lamb_mutton_label_ampersand(self):
+        """The label is literally 'lamb & mutton' (ampersand)."""
+        self.assertEqual(classify_subcategory("Lamb Chops")[0],
+                         "lamb & mutton")
+        self.assertEqual(classify_subcategory("Mutton")[0],
+                         "lamb & mutton")
+
+    def test_goat_veal(self):
+        self.assertEqual(classify_subcategory("Goat Leg")[0], "goat")
+        self.assertEqual(classify_subcategory("Veal Schnitzel Cut")[0],
+                         "veal")
+
+    def test_sausages_kebab_skewer_processed(self):
+        for name in ("Beef Sausages", "Kebab Pack", "Skewers 6pk"):
+            self.assertEqual(classify_subcategory(name)[0],
+                             "processed meats")
+
+    def test_schnitzel_label_outside_domain_sets(self):
+        """'chicken schnitzel' classifies but is NOT in the butchery
+        comparison domain (user decision 05:04)."""
+        from core.local_deals import BUTCHERY_DOMAIN
+        self.assertEqual(
+            classify_subcategory("Chicken Schnitzel Crumbed")[0],
+            "chicken schnitzel")
+        self.assertNotIn("chicken schnitzel", BUTCHERY_DOMAIN)
+
+    def test_chicken_nuggets_still_frozen_snacks(self):
+        nugget_label = classify_subcategory("Chicken Nuggets")[0]
+        self.assertNotEqual(nugget_label, "chicken mince")
+        self.assertNotIn(nugget_label,
+                         {"beef mince", "whole chicken"})
+
+    def test_no_meat_misfire_on_existing_names(self):
+        """Existing non-meat names classify exactly as before."""
+        self.assertNotEqual(classify_subcategory("Eggs")[0],
+                            "beef mince")
+        self.assertNotIn(classify_subcategory("Full Cream Milk")[0],
+                         {"lamb & mutton", "goat", "veal"})
+        self.assertNotIn(classify_subcategory("Potato Chips")[0],
+                         {"processed meats", "beef diced"})
+
+
 if __name__ == "__main__":
     unittest.main()

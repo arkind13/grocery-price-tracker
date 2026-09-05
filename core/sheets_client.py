@@ -98,3 +98,35 @@ def connect_worksheet(worksheet_name: str = "Products_Master"):
         raise RuntimeError(
             f"Failed to connect to worksheet '{worksheet_name}': {exc}"
         ) from exc
+
+
+def connect_spreadsheet():
+    """Open the spreadsheet by key (GROCERY_SPREADSHEET_ID) via gspread.
+
+    Same env/auth path as connect_worksheet; returns the gspread
+    Spreadsheet handle (needed to ensure/create the Local_Deals tab).
+    Connects (never creates) the spreadsheet itself.
+
+    Returns:
+        gspread Spreadsheet handle.
+
+    Raises:
+        RuntimeError: env var missing or connection failed
+        (secret-free message).
+    """
+    _load_env()
+    import gspread
+
+    spreadsheet_id = os.getenv("GROCERY_SPREADSHEET_ID")
+    if not spreadsheet_id:
+        raise RuntimeError(
+            "GROCERY_SPREADSHEET_ID is not set in the root .env file."
+        )
+    try:
+        creds = _build_credentials()
+        client = gspread.authorize(creds)
+        return client.open_by_key(spreadsheet_id)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to connect to spreadsheet: {exc}"
+        ) from exc

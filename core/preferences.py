@@ -19,6 +19,7 @@ from core.subcategory import NEEDS_REVIEW, normalize_subcategory
 SUBCATEGORY_HEADER = "Sub_Category"   # Col Q (idx 16)
 ITEM_CODE_HEADER = "Item_Code"        # Col R (idx 17)
 PREFERRED_HEADER = "Preferred"        # Col S (idx 18)
+KEYWORDS_HEADER_NAME = "Keywords"     # Col P (halal marker lives here)
 SUBCATEGORY_COL = 16
 ITEM_CODE_COL = 17
 PREFERRED_COL = 18
@@ -53,6 +54,7 @@ def read_qrs(worksheet) -> list[dict]:
     q = _col_index(header, SUBCATEGORY_HEADER)
     r = _col_index(header, ITEM_CODE_HEADER)
     s = _col_index(header, PREFERRED_HEADER)
+    k = _col_index(header, KEYWORDS_HEADER_NAME)
     rows: list[dict] = []
     for i, row in enumerate(values[1:], start=2):
         name = str(row[0]).strip() if len(row) > 0 else ""
@@ -67,6 +69,8 @@ def read_qrs(worksheet) -> list[dict]:
                           if r is not None and len(row) > r else ""),
             "preferred": (str(row[s]).strip()
                           if s is not None and len(row) > s else ""),
+            "keywords": (str(row[k]).strip()
+                         if k is not None and len(row) > k else ""),
         })
     return rows
 
@@ -214,6 +218,26 @@ def set_preferred(worksheet, code: str) -> dict:
                 "subcategory": "", "cleared": 0, "range_written": "",
                 "error": "row has no sub-category "
                          "(run backfill-subcategories)"}
+    # --- halal guard (§12.1 rule 6c): refuse P on a NON-halal row
+    # while a halal-marked sibling exists in that sub-category —
+    # print the halal candidate instead (ANY sub-category: manual
+    # markers included). ---
+    from core.halal import is_halal_row
+    if not is_halal_row(target.get("keywords", ""), target["name"]):
+        sibling = next(
+            (r for r in rows if r["subcategory"] == sub
+             and is_halal_row(r.get("keywords", ""), r["name"])),
+            None)
+        if sibling is not None:
+            return {
+                "wrote": False, "row_index": target["row_index"],
+                "subcategory": sub, "cleared": 0,
+                "range_written": "",
+                "error": (
+                    f"refused: '{sibling['name']}' "
+                    f"({sibling['item_code']}) is the halal-marked "
+                    f"row for '{sub}' — set P there instead"),
+            }
     by_index = {r["row_index"]: r for r in rows}
     members = {r["row_index"] for r in rows
                if r["subcategory"] == sub}

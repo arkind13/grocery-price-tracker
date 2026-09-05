@@ -39,7 +39,7 @@ from extractors.models import ProductItem
 
 
 def _col_letter_to_idx(letter: str) -> int:
-    """'A'->0, 'Z'->25, 'AA'->26."""
+    """"A'->0, 'Z'->25, 'AA'->26."""
     idx = 0
     for ch in letter:
         idx = idx * 26 + (ord(ch.upper()) - ord("A") + 1)
@@ -512,6 +512,100 @@ class TestLookupQRSMetadata(unittest.TestCase):
         self.assertEqual(result.subcategory, "milk")
         self.assertEqual(result.item_code, "ABC")
         self.assertEqual(result.preferred, "P")
+
+
+class TestHalalIntercept(unittest.TestCase):
+    """S22: the single halal intercept (§12.4) — scoped index,
+    Step-1 unscoped, Step-5 dispatch, chain-mode prefix."""
+
+    HEADER = FULL_HEADER + ["Sub_Category", "Item_Code", "Preferred"]
+
+    def _ws(self):
+        rows = [
+            self.HEADER,
+            # Non-halal meat row: Q in scope, no marker -> INVISIBLE
+            # to generic meat queries.
+            ["Woolworths Beef Mince", "Meat", "1kg", "$12.00", "", "",
+             "", "", "", "", "", "", "", "", "", "",
+             "beef mince", "AAA", ""],
+            # Halal row via NAME (Col P empty): VISIBLE.
+            ["Halal Beef Mince BrandX", "Meat", "500g", "$7.50", "",
+             "", "", "", "", "", "", "", "", "", "", "",
+             "beef mince", "BBB", ""],
+            # Non-scope row: VISIBLE to everything.
+            ["Full Cream Milk", "Dairy", "3L", "$3.00", "", "",
+             "", "", "", "", "", "", "", "", "", "",
+             "", "", ""],
+            # Halal row via Col P MARKER: VISIBLE.
+            ["Chicken Breast", "Meat", "1kg", "$14.50", "", "",
+             "", "", "", "", "", "", "", "", "", "halal",
+             "chicken breast", "CCC", ""],
+        ]
+        return FakeWorksheet(rows)
+
+    def test_meat_query_invisible_to_non_halal_row(self):
+        """Generic meat query never resolves the non-halal twin. """""
+        engine = LookupEngine(self._ws())
+        result = engine.find_product("beef mince", interactive=False)
+        self.assertNotEqual(result.generic_name,
+                            "Woolworths Beef Mince")
+
+    def test_meat_query_sees_halal_rows_and_non_scope_rows(self):
+        """Scoped search resolves the halal twin. """""
+        engine = LookupEngine(self._ws())
+        result = engine.find_product("beef mince", interactive=False)
+        self.assertEqual(result.generic_name,
+                         "Halal Beef Mince BrandX")
+
+    def test_full_name_exact_match_still_resolves_non_halal(self):
+        """Step 1 is UNSCOPED: a full non-halal name is a database
+        query (D-H4). """""
+        engine = LookupEngine(self._ws())
+        result = engine.find_product("Woolworths Beef Mince",
+                                     interactive=False)
+        self.assertEqual(result.status, LookupStatus.EXACT_SHEET)
+
+    def test_non_meat_query_completely_unscoped(self):
+        """Non-meat queries never scope the index. """""
+        engine = LookupEngine(self._ws())
+        result = engine.find_product("Full Cream Milk",
+                                     interactive=False)
+        self.assertEqual(result.status, LookupStatus.EXACT_SHEET)
+
+    def test_step5_meat_query_dispatches_to_chain(self):
+        """A meat query with NO scoped sheet hit dispatches to
+        core.halal.resolve_halal_item exactly once. """""
+        from core.halal import HalalResolution
+        ws = FakeWorksheet([self.HEADER, [
+            "Full Cream Milk", "Dairy", "3L", "$3.00", "", "",
+            "", "", "", "", "", "", "", "", "", "", "", "", ""]])
+        sentinel = HalalResolution(tier=3, butcher_line="butcher")
+        with patch("core.halal.resolve_halal_item",
+                   return_value=sentinel) as rh:
+            engine = LookupEngine(ws)
+            result = engine.find_product("lamb", interactive=False)
+        rh.assert_called_once()
+        self.assertIs(result, sentinel)
+
+    def test_chain_mode_live_query_carries_halal_prefix(self):
+        """Chain mode injects the halal prefix into the live query."""
+        engine = LookupEngine(self._ws())
+        with patch.object(LookupEngine, "_live_search_pair",
+                          return_value=([], [], "ok")) as lsp:
+            engine.find_product("lamb", interactive=False,
+                                _halal_chain=True)
+        self.assertEqual(lsp.call_args.args[0], "halal lamb")
+
+    def test_scoped_index_drops_only_non_halal_meat_rows(self):
+        """The scoped view drops ONLY non-marked auto-scope rows."""
+        engine = LookupEngine(self._ws())
+        engine._ensure_index()
+        scoped = engine._halal_scoped_index()
+        names = [d["generic_name"] for d in scoped._rows]
+        self.assertNotIn("Woolworths Beef Mince", names)
+        self.assertIn("Halal Beef Mince BrandX", names)
+        self.assertIn("Full Cream Milk", names)
+        self.assertIn("Chicken Breast", names)
 
 
 if __name__ == "__main__":

@@ -400,5 +400,103 @@ class TestResolveShopItems(unittest.TestCase):
         self.assertEqual(plan["warns"], [])
 
 
+class TestHalalPreferGuard(unittest.TestCase):
+    """S21: set_preferred halal guard + read_qrs keywords field."""
+
+    def _header(self):
+        """A..S header but Col P carries the REAL 'Keywords' name so
+        _col_index finds the halal-marker column."""
+        header = _header_a_to_s()
+        header[15] = "Keywords"
+        return header
+
+    def _ws(self):
+        rows = [
+            self._header(),
+            ["Woolworths Beef Mince", "", "1kg", "12.00", "", "",
+             "", "", "", "", "", "", "", "", "", "fresh",
+             "beef mince", "ABC", ""],
+            ["Halal Beef Mince BrandX", "", "500g", "7.50", "", "",
+             "", "", "", "", "", "", "", "", "", "halal",
+             "beef mince", "DEF", ""],
+        ]
+        return FakeWorksheet(rows)
+
+    def test_prefer_refuses_non_marked_with_marked_sibling(self):
+        """P on the NON-marked row is refused; the halal candidate
+        is named in the error."""
+        ws = self._ws()
+        res = prefs.set_preferred(ws, "ABC")
+        self.assertFalse(res["wrote"])
+        self.assertIn("Halal Beef Mince BrandX", res["error"])
+        self.assertIn("set P there instead", res["error"])
+
+    def test_prefer_refuses_in_any_subcategory_manual_marker(self):
+        """The guard applies to ANY sub-category (manual markers)."""
+        rows = [
+            self._header(),
+            ["Plain Yoghurt", "", "1kg", "3.00", "", "", "", "", "",
+             "", "", "", "", "", "", "fresh", "greek yoghurt",
+             "GHI", ""],
+            ["Halal Yoghurt Co", "", "1kg", "3.50", "", "", "", "",
+             "", "", "", "", "", "", "", "halal", "greek yoghurt",
+             "JKL", ""],
+        ]
+        ws = FakeWorksheet(rows)
+        res = prefs.set_preferred(ws, "GHI")
+        self.assertFalse(res["wrote"])
+        self.assertIn("Halal Yoghurt Co", res["error"])
+
+    def test_prefer_allows_when_no_marked_sibling(self):
+        """No marked sibling -> P writes normally."""
+        rows = [
+            self._header(),
+            ["Plain Yoghurt", "", "1kg", "3.00", "", "", "", "", "",
+             "", "", "", "", "", "", "fresh", "greek yoghurt",
+             "GHI", ""],
+        ]
+        ws = FakeWorksheet(rows)
+        res = prefs.set_preferred(ws, "GHI")
+        self.assertTrue(res["wrote"])
+
+    def test_prefer_allows_marked_row_itself(self):
+        """Setting P ON the halal-marked row itself is allowed."""
+        ws = self._ws()
+        res = prefs.set_preferred(ws, "DEF")
+        self.assertTrue(res["wrote"])
+
+    def test_read_qrs_exposes_keywords_field(self):
+        """read_qrs rows carry the Col P keywords verbatim."""
+        ws = self._ws()
+        rows = prefs.read_qrs(ws)
+        self.assertEqual(rows[0]["keywords"], "fresh")
+        self.assertEqual(rows[1]["keywords"], "halal")
+
+    def test_multiple_marked_rows_prefer_still_writes_and_backfill_surfaces(
+            self):
+        """Two marked rows in one sub-category: prefer on one still
+        writes; detect_multi_p surfaces the duplicate (not guessed)."""
+        rows = [
+            self._header(),
+            ["Halal Beef A", "", "1kg", "12.00", "", "", "", "", "",
+             "", "", "", "", "", "", "halal", "beef mince",
+             "AAA", "P"],
+            ["Halal Beef B", "", "1kg", "12.50", "", "", "", "", "",
+             "", "", "", "", "", "", "halal", "beef mince",
+             "BBB", "P"],
+        ]
+        ws = FakeWorksheet(rows)
+        # Pre-state: two P flags in one sub-category -> surfaced by
+        # detect_multi_p (reported, never silently guessed).
+        multi = prefs.detect_multi_p(prefs.read_qrs(ws))
+        self.assertEqual(len(multi), 1)
+        self.assertEqual(multi[0]["subcategory"], "beef mince")
+        # prefer on a MARKED row with a marked sibling still writes;
+        # the single-writer clears the sibling (cleared=1).
+        res = prefs.set_preferred(ws, "BBB")
+        self.assertTrue(res["wrote"])
+        self.assertEqual(res["cleared"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

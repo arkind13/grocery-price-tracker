@@ -51,6 +51,22 @@ _RULE_DEFS: list[tuple[str, str]] = [
     # below (e.g. "Supreme Cheese Corn Chips" -> "corn chips", not
     # "cheese") — keep these at the top.
     (r"corn\s*chips", "corn chips"),
+    # --- meat & poultry (halal + comparison domains depend on
+    #     these labels — spec §12.3; single words carry \b) ---
+    (r"beef\s*mince|minced\s*beef", "beef mince"),
+    (r"chicken\s*mince|minced\s*chicken", "chicken mince"),
+    (r"chicken\s*breast", "chicken breast"),
+    (r"chicken\s*thigh", "chicken thigh"),
+    (r"chicken\s*drumsticks?", "chicken drumstick"),
+    (r"chicken\s*wings?", "chicken wings"),
+    (r"whole\s*chicken|chicken\s*whole", "whole chicken"),
+    (r"\bbeef\s*diced|diced\s*beef\b", "beef diced"),
+    (r"\blamb\b|\bmutton\b", "lamb & mutton"),
+    (r"\bgoat\b", "goat"),
+    (r"\bveal\b", "veal"),
+    (r"sausages?|kebab|skewer", "processed meats"),
+    (r"schnitzel|crumbed\s*chicken|chicken\s*schnitzel",
+     "chicken schnitzel"),
     # --- cheese (compounds first) ---
     (r"cheese\s*slice", "cheese slice"),
     (r"shredded\s*cheese|grated\s*cheese", "shredded cheese"),
