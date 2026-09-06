@@ -420,7 +420,7 @@ class TestLoggedInRoute(unittest.TestCase):
 
 
 class TestDailyScan(unittest.TestCase):
-    """User-directed twice-daily new-post detector (2026-09-06)."""
+    """Twice-daily new-post detector (user spec 2026-09-06)."""
 
     def _at(self, y, m, d, h, minute=30):
         from datetime import datetime as dt
@@ -439,30 +439,31 @@ class TestDailyScan(unittest.TestCase):
         self.assertEqual(key15, "2026-09-07:15")
         self.assertFalse(closed)
 
-    def test_new_post_notifies_baseline_silent(self):
-        """Lifecycle: fresh first sighting -> backfill notify; same
-        post again -> silent; changed id -> delta notify."""
+    def test_lifecycle_codes_and_plain_message(self):
+        """Fresh first sighting -> FRUT; repeat -> silent; new post
+        -> FRUT_1; message is plain language with posted time and
+        validity."""
         import tempfile as tf
         from core import local_deals as ld
         from core.sydney_time import sydney_now
 
-        refs = {}          # store key -> current post ref
+        refs = {}
 
         class _P:
             def __init__(self, ref):
                 self.post_ref = ref
-                # fresh post: within the 3-day backfill window
                 self.creation_time = sydney_now().timestamp() - 3600
-                self.text = ""
+                self.text = ("Valid until 12 September\n"
+                             "Cos Lettuce - 99c each")
                 self.image_urls: list = []
 
         def fake_fetch(store, *, max_posts=1, **kw):
             return [_P(refs[store["key"]])]
 
-        sent = []          # records MESSAGE TEXT ONLY — never tokens
+        sent = []
         with tf.TemporaryDirectory() as tmp:
             with patch.object(ld, "SCAN_STATE_PATH",
-                              Path(tmp) / "scan_state.json"), \
+                              Path(tmp) / "s.json"), \
                     patch("extractors.fb_timeline_fetch."
                           "fetch_timeline_posts",
                           side_effect=fake_fetch), \
@@ -476,54 +477,22 @@ class TestDailyScan(unittest.TestCase):
                                   ("dunya", "DUNY"),
                                   ("abusalim", "ABSA")):
                     refs[key] = f"{code}-p1"
-                ld._save_scan_state({})       # clean baseline
-                rc1 = ld.run_daily_scan(send=True)   # backfill notify
-                after_first = len(sent)
-                rc2 = ld.run_daily_scan(send=True)   # repeat: silent
-                after_repeat = len(sent)
+                ld._save_scan_state({})
+                ld.run_daily_scan(send=True)          # FRUT..ABSA
+                n_after_first = len(sent)
+                ld.run_daily_scan(send=True)          # silent
+                n_after_repeat = len(sent)
                 for key in refs:
                     refs[key] = refs[key] + "-new"
-                rc3 = ld.run_daily_scan(send=True)   # delta notify
-        self.assertEqual((rc1, rc2, rc3), (0, 0, 0))
-        self.assertEqual(after_first, 4)      # one per store
-        self.assertEqual(after_repeat, 4)     # no re-report
-        self.assertEqual(len(sent), 8)        # deltas notified
-        self.assertIn("posted:", sent[0])     # posted time in msg
-        self.assertTrue(any("FRUT" in t for t in sent))
-
-    def test_backfill_3days_notify_then_silent(self):
-        """First sighting: post within 3 days -> notified; the same
-        post again -> silent (last_notified tracking)."""
-        import tempfile as tf
-        from core import local_deals as ld
-        from core.sydney_time import sydney_now
-
-        class _P:
-            post_ref = "fresh1"
-            creation_time = sydney_now().timestamp() - 86400
-            text = ("📅 Valid until 12 September\n"
-                    "🥬 Cos Lettuce – 99¢ each")
-            image_urls: list = []
-
-        sent = []
-        with tf.TemporaryDirectory() as tmp:
-            with patch.object(ld, "SCAN_STATE_PATH",
-                              Path(tmp) / "s.json"), \
-                    patch("extractors.fb_timeline_fetch."
-                          "fetch_timeline_posts",
-                          return_value=[_P()]), \
-                    patch.object(ld, "_send_message",
-                                 side_effect=lambda *a, **k:
-                                 sent.append(a[2] if len(a) > 2
-                                             else k.get("text", ""))
-                                 or {"ok": True}):
-                ld._save_scan_state({})
-                rc = ld.run_daily_scan(send=True)
-        self.assertEqual(rc, 0)
-        self.assertEqual(len(sent), 4)      # one per store
-        self.assertIn("valid until:", sent[0])
-        self.assertIn("posted:", sent[0])   # posted time remembered
-        self.assertIn("ignore", sent[0])    # skip instruction
+                ld.run_daily_scan(send=True)          # FRUT_1 etc.
+        self.assertEqual(n_after_first, 4)
+        self.assertEqual(n_after_repeat, n_after_first)
+        self.assertEqual(len(sent), 8)
+        frut_new = [t for t in sent if "code: FRUT_1)" in t]
+        self.assertEqual(len(frut_new), 1)
+        self.assertIn("When posted:", frut_new[0])
+        self.assertIn("Valid until: Sat 12 Sep", frut_new[0])
+        self.assertIn("ignore FRUT_1", frut_new[0])
 
     def test_first_sighting_older_than_backfill_silent(self):
         import tempfile as tf
@@ -531,7 +500,7 @@ class TestDailyScan(unittest.TestCase):
 
         class _P:
             post_ref = "ancient"
-            creation_time = 1_000_000_000   # decades old
+            creation_time = 1_000_000_000
             text = ""
             image_urls: list = []
 
@@ -550,15 +519,16 @@ class TestDailyScan(unittest.TestCase):
                 ld._save_scan_state({})
                 rc = ld.run_daily_scan(send=True)
         self.assertEqual(rc, 0)
-        self.assertEqual(sent, [])          # too old: silent baseline
+        self.assertEqual(sent, [])
 
     def test_ignore_marks_and_scan_skips(self):
         import tempfile as tf
         from core import local_deals as ld
+        from core.sydney_time import sydney_now
 
         class _P:
             post_ref = "fresh1"
-            creation_time = None
+            creation_time = sydney_now().timestamp() - 3600
             text = ""
             image_urls: list = []
 
@@ -568,43 +538,232 @@ class TestDailyScan(unittest.TestCase):
                     patch("extractors.fb_timeline_fetch."
                           "fetch_timeline_posts",
                           return_value=[_P()]):
-                # baseline with a notified post (simulate: notify
-                # then overwrite notified ref via state surgery)
                 ld._save_scan_state({})
                 with patch.object(ld, "_send_message",
                                   return_value={"ok": True}):
-                    ld.run_daily_scan(send=True)
-                state = ld._load_scan_state()
-                for store in state["stores"].values():
-                    store["last_notified_ref"] = "fresh1"
-                ld._save_scan_state(state)
-
+                    ld.run_daily_scan(send=True)   # notifies FRUT
                 rc = ld.ignore_post("FRUT")
                 state = ld._load_scan_state()
                 ignored = state["stores"]["fruitopia"]["ignored"]
-        self.assertEqual(rc, 0)
-        self.assertIn("fresh1", ignored)
+                notified = state["stores"]["fruitopia"]["notified"]
+                self.assertEqual(rc, 0)
+                self.assertIn("fresh1", ignored)
+                self.assertNotIn("fresh1", notified)
+                sent = []
+                with patch.object(ld, "_send_message",
+                                  side_effect=lambda *a, **k:
+                                  sent.append(1) or {"ok": True}):
+                    ld.run_daily_scan(send=True)   # must stay quiet
+                self.assertEqual(sent, [])
 
-    def test_ingest_picks_newest_text_file(self):
+
+class TestMergeStoreTab(unittest.TestCase):
+    """Ingest sheet write: merge, never wipe other stores."""
+
+    class _FakeTab:
+        def __init__(self, grid):
+            self.grid = grid
+            self.updates = []
+
+        def get_all_values(self):
+            return [list(r) for r in self.grid]
+
+        def clear(self):
+            pass
+
+        def freeze(self, rows=1):
+            pass
+
+        def update(self, values, range_name):
+            self.grid = values
+            self.updates.append(range_name)
+
+    def _existing(self):
+        return [
+            ["Product", "Dunya (site)", "Dunya FB specials",
+             "Merjan Brothers Quality Meats",
+             "Fruitopia Mt Druitt", "Abu Salim Fruit Market",
+             "Comments"],
+            ["FRUITS", "", "", "", "", "", ""],
+            ["Apples", "", "", "", 3.2, "", ""],
+            ["BUTCHERY", "", "", "", "", "", ""],
+            ["Beef Diced", 12.99, "", "", "", "", ""],
+        ]
+
+    def test_merge_updates_and_appends_without_wiping(self):
+        from core import local_deals as ld
+        tab = self._FakeTab(self._existing())
+        deals = [
+            {"item": "Apples", "raw_text": "Apples 3.2",
+             "price": 3.2, "unit": "kg",
+             "price_kind": "single", "multibuy_qty": None,
+             "bulk_size": None, "category": "fruits",
+             "notes": ""},
+            {"item": "Cos Lettuce", "raw_text": "Cos Lettuce 99c",
+             "price": 0.99, "unit": "ea",
+             "price_kind": "single", "multibuy_qty": None,
+             "bulk_size": None, "category": "fruits",
+             "notes": ""},
+        ]
+        rows = ld.merge_store_tab(tab, "fruitopia", deals)
+        self.assertGreater(rows, 0)
+        grid = tab.grid
+        apples = next(r for r in grid
+                      if r and str(r[0]).strip() == "Apples")
+        self.assertEqual(apples[4], 3.2)            # updated (Fruitopia col)
+        self.assertEqual(apples[1], "")             # Dunya intact
+        beef = next(r for r in grid
+                    if r and str(r[0]).strip() == "Beef Diced")
+        self.assertEqual(beef[1], 12.99)            # untouched
+        lettuce = next(r for r in grid
+                       if str(r[0]).strip().startswith("Cos Lettuce"))
+        self.assertEqual(lettuce[4], 0.99)          # appended
+        idx_f = next(i for i, r in enumerate(grid)
+                     if r and r[0] == "FRUITS")
+        idx_b = next(i for i, r in enumerate(grid)
+                     if r and r[0] == "BUTCHERY")
+        idx_l = next(i for i, r in enumerate(grid)
+                     if str(r[0]).strip().startswith("Cos Lettuce"))
+        self.assertTrue(idx_f < idx_l < idx_b)      # inside block
+
+
+class TestIngestFlow(unittest.TestCase):
+    """ingest_code: newest file, sheet merge, code freed."""
+
+    class _FakeTab:
+        def __init__(self, grid):
+            self.grid = grid
+            self.updates = []
+
+        def get_all_values(self):
+            return [list(r) for r in self.grid]
+
+        def clear(self):
+            pass
+
+        def freeze(self, rows=1):
+            pass
+
+        def update(self, values, range_name):
+            self.grid = values
+            self.updates.append(range_name)
+
+    def test_ingest_updates_sheet_and_frees_code(self):
         import tempfile as tf
         from core import local_deals as ld
-        code = "FRUT"
+
         with tf.TemporaryDirectory() as tmp:
-            inbox = Path(tmp) / code
+            inbox = Path(tmp) / "FRUT"
             inbox.mkdir(parents=True)
-            (inbox / "old.txt").write_text(
-                "Old post, nothing parseable here", encoding="utf-8")
-            newer = inbox / "new.txt"
-            newer.write_text(
-                "📅 Valid 5 & 6 September\n"
-                "🥬 Cos Lettuce – 99¢ each\n", encoding="utf-8")
-            import os
-            os.utime(inbox / "old.txt", (1, 1))
+            (inbox / "board.txt").write_text(
+                "Valid until 12 September\n"
+                "Cos Lettuce \u2013 99\u00a2 each\n", encoding="utf-8")
+            state = {"stores": {"fruitopia": {
+                "baselined": True,
+                "notified": {"p1": "FRUT"}}}}
             with patch.object(ld, "INBOX_DIR", Path(tmp)), \
+                    patch.object(ld, "SCAN_STATE_PATH",
+                                 Path(tmp) / "s.json"), \
+                    patch.object(ld, "_save_scan_state"), \
+                    patch.object(ld, "_load_scan_state",
+                                 return_value=state), \
+                    patch("core.sheets_client."
+                          "connect_spreadsheet"), \
+                    patch.object(ld, "ensure_local_deals_tab",
+                                 return_value=self._FakeTab([])), \
+                    patch.object(ld, "merge_store_tab",
+                                 return_value=5) as mst, \
                     patch.object(ld, "_send_message",
                                  return_value={"ok": True}):
-                rc = ld.ingest_code(code)
+                rc = ld.ingest_code("FRUT")
         self.assertEqual(rc, 0)
+        mst.assert_called_once()
+        # code freed -> the next new post reuses the base code
+        self.assertNotIn("p1",
+                         state["stores"]["fruitopia"]["notified"])
+
+
+class TestDunyaSiteSync(unittest.TestCase):
+    """--dunya-site: catalogue -> Dunya column, offers + changes."""
+
+    class _FakeTab:
+        def __init__(self, grid):
+            self.grid = grid
+            self.updates = []
+
+        def get_all_values(self):
+            return [list(r) for r in self.grid]
+
+        def clear(self):
+            pass
+
+        def freeze(self, rows=1):
+            pass
+
+        def update(self, values, range_name):
+            self.grid = values
+            self.updates.append(range_name)
+
+    CATALOGUE = [
+        {"name": "BEEF MINCE (5KG)", "price": 6499,
+         "regular_price": 6499, "categories": [], "unit": ""},
+        {"name": "Chicken Skewer (each)", "price": 299,
+         "regular_price": 399, "categories": [], "unit": "ea"},
+    ]
+
+    def _sync(self, tab, catalogue=None, dry_run=False):
+        from core import local_deals as ld
+        sent = []
+        with patch("extractors.shop_site_catalogue."
+                   "get_normalised_catalogue",
+                   return_value=catalogue
+                   if catalogue is not None else self.CATALOGUE), \
+                patch("core.sheets_client.connect_spreadsheet"), \
+                patch.object(ld, "ensure_local_deals_tab",
+                             return_value=tab), \
+                patch.object(ld, "_send_message",
+                             side_effect=lambda *a, **k:
+                             sent.append(a[2] if len(a) > 2
+                                         else k.get("text", ""))
+                             or {"ok": True}):
+            rc = ld.sync_dunya_site(dry_run=dry_run)
+        return rc, sent
+
+    def test_initial_build_cents_converted(self):
+        tab = self._FakeTab([])
+        rc, sent = self._sync(tab)
+        self.assertEqual(rc, 0)
+        grid = tab.grid
+        beef = next(r for r in grid
+                    if str(r[0]).strip().startswith("BEEF MINCE (5KG)"))
+        self.assertEqual(beef[1], 64.99)     # 6499 cents -> $64.99
+        self.assertIn("1 on offer", sent[0])
+        self.assertIn("Chicken Skewer", sent[0])
+
+    def test_second_run_reports_price_changes(self):
+        tab = self._FakeTab([])
+        self._sync(tab)
+        cheaper = [dict(d) for d in self.CATALOGUE]
+        cheaper[0]["price"] = 5999             # mince on sale
+        sent = []
+        with patch("core.local_deals.os.getenv",
+                   return_value="dummy"):
+            pass
+        tab2 = self._FakeTab(tab.grid)
+        rc, sent = self._sync(tab2, catalogue=cheaper)
+        self.assertEqual(rc, 0)
+        beef = next(r for r in tab2.grid
+                    if str(r[0]).strip().startswith("BEEF MINCE (5KG)"))
+        self.assertEqual(beef[1], 59.99)       # updated in place
+        self.assertIn("Price changes", sent[0])
+        self.assertIn("59.99", sent[0])
+
+    def test_dry_run_touches_nothing(self):
+        tab = self._FakeTab([])
+        rc, _sent = self._sync(tab, dry_run=True)
+        self.assertEqual(rc, 0)
+        self.assertEqual(tab.grid, [])
+        self.assertEqual(tab.updates, [])
 
 
 if __name__ == "__main__":

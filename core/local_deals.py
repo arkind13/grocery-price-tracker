@@ -155,17 +155,18 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
                    ) -> int:
     """Twice-daily new-post detector (user-directed 2026-09-06).
 
-    For each of the 4 public pages: render the timeline logged out
-    (proven reliable), take the NEWEST post and compare its id with
-    the last NOTIFIED one. Windows roll: the 15:00 scan covers posts
-    since 05:00, the 05:00 scan covers posts since 15:00 (the exact
-    posted time is printed in every message). First-ever sighting of
-    a store = the user's "last 3 days" backfill: notify only when
-    the newest post is within backfill_days, else silent baseline.
-    Every notification carries the posted time AND the validity date
-    parsed from the post text (the user imports images/text only —
-    remembering the dates is this pipeline's job). 'ignore <CODE>'
-    marks the post skipped in state.
+    OWNERSHIP: the VPS cron is the only scanner. Running this on a
+    second machine duplicates notifications (it keeps its own seen-
+    state). Local runs: --dry-run for testing only.
+
+    Flow: render each public page logged out, take the newest post,
+    and give every NEW post a code — the shop's base code for the
+    first unhandled post, then FRUT_1, FRUT_2, ... while earlier
+    ones stay unhandled. The user's notification is plain language:
+    shop, code, posted time (Sydney), validity date parsed from the
+    post text, the inbox folder, and the exact replies ("CODE" to
+    process, "ignore CODE" to skip). 'ingest' removes the pending
+    code; 'ignore' retires it forever.
 
     Args:
         dry_run: print instead of sending Telegram; state untouched.
@@ -195,7 +196,7 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
 
     now_syd = sydney_now()
     stores = state.setdefault("stores", {})
-    new_posts: list[tuple[dict, object, str]] = []
+    new_posts: list[tuple[dict, object, str, str]] = []
     failures: list[str] = []
     for store in STORES:
         try:
@@ -211,70 +212,79 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
             continue
         newest = posts[0]
         seen = stores.get(store["key"], {})
-        last_notified = seen.get("last_notified_ref")
+        notified = seen.get("notified", {})      # post_ref -> code
         ignored = seen.get("ignored", [])
         age_days = ((now_syd.timestamp() - (newest.creation_time or 0))
                     / 86400) if newest.creation_time else 999
 
-        # posted time (Sydney) + validity from the post text —
-        # remembered HERE so the user never has to (their rule).
-        posted_line = "posted: unknown"
+        if newest.post_ref in ignored:
+            print(f"[daily-scan] {store['key']}: post ignored — "
+                  f"skipped")
+            continue
+        if newest.post_ref in notified:
+            print(f"[daily-scan] {store['key']}: already reported "
+                  f"({notified[newest.post_ref]})")
+            continue
+
+        # New post: assign the next free code for this shop.
+        base = store["code"]
+        used = {c for c in notified.values() if c == base
+                or c.startswith(base + "_")}
+        if base not in used:
+            code = base
+        else:
+            n = 0
+            while f"{base}_{n + 1}" in used:
+                n += 1
+            code = f"{base}_{n + 1}"
+
+        posted_line = "when posted: unknown"
         if newest.creation_time:
             posted = _dt.fromtimestamp(
                 newest.creation_time, ZoneInfo(SYDNEY_TZ))
-            posted_line = f"posted: {posted:%a %d %b, %I:%M %p} Sydney"
+            posted_line = f"When posted: {posted:%a %d %b, %I:%M %p}"
         from extractors.deal_text import parse_validity_end
         valid_end = parse_validity_end(newest.text, today=now_syd.date())
-        valid_line = (f"valid until: {valid_end:%a %d %b}"
+        valid_line = (f"Valid until: {valid_end:%a %d %b}"
                       if valid_end
-                      else "valid until: not in post text — I will "
-                           "ask when you ingest")
+                      else "Valid until: not written in the post — "
+                           "I will ask you for the date")
 
-        is_new = newest.post_ref != last_notified
-        is_ignored = newest.post_ref in ignored
-        first_sighting = not last_notified
-        within_backfill = age_days <= backfill_days
-        should_notify = (is_new and not is_ignored
-                         and (not first_sighting
-                              or within_backfill))
+        first_sighting = not seen.get("baselined")
+        if first_sighting and age_days > backfill_days:
+            seen["baselined"] = True
+            stores[store["key"]] = seen     # persist baseline flag
+            print(f"[daily-scan] {store['key']}: newest post is "
+                  f"{age_days:.0f}d old — nothing from the last "
+                  f"{backfill_days} days, staying quiet")
+            continue
 
-        stores[store["key"]] = {
-            **seen,
-            "last_post_ref": newest.post_ref,
-            "last_creation": newest.creation_time,
-            "last_checked_window": window_key,
-            "last_cutoff": now_syd.isoformat(timespec="seconds"),
-        }
-        if should_notify:
-            stores[store["key"]]["last_notified_ref"] = newest.post_ref
-            new_posts.append((store, newest,
-                              f"{posted_line}\n{valid_line}"))
-            print(f"[daily-scan] {store['key']}: NEW post "
-                  f"{newest.post_ref} ({posted_line})")
-        elif is_ignored:
-            print(f"[daily-scan] {store['key']}: post "
-                  f"{newest.post_ref} is ignored — skipped")
-        elif first_sighting:
-            print(f"[daily-scan] {store['key']}: baseline post "
-                  f"{newest.post_ref} ({age_days:.0f}d old — older "
-                  f"than the {backfill_days}-day backfill window)")
-        else:
-            print(f"[daily-scan] {store['key']}: no change "
-                  f"({newest.post_ref})")
+        seen["baselined"] = True
+        seen["notified"] = {**notified, newest.post_ref: code}
+        seen["last_post_ref"] = newest.post_ref
+        seen["last_creation"] = newest.creation_time
+        seen["last_cutoff"] = now_syd.isoformat(timespec="seconds")
+        stores[store["key"]] = seen     # persist the store entry
+        new_posts.append((store, newest, code,
+                          f"{posted_line}\n{valid_line}"))
+        print(f"[daily-scan] {store['key']}: new post -> code "
+              f"{code}")
 
     if not dry_run:
         if open_now:
             windows[window_key] = "done"
         _save_scan_state(state)
 
-    for store, post, detail in new_posts:
+    for store, post, code, detail in new_posts:
         text = (
-            f"🆕 {store['code']} — {store['name']}\n"
-            f"{detail}\n"
-            f"Reply 'ignore {store['code']}' to skip this post.\n"
-            f"Or drop the post's image/text into grocery-price-"
-            f"tracker\\data\\{INBOX_DIRNAME}\\{store['code']}\\ "
-            f"and reply with the code: {store['code']}")
+            f"🆕 New post from {store['name']} (code: {code})\n"
+            f"\n{detail}\n"
+            f"\nWant these prices?\n"
+            f"  1. Save the post's picture or text into:\n"
+            f"     grocery-price-tracker\\data\\{INBOX_DIRNAME}"
+            f"\\{code}\n"
+            f"  2. Then send me:  {code}\n"
+            f"\nNot interested?  Just send:  ignore {code}")
         print(text)
         if send and not dry_run:
             bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
@@ -292,35 +302,49 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
     return 0
 
 
-def ignore_post(code: str) -> int:
-    """Mark the store's last-notified post as ignored (user command
-    'ignore <CODE>') — the scan will never re-report it.
-
-    Args:
-        code: the 4-letter store code.
-
-    Returns:
-        int: 0 marked, 1 nothing to mark (unknown code / no post).
-    """
+def _store_and_entry_for_code(code: str) -> tuple[dict | None, dict,
+                                                  str | None]:
+    """Resolve a possibly-suffixed code (FRUT, FRUT_1, ...) to its
+    store and the pending notified entry {post_ref: code}."""
     from extractors.fb_flyer_fetch import STORES
 
     code = code.strip().upper()
-    store = next((s for s in STORES if s.get("code") == code), None)
+    base = code.split("_")[0]
+    store = next((s for s in STORES if s.get("code") == base), None)
     if store is None:
-        print(f"[ignore] unknown code: {code}")
-        return 1
+        return None, {}, None
     state = _load_scan_state()
     seen = state.setdefault("stores", {}).get(store["key"], {})
-    ref = seen.get("last_notified_ref")
-    if not ref:
-        print(f"[ignore] {code}: no notified post on record")
+    notified = seen.get("notified", {})
+    ref = next((r for r, c in notified.items() if c == code), None)
+    return store, seen, ref
+
+
+def ignore_post(code: str) -> int:
+    """'ignore <CODE>' — retire that post (scan never re-reports it).
+
+    Args:
+        code: the post's code (FRUT, FRUT_1, ...).
+
+    Returns:
+        int: 0 retired, 1 nothing to retire.
+    """
+    store, seen, ref = _store_and_entry_for_code(code)
+    if store is None or ref is None:
+        print(f"[ignore] {code.upper()}: no such pending post")
         return 1
-    ignored = seen.setdefault("ignored", [])
+    state = _load_scan_state()
+    entry = state.setdefault("stores", {}).setdefault(
+        store["key"], seen)
+    notified = entry.get("notified", {})
+    ignored = entry.setdefault("ignored", [])
     if ref not in ignored:
         ignored.append(ref)
+    notified.pop(ref, None)
+    entry["notified"] = notified
     _save_scan_state(state)
-    print(f"[ignore] {code}: post {ref} marked ignored — the scan "
-          f"will not report it again")
+    print(f"[ignore] {code.upper()}: post retired — the scan will "
+          f"not mention it again")
     return 0
 
 
@@ -342,24 +366,32 @@ def _newest_inbox_file(folder: Path) -> Path | None:
 def ingest_code(code: str, dry_run: bool = False) -> int:
     """Process the newest file in data/local_deals_inbox/<CODE>/.
 
-    The user (cookies are banned) copies a post's content into the
-    inbox and replies with the code. Text files (.txt/.text) run
-    through the deal-line parser; images (.jpg/.jpeg/.png/.webp)
-    through the existing vision chain (ONE call, all files? no — the
-    drop is ONE file: the user copies one post's image or text).
+    The user copies a post's content into the inbox and replies with
+    the code. Text files (.txt/.text/.md) run through the deal-line
+    parser; images (.jpg/.jpeg/.png/.webp) through the vision chain.
+    On success the Local_Deals tab is UPDATED for this store only
+    (other stores' rows untouched — merge, not wipe) and a reader-
+    friendly summary is posted to the local-deals topic.
 
     Args:
-        code: the 4-letter store code (FRUT/MERJ/DUNY/ABSA).
-        dry_run: parse and print only.
+        code: the post's code from the notification (FRUT, FRUT_1...).
+        dry_run: parse and print only; no sheet write, no Telegram.
 
     Returns:
-        int: 0 parsed deals printed, 1 no file / no deals.
+        int: 0 processed, 1 no file / no deals / bad code.
     """
     from extractors.deal_text import (
         parse_fruitopia_deals, parse_validity_end,
     )
+    from extractors.fb_flyer_fetch import STORES
     from core.sydney_time import sydney_today
 
+    code = code.strip().upper()
+    base = code.split("_")[0]
+    store = next((s for s in STORES if s.get("code") == base), None)
+    if store is None:
+        print(f"[ingest] unknown code: {code}")
+        return 1
     folder = inbox_dir_for(code)
     path = _newest_inbox_file(folder)
     if path is None:
@@ -388,30 +420,47 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
         print(f"[ingest] unsupported file type: {path.suffix}")
         return 1
 
-    print(f"[ingest] source={source} deals={len(deals)} "
-          f"valid_until={valid_until or 'NEEDS DATE REVIEW'}")
+    if not deals:
+        print(f"[ingest] I could not read any prices from "
+              f"{path.name} — check the file and try again")
+        return 1
+
+    print(f"[ingest] read {len(deals)} items "
+          f"({source}; valid until {valid_until or 'UNKNOWN'})")
     for d in deals:
         note = f" ({d['multibuy_note']})" if d.get("multibuy_note") \
             else ""
         print(f"   - {d['item']} — {_money(d['price'])}"
               f"/{d['unit']}{note}")
-    if not deals:
-        print("[ingest] NO deals parsed — check the file content")
-        return 1
     if valid_until is None:
-        print("[ingest] no validity date found — tell me the date "
-              "(e.g. 'valid until 12 September') when you reply")
+        print("[ingest] no validity date found — reply with the date "
+              "(e.g. 'valid until 12 September') and I will record it")
+
+    # Convert to the sheet schema and update the Local_Deals tab for
+    # THIS store only (merge — other stores' rows are untouched).
+    category = _store_kind(store["key"]) or "other"
+    vision_deals = [_to_vision_deal(d, category) for d in deals]
     if dry_run:
+        print("[ingest] dry-run: sheet write + summary skipped")
         return 0
 
-    # Delivery: the parsed post goes to the local-deals topic so the
-    # user has a same-day record (the sheet tab rebuild stays with
-    # the Friday/daily consolidated run until the user confirms the
-    # ingest shape — TODO §6).
+    from core.sheets_client import connect_spreadsheet
+    spreadsheet = connect_spreadsheet()
+    worksheet = ensure_local_deals_tab(spreadsheet)
+    # FB-post ingest targets the shop's FB specials column (Dunya:
+    # "dunya_fb"); the site column is --dunya-site's.
+    col_store = ("dunya_fb" if store["key"] == "dunya"
+                 else store["key"])
+    rows = merge_store_tab(worksheet, col_store, vision_deals)
+    print(f"[ingest] Local_Deals tab updated ({rows} rows incl. "
+          f"headers)")
+
     bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
     topic_id = _env_int(LOCAL_DEALS_TOPIC_ENV)
-    lines = [f"📥 {code} board — {len(deals)} items "
-             f"(valid until {valid_until or '?'}):"]
+    valid_txt = (f"valid until {valid_until:%a %d %b}" if valid_until
+                 else "valid until — date to confirm")
+    lines = [f"📥 {store['name']} board saved ({len(deals)} items, "
+             f"{valid_txt}):"]
     for d in deals:
         note = f" ({d['multibuy_note']})" if d.get("multibuy_note") \
             else ""
@@ -422,6 +471,16 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
                             thread_id=topic_id or TELEGRAM_CHAT_ID)
     if not receipt.get("ok"):
         print("[ingest] telegram delivery failed")
+
+    # This post is handled: free its code (the next new post from
+    # this shop reuses the base code).
+    state = _load_scan_state()
+    seen = state.setdefault("stores", {}).setdefault(store["key"], {})
+    notified = seen.get("notified", {})
+    ref = next((r for r, c in notified.items() if c == code), None)
+    if ref is not None:
+        notified.pop(ref)
+        _save_scan_state(state)
     return 0
 
 
@@ -463,13 +522,28 @@ def friday_gate_mark_fired(now: datetime | None = None) -> None:
 
 SECTION_ORDER = ("FRUITS", "BUTCHERY", "OTHER")
 
-STORE_COLUMNS = [  # full 4-store column order (spec §4.1)
-    ("dunya", "Dunya Butchery"),
+TAB_COLUMNS = [  # Local_Deals tab layout (user rule 2026-09-06)
+    ("dunya", "Dunya (site)"),      # dunyabutchery.com.au prices
+    ("dunya_fb", "Dunya FB specials"),  # Facebook post prices
+    ("merjan", "Merjan Brothers Quality Meats"),
+    ("fruitopia", "Fruitopia Mt Druitt"),
+    ("abusalim", "Abu Salim Fruit Market"),
+    ("comments", "Comments"),       # multi-buy / bulk notes
+]
+# Kept for callers that reason about the four physical shops.
+STORE_COLUMNS = [
+    ("dunya", "Dunya (site)"),
     ("merjan", "Merjan Brothers Quality Meats"),
     ("fruitopia", "Fruitopia Mt Druitt"),
     ("abusalim", "Abu Salim Fruit Market"),
 ]
 TAB_NAME = "Local_Deals"
+
+
+def _column_for(store_key: str) -> int | None:
+    """1-based grid column for a store key ('comments' -> 6)."""
+    return next((i + 1 for i, (k, _n) in enumerate(TAB_COLUMNS)
+                 if k == store_key), None)
 
 
 def ensure_local_deals_tab(spreadsheet) -> "Worksheet":
@@ -482,7 +556,8 @@ def ensure_local_deals_tab(spreadsheet) -> "Worksheet":
     except Exception:  # noqa: BLE001 — missing tab falls through to create
         pass
     try:
-        return spreadsheet.add_worksheet(title=TAB_NAME, rows=200, cols=5)
+        return spreadsheet.add_worksheet(title=TAB_NAME, rows=200,
+                                         cols=7)
     except Exception as exc:  # noqa: BLE001 — secret-free re-raise
         raise RuntimeError(
             f"Failed to ensure {TAB_NAME} tab: "
@@ -492,7 +567,10 @@ def ensure_local_deals_tab(spreadsheet) -> "Worksheet":
 def _store_kind(store_key: str) -> str:
     """'butchery' | 'fruits' for a store key ('' when unknown)."""
     from extractors.fb_flyer_fetch import STORES
-    return next((s["kind"] for s in STORES if s["key"] == store_key), "")
+    if store_key in ("dunya", "dunya_fb"):
+        return "butchery"        # dunya_fb = Dunya's Facebook posts
+    return next((s["kind"] for s in STORES if s["key"] == store_key),
+                "")
 
 
 def _section_for(deal: dict) -> str:
@@ -543,73 +621,95 @@ def _multibuy_note(deal: dict) -> str:
             f"— {_money(rate)}/ea]")
 
 
-def _cell_for(deal: dict):
-    """Numeric price for single deals, note text otherwise, None
-    when the price is missing entirely (blank cell)."""
+def _cell_for(deal: dict) -> tuple:
+    """(price cell, comments cell) for one deal.
+
+    Price cell: single deals -> the price; multibuy -> the effective
+    UNIT rate (comparable number); bulk -> the bundle price. Comments
+    cell: the multi-buy/bulk note text (the user asked for specials
+    pricing and multi-buy comments in separate columns —
+    2026-09-06). None when the price is missing entirely.
+    """
     kind = deal.get("price_kind")
     price = deal.get("price")
+    note = ""
     if kind == "bulk_pack":
-        return _bulk_note(deal)
-    if kind == "multibuy":
-        return _multibuy_note(deal)
+        note = _bulk_note(deal)
+    elif kind == "multibuy":
+        note = _multibuy_note(deal)
     if isinstance(price, (int, float)) and price > 0:
-        return float(price)
-    return None
+        cell = float(price)
+        if kind == "multibuy":
+            from core.multibuy import effective_unit_rate
+            qty = int(deal.get("multibuy_qty") or 0)
+            if qty:
+                cell = round(effective_unit_rate(qty, cell), 2)
+    elif note:
+        cell = note          # keep the offer text visible in-place
+    else:
+        cell = None
+    return cell, note
 
 
 def build_rows(all_store_deals: dict) -> dict:
-    """{section: [[colA, dunya, merjan, fruitopia, abusalim], ...]}.
+    """{section: [[Product, Dunya(site), Dunya FB specials, Merjan,
+    Fruitopia, Abu Salim, Comments], ...]}.
 
     Canonical rows (RF1): equivalent IN-DOMAIN items share ONE row
-    keyed by canonical_key; bulk/multi-buy cells hold NOTE text while
-    a unit-price store keeps its numeric cell on the same row (the
-    maths never mixes them). Out-of-domain items NEVER merge into
-    domain rows (Oreo rule) — standalone rows under OTHER.
+    keyed by canonical_key; the numeric specials price sits in the
+    store's column while multi-buy/bulk NOTE text goes to the
+    Comments column (user rule 2026-09-06). Dunya has TWO columns:
+    site prices (dunyabutchery.com.au, `--dunya-site`) and Facebook
+    specials (DUNY ingest), side by side. Out-of-domain items NEVER
+    merge into domain rows (Oreo rule) — standalone rows under OTHER.
 
     Args:
         all_store_deals: {store_key: [deal dicts with category +
-            price_kind fields from the vision schema]}.
+            price_kind fields from the vision schema]}. store_key
+            "dunya" targets the SITE column; "dunya_fb" targets the
+            Facebook specials column.
 
     Returns:
-        section -> grid rows (5 cells each, "" for absent stores).
+        section -> grid rows (7 cells each, "" for absent stores).
     """
     rows_by_section: dict[str, list[list]] = {
         s: [] for s in SECTION_ORDER}
     row_index: dict[tuple, int] = {}
     for store_key, deals in all_store_deals.items():
+        in_domain_kind = _store_kind(store_key)
         for deal in deals:
-            in_domain = deal.get("category") == _store_kind(store_key)
+            in_domain = deal.get("category") == in_domain_kind
             if not in_domain:
                 section = "OTHER"
                 key = ("od", store_key,
                        canonical_key(deal.get("item") or ""))
             else:
-                # One row per canonical base: bulk/multi-buy cells
-                # hold NOTE text while a unit-price store keeps its
-                # numeric cell on the SAME row (the maths never
-                # mixes them — plan §1.4.3/S10).
+                # One row per canonical base: the numeric specials
+                # price sits in the store column and any multi-buy/
+                # bulk note goes to Comments (never mixed).
                 section = _section_for(deal)
                 key = canonical_key(deal.get("item") or "")
-            cell = _cell_for(deal)
+            cell, comment = _cell_for(deal)
             display = _display_name(deal)
             slot = row_index.get((section, key))
             if slot is None:
-                grid_row = [display, "", "", "", ""]
+                grid_row = [display] + [""] * 6
                 rows_by_section[section].append(grid_row)
                 row_index[(section, key)] = \
                     len(rows_by_section[section]) - 1
                 slot = row_index[(section, key)]
-            col = next((i + 1 for i, (k, _n) in enumerate(STORE_COLUMNS)
-                        if k == store_key), None)
+            col = _column_for(store_key)
             if col is not None and cell is not None:
                 rows_by_section[section][slot][col] = cell
+            if col is not None and comment:
+                rows_by_section[section][slot][6] = comment
     return {s: rows for s, rows in rows_by_section.items() if rows}
 
 
 def rebuild_tab(worksheet, rows_by_section: dict,
                 store_keys: list[str]) -> None:
     """Wipe + rewrite the tab (idempotent). Freeze row 1. ONE batch
-    update A1:E{N} (gspread update(values=..., range_name=...)).
+    update A1:G{N} (gspread update(values=..., range_name=...)).
 
     Args:
         worksheet: gspread/Fake worksheet handle for Local_Deals.
@@ -617,22 +717,22 @@ def rebuild_tab(worksheet, rows_by_section: dict,
         store_keys: stores in THIS run (other columns stay blank).
     """
     active = {k.strip() for k in (store_keys or [])
-              if k and k.strip()} or {k for k, _n in STORE_COLUMNS}
-    grid = [["Product"] + [name for _k, name in STORE_COLUMNS]]
+              if k and k.strip()} or {k for k, _n in TAB_COLUMNS}
+    grid = [["Product"] + [name for _k, name in TAB_COLUMNS]]
     for section in SECTION_ORDER:
         section_rows = rows_by_section.get(section) or []
         if not section_rows:
             continue
-        grid.append([section, "", "", "", ""])
+        grid.append([section] + [""] * 6)
         for row in section_rows:
             row = list(row)
-            for i, (k, _n) in enumerate(STORE_COLUMNS, start=1):
+            for i, (k, _n) in enumerate(TAB_COLUMNS, start=1):
                 if k not in active:
                     row[i] = ""  # columns not in this run stay blank
             grid.append(row)
     worksheet.clear()
     worksheet.freeze(rows=1)
-    worksheet.update(values=grid, range_name=f"A1:E{len(grid)}")
+    worksheet.update(values=grid, range_name=f"A1:G{len(grid)}")
 
 
 @dataclass
@@ -1507,6 +1607,249 @@ def extract_post_deals(post, run_dir, store_key: str
     return payload.get("deals") or [], "vision", valid_until
 
 
+def _to_vision_deal(d: dict, category: str) -> dict:
+    """Text-parser deal -> the vision schema build_rows expects.
+
+    Args:
+        d: parse_fruitopia_deals() output (item/price/unit/
+            multibuy/multibuy_note/raw).
+        category: "fruits" | "butchery" | "other" (store kind).
+
+    Returns:
+        dict: flyer_vision-schema deal (item, raw_text, price, unit,
+        price_kind, multibuy_qty, bulk_size, category, notes).
+    """
+    qty = d.get("multibuy")
+    return {
+        "item": d["item"],
+        "raw_text": d.get("raw") or d["item"],
+        "price": d["price"],
+        "unit": d["unit"],
+        "price_kind": "multibuy" if qty else "single",
+        "multibuy_qty": qty,
+        "bulk_size": None,
+        "category": category,
+        "notes": d.get("multibuy_note") or "",
+    }
+
+
+def merge_store_tab(worksheet, store_key: str, deals: list[dict],
+                    ) -> int:
+    """Merge ONE store's deals into the existing Local_Deals tab.
+
+    Unlike rebuild_tab (wipe + rewrite for a full run), the ingest
+    flow must NOT touch the other stores' rows: the current grid is
+    read, matching Product rows (same section, same Col A text) get
+    this store's column cell updated, unmatched rows are appended
+    inside their section block, and the FULL grid is written back in
+    ONE batch update (same layout as rebuild_tab: header, then per
+    section a title row + item rows).
+
+    Args:
+        worksheet: gspread/Fake worksheet handle for Local_Deals.
+        store_key: the store whose column is updated ("dunya" =
+            site column, "dunya_fb" = FB specials column).
+        deals: vision-schema deal dicts (see _to_vision_deal).
+
+    Returns:
+        int: number of grid rows written (header included).
+    """
+    rows_by_section = build_rows({store_key: deals})
+    col = _column_for(store_key)
+
+    grid = worksheet.get_all_values() or [["Product"] + [
+        name for _k, name in TAB_COLUMNS]]
+    # Normalise row WIDTH so index assignment never fails.
+    grid = [(r + [""] * len(TAB_COLUMNS))[:len(TAB_COLUMNS) + 1]
+            for r in grid]
+    if not grid or not str(grid[0][0]).strip():
+        grid = [["Product"] + [name for _k, name in TAB_COLUMNS]]
+
+    for section in SECTION_ORDER:
+        section_rows = rows_by_section.get(section) or []
+        if not section_rows:
+            continue
+        # Locate this section's title row and its block extent.
+        title_idx = next((i for i, row in enumerate(grid)
+                          if row and str(row[0]).strip() == section),
+                         None)
+        if title_idx is None:
+            title_idx = len(grid)
+            grid.append([section] + [""] * 6)
+            block_end = title_idx + 1
+        else:
+            block_end = title_idx + 1
+            while block_end < len(grid):
+                first = str(grid[block_end][0]).strip()
+                if first and first in SECTION_ORDER:
+                    break                      # next section starts
+                block_end += 1
+        for row in section_rows:
+            match = next(
+                (i for i in range(title_idx + 1, block_end)
+                 if str(grid[i][0]).strip()
+                 == str(row[0]).strip()),
+                None)
+            if match is None:
+                grid.insert(block_end, list(row))
+                block_end += 1
+            elif col is not None:
+                if row[col] != "":
+                    grid[match][col] = row[col]
+                if row[6] != "":
+                    grid[match][6] = row[6]
+    worksheet.clear()
+    worksheet.freeze(rows=1)
+    worksheet.update(values=grid, range_name=f"A1:G{len(grid)}")
+    return len(grid)
+
+
+_SITE_DASH_RE = re.compile(
+    r"\s*[–—-]\s*\d+(?:[.,]\d+)?(?:\s*[-–—]\s*\d+(?:[.,]\d+)?)?\s*"
+    r"(?:kg|g|each|ea|pack)?\s*$", re.IGNORECASE)
+
+
+def _clean_site_name(name: str) -> str:
+    """WooCommerce product name -> clean display/product name.
+
+    Decodes HTML entities ("Lamb Leg Roast &#8211; 2.5-3kg" keeps an
+    en dash as text), then drops a TRAILING "– 2.5-3kg" size fragment
+    after a dash so the same roast is always ONE Local_Deals row
+    instead of sprouting size-specific duplicates. Names without a
+    size fragment pass through unchanged.
+    """
+    import html as _html
+
+    clean = _html.unescape(str(name or "")).strip()
+    clean = re.sub(r"\s+", " ", clean)
+    clean = re.sub(r"\s*\(per kg\)|\s*\(each\)", "", clean,
+                   flags=re.IGNORECASE)
+    clean = _SITE_DASH_RE.sub("", clean).strip(" –—-")
+    return clean or str(name or "").strip()
+
+
+def sync_dunya_site(dry_run: bool = False, send: bool = True,
+                    force: bool = False) -> int:
+    """Build/update the Local_Deals tab from dunyabutchery.com.au
+    (user-directed 2026-09-06).
+
+    The shop's OWN website (WooCommerce Store API via Scrape.do —
+    verified working 2026-09-05) is the source: every catalogue item
+    lands in the Dunya column (initial build = full build; later
+    runs merge and only change what moved). Discounts are visible
+    two ways, both reported: the site's own sale price vs regular
+    price, and any cell change vs the previous sync.
+
+    Args:
+        dry_run: fetch + print the diff; no sheet write, no Telegram.
+        send: post the summary to the local-deals topic.
+        force: bypass the site-catalogue cache (28-day).
+
+    Returns:
+        int: 0 synced, 1 no catalogue / no items.
+    """
+    from extractors.shop_site_catalogue import (
+        get_normalised_catalogue,
+    )
+    from core.sheets_client import connect_spreadsheet, _load_env
+
+    _load_env()
+    items = get_normalised_catalogue("dunya", force=force)
+    items = [i for i in items
+             if isinstance(i.get("price"), (int, float))
+             and i["price"] > 0]
+    if not items:
+        print("[dunya-site] no catalogue items (fetch failed?)")
+        return 1
+
+    # WC Store API prices are minor units (cents) — verified
+    # 2026-09-05: BEEF MINCE (5KG) 6499 -> $64.99.
+    deals = []
+    for i in items:
+        name = _clean_site_name(i["name"])
+        deals.append({
+            "item": name,
+            "raw_text": i["name"],
+            "price": round(i["price"] / 100, 2),
+            "unit": i.get("unit") or "ea",
+            "price_kind": "single",
+            "multibuy_qty": None,
+            "bulk_size": None,
+            "category": "butchery",
+            "notes": "",
+            "regular_price": (round(i["regular_price"] / 100, 2)
+                              if i.get("regular_price") else None),
+        })
+
+    on_offer = [d for d in deals
+                if d.get("regular_price")
+                and d["price"] < d["regular_price"]]
+
+    if dry_run:
+        print(f"[dunya-site] {len(deals)} items "
+              f"({len(on_offer)} on offer) — dry-run, sheet "
+              f"untouched")
+        for d in on_offer:
+            save = round(d["regular_price"] - d["price"], 2)
+            pct = round(100 * save / d["regular_price"])
+            print(f"   OFFER: {d['item']} {_money(d['price'])}"
+                  f" (was {_money(d['regular_price'])}, "
+                  f"save {_money(save)} = {pct}%)")
+        return 0
+
+    spreadsheet = connect_spreadsheet()
+    worksheet = ensure_local_deals_tab(spreadsheet)
+    grid_before = worksheet.get_all_values() or []
+    dunya_col = next(i for i, (k, _n) in enumerate(STORE_COLUMNS)
+                     if k == "dunya") + 1
+    before = {str(r[0]).strip(): r[dunya_col]
+              for r in grid_before[1:] if len(r) > dunya_col}
+    rows = merge_store_tab(worksheet, "dunya",
+                           [{k: v for k, v in d.items()
+                             if k != "regular_price"}
+                            for d in deals])
+    print(f"[dunya-site] synced {len(deals)} items "
+          f"({rows} grid rows); {len(on_offer)} on offer")
+
+    changes = []
+    for d in deals:
+        # The sheet's Col A is _display_name(item) — diff on THAT.
+        prev = before.get(_display_name(d).strip())
+        if prev in ("", None) or str(prev) == str(d["price"]):
+            continue
+        try:
+            old = float(str(prev).replace("$", ""))
+        except ValueError:
+            continue
+        if abs(old - d["price"]) >= 0.01:
+            changes.append((d["item"], old, d["price"]))
+
+    lines = [f"🐑 Dunya Butchery site sync: {len(deals)} items "
+             f"({len(on_offer)} on offer) — Local_Deals updated"]
+    if changes:
+        lines.append(f"Price changes since last sync: "
+                     f"{len(changes)}")
+        for name, old, new in changes[:10]:
+            arrow = "🔻" if new < old else "🔺"
+            lines.append(f"  {arrow} {name}: {_money(old)} -> "
+                         f"{_money(new)}")
+    if on_offer:
+        lines.append("On offer right now (site sale prices):")
+        for d in on_offer[:10]:
+            save = round(d["regular_price"] - d["price"], 2)
+            lines.append(f"  • {d['item']} {_money(d['price'])} "
+                         f"(regular {_money(d['regular_price'])}, "
+                         f"save {_money(save)})")
+    bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
+    topic_id = _env_int(LOCAL_DEALS_TOPIC_ENV)
+    receipt = _send_message(bot_token, TELEGRAM_CHAT_ID,
+                            "\n".join(lines),
+                            thread_id=topic_id or TELEGRAM_CHAT_ID)
+    if not receipt.get("ok"):
+        print("[dunya-site] telegram delivery failed")
+    return 0
+
+
 def run_local_deals(stores=None, dry_run: bool = False,
                     send_telegram: bool = True,
                     refresh_catalogue: bool = False) -> int:
@@ -1572,6 +1915,12 @@ def run_local_deals(stores=None, dry_run: bool = False,
                     print(f"[local-deals] {key}: {exc}")
                 else:
                     print(f"[local-deals] {key}: {kind}")
+
+    # Dunya's FACEBOOK deals write to the "Dunya FB specials"
+    # column — the Dunya (site) column belongs to --dunya-site sync
+    # (user rule 2026-09-06).
+    if "dunya" in store_deals:
+        store_deals["dunya_fb"] = store_deals.pop("dunya")
 
     flat_rows = [d for deals in store_deals.values() for d in deals]
     master_rows: list[dict] = []

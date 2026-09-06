@@ -121,7 +121,7 @@ class TestSheetRebuild(unittest.TestCase):
         self.assertEqual(ws.frozen, 1)
         header = ws.updates[-1][0][0]
         self.assertEqual(header[0], "Product")
-        self.assertEqual(header[1:], [n for _k, n in ld.STORE_COLUMNS])
+        self.assertEqual(header[1:], [n for _k, n in ld.TAB_COLUMNS])
 
     def test_section_order_fruits_butchery_other(self):
         """Sections appear FRUITS, BUTCHERY, OTHER in grid order."""
@@ -158,8 +158,8 @@ class TestSheetRebuild(unittest.TestCase):
         self.assertEqual(len(fruit_rows), 1)
         row = fruit_rows[0]
         self.assertIn("multi buy 5kg for $2.99", str(row))
-        # fruitopia numeric on the same row
-        self.assertEqual(row[3], 3.00)
+        # fruitopia numeric on the same row (col 4 in the 7-col tab)
+        self.assertEqual(row[4], 3.00)
 
     def test_out_of_domain_items_recorded_under_other(self):
         """Out-of-domain items are recorded (never dropped) under
@@ -349,15 +349,19 @@ class TestReport(unittest.TestCase):
                      category="fruits", kind="bulk_pack", price=2.99,
                      unit="pack", bulk_size="5kg")
         rows = ld.build_rows({"abusalim": [deal]})
-        self.assertEqual(rows["FRUITS"][0][4],
+        # New layout: numeric specials price in the store column,
+        # the multi-buy/bulk note moved to the Comments column.
+        self.assertEqual(rows["FRUITS"][0][5], 2.99)
+        self.assertEqual(rows["FRUITS"][0][6],
                          "[multi buy 5kg for $2.99]")
         results = ld.match_and_detect([deal], [], {})
         self.assertEqual(results[0].multibuy_note,
                          "multi buy 5kg for $2.99 — $0.60/kg")
         mb = _deal(item="Sausages", kind="multibuy", price=15.0,
                    unit="pack", multibuy_qty=2)
-        rows2 = ld.build_rows({"dunya": [mb]})
-        self.assertEqual(rows2["BUTCHERY"][0][1],
+        rows2 = ld.build_rows({"dunya_fb": [mb]})
+        self.assertEqual(rows2["BUTCHERY"][0][2], 7.5)
+        self.assertEqual(rows2["BUTCHERY"][0][6],
                          "[multi buy 2 for $15.00 — $7.50/ea]")
 
     def test_no_prices_warn_line(self):

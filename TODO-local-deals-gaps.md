@@ -121,6 +121,44 @@ Ground rules for tomorrow (from the user):
       older one is not enumerated; the user checks the page anyway
       during ingest.
 
+## 8. Close-out refinements (user-directed 2026-09-06, late)
+
+- [x] TAB LAYOUT (7 columns): Product | Dunya (site) | Dunya FB
+      specials | Merjan | Fruitopia | Abu Salim | Comments. The
+      Dunya SITE prices (dunyabutchery.com.au, `--dunya-site`) and
+      the Dunya FACEBOOK specials (DUNY ingest) now have SEPARATE
+      columns; multi-buy/bulk notes moved to the Comments column
+      (numeric effective rate stays in the specials column).
+      build_rows/rebuild_tab/merge_store_tab all 7-wide (A1:G).
+- [x] PRODUCT NAME CLEANUP: WooCommerce names decoded
+      ("&#8211;" -> en dash) and trailing size fragments dropped
+      ("Lamb Leg Roast – 2.5-3kg" -> "Lamb Leg Roast" — ONE row,
+      no size-specific duplicates). `_clean_site_name`.
+- [x] Codes FRUT/MERJ/DUNY/ABSA confirmed; multiple pending posts
+      per shop get FRUT_1, FRUT_2, ... (freed again once ingested).
+- [x] Scan cadence fixed per user: cron tick HOURLY (was every
+      15 min) — the real scan still only fires inside the 05:00 and
+      15:00 Sydney windows, so Facebook is contacted twice a day.
+      Scans belong to the VPS only (a local run would duplicate
+      notifications — documented in the skill).
+- [x] Notification messages rewritten in plain language (shop name,
+      code, "When posted", "Valid until", numbered what-to-do, and
+      the exact ignore line — no jargon).
+- [x] Dunya site sheet BUILT from dunyabutchery.com.au: 101 items
+      synced into Local_Deals (verified vs the 2026-09-05 values:
+      BEEF MINCE (5KG) $64.99, Chicken Skewer $2.99, Greek Chops
+      $21.99, Spicy Wings $10.99, Beef Curry /kg $15.99). Offers are
+      visible two ways in every sync summary: site sale price vs
+      regular price, and price changes vs the previous sync.
+- [ ] LLM item-name genericisation: currently NOT in the project —
+      Local_Deals item names come from the vision schema verbatim,
+      and matching is rule-based (canonical_key + similarity). If
+      the user wants FB deal names mapped to generic master names by
+      an LLM, that is NEW work (LLM cost + a confirm step) — decide
+      after seeing a few real ingests.
+- [ ] Rebuild the live tab in the new 7-column layout + re-sync
+      Dunya site prices (old layout was built before this change).
+
 ## 3. Text AND image posts (Fruitopia lesson)  — [DONE]
 
 - [x] Per-post pipeline: `extract_post_deals` — TEXT first (any price

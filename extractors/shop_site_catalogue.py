@@ -77,12 +77,21 @@ def _load_cache(cache: Path) -> dict | None:
 
 
 def _refresh(site: dict, cache: Path) -> bool:
-    """Fetch all pages via Scrape.do; write the cache. False on fail."""
+    """Fetch all pages via Scrape.do; write the cache. False on fail.
+
+    An EMPTY fetch (0 products — transient site/Scrape.do hiccup)
+    is treated as a failure: the previous good cache is kept instead
+    of being overwritten with nothing (2026-09-06).
+    """
     try:
         products = _fetch_via_scrapedo(site["api_base"])
     except (requests.RequestException, RuntimeError, ValueError):
         print(f"[shop_site_catalogue] refresh failed for "
               f"{site['key']} — keeping stale cache", flush=True)
+        return False
+    if not products:
+        print(f"[shop_site_catalogue] refresh returned 0 products "
+              f"for {site['key']} — keeping stale cache", flush=True)
         return False
     payload = {"fetched_at": datetime.now(timezone.utc).isoformat(
         timespec="seconds"), "products": products}

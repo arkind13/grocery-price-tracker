@@ -276,7 +276,7 @@ session says so and offers pick/forget/skip instead of garbage results.
 live. Items the sheet knows are shown with plain prices (Woolworths display
 prices always carry the 5% team discount; the sheet stores raw prices).
 
-### Local deals (Friday)
+### Local deals (Friday + twice-daily detector)
 
 `local-deals` reads the Facebook price boards of four local shops
 (Dunya Butchery, Merjan Brothers, Fruitopia, Abu Salim), parses them
@@ -288,6 +288,20 @@ fruit shops only against produce — everything else is shown but never
 compared. The Friday cron (05:00-05:59 Sydney, once per Friday) uses
 `--friday-gate`; any-day manual runs are fine. Failures degrade to
 "⚠️ No prices found this week: …" lines — never silence.
+
+Twice-daily detector (2026-09-06; cookies for Facebook are banned):
+`--daily-scan` (cron tick hourly; the scan fires only 05:00-05:59 and
+15:00-15:59 Sydney, once per window) renders each public page logged
+out and notifies new posts in the local-deals topic — shop codes
+FRUT/MERJ/DUNY/ABSA (FRUT_1, FRUT_2, … while several are pending),
+posted time and validity date included. `--ingest CODE` processes the
+file dropped into `data/local_deals_inbox/<CODE>/` (image → vision,
+text → `extractors/deal_text.py` parser) and MERGES the results into
+the tab for that store only (`merge_store_tab` — other stores are
+never wiped). `--ignore CODE` retires a post. Dunya's own website
+(dunyabutchery.com.au WooCommerce API) syncs the Dunya column via
+`--dunya-site` and reports on-offer items plus price changes since
+the previous sync.
 
 ### Halal resolution chain
 
