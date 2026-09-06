@@ -164,7 +164,7 @@ def _post_snippet(text: str, limit: int = 70) -> str:
 
 
 def run_daily_scan(dry_run: bool = False, send: bool = True,
-                   max_posts: int = 1, backfill_days: int = 3,
+                   max_posts: int = 3, backfill_days: int = 3,
                    force: bool = False) -> int:
     """Twice-daily new-post detector (user-directed 2026-09-06).
 
@@ -183,15 +183,20 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
     = the user's "last 3 days" backfill: notify only when the newest
     post is within backfill_days, else silent baseline.
 
-    Every notification carries the shop code (FRUT, then FRUT_1,
-    FRUT_2, ... while earlier posts stay unhandled), the posted time
-    (Sydney) and the validity date parsed from the post text.
-    'ingest CODE' removes the pending code; 'ignore CODE' retires it.
+    INBOX CODES (user rule 2026-09-07): every notification carries
+    <3-letter shop><ddmmyy><HHMM> of the ALERT (Sydney time the
+    notification is sent — FRU0709260507 = Fruitopia, alerted
+    07 Sep 26, 05:07), plus the posted time and the validity date
+    parsed from the post text. Several posts of one shop between two
+    scans each get their own code (same-minute collisions take a
+    _2/_3 suffix). 'ingest CODE' completes the code; 'ignore CODE'
+    retires it.
 
     Args:
         dry_run: print instead of sending Telegram; state untouched.
         send: send the notification via Telegram (topic 594).
-        max_posts: posts inspected per store (newest only).
+        max_posts: newest posts inspected per store (a missed window
+            must not silently drop the middle posts).
         backfill_days: max age of a first-sighting post to report.
         force: scan now even outside the 05:00/15:00 windows.
 
@@ -240,11 +245,12 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
             continue
         newest = posts[0]
         seen = stores.get(store["key"], {})
-        notified = seen.get("notified", {})      # post_ref -> code
+        notified = dict(seen.get("notified", {}))   # post_ref -> code
         ignored = seen.get("ignored", [])
         cutoff_raw = seen.get("last_cutoff")
-        age_days = ((now_syd.timestamp() - (newest.creation_time or 0))
-                    / 86400) if newest.creation_time else 999
+        newest_age = ((now_syd.timestamp()
+                       - (newest.creation_time or 0)) / 86400
+                      ) if newest.creation_time else 999
         baselined = bool(seen.get("baselined"))
 
         # Advance the cutoff no matter what happens below — this scan
@@ -255,68 +261,85 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
         seen["baselined"] = True
         stores[store["key"]] = seen   # persist every branch
 
-        if newest.post_ref in ignored:
-            print(f"[daily-scan] {store['key']}: post ignored — "
-                  f"skipped")
-            continue
-        if newest.post_ref in notified:
-            print(f"[daily-scan] {store['key']}: already reported "
-                  f"({notified[newest.post_ref]})")
-            continue
-
-        # Time window: ongoing scans report only posts CREATED since
-        # the previous alert (the user's between-alerts rule).
-        if baselined and cutoff_raw and newest.creation_time:
-            try:
-                posted_dt = _dt.fromtimestamp(
-                    newest.creation_time, ZoneInfo(SYDNEY_TZ))
-                if posted_dt <= _dt.fromisoformat(cutoff_raw):
-                    print(f"[daily-scan] {store['key']}: post "
-                          f"{newest.post_ref} predates the last "
-                          f"alert ({cutoff_raw}) — outside the "
-                          f"between-alerts window")
-                    continue
-            except ValueError:
-                pass                   # bad stored cutoff -> notify
-
-        # New post: assign the next free code for this shop
-        # (user notation: MERJ, MERJ_01, MERJ_02, ...).
-        base = store["code"]
-        used = {c for c in notified.values() if c == base
-                or c.startswith(base + "_")}
-        if base not in used:
-            code = base
-        else:
-            n = 0
-            while f"{base}_{n + 1:02d}" in used:
-                n += 1
-            code = f"{base}_{n + 1:02d}"
-
-        posted_line = "when posted: unknown"
-        if newest.creation_time:
-            posted = _dt.fromtimestamp(
-                newest.creation_time, ZoneInfo(SYDNEY_TZ))
-            posted_line = f"When posted: {posted:%a %d %b, %I:%M %p}"
-        from extractors.deal_text import parse_validity_end
-        valid_end = parse_validity_end(newest.text, today=now_syd.date())
-        valid_line = (f"Valid until: {valid_end:%a %d %b}"
-                      if valid_end
-                      else "Valid until: not written in the post — "
-                           "I will ask you for the date")
-        snippet_line = f"Post starts with: \"{_post_snippet(newest.text)}\""
-
-        if not baselined and age_days > backfill_days:
+        if not baselined and newest_age > backfill_days:
             print(f"[daily-scan] {store['key']}: newest post is "
-                  f"{age_days:.0f}d old — nothing from the last "
+                  f"{newest_age:.0f}d old — nothing from the last "
                   f"{backfill_days} days, staying quiet")
             continue
 
-        seen["notified"] = {**notified, newest.post_ref: code}
-        new_posts.append((store, newest, code,
-                          f"{posted_line}\n{valid_line}\n"
-                          f"{snippet_line}"))
-        print(f"[daily-scan] {store['key']}: new post -> code "
-              f"{code}")
+        # Timestamped inbox codes (user rule 2026-09-07): the code is
+        # <3-letter shop><ddmmyy><HHMM> of the ALERT (Sydney, when the
+        # notification is sent) — never the post's own time. Posts
+        # alerted in the same scan share the stamp; _2/_3 keeps every
+        # code unique even across two scans within one minute.
+        stamp = f"{store['code']}{now_syd:%d%m%y%H%M}"
+        taken = set(notified.values())
+
+        def _next_code() -> str:
+            code = stamp
+            n = 1
+            while code in taken:
+                n += 1
+                code = f"{stamp}_{n}"
+            taken.add(code)
+            return code
+
+        for post in posts:            # newest first
+            if post.post_ref in ignored:
+                print(f"[daily-scan] {store['key']}: post "
+                      f"{post.post_ref} ignored — skipped")
+                continue
+            if post.post_ref in notified:
+                print(f"[daily-scan] {store['key']}: already "
+                      f"reported ({notified[post.post_ref]})")
+                continue
+
+            # Time window: ongoing scans report only posts CREATED
+            # since the previous alert (between-alerts rule); a fresh
+            # first sighting reports only the backfill window.
+            if baselined and cutoff_raw and post.creation_time:
+                try:
+                    posted_dt = _dt.fromtimestamp(
+                        post.creation_time, ZoneInfo(SYDNEY_TZ))
+                    if posted_dt <= _dt.fromisoformat(cutoff_raw):
+                        print(f"[daily-scan] {store['key']}: post "
+                              f"{post.post_ref} predates the last "
+                              f"alert ({cutoff_raw}) — outside the "
+                              f"between-alerts window")
+                        continue
+                except ValueError:
+                    pass               # bad stored cutoff -> notify
+            elif not baselined and post.creation_time:
+                age_days = ((now_syd.timestamp()
+                             - post.creation_time) / 86400)
+                if age_days > backfill_days:
+                    continue
+
+            code = _next_code()
+            posted_line = "when posted: unknown"
+            if post.creation_time:
+                posted = _dt.fromtimestamp(
+                    post.creation_time, ZoneInfo(SYDNEY_TZ))
+                posted_line = (f"When posted: "
+                               f"{posted:%a %d %b, %I:%M %p}")
+            from extractors.deal_text import parse_validity_end
+            valid_end = parse_validity_end(post.text,
+                                           today=now_syd.date())
+            valid_line = (f"Valid until: {valid_end:%a %d %b}"
+                          if valid_end
+                          else "Valid until: not written in the "
+                               "post — I will ask you for the date")
+            snippet_line = (f"Post starts with: "
+                            f"\"{_post_snippet(post.text)}\"")
+
+            notified[post.post_ref] = code
+            new_posts.append((store, post, code,
+                              f"{posted_line}\n{valid_line}\n"
+                              f"{snippet_line}"))
+            print(f"[daily-scan] {store['key']}: new post -> code "
+                  f"{code}")
+
+        seen["notified"] = notified
 
     if not dry_run:
         if open_now:
@@ -350,21 +373,40 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
     return 0
 
 
-def _store_and_entry_for_code(code: str) -> tuple[dict | None, dict,
-                                                  str | None]:
-    """Resolve a possibly-suffixed code (FRUT, FRUT_1, ...) to its
-    store and the pending notified entry {post_ref: code}."""
+def _store_for_code(code: str) -> dict | None:
+    """Resolve any inbox-code form to its STORES entry.
+
+    The shop is always the FIRST THREE letters: current codes are
+    <3-letter shop><ddmmyy><HHMM> (FRU0709260507), and the retired
+    4-letter codes (FRUT/MERJ/DUNY/ABSA — alerts sent before
+    2026-09-07) also start with the same 3 letters, so one rule
+    resolves both.
+
+    Args:
+        code: raw code from the user (any case, suffix allowed).
+
+    Returns:
+        The matching STORES dict, or None when unknown.
+    """
     from extractors.fb_flyer_fetch import STORES
 
-    code = code.strip().upper()
-    base = code.split("_")[0]
-    store = next((s for s in STORES if s.get("code") == base), None)
+    base = code.strip().upper().split("_")[0][:3]
+    return next((s for s in STORES if s.get("code") == base), None)
+
+
+def _store_and_entry_for_code(code: str) -> tuple[dict | None, dict,
+                                                  str | None]:
+    """Resolve an inbox code (FRU0709260507, legacy FRUT, FRUT_1,
+    ...) to its store and the pending notified entry {post_ref:
+    code}."""
+    store = _store_for_code(code)
     if store is None:
         return None, {}, None
     state = _load_scan_state()
     seen = state.setdefault("stores", {}).get(store["key"], {})
     notified = seen.get("notified", {})
-    ref = next((r for r, c in notified.items() if c == code), None)
+    ref = next((r for r, c in notified.items()
+                if c == code.strip().upper()), None)
     return store, seen, ref
 
 
@@ -372,7 +414,7 @@ def ignore_post(code: str) -> int:
     """'ignore <CODE>' — retire that post (scan never re-reports it).
 
     Args:
-        code: the post's code (FRUT, FRUT_1, ...).
+        code: the post's code (FRU0709260507; legacy FRUT / FRUT_1).
 
     Returns:
         int: 0 retired, 1 nothing to retire.
@@ -431,7 +473,8 @@ def set_date_cmd(code: str, filename: str, date_text: str) -> int:
     pasted post whose board didn't show one, and archive the file.
 
     Args:
-        code: the shop code (FRUT, FRUT_1, ...).
+        code: the notification's inbox code (FRU0709260507; legacy
+            FRUT / FRUT_1).
         filename: the file name inside needs_date/.
         date_text: e.g. "2026-09-12" or "12 September".
     """
@@ -439,8 +482,7 @@ def set_date_cmd(code: str, filename: str, date_text: str) -> int:
     from extractors.deal_text import parse_validity_end
 
     code = code.strip().upper()
-    base = code.split("_")[0]
-    store = next((s for s in STORES if s.get("code") == base), None)
+    store = _store_for_code(code)
     if store is None:
         print(f"[set-date] unknown code: {code}")
         return 1
@@ -522,7 +564,8 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
     the local-deals topic.
 
     Args:
-        code: the post's code from the notification (FRUT, FRUT_1...).
+        code: the notification's inbox code (FRU0709260507; legacy
+            FRUT / FRUT_1).
         dry_run: parse and print only; no sheet write, no Telegram.
 
     Returns:
@@ -531,12 +574,10 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
     from extractors.deal_text import (
         parse_fruitopia_deals, parse_validity_end,
     )
-    from extractors.fb_flyer_fetch import STORES
     from core.sydney_time import sydney_today
 
     code = code.strip().upper()
-    base = code.split("_")[0]
-    store = next((s for s in STORES if s.get("code") == base), None)
+    store = _store_for_code(code)
     if store is None:
         print(f"[ingest] unknown code: {code}")
         return 1
@@ -667,11 +708,11 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
         print("[ingest] posts missing a validity date:")
         for b in needs:
             print(f"   {b['file']} — starts with: {b['snippet']}")
-        print("[ingest] reply with the dates (e.g. 'FRUT board.jpg "
+        print("[ingest] reply with the dates (e.g. '<code> board.jpg "
               "valid until 12 September') and I will record them")
 
-    # All posts are handled: free every pending code for this shop
-    # (the next new post reuses the base code).
+    # All posts are handled: clear every pending code for this shop
+    # (the next alert mints a fresh timestamped code).
     state = _load_scan_state()
     seen = state.setdefault("stores", {}).setdefault(store["key"], {})
     freed = sorted(seen.get("notified", {}).values())
@@ -679,7 +720,7 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
     _save_scan_state(state)
     if freed:
         print(f"[ingest] code(s) {', '.join(freed)} completed — "
-              f"the next new post reuses the base code")
+              f"the next alert mints a fresh code")
     return 0
 
 

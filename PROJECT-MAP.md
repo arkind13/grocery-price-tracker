@@ -292,9 +292,12 @@ compared. The Friday cron (05:00-05:59 Sydney, once per Friday) uses
 Twice-daily detector (2026-09-06; cookies for Facebook are banned):
 `--daily-scan` (cron tick hourly; the scan fires only 05:00-05:59 and
 15:00-15:59 Sydney, once per window) renders each public page logged
-out and notifies new posts in the local-deals topic — shop codes
-FRUT/MERJ/DUNY/ABSA (FRUT_1, FRUT_2, … while several are pending),
-posted time and validity date included. `--ingest CODE` processes the
+out and notifies every post since the previous alert (up to 3 per
+store) in the local-deals topic — timestamped inbox codes (user rule
+2026-09-07): 3-letter shop FRU/MER/DUN/ABS + ddmmyy + HHMM of the
+ALERT (e.g. FRU0709260507; `_2`/`_3` on same-minute collisions;
+legacy FRUT/MERJ/DUNY/ABSA still resolve), posted time and validity
+date included. `--ingest CODE` processes the
 file dropped into `data/local_deals_inbox/<CODE>/` (image → vision,
 text → `extractors/deal_text.py` parser) and MERGES the results into
 the tab for that store only (`merge_store_tab` — other stores are

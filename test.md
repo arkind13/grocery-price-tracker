@@ -582,3 +582,50 @@ NOT done (TODO §7 comes after store verifications).
 Three-way sync: tracker `caf0c24`, parent `1574931` pushed; VPS
 files md5-matched (local_deals.py, CLI, shop_site_catalogue, skill,
 catalogue).
+
+## Round 2026-09-07 — R18 daily-scan: timestamped inbox codes + missed-window coverage
+
+User report 2026-09-06/07: "last night 3 pm run and today morning
+5 am run didn't happen" + only one Fruitopia alert received; user
+rule: change the 4-letter inbox code to a 3-letter shop code +
+ddmmyy + HHMM where the time is the ALERT time, never the post's.
+
+### Findings (from the VPS scan log — nothing was broken)
+
+- The 15:07 (2026-09-06:15) and 05:07 (2026-09-07:5) windows DID
+  fire; both printed only "already reported"/"predates the last
+  alert" — no notification is CORRECT when nothing new was posted
+  since the last cutoff.
+- The one Fruitopia alert came from the forced LIVE acceptance run at
+  12:35 Sydney (window=2026-09-06:12 in the log) — the previous
+  round's real-Telegram test.
+
+### Changes (user rule 2026-09-07)
+
+- `extractors/fb_flyer_fetch.py`: shop codes DUNY/MERJ/FRUT/ABSA →
+  DUN/MER/FRU/ABS.
+- `core/local_deals.py`:
+  - Code = `<3-letter shop><ddmmyy><HHMM>` of the ALERT (Sydney time
+    the notification is sent), e.g. FRU0709260507; `_2`/`_3` suffix
+    on same-minute collisions. Replaces FRUT/FRUT_01 counters.
+  - `run_daily_scan` now inspects up to `max_posts=3` per store and
+    reports EVERY post since the previous cutoff — the user's
+    missed-run scenario (window skipped, shop posts twice) no longer
+    silently drops the middle post.
+  - Shared `_store_for_code` resolver: first 3 letters; legacy
+    FRUT/MERJ/DUNY/ABSA (and suffixed) codes still resolve, so old
+    alerts on the user's phone keep working.
+  - Ingest/ignore/set-date wording updated ("next alert mints a
+    fresh code").
+- `grocery_price_cli.py`: `--daily-scan` help shows the new format.
+- README §local-deals + PROJECT-MAP §detector + SKILL.md (description,
+  `--daily-scan` row, detector flow) updated; catalogue regen --check
+  OK.
+
+| PASS | py_compile | CLI + local_deals + fb_flyer_fetch | exit 0 |
+| PASS | test_deal_text.py | pytest -q | 40 passed in 1.57 s |
+| PASS | Full suite | pytest grocery-price-tracker/tests/ -q | 1121 passed, 0 failed, 0 skipped in 67 s |
+| PASS | Deterministic lifecycle | injected advancing clock | backfill 4 shops → silent repeat → fresh timestamped codes FRU0709260907/FRU0709260917; immune to running the suite inside a scan window |
+| PASS | Alert-time pin | fixed clock, post 20:15 prev day | code FRU0709260907 (alert 09:07), "When posted: Sun 06 Sep, 08:15 PM" |
+| PASS | Missed-window scenario | two posts between scans | both reported: FRU0709261507 + FRU0709261507_2 |
+| PASS | Legacy resolution | ingest FRUT / notified {"p1": "FRUT"} | resolves → fruitopia, pending codes cleared |

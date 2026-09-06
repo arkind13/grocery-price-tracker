@@ -694,13 +694,18 @@ secret-free receipt line (`[telegram] ok message_id=…`) for auditing.
 Cookies for Facebook are banned (Woolworths/Coles browser-login
 lesson). Instead, a twice-daily cron detector (hourly cron tick; the
 scan itself fires only 05:00-05:59 and 15:00-15:59 Sydney, once per
-window) renders each public page logged out and reports the newest
-post:
+window) renders each public page logged out and reports every post
+made since the previous alert (up to 3 per store — a missed window
+never silently drops a middle post):
 
-- Every notification carries the shop's code — FRUT (Fruitopia),
-  MERJ (Merjan), DUNY (Dunya), ABSA (Abu Salim) — plus the posted
-  time (Sydney) and the validity date parsed from the post text
-  (`FRUT_1`, `FRUT_2`, … when several posts of one shop are pending).
+- Every notification carries a timestamped inbox code (user rule
+  2026-09-07) — 3-letter shop (FRU = Fruitopia, MER = Merjan,
+  DUN = Dunya, ABS = Abu Salim) + ddmmyy + HHMM of the ALERT (Sydney
+  time the message is sent, NOT the post's own time), e.g.
+  `FRU0709260507` = Fruitopia alerted 07 Sep 26, 05:07 — plus the
+  posted time and the validity date parsed from the post text.
+  Same-minute collisions take a `_2`/`_3` suffix; pre-2026-09-07
+  alerts with plain FRUT/MERJ/DUNY/ABSA codes still resolve.
 - To process a post: save its picture or text into
   `grocery-price-tracker/data/local_deals_inbox/<CODE>/`, then run
   `local-deals --ingest CODE` (images → vision; text → deal parser).

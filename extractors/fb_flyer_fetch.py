@@ -20,16 +20,16 @@ import requests
 STORES = [
     {"key": "dunya",     "name": "Dunya Butchery",
      "fb_page_id": "100071472636159", "kind": "butchery",
-     "code": "DUNY"},
+     "code": "DUN"},
     {"key": "merjan",    "name": "Merjan Brothers Quality Meats",
      "fb_page_id": "61578274311504",  "kind": "butchery",
-     "code": "MERJ"},
+     "code": "MER"},
     {"key": "fruitopia", "name": "Fruitopia Mt Druitt",
      "fb_page_id": "100092972080784", "kind": "fruits",
-     "pipeline": "timeline", "code": "FRUT"},
+     "pipeline": "timeline", "code": "FRU"},
     {"key": "abusalim",  "name": "Abu Salim Fruit Market",
      "fb_page_id": "61592534263358",  "kind": "fruits",
-     "code": "ABSA"},
+     "code": "ABS"},
 ]
 
 FB_FETCH_MAX_ATTEMPTS = 3     # 5xx/timeout only, fresh session each

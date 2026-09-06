@@ -440,12 +440,25 @@ class TestDailyScan(unittest.TestCase):
         self.assertFalse(closed)
 
     def test_lifecycle_codes_and_plain_message(self):
-        """Backfill notifies (FRUT..ABSA); repeat silent; a post
-        created AFTER the last alert -> delta codes FRUT_1 etc."""
+        """Backfill notifies all four shops; repeat silent; a post
+        created AFTER the last alert gets a fresh timestamped code
+        (user rule 2026-09-07: <shop><ddmmyy><HHMM> of the alert).
+        Deterministic via an injected advancing clock — also immune
+        to running the suite inside a 05/15 scan window."""
         import tempfile as tf
+        from datetime import datetime as _dtmod, timedelta as _td
+        from zoneinfo import ZoneInfo as _ZI
         from core import local_deals as ld
-        from core.sydney_time import sydney_now
 
+        class _Clock:
+            def __init__(self, start):
+                self.now = start
+
+            def __call__(self):
+                return self.now
+
+        clock = _Clock(_dtmod(2026, 9, 7, 9, 7,
+                              tzinfo=_ZI("Australia/Sydney")))
         refs = {}
         offsets = {}     # ref -> seconds ago it was created
 
@@ -459,13 +472,14 @@ class TestDailyScan(unittest.TestCase):
 
         def fake_fetch(store, *, max_posts=1, **kw):
             ref = fake_fetch.ref
-            created = sydney_now().timestamp() - offsets[ref]
+            created = clock.now.timestamp() - offsets[ref]
             return [_P(ref, created)]
 
         sent = []
         with tf.TemporaryDirectory() as tmp:
             with patch.object(ld, "SCAN_STATE_PATH",
                               Path(tmp) / "s.json"), \
+                    patch.object(ld, "sydney_now", clock), \
                     patch("extractors.fb_timeline_fetch."
                           "fetch_timeline_posts",
                           side_effect=fake_fetch), \
@@ -474,32 +488,36 @@ class TestDailyScan(unittest.TestCase):
                                  sent.append(a[2] if len(a) > 2
                                              else k.get("text", ""))
                                  or {"ok": True}):
-                for key, code in (("fruitopia", "FRUT"),
-                                  ("merjan", "MERJ"),
-                                  ("dunya", "DUNY"),
-                                  ("abusalim", "ABSA")):
+                for key, code in (("fruitopia", "FRU"),
+                                  ("merjan", "MER"),
+                                  ("dunya", "DUN"),
+                                  ("abusalim", "ABS")):
                     refs[key] = f"{code}-p1"
                     offsets[f"{code}-p1"] = 3600.0
                 fake_fetch.ref = refs["fruitopia"]
                 ld._save_scan_state({})
-                ld.run_daily_scan(send=True, force=True)  # FRUT..ABSA
+                ld.run_daily_scan(send=True, force=True)  # backfill
                 n_after_first = len(sent)
+                clock.now += _td(minutes=1)
                 fake_fetch.ref = refs["fruitopia"]
                 ld.run_daily_scan(send=True, force=True)  # silent
                 n_after_repeat = len(sent)
+                clock.now += _td(minutes=9)      # 09:17
                 for key in refs:
                     refs[key] = refs[key] + "-new"
-                    offsets[refs[key]] = 0.05   # after last alert
+                    offsets[refs[key]] = 30.0   # after the last alert
                     fake_fetch.ref = refs[key]
-                ld.run_daily_scan(send=True, force=True)  # FRUT_1 etc.
+                ld.run_daily_scan(send=True, force=True)  # new codes
         self.assertEqual(n_after_first, 4)
         self.assertEqual(n_after_repeat, n_after_first)
         self.assertEqual(len(sent), 8)
-        frut_new = [t for t in sent if "code: FRUT_01)" in t]
-        self.assertEqual(len(frut_new), 1)
-        self.assertIn("When posted:", frut_new[0])
-        self.assertIn("Valid until: Sat 12 Sep", frut_new[0])
-        self.assertIn("ignore FRUT_01", frut_new[0])
+        first = [t for t in sent if "code: FRU0709260907)" in t]
+        self.assertEqual(len(first), 1)
+        self.assertIn("When posted:", first[0])
+        self.assertIn("Valid until: Sat 12 Sep", first[0])
+        self.assertIn("ignore FRU0709260907", first[0])
+        delta = [t for t in sent if "code: FRU0709260917)" in t]
+        self.assertEqual(len(delta), 1)
 
     def test_first_sighting_older_than_backfill_silent(self):
         import tempfile as tf
@@ -549,7 +567,9 @@ class TestDailyScan(unittest.TestCase):
                 with patch.object(ld, "_send_message",
                                   return_value={"ok": True}):
                     ld.run_daily_scan(send=True, force=True)  # notifies
-                rc = ld.ignore_post("FRUT")
+                code = ld._load_scan_state()["stores"]["fruitopia"][
+                    "notified"]["fresh1"]
+                rc = ld.ignore_post(code)
                 state = ld._load_scan_state()
                 ignored = state["stores"]["fruitopia"]["ignored"]
                 notified = state["stores"]["fruitopia"]["notified"]
@@ -562,6 +582,109 @@ class TestDailyScan(unittest.TestCase):
                                   sent.append(1) or {"ok": True}):
                     ld.run_daily_scan(send=True, force=True)  # quiet
                 self.assertEqual(sent, [])
+
+    def test_code_is_alert_time_not_post_time(self):
+        """User rule 2026-09-07: the code stamps the ALERT (scan)
+        time — FRU0709260907 = Fruitopia alerted 07 Sep 26 09:07 —
+        even when the post itself was made hours earlier."""
+        import tempfile as tf
+        from datetime import datetime as _dtmod
+        from zoneinfo import ZoneInfo as _ZI
+        from core import local_deals as ld
+
+        posted = _dtmod(2026, 9, 6, 20, 15,
+                        tzinfo=_ZI("Australia/Sydney"))
+
+        class _P:
+            post_ref = "p-old"
+            creation_time = posted.timestamp()
+            text = ""
+            image_urls: list = []
+
+        def fake_fetch(store, *, max_posts=1, **kw):
+            return [_P()]
+
+        sent = []
+        with tf.TemporaryDirectory() as tmp:
+            with patch.object(ld, "SCAN_STATE_PATH",
+                              Path(tmp) / "s.json"), \
+                    patch.object(ld, "sydney_now",
+                                 lambda: _dtmod(
+                                     2026, 9, 7, 9, 7,
+                                     tzinfo=_ZI("Australia/Sydney"))), \
+                    patch("extractors.fb_timeline_fetch."
+                          "fetch_timeline_posts",
+                          side_effect=fake_fetch), \
+                    patch.object(ld, "_send_message",
+                                 side_effect=lambda *a, **k:
+                                 sent.append(a[2] if len(a) > 2
+                                             else k.get("text", ""))
+                                 or {"ok": True}):
+                ld._save_scan_state({})
+                ld.run_daily_scan(send=True, force=True)
+        fru = [t for t in sent if "code: FRU" in t]
+        self.assertEqual(len(fru), 1)
+        self.assertIn("code: FRU0709260907)", fru[0])   # alert stamp
+        self.assertIn("When posted: Sun 06 Sep, 08:15 PM", fru[0])
+
+    def test_missed_window_two_posts_both_notified(self):
+        """The user's missed-run scenario: a window is skipped and the
+        shop posts TWICE before the next scan — BOTH posts are
+        reported (newest first), each with its own unique code."""
+        import tempfile as tf
+        from datetime import datetime as _dtmod, timedelta as _td
+        from zoneinfo import ZoneInfo as _ZI
+        from core import local_deals as ld
+
+        class _Clock:
+            def __init__(self, start):
+                self.now = start
+
+            def __call__(self):
+                return self.now
+
+        clock = _Clock(_dtmod(2026, 9, 7, 9, 7,
+                              tzinfo=_ZI("Australia/Sydney")))
+
+        class _P:
+            def __init__(self, ref, created):
+                self.post_ref = ref
+                self.creation_time = created
+                self.text = ""
+                self.image_urls: list = []
+
+        # ref -> seconds before the CURRENT clock it was created
+        state_refs = {"p1": 3600.0}
+
+        def fake_fetch(store, *, max_posts=3, **kw):
+            # newest first, as the timeline returns them
+            return [_P(ref, clock.now.timestamp() - off)
+                    for ref, off in state_refs.items()]
+
+        sent = []
+        with tf.TemporaryDirectory() as tmp:
+            with patch.object(ld, "SCAN_STATE_PATH",
+                              Path(tmp) / "s.json"), \
+                    patch.object(ld, "sydney_now", clock), \
+                    patch("extractors.fb_timeline_fetch."
+                          "fetch_timeline_posts",
+                          side_effect=fake_fetch), \
+                    patch.object(ld, "_send_message",
+                                 side_effect=lambda *a, **k:
+                                 sent.append(a[2] if len(a) > 2
+                                             else k.get("text", ""))
+                                 or {"ok": True}):
+                ld._save_scan_state({})
+                ld.run_daily_scan(send=True, force=True)  # baseline p1
+                # Missed windows: the shop posts p3 (14:00) and p2
+                # (11:00); the 15:07 scan sees both, none reported.
+                clock.now += _td(hours=6)                 # 15:07
+                state_refs = {"p3": 4020.0, "p2": 14820.0}
+                ld.run_daily_scan(send=True, force=True)
+        fru = [t for t in sent if "(code: FRU" in t]
+        self.assertEqual(len(fru), 3)      # baseline + two deltas
+        self.assertIn("code: FRU0709261507)", fru[1])     # p3 newest
+        self.assertIn("code: FRU0709261507_2)", fru[2])   # p2 next
 
 
 class TestMergeStoreTab(unittest.TestCase):
@@ -685,7 +808,8 @@ class TestIngestFlow(unittest.TestCase):
                 rc = ld.ingest_code("FRUT")
         self.assertEqual(rc, 0)
         mst.assert_called_once()
-        # code freed -> the next new post reuses the base code
+        # legacy 4-letter code still resolves; ingest clears the
+        # shop's pending codes (the next alert mints a fresh one)
         self.assertNotIn("p1",
                          state["stores"]["fruitopia"]["notified"])
 
@@ -865,7 +989,7 @@ class TestScanWindowsAndCutoff(unittest.TestCase):
                                  sent.append(a[2] if len(a) > 2
                                              else k.get("text", ""))
                                  or {"ok": True}):
-                # Baseline: fresh post -> FRUT notified, cutoff set.
+                # Baseline: fresh post -> FRU<stamp> notified, cutoff.
                 created_offsets.update({"p1": 3600.0})
                 fake_fetch.ref = "p1"
                 ld._save_scan_state({})
