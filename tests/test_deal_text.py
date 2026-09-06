@@ -440,25 +440,27 @@ class TestDailyScan(unittest.TestCase):
         self.assertFalse(closed)
 
     def test_lifecycle_codes_and_plain_message(self):
-        """Fresh first sighting -> FRUT; repeat -> silent; new post
-        -> FRUT_1; message is plain language with posted time and
-        validity."""
+        """Backfill notifies (FRUT..ABSA); repeat silent; a post
+        created AFTER the last alert -> delta codes FRUT_1 etc."""
         import tempfile as tf
         from core import local_deals as ld
         from core.sydney_time import sydney_now
 
         refs = {}
+        offsets = {}     # ref -> seconds ago it was created
 
         class _P:
-            def __init__(self, ref):
+            def __init__(self, ref, created):
                 self.post_ref = ref
-                self.creation_time = sydney_now().timestamp() - 3600
+                self.creation_time = created
                 self.text = ("Valid until 12 September\n"
-                             "Cos Lettuce - 99c each")
+                             "Cos Lettuce \u2013 99\u00a2 each")
                 self.image_urls: list = []
 
         def fake_fetch(store, *, max_posts=1, **kw):
-            return [_P(refs[store["key"]])]
+            ref = fake_fetch.ref
+            created = sydney_now().timestamp() - offsets[ref]
+            return [_P(ref, created)]
 
         sent = []
         with tf.TemporaryDirectory() as tmp:
@@ -477,14 +479,19 @@ class TestDailyScan(unittest.TestCase):
                                   ("dunya", "DUNY"),
                                   ("abusalim", "ABSA")):
                     refs[key] = f"{code}-p1"
+                    offsets[f"{code}-p1"] = 3600.0
+                fake_fetch.ref = refs["fruitopia"]
                 ld._save_scan_state({})
-                ld.run_daily_scan(send=True)          # FRUT..ABSA
+                ld.run_daily_scan(send=True, force=True)  # FRUT..ABSA
                 n_after_first = len(sent)
-                ld.run_daily_scan(send=True)          # silent
+                fake_fetch.ref = refs["fruitopia"]
+                ld.run_daily_scan(send=True, force=True)  # silent
                 n_after_repeat = len(sent)
                 for key in refs:
                     refs[key] = refs[key] + "-new"
-                ld.run_daily_scan(send=True)          # FRUT_1 etc.
+                    offsets[refs[key]] = 0.05   # after last alert
+                    fake_fetch.ref = refs[key]
+                ld.run_daily_scan(send=True, force=True)  # FRUT_1 etc.
         self.assertEqual(n_after_first, 4)
         self.assertEqual(n_after_repeat, n_after_first)
         self.assertEqual(len(sent), 8)
@@ -517,7 +524,7 @@ class TestDailyScan(unittest.TestCase):
                                              else k.get("text", ""))
                                  or {"ok": True}):
                 ld._save_scan_state({})
-                rc = ld.run_daily_scan(send=True)
+                rc = ld.run_daily_scan(send=True, force=True)
         self.assertEqual(rc, 0)
         self.assertEqual(sent, [])
 
@@ -541,7 +548,7 @@ class TestDailyScan(unittest.TestCase):
                 ld._save_scan_state({})
                 with patch.object(ld, "_send_message",
                                   return_value={"ok": True}):
-                    ld.run_daily_scan(send=True)   # notifies FRUT
+                    ld.run_daily_scan(send=True, force=True)  # notifies
                 rc = ld.ignore_post("FRUT")
                 state = ld._load_scan_state()
                 ignored = state["stores"]["fruitopia"]["ignored"]
@@ -553,7 +560,7 @@ class TestDailyScan(unittest.TestCase):
                 with patch.object(ld, "_send_message",
                                   side_effect=lambda *a, **k:
                                   sent.append(1) or {"ok": True}):
-                    ld.run_daily_scan(send=True)   # must stay quiet
+                    ld.run_daily_scan(send=True, force=True)  # quiet
                 self.assertEqual(sent, [])
 
 
@@ -789,6 +796,95 @@ class TestDunyaSiteSync(unittest.TestCase):
         self.assertEqual(lamb[6],
                          "[multi buy 2 for $30.00 — $15.00/ea]")
         self.assertIn("1 on offer", sent[0])
+
+
+class TestScanWindowsAndCutoff(unittest.TestCase):
+    """User rules: hourly tick, scans ONLY at 05:00/15:00 Sydney,
+    ongoing alerts report only posts made BETWEEN alerts."""
+
+    class _P:
+        def __init__(self, ref, created):
+            self.post_ref = ref
+            self.creation_time = created
+            self.text = ""
+            self.image_urls: list = []
+
+    def test_off_window_tick_does_not_contact_facebook(self):
+        import tempfile as tf
+        from core import local_deals as ld
+        from core.sydney_time import sydney_now
+
+        now = sydney_now()
+        h = (now.hour + 3) % 24
+        if h in (5, 15):
+            h = (h + 1) % 24
+        outside = now.replace(hour=h)
+        calls = []
+
+        def fake_fetch(store, *, max_posts=1, **kw):
+            calls.append(1)
+            return []
+
+        with tf.TemporaryDirectory() as tmp:
+            with patch.object(ld, "SCAN_STATE_PATH",
+                              Path(tmp) / "s.json"), \
+                    patch("extractors.fb_timeline_fetch."
+                          "fetch_timeline_posts",
+                          side_effect=fake_fetch), \
+                    patch("core.local_deals.sydney_now",
+                          return_value=outside):
+                rc = ld.run_daily_scan(send=False)
+        self.assertEqual(rc, 0)
+        self.assertEqual(calls, [])   # zero FB contact off-window
+
+    def test_between_alerts_window_enforced(self):
+        """A new post created BEFORE the last alert is skipped; one
+        created AFTER it is notified."""
+        import tempfile as tf
+        from core import local_deals as ld
+        from core.sydney_time import sydney_now
+
+        # ref -> how many seconds ago the post was created
+        created_offsets = {}
+
+        def fake_fetch(store, *, max_posts=1, **kw):
+            ref = fake_fetch.ref
+            created = sydney_now().timestamp() \
+                - created_offsets[ref]
+            return [self._P(ref, created)]
+
+        sent = []
+        with tf.TemporaryDirectory() as tmp:
+            with patch.object(ld, "SCAN_STATE_PATH",
+                              Path(tmp) / "s.json"), \
+                    patch("extractors.fb_timeline_fetch."
+                          "fetch_timeline_posts",
+                          side_effect=fake_fetch), \
+                    patch.object(ld, "_send_message",
+                                 side_effect=lambda *a, **k:
+                                 sent.append(a[2] if len(a) > 2
+                                             else k.get("text", ""))
+                                 or {"ok": True}):
+                # Baseline: fresh post -> FRUT notified, cutoff set.
+                created_offsets.update({"p1": 3600.0})
+                fake_fetch.ref = "p1"
+                ld._save_scan_state({})
+                ld.run_daily_scan(send=True, force=True)
+                n1 = len(sent)
+                # A DIFFERENT post created BEFORE that alert: new
+                # id, but outside the between-alerts window.
+                fake_fetch.ref = "p_old"
+                created_offsets["p_old"] = 7200.0
+                ld.run_daily_scan(send=True, force=True)
+                n2 = len(sent)
+                # A post created AFTER the alert: notified.
+                fake_fetch.ref = "p_new"
+                created_offsets["p_new"] = 0.05
+                ld.run_daily_scan(send=True, force=True)
+                n3 = len(sent)
+        self.assertEqual(n1, 4)      # backfill: one per store
+        self.assertEqual(n2, n1)     # pre-alert post: silent
+        self.assertEqual(n3, n1 + 4) # between-alerts post: notified
 
 
 if __name__ == "__main__":

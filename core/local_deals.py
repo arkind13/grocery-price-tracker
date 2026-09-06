@@ -152,30 +152,39 @@ def daily_scan_window(now: datetime | None = None
 
 def run_daily_scan(dry_run: bool = False, send: bool = True,
                    max_posts: int = 1, backfill_days: int = 3,
-                   ) -> int:
+                   force: bool = False) -> int:
     """Twice-daily new-post detector (user-directed 2026-09-06).
 
     OWNERSHIP: the VPS cron is the only scanner. Running this on a
-    second machine duplicates notifications (it keeps its own seen-
-    state). Local runs: --dry-run for testing only.
+    second machine duplicates notifications (each machine keeps its
+    own seen-state). Local runs: --dry-run for testing only.
 
-    Flow: render each public page logged out, take the newest post,
-    and give every NEW post a code — the shop's base code for the
-    first unhandled post, then FRUT_1, FRUT_2, ... while earlier
-    ones stay unhandled. The user's notification is plain language:
-    shop, code, posted time (Sydney), validity date parsed from the
-    post text, the inbox folder, and the exact replies ("CODE" to
-    process, "ignore CODE" to skip). 'ingest' removes the pending
-    code; 'ignore' retires it forever.
+    SCHEDULE: the cron ticks hourly, but WITHOUT force this function
+    contacts Facebook ONLY inside the 05:00-05:59 and 15:00-15:59
+    Sydney windows, once per window (zero credits otherwise).
+    force=True scans now regardless of the clock (manual runs).
+
+    WINDOWS: each scan records a cutoff (Sydney time). Ongoing scans
+    report only posts CREATED after the previous cutoff — i.e. what
+    was posted between the two alerts. First-ever sighting of a shop
+    = the user's "last 3 days" backfill: notify only when the newest
+    post is within backfill_days, else silent baseline.
+
+    Every notification carries the shop code (FRUT, then FRUT_1,
+    FRUT_2, ... while earlier posts stay unhandled), the posted time
+    (Sydney) and the validity date parsed from the post text.
+    'ingest CODE' removes the pending code; 'ignore CODE' retires it.
 
     Args:
         dry_run: print instead of sending Telegram; state untouched.
         send: send the notification via Telegram (topic 594).
         max_posts: posts inspected per store (newest only).
         backfill_days: max age of a first-sighting post to report.
+        force: scan now even outside the 05:00/15:00 windows.
 
     Returns:
-        int: 0 all stores checked, 1 partial failure, 2 total.
+        int: 0 all stores checked (or window closed), 1 partial
+        failure, 2 total failure.
     """
     from datetime import datetime as _dt
 
@@ -183,12 +192,18 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
     from extractors.fb_timeline_fetch import fetch_timeline_posts
 
     open_now, window_key = daily_scan_window()
+    if not open_now and not dry_run and not force:
+        # Off-schedule cron tick: do not contact Facebook at all
+        # (twice-daily scans only — user rule 2026-09-06).
+        return 0
+
     state = _load_scan_state()
     windows = state.setdefault("windows", {})
     if open_now and not dry_run and windows.get(window_key) == "done":
         return 0                      # this window already serviced
 
     print(f"[daily-scan] window={window_key or 'off-schedule'}"
+          f"{' (forced)' if force else ''}"
           f"{' (dry-run)' if dry_run else ''}")
     from core.sheets_client import _load_env
     _load_env()
@@ -214,8 +229,18 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
         seen = stores.get(store["key"], {})
         notified = seen.get("notified", {})      # post_ref -> code
         ignored = seen.get("ignored", [])
+        cutoff_raw = seen.get("last_cutoff")
         age_days = ((now_syd.timestamp() - (newest.creation_time or 0))
                     / 86400) if newest.creation_time else 999
+        baselined = bool(seen.get("baselined"))
+
+        # Advance the cutoff no matter what happens below — this scan
+        # is "the previous alert" for the next one.
+        seen["last_cutoff"] = now_syd.isoformat(timespec="seconds")
+        seen["last_post_ref"] = newest.post_ref
+        seen["last_creation"] = newest.creation_time
+        seen["baselined"] = True
+        stores[store["key"]] = seen   # persist every branch
 
         if newest.post_ref in ignored:
             print(f"[daily-scan] {store['key']}: post ignored — "
@@ -225,6 +250,21 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
             print(f"[daily-scan] {store['key']}: already reported "
                   f"({notified[newest.post_ref]})")
             continue
+
+        # Time window: ongoing scans report only posts CREATED since
+        # the previous alert (the user's between-alerts rule).
+        if baselined and cutoff_raw and newest.creation_time:
+            try:
+                posted_dt = _dt.fromtimestamp(
+                    newest.creation_time, ZoneInfo(SYDNEY_TZ))
+                if posted_dt <= _dt.fromisoformat(cutoff_raw):
+                    print(f"[daily-scan] {store['key']}: post "
+                          f"{newest.post_ref} predates the last "
+                          f"alert ({cutoff_raw}) — outside the "
+                          f"between-alerts window")
+                    continue
+            except ValueError:
+                pass                   # bad stored cutoff -> notify
 
         # New post: assign the next free code for this shop.
         base = store["code"]
@@ -250,21 +290,13 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
                       else "Valid until: not written in the post — "
                            "I will ask you for the date")
 
-        first_sighting = not seen.get("baselined")
-        if first_sighting and age_days > backfill_days:
-            seen["baselined"] = True
-            stores[store["key"]] = seen     # persist baseline flag
+        if not baselined and age_days > backfill_days:
             print(f"[daily-scan] {store['key']}: newest post is "
                   f"{age_days:.0f}d old — nothing from the last "
                   f"{backfill_days} days, staying quiet")
             continue
 
-        seen["baselined"] = True
         seen["notified"] = {**notified, newest.post_ref: code}
-        seen["last_post_ref"] = newest.post_ref
-        seen["last_creation"] = newest.creation_time
-        seen["last_cutoff"] = now_syd.isoformat(timespec="seconds")
-        stores[store["key"]] = seen     # persist the store entry
         new_posts.append((store, newest, code,
                           f"{posted_line}\n{valid_line}"))
         print(f"[daily-scan] {store['key']}: new post -> code "
