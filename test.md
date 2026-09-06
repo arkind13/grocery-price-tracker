@@ -716,3 +716,44 @@ on the sheet (Dunya SITE column excluded — live prices).
 | PASS | Rebuild validity row | rebuild_tab + validity dict | row 2 written, stamp placed, frozen = 2 |
 | PASS | Ingest stamps newest dated | old 12 Sep + new 19 Sep files | row 2 = "valid until Sat 19 Sep" |
 | PASS | Full suite | pytest grocery-price-tracker/tests/ -q | 1128 passed, 0 failed, 0 skipped |
+
+## Round 2026-09-07 (d) — R21 smart matching: plurals, bag-vs-bag per-kg, validity gate
+
+User rules 2026-09-07: (1) "strawberry" must compare against
+"strawberries"; (2) a 5kg onion bag must NOT compare against
+individual onions — 5kg at Fruitopia compares per-kg against the
+LARGEST bag available at Woolworths (5kg vs 2kg = x2.5);
+(3) validity must gate the comparison — Fruitopia pricing that ended
+yesterday must not keep producing "live" comparisons.
+
+### Changes (`core/local_deals.py`)
+
+- `_singular` / `_fold_plurals`: naive food-plural folder (ies→y,
+  oes/xes/zes/ches/shes→strip es, generic s; cos/rice untouched).
+  Applied in `canonical_key` (sheet grouping) and in the match loop.
+- `_item_tokens`: plural-folded AND SIZE-STRIPPED matching tokens —
+  "5kg" vs "2kg" never vetoes a name match (sizes are the point of
+  the bag rule, not a mismatch).
+- `_deal_weight_g`: weight (g) extracted from the deal's own text
+  ("Onions 5kg Bag" -> 5000; loose/per-kg deals -> None).
+- `match_and_detect` bag path: when the deal carries a weight, the
+  master candidate pool keeps only WEIGHT-size rows and the LARGEST
+  wins; both sides normalise to $/kg (5kg $7.50 = $1.50/kg vs 2kg
+  $5.00 = $2.50/kg -> 40% under -> alert). No weight-size master ->
+  "no comparable bag size at Woolworths/Coles", never a bag-vs-each
+  comparison. Loose (kg) deals keep the existing path.
+- Validity gate: a deal with `valid_until` < today (Sydney) is
+  RECORDED but never compared or alerted — note "prices expired
+  <day> — not compared". Ingest stamps each batch's validity onto
+  its rows and lists expired files in the summary ("⏳ Expired —
+  recorded, not compared").
+- parse_size stays untouched (anchored parser — deal-side scanning
+  lives in `_deal_weight_g`).
+
+| PASS | Plural match | "Strawberries" vs master "Strawberry 500g" | matched, 70% under -> alert |
+| PASS | Bag vs largest master bag | 5kg $7.50 vs masters 1kg/2kg | picks 2kg, per-kg basis, 40% -> alert |
+| PASS | Bag equal rate no alert | 5kg $12.50 vs 2kg $5.00 | pct 0.0, no alert |
+| PASS | Bag never vs loose each | only a size-less master | "no comparable bag size", pct None |
+| PASS | Expired not compared | valid_until yesterday, 94% under | pct None, note "prices expired", no alert |
+| PASS | Valid still compared | valid_until tomorrow | alert as normal |
+| PASS | Full suite | pytest grocery-price-tracker/tests/ -q | 1134 passed, 0 failed, 0 skipped |

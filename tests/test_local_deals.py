@@ -309,6 +309,88 @@ class TestDetection(unittest.TestCase):
         post1 = ld.render_post1(results, "2026-09-11")
         self.assertNotIn("Extra stop worth it", post1)
 
+    def test_plural_forms_match(self):
+        """User rule 2026-09-07: 'Strawberries' matches the
+        'Strawberry' master row (plural-folded containment)."""
+        results = self._detect(
+            [_deal(item="Strawberries", store="fruitopia",
+                   category="fruits", price=2.99, unit="kg")],
+            [_master(name="Woolworths Strawberry 500g",
+                     size="500g", wool=5.00, sub="strawberries",
+                     coarse="Fruit & Veg")])
+        self.assertEqual(results[0].matched_master,
+                         "Woolworths Strawberry 500g")
+        self.assertTrue(results[0].alert)
+
+    def test_bag_compares_per_kg_vs_largest_master_bag(self):
+        """User rule 2026-09-07: a 5kg bag deal compares PER KILO
+        against the LARGEST matching master bag (2kg over 1kg)."""
+        results = self._detect(
+            [_deal(item="Onions 5kg Bag", store="fruitopia",
+                   category="fruits", price=7.50, unit="ea")],
+            [_master(name="Woolworths Onions 1kg Bag", size="1kg",
+                     wool=3.00, sub="onions", coarse="Fruit & Veg",
+                     idx=2),
+             _master(name="Woolworths Onions 2kg Bag", size="2kg",
+                     wool=5.00, sub="onions", coarse="Fruit & Veg",
+                     idx=3)])
+        self.assertEqual(results[0].matched_master,
+                         "Woolworths Onions 2kg Bag")     # largest
+        self.assertEqual(results[0]._basis, "kg")
+        # deal $1.50/kg vs master $2.50/kg -> 40% under -> alert
+        self.assertTrue(results[0].alert)
+
+    def test_bag_equal_rate_no_alert(self):
+        """5kg $12.50 ($2.50/kg) vs 2kg $5.00 ($2.50/kg) -> pct 0."""
+        results = self._detect(
+            [_deal(item="Onions 5kg Bag", store="fruitopia",
+                   category="fruits", price=12.50, unit="ea")],
+            [_master(name="Woolworths Onions 2kg Bag", size="2kg",
+                     wool=5.00, sub="onions", coarse="Fruit & Veg")])
+        self.assertFalse(results[0].alert)
+        self.assertEqual(results[0].pct, pytest.approx(0.0))
+
+    def test_bag_never_vs_loose_each(self):
+        """No weight-size master -> 'no comparable bag size'; a bag
+        is never compared against a loose each-price."""
+        results = self._detect(
+            [_deal(item="Onions 5kg Bag", store="fruitopia",
+                   category="fruits", price=7.50, unit="ea")],
+            [_master(name="Woolworths Brown Onions", size="",
+                     wool=2.50, sub="onions", coarse="Fruit & Veg")])
+        self.assertIsNone(results[0].pct)
+        self.assertFalse(results[0].alert)
+        self.assertIn("no comparable bag size", results[0].note)
+
+    def test_expired_prices_not_compared(self):
+        """User rule 2026-09-07: a post whose validity ended before
+        today (Sydney) is recorded but never compared or alerted."""
+        from datetime import timedelta
+        yesterday = ld.sydney_today() - timedelta(days=1)
+        results = self._detect(
+            [_deal(item="Strawberries", store="fruitopia",
+                   category="fruits", price=0.50, unit="kg",
+                   valid_until=yesterday)],
+            [_master(name="Woolworths Strawberry 500g",
+                     size="500g", wool=5.00, sub="strawberries",
+                     coarse="Fruit & Veg")])
+        self.assertIsNone(results[0].pct)
+        self.assertFalse(results[0].alert)
+        self.assertIn("prices expired", results[0].note)
+
+    def test_valid_prices_still_compared(self):
+        """A post still inside its validity period compares normally."""
+        from datetime import timedelta
+        tomorrow = ld.sydney_today() + timedelta(days=2)
+        results = self._detect(
+            [_deal(item="Strawberries", store="fruitopia",
+                   category="fruits", price=2.99, unit="kg",
+                   valid_until=tomorrow)],
+            [_master(name="Woolworths Strawberry 500g",
+                     size="500g", wool=5.00, sub="strawberries",
+                     coarse="Fruit & Veg")])
+        self.assertTrue(results[0].alert)
+
 
 def _mk_alert(store_key, store_name, baseline, flyer,
               item="Beef Diced"):

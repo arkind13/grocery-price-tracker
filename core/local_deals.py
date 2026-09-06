@@ -63,13 +63,74 @@ TELEGRAM_USER_ID = 1594431983       # DM fallback (D24)
 LOCAL_DEALS_TOPIC_ENV = "TELEGRAM_LOCAL_DEALS_TOPIC_ID"
 
 
+def _singular(word: str) -> str:
+    """Naive food-plural folder (user rule 2026-09-07):
+    strawberries -> strawberry, tomatoes -> tomato, onions -> onion,
+    peaches -> peach, grapes -> grape. Anything it does not recognise
+    passes through unchanged (cos, rice, watercress ...)."""
+    w = (word or "").lower()
+    if len(w) > 4 and w.endswith("ies"):
+        return w[:-3] + "y"
+    if len(w) > 4 and w.endswith(("oes", "xes", "zes", "ches",
+                                  "shes")):
+        return w[:-2]
+    if len(w) > 3 and w.endswith("s") \
+            and not w.endswith(("ss", "us", "is")):
+        return w[:-1]
+    return w
+
+
+def _fold_plurals(tokens) -> set:
+    """Map _singular over a token iterable -> folded token set."""
+    return {_singular(t) for t in tokens}
+
+
+def _deal_weight_g(item: str, bulk_size: str = "") -> float | None:
+    """Weight in GRAMS carried inside a deal's own text (user rule
+    2026-09-07): 'Onions 5kg Bag' -> 5000.0, 'Cos Lettuce 500g' ->
+    500.0. First weight match wins; None when the text carries no
+    weight size (loose/per-kg/each deals). Uses parse_size per match
+    so the unit grammar stays in ONE place (core.uom)."""
+    from core.uom import FAMILY_WEIGHT, parse_size
+    text = f"{item or ''} {bulk_size or ''}"
+    for m in re.finditer(r"(\d+(?:\.\d+)?)\s?(kg|g|mg)\b",
+                         text, re.IGNORECASE):
+        parsed = parse_size(m.group(0))
+        if parsed is not None and parsed.family == FAMILY_WEIGHT:
+            return parsed.value
+    return None
+
+
+def _item_tokens(text: str) -> set:
+    """Plural-folded, SIZE-STRIPPED word tokens for name matching.
+
+    Size tokens ('5kg', '500g', bare units) never participate: the
+    bag rule compares ACROSS sizes on purpose, so 'Onions 5kg Bag'
+    must match 'Woolworths Onions 2kg Bag' (user rule 2026-09-07).
+    """
+    size_re = re.compile(r"\d+(?:[.,]\d+)?\s*(?:kg|g|mg|ml|l)\Z",
+                         re.IGNORECASE)
+    tokens = set()
+    for t in similarity_tokens(text or ""):
+        if re.fullmatch(r"\d+(?:[.,]\d+)?", t):
+            continue
+        if size_re.fullmatch(t):
+            continue
+        if t in ("kg", "g", "mg", "ml", "l"):
+            continue
+        tokens.add(t)
+    return _fold_plurals(tokens)
+
+
 def canonical_key(item_name: str) -> tuple:
     """Variety-aware canonical grouping key (RF1, sandbox test3 18/18).
 
     Word-order-insensitive tokens via name_matcher.similarity_tokens,
-    stopwords + pure numbers stripped; a variety qualifier is REQUIRED
-    in the key when present ("Beef Diced" == "Diced Beef"; "Royal
-    Gala" never merges with "Pink Lady"). Returns (base, variety).
+    plural-folded ("Strawberry" == "Strawberries" — user rule
+    2026-09-07), stopwords + pure numbers stripped; a variety
+    qualifier is REQUIRED in the key when present ("Beef Diced" ==
+    "Diced Beef"; "Royal Gala" never merges with "Pink Lady").
+    Returns (base, variety).
 
     Args:
         item_name: raw product/deal name.
@@ -79,8 +140,9 @@ def canonical_key(item_name: str) -> tuple:
         contribute their component words to neither part twice.
     """
     name = (item_name or "").lower()
-    tokens = {t for t in similarity_tokens(name)
-              if t not in STOPWORDS and not re.fullmatch(r"\d+(\.\d+)?", t)}
+    tokens = {_singular(t) for t in similarity_tokens(name)
+              if t not in STOPWORDS
+              and not re.fullmatch(r"\d+(\.\d+)?", t)}
     variety: set[str] = set()
     for v in VARIETY_TOKENS:
         if any(vt in tokens for vt in v.split()):
@@ -718,7 +780,9 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
 
     # Standout check vs the master sheet — the SAME >20% machinery as
     # the Friday/on-demand report (user rule 2026-09-07: the alert
-    # must show up at ingest time, not only in the report).
+    # must show up at ingest time, not only in the report). Each
+    # batch carries its OWN validity; expired batches are recorded
+    # but never compared.
     standout_block: list[str]
     try:
         from core.sheets_client import connect_worksheet
@@ -728,6 +792,8 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
             for d in b["deals"]:
                 row = dict(d)
                 row["store_key"] = store["key"]
+                if b["valid_until"]:
+                    row["valid_until"] = b["valid_until"]
                 scan_rows.append(row)
         results = match_and_detect(scan_rows, master_rows, {})
         standout_block = render_post1(
@@ -752,6 +818,14 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
                          f"/{d['unit']}{note}")
     lines.append("")
     lines.extend(standout_block)
+    expired = [b for b in batches if b["valid_until"]
+               and b["valid_until"] < sydney_today()]
+    if expired:
+        lines.append("")
+        lines.append("⏳ Expired — recorded, not compared:")
+        for b in expired:
+            lines.append(f"• {b['file']} (valid until "
+                         f"{b['valid_until']:%a %d %b})")
     receipt = _send_message(bot_token, TELEGRAM_CHAT_ID,
                             "\n".join(lines)[:4000],
                             thread_id=topic_id or TELEGRAM_CHAT_ID)
@@ -1321,8 +1395,27 @@ def match_and_detect(rows, master_rows, site_catalogues) -> list[MatchResult]:
             continue
         result.in_domain = True
 
+        # Validity gate (user rule 2026-09-07): a post whose prices
+        # have EXPIRED is recorded but never compared or alerted —
+        # expired pricing must not look live.
+        valid_until = deal.get("valid_until")
+        if valid_until is not None:
+            if isinstance(valid_until, str):
+                try:
+                    valid_until = date.fromisoformat(valid_until)
+                except ValueError:
+                    valid_until = None
+            if valid_until is not None \
+                    and valid_until < sydney_today():
+                result.note = (f"prices expired "
+                               f"{valid_until:%a %d %b} — not "
+                               f"compared")
+                results.append(result)
+                continue
+
         best_ratio, best_master = 0.0, None
-        deal_tokens = similarity_tokens(deal.get("item") or "")
+        deal_tokens = _item_tokens(deal.get("item") or "")
+        candidates: list[tuple[float, dict]] = []
         for master in master_rows:
             if not is_in_domain(store_kind,
                                 deal.get("category") or "",
@@ -1332,10 +1425,38 @@ def match_and_detect(rows, master_rows, site_catalogues) -> list[MatchResult]:
             ratio = token_set_ratio(deal.get("item") or "",
                                     master["name"])
             containment = bool(deal_tokens) and deal_tokens.issubset(
-                similarity_tokens(master["name"]))
-            if (ratio >= MATCH_MIN_RATIO or containment) \
-                    and ratio > best_ratio:
-                best_ratio, best_master = ratio, master
+                _item_tokens(master["name"]))
+            if ratio >= MATCH_MIN_RATIO or containment:
+                candidates.append((ratio, master))
+
+        # Bag-aware selection (user rule 2026-09-07): a deal weighed
+        # as a bag ("Onions 5kg Bag") compares PER KILO against the
+        # LARGEST matching weight-size master bag — never against a
+        # loose each-price (no weight size on the master side).
+        from core.uom import FAMILY_WEIGHT, parse_size
+        deal_weight_g = _deal_weight_g(
+            deal.get("item") or "",
+            str(deal.get("bulk_size") or ""))
+        bag_override = False
+        if deal_weight_g is not None:
+            weighted = []
+            for ratio, master in candidates:
+                parsed = parse_size(master.get("size") or "")
+                if parsed is not None \
+                        and parsed.family == FAMILY_WEIGHT \
+                        and parsed.value > 0:
+                    weighted.append((parsed.value, ratio, master))
+            if not weighted:
+                result.note = ("no comparable bag size at "
+                               "Woolworths/Coles")
+                results.append(result)
+                continue
+            weighted.sort(key=lambda t: (-t[0], -t[1]))
+            best_master = weighted[0][2]
+            bag_override = True
+        elif candidates:
+            best_ratio, best_master = max(
+                candidates, key=lambda t: t[0])
 
         site = _site_price_for(deal, site_catalogues)
         if site is not None and result.flyer_price:
@@ -1360,13 +1481,22 @@ def match_and_detect(rows, master_rows, site_catalogues) -> list[MatchResult]:
                              best_master["name"]):
             result.variety_conflict = True
             result.note = "variety differs — verify"
-        if not _unit_prices_agree(deal, best_master):
+        # Bag path: both sides normalize to $/kg, so the unit-family
+        # gate is satisfied by construction (deal bag vs master bag).
+        if not bag_override and not _unit_prices_agree(
+                deal, best_master):
             result.note = result.note or "unit mismatch"
             results.append(result)
             continue
 
         master_unit = _master_unit_price(best_master)
         deal_unit = _deal_unit_price(deal)
+        if bag_override:
+            price_num = deal.get("price")
+            deal_unit = (float(price_num)
+                         / (deal_weight_g / 1000.0), "kg") \
+                if isinstance(price_num, (int, float)) \
+                and not isinstance(price_num, bool) else None
         if master_unit is None or deal_unit is None:
             results.append(result)
             continue
