@@ -330,7 +330,7 @@ class TestReport(unittest.TestCase):
             _mk_alert("dunya", "Dunya Butchery", 17.50, 12.99),
             _mk_alert("fruitopia", "Fruitopia Mt Druitt", 4.50, 3.20),
         ]
-        post1 = ld.render_post1(results, "2026-09-11")
+        post1 = ld.render_post1(results, "Fri 2026-09-11")
         self.assertIn("LOCAL STANDOUTS — Fri 2026-09-11 (Mt Druitt)",
                       post1)
         self.assertIn("DUNYA BUTCHERY", post1)

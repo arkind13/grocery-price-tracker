@@ -19,13 +19,17 @@ import requests
 
 STORES = [
     {"key": "dunya",     "name": "Dunya Butchery",
-     "fb_page_id": "100071472636159", "kind": "butchery"},
+     "fb_page_id": "100071472636159", "kind": "butchery",
+     "code": "DUNY"},
     {"key": "merjan",    "name": "Merjan Brothers Quality Meats",
-     "fb_page_id": "61578274311504",  "kind": "butchery"},
+     "fb_page_id": "61578274311504",  "kind": "butchery",
+     "code": "MERJ"},
     {"key": "fruitopia", "name": "Fruitopia Mt Druitt",
-     "fb_page_id": "100092972080784", "kind": "fruits"},
+     "fb_page_id": "100092972080784", "kind": "fruits",
+     "pipeline": "timeline", "code": "FRUT"},
     {"key": "abusalim",  "name": "Abu Salim Fruit Market",
-     "fb_page_id": "61592534263358",  "kind": "fruits"},
+     "fb_page_id": "61592534263358",  "kind": "fruits",
+     "code": "ABSA"},
 ]
 
 FB_FETCH_MAX_ATTEMPTS = 3     # 5xx/timeout only, fresh session each
@@ -156,9 +160,21 @@ def _group_by_post(html: str,
         groups[idx].append(url)
     return [g for g in groups if g]
 
-def _build_params(page_id: str, path: str, session_id: str) -> dict:
-    """Scrape.do params for one FB render (sandbox test1 shape)."""
-    return {
+def _build_params(page_id: str, path: str, session_id: str,
+                  extra: dict | None = None) -> dict:
+    """Scrape.do params for one FB render (sandbox test1 shape).
+
+    Args:
+        page_id: the FB page id.
+        path: URL path after the page id ("/photos", "" ...).
+        session_id: sticky-session id for this attempt.
+        extra: optional extra Scrape.do params (e.g. scroll tweaks),
+        merged last so they can override the defaults.
+
+    Returns:
+        dict: full Scrape.do query params.
+    """
+    params = {
         "token": os.getenv("SCRAPEDO_API_KEY", ""),
         "url": f"https://www.facebook.com/{page_id}{path}",
         "render": "true",       # FB needs JS
@@ -166,6 +182,9 @@ def _build_params(page_id: str, path: str, session_id: str) -> dict:
         "country": "au",
         "session": session_id,
     }
+    if extra:
+        params.update(extra)
+    return params
 
 
 def _fresh_session(n: int) -> str:
@@ -173,11 +192,17 @@ def _fresh_session(n: int) -> str:
     return f"fb_{int(time.time())}_{n}"
 
 
-def _fetch_html(page_id: str, path: str) -> str:
+def _fetch_html(page_id: str, path: str,
+                extra_params: dict | None = None) -> str:
     """Render one FB URL via Scrape.do with the retry policy.
 
     Retries ONLY 5xx/timeout (fresh session each); 401/403/400 fail
     immediately. Raises FetchUnavailable on exhaustion.
+
+    Args:
+        page_id: the FB page id.
+        path: URL path after the page id.
+        extra_params: optional extra Scrape.do params for this call.
     """
     for attempt in range(FB_FETCH_MAX_ATTEMPTS):
         if not register_scrapedo_credit():
@@ -185,7 +210,9 @@ def _fetch_html(page_id: str, path: str) -> str:
         try:
             resp = requests.get(
                 SCRAPEDO_BASE,
-                params=_build_params(page_id, path, _fresh_session(attempt)),
+                params=_build_params(page_id, path,
+                                     _fresh_session(attempt),
+                                     extra_params),
                 timeout=SCRAPEDO_TIMEOUT_S,
             )
         except requests.RequestException:

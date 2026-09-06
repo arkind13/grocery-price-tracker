@@ -560,16 +560,26 @@ class TestHalalIntercept(unittest.TestCase):
     def test_full_name_exact_match_still_resolves_non_halal(self):
         """Step 1 is UNSCOPED: a full non-halal name is a database
         query (D-H4). """""
+        # The live-fill layer is mocked empty (no network — this file
+        # is pure unit tests): a non-interactive resolve of a
+        # WW-only row must keep the pure EXACT_SHEET sheet answer
+        # instead of drifting into SHEET_AND_LIVE.
         engine = LookupEngine(self._ws())
-        result = engine.find_product("Woolworths Beef Mince",
-                                     interactive=False)
+        with patch.object(LookupEngine, "_live_search_pair",
+                          return_value=([], [], "ok")):
+            result = engine.find_product("Woolworths Beef Mince",
+                                         interactive=False)
         self.assertEqual(result.status, LookupStatus.EXACT_SHEET)
 
     def test_non_meat_query_completely_unscoped(self):
         """Non-meat queries never scope the index. """""
+        # Same live-fill mock: the sheet row is WW-only, and the
+        # merged SHEET_AND_LIVE tag must not mask the Step-1 hit.
         engine = LookupEngine(self._ws())
-        result = engine.find_product("Full Cream Milk",
-                                     interactive=False)
+        with patch.object(LookupEngine, "_live_search_pair",
+                          return_value=([], [], "ok")):
+            result = engine.find_product("Full Cream Milk",
+                                         interactive=False)
         self.assertEqual(result.status, LookupStatus.EXACT_SHEET)
 
     def test_step5_meat_query_dispatches_to_chain(self):

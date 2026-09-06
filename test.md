@@ -362,3 +362,188 @@ Implementation plan: `implementation-plan.md` (binding revision
    `--provision-topic` run (baked into future Friday diagnostics).
 | PASS | S30 VPS sync | scp CLI + core/extractors + 3 skill files; md5sum both sides; `docker restart openclaw-core`; `local-deals --dry-run` smoke | all 3 skill md5s match (fce2d042…, 46249820…, 58467348…); container restarted; smoke ran fetch→vision→render end-to-end (⚠️ lines expected: boards not yet published) |
 | PASS | S33 VPS cron | idempotent install script via ssh stdin; `crontab -l | grep friday-gate`; `local-deals --friday-gate` outside window | `INSTALLED`; line `*/15 * * * * docker exec … local-deals --friday-gate >> /home/ubuntu/scripts/local_deals.log 2>&1` verified; Saturday run: EXIT_CODE=0, silent, no state written |
+
+# Round 2026-09-06 — B2 / R17 Smart Basket: pipeline audit + gap closure
+# (03 Code Agent — implementation-plan.md v1.0 executed as an audit)
+
+## Context
+
+`implementation-plan.md` v1.0 (2026-09-03) was written for a FRESH B2
+build, but the tree already carries B2 in full —
+`core/basket_optimizer.py`, `tests/test_optimizer.py` (all 28 matrix
+tests), the `optimize` CLI subcommand, skill routing and docs —
+subsequently evolved by committed rounds (2026-09-03 buy-list format +
+two-phase confirm, 2026-09-05 halal gate). Re-running S1–S15 verbatim
+would have regressed committed work, so the plan was executed as a
+step-by-step audit with gap closure instead. Outcomes per plan section:
+
+| Plan step | Audit outcome |
+|---|---|
+| S1–S13 module | present; evolved superset (item_labels/sources/prices, `plan_from_items`, buy-list `format_plan` per user rules 2026-09-03). Design lock-ins intact: min 5 items, strict-greater $3.00, Σ per-item gaps, WW tie-break, look-only |
+| S14–S15 CLI | present at L72–90 / L2118–2234; adds `--confirm`, halal gate, sheet-first confirm flow (committed evolution); gate exit 2 + stderr intact |
+| S16–S20 tests | all 28 matrix tests present; see [FAIL->FIXED] below |
+| S21 SKILL.md 5 touches | all present (frontmatter L3, table L38, NL mappings L201–203, pattern 7 L237, timeout L330 + examples L358–359) |
+| S22 catalogue | `python skills_doc.py --check` → OK (exit 0) |
+| S23–S25 docs | README L382/L410/L714; PROJECT-MAP L54/L169/L350; roadmap R17 Realized L222 — all present |
+| S26 round entry | THIS section (was missing — the only doc gap) |
+
+## Gap fixed
+
+`[FAIL->FIXED] | TestHalalIntercept: full-name-exact + non-meat-unscoped | python -m pytest tests/test_lookup.py::TestHalalIntercept -q | 2 failed (EXACT_SHEET vs SHEET_AND_LIVE). Root cause: both tests ran interactive=False on WW-only rows, so the 2026-09-03 live-fill merge (user report: bread/beef mince never reached live) re-tagged them SHEET_AND_LIVE — and worse, ran REAL live searches from unit tests (violating the file's "no network" contract; ~100 s of suite time). Fix (test-only, mirrors the in-file `_live_search_pair` mock convention): mock the live layer empty; the D-H4 scoping intent is untouched. 7 passed`
+
+## Full-suite gate
+
+- Before fix: **1073 passed, 2 failed** (both TestHalalIntercept).
+- After fix: **1075 passed, 0 failed, 0 skipped** (79 s; 62 s on the
+  repeat run — the mock removed the real network calls).
+
+## S27 local acceptance (2026-09-06)
+
+| PASS | S27.1 6-item basket (two-phase, auto) | `python grocery_price_cli.py optimize --items "milk, eggs, bread, beef mince, apples, rice"` then `optimize --confirm none` | run 1: halal gate note + 5/6 sheet-priced + 🔎 confirm block (KSM = Coles pricing missing) + eggs sheet substitute (read-only), exit 0; run 2: 🧠 SMART BASKET — 6 ITEMS / ✅ ONE TRIP: WOOLWORTHS — $37.72 / numbered buy-list with (sheet)/(sub) labels / 💵 subtotal / 💡 bottom note, exit 0, nothing written |
+| PASS | S27.2 gate refusal | `python grocery_price_cli.py optimize --items "milk, eggs"` | refusal on stderr (points to `compare`), exit 2 |
+| PASS | S27.3 full suite | `python -m pytest tests/ -q` (from repo root) | 1075 passed, 0 failed, 0 skipped |
+| PASS | S27.4 catalogue | `python skills_doc.py --check` | OK |
+
+## Notes
+
+- Captured (piped) Windows runs need `PYTHONUTF8=1`: an interactive
+  console is UTF-8 (PEP 528) but a cp1252 pipe crashes on the 🧠 emoji
+  (`charmap codec`), exit 1 via main()'s handler. Environment artifact,
+  not a code bug — docker/VPS and interactive runs are unaffected.
+- S28 (VPS deploy) + the git commit remain user-gated per plan §6.3/§6.4.
+
+# Round 2026-09-06 (evening) — Local Deals rebuild per
+# TODO-local-deals-gaps.md: Tasks 0-3 + 4a wiring (03 Code Agent)
+
+## Task 0 — topic 594 re-verified (config + test messages were MISSING)
+
+`[FAIL->FIXED] | TELEGRAM_LOCAL_DEALS_TOPIC_ID absent | local root .env: key absent; VPS /home/ubuntu/openclaw/.env (bind-mounted /app/tasks/ai-tools/.env — confirmed via in-container _find_root_env): count 0 | upserted 594 both sides (inode-safe cat-truncate on the bind mount); test sends land INSIDE topic 594 from local AND container (receipt: route=topic, thread_id=594, api_ok=True, message_id=604). Provisioning side effect: first attempt created a duplicate topic 601 (env written to file, not process env) — DELETED via deleteForumTopic, env pinned to user-confirmed 594. USER visual re-check of the group still open`
+
+## Task 1 — Sydney timezone discipline
+
+- NEW `core/sydney_time.py`: `sydney_now()` / `sydney_today()` (single
+  source; ZoneInfo DST-proof; AEDT switch handled by zoneinfo).
+- Replaced server-time clocks (grep evidence, local-deals + halal
+  paths only; queue/ISO-timestamp modules stay UTC by design):
+  `core/local_deals.py` friday_gate_open, friday_gate_mark_fired,
+  first-fire fired_at, run flow today_syd + run_dir;
+  `core/halal.py` ledger TTL ×2 + checked_at ×2 (L280/298/310/557).
+- §5 bug fixed: "Fri" hardcoded in render_post1/render_post2_blocks —
+  headers now carry the run's real Sydney weekday (live proof below).
+- NEW `tests/test_sydney_time.py` (6): the TODO's own pin (2026-09-06
+  20:00 UTC == 06:00 Mon 7 Sep Sydney; "5 & 6 September" EXPIRED),
+  23:59-boundary, year rollover, AEDT offset 11h, gate via UTC instant.
+
+## Tasks 2-3 — timeline pipeline (text-first, per-post images)
+
+- NEW `extractors/fb_timeline_fetch.py`: root-page render → Comet
+  story JSON parse (post_id/creation_time/message.text/scontent urls,
+  position-attributed per story, newest-first by creation_time).
+- NEW `extractors/deal_text.py`: parse_validity_end ("Saturday &
+  Sunday, 5 & 6 September" → 2026-09-06, Sydney year-inference),
+  parse_fruitopia_deals (¢/$//kg/each/"2 for $X" grammar, multibuy
+  divided out WITH note), filter_recent_posts (last-3 + future-only
+  + needs_date_review bucket).
+- `core/local_deals.py`: extract_post_deals (TEXT branch first;
+  vision ONLY for image-only posts, on the post's OWN timeline
+  images, max 4); _process_store_timeline (validity filter, expired
+  dropped with date printed, undated EXCLUDED as needs-review,
+  vision valid_until rescue); _process_store branches on the new
+  `"pipeline": "timeline"` flag (fruitopia ONLY — other stores
+  untouched on the legacy path until their own tasks).
+- NEW `tests/test_deal_text.py` (20): fixtures from the REAL
+  anniversary post; branch tests; pipeline wiring tests.
+
+## Live evidence (Scrape.do: 3 renders + 1 vision call; rules honored)
+
+| PASS | Render A (saved 976 KB render) | parse + filter | 1 story (post 974521905656870, created 2026-09-04 07:06 UTC), valid through TODAY Sydney (2026-09-06, its last day) → KEPT; 24 deals; 3 own images |
+| PASS | Render B (scrollBottom attempt) | compare vs A | SAME post, SAME 1898-char text, IDENTICAL 24-deal signature; scroll did NOT surface older stories |
+| PASS | Render C (Task 3b comparison) | text vs image | VISION on the post's own timeline images reads 24 deals (board IS on the timeline post — photos-tab was the wrong source); overlap 15/24 exact (name/unit variants; text authoritative: bread unit, multibuy 1.50-with-note) |
+| PASS | 4a dry-run live | `grocery_price_cli.py local-deals --stores fruitopia --dry-run` | "🛒 LOCAL BOARDS — Sun 2026-09-06 (Mt Druitt)" (real weekday), all 24 Fruitopia deals, look-only, exit 0 |
+
+### GAP (evidence, per TODO §3 timebox): the logged-out timeline render
+exposes only the NEWEST story's JSON. Two independent renders (plain +
+scrolled) both yield exactly ONE story. Last-3 enumeration + filter are
+built and unit-tested (4-post fixtures) and will ingest older stories
+when FB exposes them — but today only 1 post is extractable. Options
+for the user: accept newest-post coverage, or a logged-in scraping
+route (new work, not attempted — credits were not burned on it).
+
+### Logged-in route (user APPROVED 2026-09-06 late evening) — BUILT
+
+- `extractors/fb_timeline_fetch.py`: `fb_cookie_header()` (reads the
+  `FB_COOKIE_C_USER` + `FB_COOKIE_XS` .env pair — secrets, never
+  logged; both required), `_custom_headers_params()` (Scrape.do
+  `customHttpHeaders=true` + b64 JSON Cookie header), and a route
+  policy on `fetch_timeline_posts`: `logged_in="auto"` (default) =
+  logged-in attempt first when the pair is set, graceful fallback to
+  the logged-out render (max 2 credits); `True` = logged-in only;
+  `False` = logged-out only (unchanged single-credit path).
+- Secret hygiene: the b64 blob carries the cookie and travels only in
+  the request params — never printed; the retry policy surfaces only
+  exception class names.
+- Tests: 6 new offline route tests (pair-required header builder,
+  b64 round-trip with a dummy value, auto-fallback call order,
+  single-call success, True-without-cookies raises with ZERO calls,
+  False ignores cookies). `test_deal_text.py` now 26, all green;
+  full suite unaffected (no production path changes without the
+  env pair set).
+
+## Round 2026-09-06, ~00:30 — twice-daily new-post detector
+# (user redesign: cookies banned outright; GitHub check done — known
+# logged-out scrapers are dead or login-based; user approved the
+# detector flow)
+
+### User requirements (verbatim intent)
+
+- Today: scan topics from the LAST 3 DAYS (backfill).
+- Going forward: 15:00 scan covers posts since 05:00; 05:00 scan
+  covers posts since 15:00 (rolling windows).
+- EVERY notification must carry the posted time AND the validity
+  date — the user imports images/text only; remembering dates is
+  the pipeline's job ("inbuilt in your skills or messages").
+- `ignore <CODE>` skips a post permanently.
+- 4-letter codes (3-letter reserved for Woolworths/Coles commands):
+  FRUT / MERJ / DUNY / ABSA.
+- Friday summaries cease once daily flow is proven (cron kept until
+  then).
+
+### Built + verified
+
+| PASS | Live backfill (real Telegram to topic 594) | `local-deals --daily-scan` | DUNY: posted Thu 03 Sep 11:34 (validity not in text — asked at ingest); MERJ: Fri 04 Sep 20:20 (same); FRUT: Fri 04 Sep 17:06, valid until Sun 06 Sep (auto-parsed from text); ABSA: newest post 12d old → correctly silent. Exit 0 |
+| PASS | Baseline state | data/local_deals_scan_state.json | per-store last_post_ref/creation/cutoff + windows map |
+| PASS | Ignore command | `local-deals --ignore CODE` | marks last_notified_ref; scan never re-reports (unit-tested) |
+| PASS | Ingest | `local-deals --ingest CODE` | newest inbox file (image → vision / text → parser), deals + validity, summary to topic (unit-tested) |
+| PASS | Cron | ssh crontab | `*/15 * * * * docker exec … local-deals --daily-scan >> /home/ubuntu/scripts/local_deals_scan.log 2>&1` (window-gated inside: fires once per 05:xx / 15:xx Sydney) |
+| PASS | VPS deploy | scp CLI + core/local_deals + core/sydney_time + core/halal + extractors/fb_timeline_fetch + extractors/deal_text + extractors/fb_flyer_fetch; NEW files via /tmp + sudo install (dirs are node-owned); md5 all 7 match local | verified |
+| PASS | Skill + catalogue | SKILL.md detector flow + codes + ingest/ignore routing; `skills_doc.py --check` OK; both skill files scp'd, md5 match | verified |
+
+### Tests
+
+- `tests/test_deal_text.py` → 34 tests (route policy, backfill
+  lifecycle: fresh first-sighting notifies / repeat silent / delta
+  notifies; ignore marks; ingest picks newest; windows 05/15 Sydney).
+- Affected suites: 118 passed. Full suite last full run this session:
+  1101 passed, 0 failed, 0 skipped.
+
+### Security note
+
+A pytest failure diff transiently printed a real Telegram bot token
+to the local transcript (test recorded full _send_message args).
+Fixed: fakes now record message text only. Recommend rotating
+`TELEGRAM_CLAW_BOT` when convenient (local-only exposure; not in any
+committed file).
+
+## Suite
+
+- Affected suites: 106 passed (×2 runs) + full suite 1098 → **1101
+  passed, 0 failed, 0 skipped** (+26 new tests this round).
+- 3-pass rule: deal_text/sydney/local_deals/halal ran green 3×.
+
+## 4a GATE — awaiting user confirmation
+
+Fruitopia is integrated (timeline pipeline) and verified above. The
+user must confirm the 24-deal list (and the anniversary post = the
+"5 & 6 September" catalogue — TODO's posts (a) and (b) are ONE post)
+before 4b Merjan / 4c Dunya / 4d Abu Salim start. VPS redeploy is
+NOT done (TODO §7 comes after store verifications).

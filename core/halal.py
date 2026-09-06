@@ -6,8 +6,10 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
+
+from core.sydney_time import sydney_today  # noqa: E402 — house lazy style
 
 HALAL_MARKER = "halal"          # positive-only token in Col P
 HALAL_CHECK_CATEGORIES = {      # §4.5 / §12.3 labels (exact mirror)
@@ -277,7 +279,7 @@ def check_halal_via_llm(name: str, brand: str = "",
         try:
             checked = date.fromisoformat(
                 str(cached.get("checked_at", ""))[:10])
-            if date.today() - checked < \
+            if sydney_today() - checked < \
                     timedelta(days=HALAL_CHECK_TTL_DAYS):
                 return HalalVerdict(**{**cached, "product": name})
         except ValueError:
@@ -295,7 +297,7 @@ def check_halal_via_llm(name: str, brand: str = "",
                 verdict=str(data.get("verdict", "uncertain")),
                 confidence=float(data.get("confidence") or 0.0),
                 evidence=str(data.get("evidence", ""))[:300],
-                checked_at=date.today().isoformat(),
+                checked_at=sydney_today().isoformat(),
                 web_searched=True,
                 brand_line=str(data.get("brand_line", ""))[:200],
             )
@@ -307,7 +309,7 @@ def check_halal_via_llm(name: str, brand: str = "",
         verdict = HalalVerdict(
             product=name, verdict="uncertain", confidence=0.0,
             evidence=f"check failed: {last_err}",
-            checked_at=date.today().isoformat(),
+            checked_at=sydney_today().isoformat(),
             web_searched=False, brand_line=brand)
     ledger[key] = {
         "verdict": verdict.verdict,
@@ -554,7 +556,7 @@ def backfill_halal_checks(worksheet, dry_run: bool = False,
             try:
                 checked = date.fromisoformat(
                     str(cached.get("checked_at", ""))[:10])
-                fresh = date.today() - checked < timedelta(
+                fresh = sydney_today() - checked < timedelta(
                     days=HALAL_CHECK_TTL_DAYS)
             except ValueError:
                 fresh = False

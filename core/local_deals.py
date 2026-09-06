@@ -13,11 +13,23 @@ from zoneinfo import ZoneInfo
 from core.basket_optimizer import DEFAULT_SPLIT_THRESHOLD  # noqa: F401
 from core.name_matcher import similarity_tokens, token_set_ratio
 from core.subcategory import normalize_subcategory
+from core.sydney_time import SYDNEY_TZ, sydney_now, sydney_today
 
 ALERT_PCT = 20.0                # strictly greater (20.0 -> no alert)
 MATCH_MIN_RATIO = 0.65          # master-match threshold (§1.4.3)
 MSG_CHAR_LIMIT = 4000           # hard pre-send check (4096 budget)
-SYDNEY_TZ = "Australia/Sydney"
+STATE_PATH = (Path(__file__).resolve().parent.parent / "data"
+              / "local_deals_cron_state.json")
+SCAN_STATE_PATH = (Path(__file__).resolve().parent.parent / "data"
+                   / "local_deals_scan_state.json")
+SCAN_WINDOWS = (5, 15)          # Sydney hours: 05:00 and 15:00
+INBOX_DIRNAME = "local_deals_inbox"
+INBOX_DIR = (Path(__file__).resolve().parent.parent / "data"
+             / INBOX_DIRNAME)
+
+# Butchery comparison domain — the SAME label set as
+# HALAL_CHECK_CATEGORIES (spec §8.4; unified in step S23).
+from core.halal import HALAL_CHECK_CATEGORIES as BUTCHERY_DOMAIN  # noqa: E402
 STATE_PATH = (Path(__file__).resolve().parent.parent / "data"
               / "local_deals_cron_state.json")
 
@@ -108,6 +120,311 @@ def _load_gate_state() -> dict:
         return {}
 
 
+def _load_scan_state() -> dict:
+    """Read local_deals_scan_state.json ({} when missing/corrupt)."""
+    try:
+        return json.loads(SCAN_STATE_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_scan_state(state: dict) -> None:
+    SCAN_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    SCAN_STATE_PATH.write_text(json.dumps(state, indent=2),
+                               encoding="utf-8")
+
+
+def daily_scan_window(now: datetime | None = None
+                      ) -> tuple[bool, str]:
+    """Inside a daily scan window (05:00-05:59 or 15:00-15:59 Sydney)?
+
+    Args:
+        now: injectable clock (tests); defaults to sydney_now().
+
+    Returns:
+        tuple: (is_open, window_key) — key like "2026-09-07:5".
+    """
+    now_syd = (now or sydney_now()).astimezone(ZoneInfo(SYDNEY_TZ))
+    open_now = now_syd.hour in SCAN_WINDOWS
+    key = f"{now_syd.date().isoformat()}:{now_syd.hour}"
+    return open_now, key
+
+
+def run_daily_scan(dry_run: bool = False, send: bool = True,
+                   max_posts: int = 1, backfill_days: int = 3,
+                   ) -> int:
+    """Twice-daily new-post detector (user-directed 2026-09-06).
+
+    For each of the 4 public pages: render the timeline logged out
+    (proven reliable), take the NEWEST post and compare its id with
+    the last NOTIFIED one. Windows roll: the 15:00 scan covers posts
+    since 05:00, the 05:00 scan covers posts since 15:00 (the exact
+    posted time is printed in every message). First-ever sighting of
+    a store = the user's "last 3 days" backfill: notify only when
+    the newest post is within backfill_days, else silent baseline.
+    Every notification carries the posted time AND the validity date
+    parsed from the post text (the user imports images/text only —
+    remembering the dates is this pipeline's job). 'ignore <CODE>'
+    marks the post skipped in state.
+
+    Args:
+        dry_run: print instead of sending Telegram; state untouched.
+        send: send the notification via Telegram (topic 594).
+        max_posts: posts inspected per store (newest only).
+        backfill_days: max age of a first-sighting post to report.
+
+    Returns:
+        int: 0 all stores checked, 1 partial failure, 2 total.
+    """
+    from datetime import datetime as _dt
+
+    from extractors.fb_flyer_fetch import FetchUnavailable
+    from extractors.fb_timeline_fetch import fetch_timeline_posts
+
+    open_now, window_key = daily_scan_window()
+    state = _load_scan_state()
+    windows = state.setdefault("windows", {})
+    if open_now and not dry_run and windows.get(window_key) == "done":
+        return 0                      # this window already serviced
+
+    print(f"[daily-scan] window={window_key or 'off-schedule'}"
+          f"{' (dry-run)' if dry_run else ''}")
+    from core.sheets_client import _load_env
+    _load_env()
+    from extractors.fb_flyer_fetch import STORES
+
+    now_syd = sydney_now()
+    stores = state.setdefault("stores", {})
+    new_posts: list[tuple[dict, object, str]] = []
+    failures: list[str] = []
+    for store in STORES:
+        try:
+            posts = fetch_timeline_posts(store, max_posts=max_posts)
+        except FetchUnavailable as exc:
+            failures.append(store["key"])
+            print(f"[daily-scan] {store['key']}: {exc}")
+            continue
+        except Exception as exc:      # noqa: BLE001 — store isolation
+            failures.append(store["key"])
+            print(f"[daily-scan] {store['key']}: "
+                  f"{exc.__class__.__name__}")
+            continue
+        newest = posts[0]
+        seen = stores.get(store["key"], {})
+        last_notified = seen.get("last_notified_ref")
+        ignored = seen.get("ignored", [])
+        age_days = ((now_syd.timestamp() - (newest.creation_time or 0))
+                    / 86400) if newest.creation_time else 999
+
+        # posted time (Sydney) + validity from the post text —
+        # remembered HERE so the user never has to (their rule).
+        posted_line = "posted: unknown"
+        if newest.creation_time:
+            posted = _dt.fromtimestamp(
+                newest.creation_time, ZoneInfo(SYDNEY_TZ))
+            posted_line = f"posted: {posted:%a %d %b, %I:%M %p} Sydney"
+        from extractors.deal_text import parse_validity_end
+        valid_end = parse_validity_end(newest.text, today=now_syd.date())
+        valid_line = (f"valid until: {valid_end:%a %d %b}"
+                      if valid_end
+                      else "valid until: not in post text — I will "
+                           "ask when you ingest")
+
+        is_new = newest.post_ref != last_notified
+        is_ignored = newest.post_ref in ignored
+        first_sighting = not last_notified
+        within_backfill = age_days <= backfill_days
+        should_notify = (is_new and not is_ignored
+                         and (not first_sighting
+                              or within_backfill))
+
+        stores[store["key"]] = {
+            **seen,
+            "last_post_ref": newest.post_ref,
+            "last_creation": newest.creation_time,
+            "last_checked_window": window_key,
+            "last_cutoff": now_syd.isoformat(timespec="seconds"),
+        }
+        if should_notify:
+            stores[store["key"]]["last_notified_ref"] = newest.post_ref
+            new_posts.append((store, newest,
+                              f"{posted_line}\n{valid_line}"))
+            print(f"[daily-scan] {store['key']}: NEW post "
+                  f"{newest.post_ref} ({posted_line})")
+        elif is_ignored:
+            print(f"[daily-scan] {store['key']}: post "
+                  f"{newest.post_ref} is ignored — skipped")
+        elif first_sighting:
+            print(f"[daily-scan] {store['key']}: baseline post "
+                  f"{newest.post_ref} ({age_days:.0f}d old — older "
+                  f"than the {backfill_days}-day backfill window)")
+        else:
+            print(f"[daily-scan] {store['key']}: no change "
+                  f"({newest.post_ref})")
+
+    if not dry_run:
+        if open_now:
+            windows[window_key] = "done"
+        _save_scan_state(state)
+
+    for store, post, detail in new_posts:
+        text = (
+            f"🆕 {store['code']} — {store['name']}\n"
+            f"{detail}\n"
+            f"Reply 'ignore {store['code']}' to skip this post.\n"
+            f"Or drop the post's image/text into grocery-price-"
+            f"tracker\\data\\{INBOX_DIRNAME}\\{store['code']}\\ "
+            f"and reply with the code: {store['code']}")
+        print(text)
+        if send and not dry_run:
+            bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
+            topic_id = _env_int(LOCAL_DEALS_TOPIC_ENV)
+            receipt = _send_message(bot_token, TELEGRAM_CHAT_ID,
+                                    text, thread_id=topic_id
+                                    or TELEGRAM_CHAT_ID)
+            if not receipt.get("ok"):
+                print("[daily-scan] telegram delivery failed")
+
+    if failures and len(failures) < len(STORES):
+        return 1
+    if failures:
+        return 2
+    return 0
+
+
+def ignore_post(code: str) -> int:
+    """Mark the store's last-notified post as ignored (user command
+    'ignore <CODE>') — the scan will never re-report it.
+
+    Args:
+        code: the 4-letter store code.
+
+    Returns:
+        int: 0 marked, 1 nothing to mark (unknown code / no post).
+    """
+    from extractors.fb_flyer_fetch import STORES
+
+    code = code.strip().upper()
+    store = next((s for s in STORES if s.get("code") == code), None)
+    if store is None:
+        print(f"[ignore] unknown code: {code}")
+        return 1
+    state = _load_scan_state()
+    seen = state.setdefault("stores", {}).get(store["key"], {})
+    ref = seen.get("last_notified_ref")
+    if not ref:
+        print(f"[ignore] {code}: no notified post on record")
+        return 1
+    ignored = seen.setdefault("ignored", [])
+    if ref not in ignored:
+        ignored.append(ref)
+    _save_scan_state(state)
+    print(f"[ignore] {code}: post {ref} marked ignored — the scan "
+          f"will not report it again")
+    return 0
+
+
+def inbox_dir_for(code: str) -> Path:
+    """The per-code inbox folder, created on demand."""
+    d = INBOX_DIR / code.strip().upper()
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _newest_inbox_file(folder: Path) -> Path | None:
+    """Newest non-hidden file in the folder (mtime), or None."""
+    files = [p for p in folder.iterdir()
+             if p.is_file() and not p.name.startswith(".")]
+    return max(files, key=lambda p: p.stat().st_mtime) if files \
+        else None
+
+
+def ingest_code(code: str, dry_run: bool = False) -> int:
+    """Process the newest file in data/local_deals_inbox/<CODE>/.
+
+    The user (cookies are banned) copies a post's content into the
+    inbox and replies with the code. Text files (.txt/.text) run
+    through the deal-line parser; images (.jpg/.jpeg/.png/.webp)
+    through the existing vision chain (ONE call, all files? no — the
+    drop is ONE file: the user copies one post's image or text).
+
+    Args:
+        code: the 4-letter store code (FRUT/MERJ/DUNY/ABSA).
+        dry_run: parse and print only.
+
+    Returns:
+        int: 0 parsed deals printed, 1 no file / no deals.
+    """
+    from extractors.deal_text import (
+        parse_fruitopia_deals, parse_validity_end,
+    )
+    from core.sydney_time import sydney_today
+
+    folder = inbox_dir_for(code)
+    path = _newest_inbox_file(folder)
+    if path is None:
+        print(f"[ingest] no file in {folder}")
+        return 1
+    print(f"[ingest] {code}: processing {path.name}")
+    today = sydney_today()
+
+    if path.suffix.lower() in (".txt", ".text", ".md"):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        deals = parse_fruitopia_deals(text)
+        source = "text"
+        valid_until = parse_validity_end(text, today=today)
+    elif path.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp"):
+        from core.flyer_vision import parse_board_images
+        payload = parse_board_images([path])
+        deals = payload.get("deals") or []
+        source = "vision"
+        raw_until = payload.get("valid_until")
+        try:
+            valid_until = (date.fromisoformat(str(raw_until))
+                           if raw_until else None)
+        except ValueError:
+            valid_until = None
+    else:
+        print(f"[ingest] unsupported file type: {path.suffix}")
+        return 1
+
+    print(f"[ingest] source={source} deals={len(deals)} "
+          f"valid_until={valid_until or 'NEEDS DATE REVIEW'}")
+    for d in deals:
+        note = f" ({d['multibuy_note']})" if d.get("multibuy_note") \
+            else ""
+        print(f"   - {d['item']} — {_money(d['price'])}"
+              f"/{d['unit']}{note}")
+    if not deals:
+        print("[ingest] NO deals parsed — check the file content")
+        return 1
+    if valid_until is None:
+        print("[ingest] no validity date found — tell me the date "
+              "(e.g. 'valid until 12 September') when you reply")
+    if dry_run:
+        return 0
+
+    # Delivery: the parsed post goes to the local-deals topic so the
+    # user has a same-day record (the sheet tab rebuild stays with
+    # the Friday/daily consolidated run until the user confirms the
+    # ingest shape — TODO §6).
+    bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
+    topic_id = _env_int(LOCAL_DEALS_TOPIC_ENV)
+    lines = [f"📥 {code} board — {len(deals)} items "
+             f"(valid until {valid_until or '?'}):"]
+    for d in deals:
+        note = f" ({d['multibuy_note']})" if d.get("multibuy_note") \
+            else ""
+        lines.append(f"• {d['item']} — {_money(d['price'])}"
+                     f"/{d['unit']}{note}")
+    receipt = _send_message(bot_token, TELEGRAM_CHAT_ID,
+                            "\n".join(lines),
+                            thread_id=topic_id or TELEGRAM_CHAT_ID)
+    if not receipt.get("ok"):
+        print("[ingest] telegram delivery failed")
+    return 0
+
+
 def friday_gate_open(now: datetime | None = None) -> bool:
     """True iff now is Friday 05:00-05:59 Sydney AND not yet fired.
 
@@ -120,7 +437,7 @@ def friday_gate_open(now: datetime | None = None) -> bool:
     Returns:
         True when the Friday send window is open for today.
     """
-    now_syd = (now or datetime.now()).astimezone(
+    now_syd = (now or sydney_now()).astimezone(
         ZoneInfo(SYDNEY_TZ))
     if now_syd.weekday() != 4 or now_syd.hour != 5:
         return False
@@ -135,7 +452,7 @@ def friday_gate_mark_fired(now: datetime | None = None) -> None:
     Args:
         now: injectable clock (tests); defaults to real now.
     """
-    now_syd = (now or datetime.now()).astimezone(
+    now_syd = (now or sydney_now()).astimezone(
         ZoneInfo(SYDNEY_TZ))
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     STATE_PATH.write_text(
@@ -679,7 +996,7 @@ def render_post1(results: list[MatchResult], friday_date: str) -> str:
         return "No local standouts this week"
 
     lines: list[str] = [
-        f"🚨 LOCAL STANDOUTS — Fri {friday_date} (Mt Druitt)"]
+        f"🚨 LOCAL STANDOUTS — {friday_date} (Mt Druitt)"]
     show = standouts + suppressed
     seen_stores: list[str] = []
     for r in show:
@@ -772,7 +1089,7 @@ def render_post2_blocks(results, friday_date) -> list[str]:
             active_stores.append(s)
     missing = [s for s in STORES if s not in active_stores]
 
-    intro = [f"🛒 LOCAL BOARDS — Fri {friday_date} (Mt Druitt)"]
+    intro = [f"🛒 LOCAL BOARDS — {friday_date} (Mt Druitt)"]
     intro += [f"⚠️ No prices found this week: {s['name']} "
               f"(no new board)" for s in missing]
     if any(r.multibuy_note for r in results):
@@ -941,7 +1258,7 @@ def _write_first_fire_receipt(receipts: list[dict], route: str) -> None:
     if not oks:
         return
     payload = {
-        "fired_at": datetime.now().astimezone().isoformat(
+        "fired_at": sydney_now().isoformat(
             timespec="seconds"),
         "route": route,
         "messages": [{"message_id": r.get("message_id"),
@@ -1040,8 +1357,73 @@ def provision_local_deals_topic(bot_token: str = "") -> dict:
     return result
 
 
+def _process_store_timeline(store: dict, run_dir: Path, today_syd
+                            ) -> list[dict]:
+    """Timeline pipeline: last-3 posts, text-first, future-only.
+
+    The user's standing rule (TODO Task 2): each store's LAST 3
+    posts are in scope; only posts whose validity date is in the
+    FUTURE (Sydney) are reported. A post with no date lands in the
+    needs-date-review bucket — printed for the user, never silently
+    included (§2). Undated image-only posts may still be rescued by
+    a vision-parsed valid_until.
+
+    Args:
+        store: STORES entry (pipeline == "timeline").
+        run_dir: per-run flyer directory.
+        today_syd: Sydney date.
+
+    Returns:
+        Deal dicts enriched with store_key/store_name/post_ref.
+
+    Raises:
+        FetchUnavailable: render failed or zero in-scope deals.
+    """
+    from extractors.fb_flyer_fetch import FetchUnavailable
+    from extractors.deal_text import filter_recent_posts
+    from extractors.fb_timeline_fetch import fetch_timeline_posts
+
+    posts = fetch_timeline_posts(store, max_posts=3)
+    kept, expired, needs_review = filter_recent_posts(
+        posts, today=today_syd)
+    for post, end in expired:
+        print(f"[local-deals] {store['key']}: post {post.post_ref} "
+              f"expired {end} (Sydney) — dropped")
+    for post in needs_review:
+        print(f"[local-deals] {store['key']}: post {post.post_ref} "
+              f"has NO date in text — needs date review, excluded")
+    deals: list[dict] = []
+    for post, _end in kept:
+        post_deals, source, vision_until = extract_post_deals(
+            post, run_dir, store["key"])
+        if source == "vision" and vision_until is not None \
+                and vision_until < today_syd:
+            print(f"[local-deals] {store['key']}: post "
+                  f"{post.post_ref} board expired {vision_until} "
+                  f"(vision date) — dropped")
+            continue
+        for deal in post_deals:
+            deals.append({**deal,
+                          "store_key": store["key"],
+                          "store_name": store["name"],
+                          "post_ref": post.post_ref,
+                          "source": source})
+    if not deals:
+        raise FetchUnavailable(
+            "no in-scope deals from timeline (last 3 posts)")
+    return deals
+
+
 def _process_store(store: dict, run_dir: Path, today_syd) -> list[dict]:
-    """One store: fetch -> per-post vision -> freshness filter.
+    """One store: fetch -> per-post extraction -> freshness filter.
+
+    Two pipelines (TODO Tasks 2-4a):
+      - "timeline" (fruitopia): last-3 timeline posts, text-first
+        per-post extraction (vision only for image-only posts),
+        Sydney validity filter; undated posts are printed as
+        needs-review and EXCLUDED (never silently included).
+      - "photos" (others until their rebuild): the legacy photos-tab
+        + vision path, unchanged.
 
     Raises (FetchUnavailable / VisionUnavailable) on total failure —
     the caller records the store as failed (⚠️ line, exit code).
@@ -1055,6 +1437,9 @@ def _process_store(store: dict, run_dir: Path, today_syd) -> list[dict]:
     Returns:
         Deal dicts enriched with store_key/store_name/post_ref.
     """
+    if store.get("pipeline") == "timeline":
+        return _process_store_timeline(store, run_dir, today_syd)
+
     from extractors.fb_flyer_fetch import fetch_store_posts
     from core.flyer_vision import parse_board_images
 
@@ -1078,6 +1463,48 @@ def _process_store(store: dict, run_dir: Path, today_syd) -> list[dict]:
         from extractors.fb_flyer_fetch import FetchUnavailable
         raise FetchUnavailable("no deals parsed from any post")
     return deals
+
+
+def extract_post_deals(post, run_dir, store_key: str
+                       ) -> tuple[list[dict], str, "date | None"]:
+    """Text-first per-post extraction (TODO Task 3).
+
+    Branch rule (the Fruitopia lesson): parse the post TEXT first;
+    ONLY a post with no price text falls back to vision — and then on
+    the post's OWN timeline-attributed images, never the photos tab.
+    Vision's parsed valid_until (often absent) rides along so the
+    caller can freshness-check an image-only post.
+
+    Args:
+        post: TimelinePost (text + image_urls).
+        run_dir: per-run flyer directory for downloaded images.
+        store_key: store key (filename prefix).
+
+    Returns:
+        tuple: (deals, source, valid_until) with source
+        "text" | "vision" | "none"; valid_until is a parsed date or
+        None (None means "no date known" — caller asks the user).
+    """
+    from extractors.deal_text import parse_fruitopia_deals
+
+    deals = parse_fruitopia_deals(post.text)
+    if deals:
+        return deals, "text", None
+    if not post.image_urls:
+        return [], "none", None
+    from core.flyer_vision import parse_board_images
+    from extractors.fb_timeline_fetch import download_post_images
+    files = download_post_images(post, run_dir, store_key)
+    if not files:
+        return [], "none", None
+    payload = parse_board_images(files)
+    raw_until = payload.get("valid_until")
+    try:
+        valid_until = (date.fromisoformat(str(raw_until))
+                       if raw_until else None)
+    except ValueError:
+        valid_until = None
+    return payload.get("deals") or [], "vision", valid_until
 
 
 def run_local_deals(stores=None, dry_run: bool = False,
@@ -1109,10 +1536,11 @@ def run_local_deals(stores=None, dry_run: bool = False,
     if not active:
         print(f"[local-deals] unknown stores: {sorted(wanted)}")
         return 2
-    today_syd = datetime.now().astimezone(
-        ZoneInfo(SYDNEY_TZ)).date()
-    friday_label = today_syd.isoformat()
-    run_dir = FLYERS_DIR / datetime.now().strftime("%Y%m%d_%H%M%S")
+    today_syd = sydney_today()
+    # §5 bug fix: the report headers carry the RUN's actual Sydney
+    # weekday (render functions no longer hardcode "Fri").
+    run_label = today_syd.strftime("%a %Y-%m-%d")
+    run_dir = FLYERS_DIR / sydney_now().strftime("%Y%m%d_%H%M%S")
 
     # Dunya site catalogue loads ONCE before the fan-out (D14).
     site_catalogues: dict[str, list[dict]] = {}
@@ -1170,8 +1598,8 @@ def run_local_deals(stores=None, dry_run: bool = False,
             print(f"[local-deals] tab rebuild failed: "
                   f"{exc.__class__.__name__}")
 
-    post1 = render_post1(results, friday_label)
-    blocks = render_post2_blocks(results, friday_label)
+    post1 = render_post1(results, run_label)
+    blocks = render_post2_blocks(results, run_label)
     if dry_run or not send_telegram:
         print(post1)
         print()
