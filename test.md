@@ -629,3 +629,90 @@ ddmmyy + HHMM where the time is the ALERT time, never the post's.
 | PASS | Alert-time pin | fixed clock, post 20:15 prev day | code FRU0709260907 (alert 09:07), "When posted: Sun 06 Sep, 08:15 PM" |
 | PASS | Missed-window scenario | two posts between scans | both reported: FRU0709261507 + FRU0709261507_2 |
 | PASS | Legacy resolution | ingest FRUT / notified {"p1": "FRUT"} | resolves → fruitopia, pending codes cleared |
+
+## Round 2026-09-07 (b) — R19 daily-scan: heartbeat, standout-at-ingest, multi-post alerts, dual-path ingest
+
+User asks: (1) a finished scan with no new deals must still message
+"no new deals" — silence is indistinguishable from broken; (2) does
+the >20% master-sheet check fire when a saved post is ingested;
+(3) Fruitopia posts text + pic — can the text file alone be dropped
+in; (4) does the saved file's NAME matter; (5) alerts must show the
+FULL Windows folder path for copy-paste; (6) do alerts say how many
+posts are pending and what happens with different validity periods;
+(7) the VPS inbox is not the PC inbox — fix the sandbox/PC gap.
+
+### Answers → changes
+
+- (1) HEARTBEAT (`run_daily_scan`): a completed scan with nothing new
+  sends one "✅ Local deals scan done — no new posts …" message;
+  partial fetch failures add "⚠️ Could not check: <names>"; total
+  failure sends a ⚠️ could-not-check-any message. Off-window ticks
+  and already-serviced windows stay silent (unchanged).
+- (2) STANDOUT AT INGEST (`ingest_code`): the summary message now
+  includes render_post1 of match_and_detect over the ingested deals
+  vs Products_Master (same >20% machinery as the Friday report);
+  degrades to "⚠️ Standout check failed" on master-read errors.
+- (3) YES — already supported (.txt/.text/.md → `parse_fruitopia_deals`,
+  no vision call); docs now say a text copy is the PREFERRED path.
+- (4) File NAME is free; only the extension matters (.txt/.text/.md
+  text parser; .jpg/.jpeg/.png/.webp vision; hidden files skipped).
+- (5) Alerts now carry the full copy-paste path
+  (`C:\Users\User.DESKTOP-R2G441H\Documents\AI related\grocery-price-tracker\data\local_deals_inbox\<CODE>`)
+  via the new `USER_INBOX_ROOT_WIN` constant (scanner runs on the
+  VPS but the user saves on Windows).
+- (6) Multi-post scans add "📍 N new posts from this shop in this
+  scan: <codes>" to each alert; every post keeps its OWN "Valid
+  until" (per-post in alert, per-file in summary + post log). Ingest
+  now merges REVERSED (newest file last) so the NEWEST post's price
+  wins per item — older posts can never overwrite fresher prices.
+- (7) DUAL-PATH INGEST: the PC runs ingest itself (local .env has
+  vision/Telegram/sheet keys — `_load_env` walks up to the workspace
+  root). Local is the path for PC-saved files; the VPS inbox only
+  receives files forwarded into the Telegram topic. SKILL.md + README
+  document both; never ask the user to re-save a PC file "into the
+  sandbox". Local inbox files were ALSO scp-synced to the VPS inbox
+  so both sides match.
+
+| PASS | Local dry-run ingest (FRUT txt) | `--ingest FRUT --dry-run` on the PC | 24 items parsed by the text parser, "valid until Sun 06 Sep"; no sheet, no Telegram; rc 0 |
+| PASS | Local dry-run ingest (MERJ jpg) | `--ingest MERJ --dry-run` on the PC | 1 item via zlm-glm vision (Lamb Curry $27.99/pack); rc 0 |
+| PASS | Heartbeat (quiet scan) | patched fetch, all stores quiet | exactly 1 message, "no new posts", "✅"; rc 0 |
+| PASS | Heartbeat (partial failure) | merjan+abusalim FetchUnavailable | rc 1, heartbeat names "Could not check: …" |
+| PASS | Standout wiring | ingest with patched match_and_detect/render_post1 | summary contains the standout block; check ran once |
+| PASS | Newest-wins merge | old txt ($0.80) + new txt ($0.99) same item | sheet cell = 0.99 (newest post wins) |
+| PASS | Multi-post alerts | 2 posts between scans | per-post validity kept (12 Sep vs 19 Sep) + "📍 2 new posts …" count line |
+| PASS | Full suite | pytest grocery-price-tracker/tests/ -q | 1124 passed, 0 failed, 0 skipped |
+
+## Round 2026-09-07 (c) — R20: --set-date CLI wiring, validity row on the tab
+
+User forwards a production finding (Claw, 07:30 Sydney): the skill
+documented `--set-date`, but the CLI parser never had it, and
+`set_date_cmd` double-appended the inbox dir
+(`inbox_dir_for(code).parent / INBOX_DIRNAME / code`) so the
+needs_date file was never found — Claw applied the state change
+manually. User also asks for a per-shop "prices valid until" place
+on the sheet (Dunya SITE column excluded — live prices).
+
+### Changes
+
+- `grocery_price_cli.py`: `--set-date CODE FILE DATE` (nargs=3) and
+  `--post-log CODE` wired into the local-deals subparser + dispatch.
+- `core/local_deals.py`:
+  - `set_date_cmd` path fix: `inbox_dir_for(code) / "needs_date" |
+    / "processed"` (double-append removed — Claw's diagnosis
+    confirmed and fixed).
+  - Tab row 2 = "Prices valid until": `rebuild_tab` writes the
+    canonical row (Dunya site column = "n/a (live site)") and
+    freezes rows 1-2; `merge_store_tab` inserts the row for
+    pre-existing tabs and stamps the ingested store's column with
+    the NEWEST dated post's period (`valid until Sat 12 Sep`
+    format); `sync_dunya_site` never stamps (site column).
+  - `ingest_code` picks the newest dated file's validity and passes
+    it through.
+- test_local_deals.py: header-freeze contract updated to 2 rows.
+
+| PASS | Parser flags | `--set-date MERJ board.jpg "12 September"` / `--post-log FRUT` | parse + dest correct |
+| PASS | set-date path fix | needs_date file in tmp inbox | file archived to processed/, post log entry 2026-09-12 |
+| PASS | Merge validity stamp | fruitopia valid_until 2026-09-12 | row 2 E = "valid until Sat 12 Sep"; B = "n/a (live site)"; Merjan blank |
+| PASS | Rebuild validity row | rebuild_tab + validity dict | row 2 written, stamp placed, frozen = 2 |
+| PASS | Ingest stamps newest dated | old 12 Sep + new 19 Sep files | row 2 = "valid until Sat 19 Sep" |
+| PASS | Full suite | pytest grocery-price-tracker/tests/ -q | 1128 passed, 0 failed, 0 skipped |

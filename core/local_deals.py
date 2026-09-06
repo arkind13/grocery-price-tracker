@@ -28,6 +28,12 @@ SCAN_WINDOWS = (5, 15)          # Sydney hours: 05:00 and 15:00
 INBOX_DIRNAME = "local_deals_inbox"
 INBOX_DIR = (Path(__file__).resolve().parent.parent / "data"
              / INBOX_DIRNAME)
+# The scanner runs on the VPS, but the USER saves inbox files on
+# Windows — notifications carry this full copy-paste path
+# (user rule 2026-09-07).
+USER_INBOX_ROOT_WIN = ("C:\\Users\\User.DESKTOP-R2G441H\\Documents"
+                       "\\AI related\\grocery-price-tracker\\data"
+                       "\\local_deals_inbox")
 
 # Butchery comparison domain — the SAME label set as
 # HALAL_CHECK_CATEGORIES (spec §8.4; unified in step S23).
@@ -192,6 +198,12 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
     _2/_3 suffix). 'ingest CODE' completes the code; 'ignore CODE'
     retires it.
 
+    HEARTBEAT (user rule 2026-09-07): a completed scan with nothing
+    new sends one "✅ ... no new posts" message (with a could-not-
+    check note when a store fetch failed) — silence never means
+    broken. Off-window ticks and already-serviced windows still stay
+    fully silent.
+
     Args:
         dry_run: print instead of sending Telegram; state untouched.
         send: send the notification via Telegram (topic 594).
@@ -347,15 +359,49 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
         _save_scan_state(state)
 
     for store, post, code, detail in new_posts:
+        shop_codes = [c for s, _p, c, _d in new_posts
+                      if s["key"] == store["key"]]
         text = (
             f"🆕 New post from {store['name']} (code: {code})\n"
             f"\n{detail}\n"
             f"\nWant these prices?\n"
             f"  1. Save the post's picture or text into:\n"
-            f"     grocery-price-tracker\\data\\{INBOX_DIRNAME}"
-            f"\\{code}\n"
+            f"     {USER_INBOX_ROOT_WIN}\\{code}\n"
             f"  2. Then send me:  {code}\n"
             f"\nNot interested?  Just send:  ignore {code}")
+        if len(shop_codes) > 1:
+            # Multi-post scan: say how many, and list every code so
+            # the user never loses track of pending posts (each post
+            # keeps its OWN validity date above).
+            text += (f"\n📍 {len(shop_codes)} new posts from this "
+                     f"shop in this scan: {', '.join(shop_codes)}")
+        print(text)
+        if send and not dry_run:
+            bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
+            topic_id = _env_int(LOCAL_DEALS_TOPIC_ENV)
+            receipt = _send_message(bot_token, TELEGRAM_CHAT_ID,
+                                    text, thread_id=topic_id
+                                    or TELEGRAM_CHAT_ID)
+            if not receipt.get("ok"):
+                print("[daily-scan] telegram delivery failed")
+
+    if not new_posts:
+        # Heartbeat (user rule 2026-09-07): a finished scan with
+        # nothing to report must never be silent — the user cannot
+        # tell "all clear" from "broken" otherwise.
+        names = {s["key"]: s["name"] for s in STORES}
+        checked = f"{now_syd:%a %d %b, %I:%M %p}"
+        bad = [names[k] for k in failures if k in names]
+        if failures and len(failures) == len(STORES):
+            text = (f"⚠️ Local deals scan could not check any shop "
+                    f"({checked} Sydney) — will retry at the next "
+                    f"window")
+        else:
+            text = (f"✅ Local deals scan done — no new posts from "
+                    f"any of the {len(STORES)} shops ({checked} "
+                    f"Sydney)")
+            if bad:
+                text += f"\n⚠️ Could not check: {', '.join(bad)}"
         print(text)
         if send and not dry_run:
             bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
@@ -499,14 +545,13 @@ def set_date_cmd(code: str, filename: str, date_text: str) -> int:
         print(f"[set-date] could not read a date from: {date_text}")
         return 1
 
-    needs = inbox_dir_for(code).parent / INBOX_DIRNAME / code \
-        / "needs_date"
+    folder = inbox_dir_for(code)
+    needs = folder / "needs_date"
     src = needs / filename
     if not src.exists():
         print(f"[set-date] {filename} not in needs_date/")
         return 1
-    done = inbox_dir_for(code).parent / INBOX_DIRNAME / code \
-        / "processed"
+    done = folder / "processed"
     done.mkdir(parents=True, exist_ok=True)
     src.replace(done / filename)
 
@@ -659,9 +704,40 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
     # "dunya_fb"); the site column is --dunya-site's.
     col_store = ("dunya_fb" if store["key"] == "dunya"
                  else store["key"])
-    rows = merge_store_tab(worksheet, col_store, all_vision_deals)
+    # Files are newest-first; reversed so the NEWEST post's deal wins
+    # when two posts list the same item (older posts never overwrite
+    # fresher prices on the sheet). Validity stays per post/file in
+    # the post log + summary — never merged away.
+    newest_valid = next((b["valid_until"] for b in batches
+                         if b["valid_until"]), None)
+    rows = merge_store_tab(worksheet, col_store,
+                           list(reversed(all_vision_deals)),
+                           valid_until=newest_valid)
     print(f"[ingest] Local_Deals tab updated ({rows} rows incl. "
           f"headers)")
+
+    # Standout check vs the master sheet — the SAME >20% machinery as
+    # the Friday/on-demand report (user rule 2026-09-07: the alert
+    # must show up at ingest time, not only in the report).
+    standout_block: list[str]
+    try:
+        from core.sheets_client import connect_worksheet
+        master_rows = _load_master_rows(connect_worksheet())
+        scan_rows = []
+        for b in batches:
+            for d in b["deals"]:
+                row = dict(d)
+                row["store_key"] = store["key"]
+                scan_rows.append(row)
+        results = match_and_detect(scan_rows, master_rows, {})
+        standout_block = render_post1(
+            results,
+            sydney_now().strftime("%a %Y-%m-%d")).splitlines()
+    except Exception as exc:      # noqa: BLE001 — degrade cleanly
+        print(f"[ingest] standout check failed: "
+              f"{exc.__class__.__name__}")
+        standout_block = ["⚠️ Standout check failed — run the "
+                          "local-deals report later"]
 
     bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
     topic_id = _env_int(LOCAL_DEALS_TOPIC_ENV)
@@ -674,6 +750,8 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
                 if d.get("multibuy_note") else ""
             lines.append(f"• {d['item']} — {_money(d['price'])}"
                          f"/{d['unit']}{note}")
+    lines.append("")
+    lines.extend(standout_block)
     receipt = _send_message(bot_token, TELEGRAM_CHAT_ID,
                             "\n".join(lines)[:4000],
                             thread_id=topic_id or TELEGRAM_CHAT_ID)
@@ -947,18 +1025,32 @@ def build_rows(all_store_deals: dict) -> dict:
 
 
 def rebuild_tab(worksheet, rows_by_section: dict,
-                store_keys: list[str]) -> None:
-    """Wipe + rewrite the tab (idempotent). Freeze row 1. ONE batch
-    update A1:G{N} (gspread update(values=..., range_name=...)).
+                store_keys: list[str],
+                validity: dict[str, str] | None = None) -> None:
+    """Wipe + rewrite the tab (idempotent). Freeze the header +
+    validity rows. ONE batch update A1:G{N}.
+
+    Row 2 is the "Prices valid until" row (user rule 2026-09-07):
+    one validity stamp per shop column; the Dunya SITE column is
+    marked n/a (site prices are live, no validity period). Values
+    are blank after a rebuild unless `validity` supplies
+    {store_key: text} — ingest stamps its column on every run.
 
     Args:
         worksheet: gspread/Fake worksheet handle for Local_Deals.
         rows_by_section: build_rows() output.
         store_keys: stores in THIS run (other columns stay blank).
+        validity: optional {store_key: "valid until …"} stamps.
     """
     active = {k.strip() for k in (store_keys or [])
               if k and k.strip()} or {k for k, _n in TAB_COLUMNS}
-    grid = [["Product"] + [name for _k, name in TAB_COLUMNS]]
+    grid = [["Product"] + [name for _k, name in TAB_COLUMNS],
+            ["Prices valid until", "n/a (live site)",
+             "", "", "", "", ""]]
+    for key, text in (validity or {}).items():
+        col = _column_for(key)
+        if col is not None and col != _column_for("dunya"):
+            grid[1][col] = text
     for section in SECTION_ORDER:
         section_rows = rows_by_section.get(section) or []
         if not section_rows:
@@ -971,7 +1063,7 @@ def rebuild_tab(worksheet, rows_by_section: dict,
                     row[i] = ""  # columns not in this run stay blank
             grid.append(row)
     worksheet.clear()
-    worksheet.freeze(rows=1)
+    worksheet.freeze(rows=2)
     worksheet.update(values=grid, range_name=f"A1:G{len(grid)}")
 
 
@@ -1874,6 +1966,7 @@ def _to_vision_deal(d: dict, category: str) -> dict:
 
 
 def merge_store_tab(worksheet, store_key: str, deals: list[dict],
+                    valid_until=None,
                     ) -> int:
     """Merge ONE store's deals into the existing Local_Deals tab.
 
@@ -1882,14 +1975,18 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
     read, matching Product rows (same section, same Col A text) get
     this store's column cell updated, unmatched rows are appended
     inside their section block, and the FULL grid is written back in
-    ONE batch update (same layout as rebuild_tab: header, then per
-    section a title row + item rows).
+    ONE batch update (same layout as rebuild_tab: header, "Prices
+    valid until" row, then per section a title row + item rows).
 
     Args:
         worksheet: gspread/Fake worksheet handle for Local_Deals.
         store_key: the store whose column is updated ("dunya" =
             site column, "dunya_fb" = FB specials column).
         deals: vision-schema deal dicts (see _to_vision_deal).
+        valid_until: optional datetime.date — stamped into row 2 of
+            this store's column (user rule 2026-09-07). Never
+            stamped for the Dunya SITE column (live site prices —
+            no validity period).
 
     Returns:
         int: number of grid rows written (header included).
@@ -1904,6 +2001,15 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
             for r in grid]
     if not grid or not str(grid[0][0]).strip():
         grid = [["Product"] + [name for _k, name in TAB_COLUMNS]]
+    # Canonical row 2: "Prices valid until" (insert for tabs that
+    # predate the 2026-09-07 layout).
+    if len(grid) < 2 or str(grid[1][0]).strip() != \
+            "Prices valid until":
+        grid.insert(1, ["Prices valid until", "n/a (live site)",
+                        "", "", "", "", ""])
+    if valid_until is not None and col is not None \
+            and col != _column_for("dunya"):
+        grid[1][col] = f"valid until {valid_until:%a %d %b}"
 
     for section in SECTION_ORDER:
         section_rows = rows_by_section.get(section) or []

@@ -301,7 +301,12 @@ date included. `--ingest CODE` processes the
 file dropped into `data/local_deals_inbox/<CODE>/` (image → vision,
 text → `extractors/deal_text.py` parser) and MERGES the results into
 the tab for that store only (`merge_store_tab` — other stores are
-never wiped). `--ignore CODE` retires a post. Dunya's own website
+never wiped; newest post's price wins; row 2 "Prices valid until" is
+stamped per shop, Dunya site column n/a) and the summary includes
+the >20% standout check vs Products_Master. PC-saved files are
+ingested by the LOCAL agent (the Windows inbox path is in the
+alert); the VPS inbox only receives topic-forwarded files.
+`--ignore CODE` retires a post. Dunya's own website
 (dunyabutchery.com.au WooCommerce API) syncs the Dunya column via
 `--dunya-site` and reports on-offer items plus price changes since
 the previous sync.

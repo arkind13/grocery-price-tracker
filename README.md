@@ -706,12 +706,25 @@ never silently drops a middle post):
   posted time and the validity date parsed from the post text.
   Same-minute collisions take a `_2`/`_3` suffix; pre-2026-09-07
   alerts with plain FRUT/MERJ/DUNY/ABSA codes still resolve.
-- To process a post: save its picture or text into
-  `grocery-price-tracker/data/local_deals_inbox/<CODE>/`, then run
-  `local-deals --ingest CODE` (images → vision; text → deal parser).
-  Ingest UPDATES the `Local_Deals` tab for that store only (merge —
-  other stores' rows are never wiped) and posts the summary to the
-  topic.
+- To process a post: save its picture or text into the code's inbox
+  folder on the PC (full path in the alert, e.g.
+  `C:\Users\User.DESKTOP-R2G441H\Documents\AI related\grocery-price-tracker\data\local_deals_inbox\<CODE>`)
+  and ask the local agent to ingest it (it runs
+  `grocery_price_cli.py local-deals --ingest CODE` from the workspace
+  — the PC has all needed secrets). Files forwarded into the Telegram
+  topic land in the VPS inbox and are ingested there instead. The
+  file NAME is free — only the extension matters (`.txt`/`.md` → text
+  parser, no vision; `.jpg`/`.png`/`.webp` → vision). A text copy of
+  a post is the preferred, fastest and most reliable path (Fruitopia
+  posts text + photo — the text file alone is enough). Ingest
+  UPDATES the `Local_Deals` tab for that store only (merge — other
+  stores' rows are never wiped; when several posts list the same
+  item the NEWEST post's price wins), the summary INCLUDES the >20%
+  standout check vs the master sheet, and each file keeps its OWN
+  validity period (alert, summary and post log). Tab row 2 is a
+  "Prices valid until" row — one stamp per shop column, refreshed at
+  every ingest (newest dated post wins); the Dunya site column is
+  n/a because site prices are always live.
 - `local-deals --ignore CODE` retires a notified post permanently.
 - First-ever scan of a shop reports only posts from the last
   `backfill_days` (3) days; older pages stay quiet.

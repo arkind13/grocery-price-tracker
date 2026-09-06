@@ -115,13 +115,17 @@ class TestSheetRebuild(unittest.TestCase):
         self.assertEqual(len(ws.updates), 2)
 
     def test_header_row_frozen(self):
-        """Row 1 frozen; header = Product + the 4 store names."""
+        """Rows 1-2 frozen (header + validity row); header = Product
+        + the 4 store names; row 2 = the validity labels."""
         ws = FakeWorksheet()
         self._rebuild(ws, {"dunya": [_deal()]})
-        self.assertEqual(ws.frozen, 1)
+        self.assertEqual(ws.frozen, 2)
         header = ws.updates[-1][0][0]
         self.assertEqual(header[0], "Product")
         self.assertEqual(header[1:], [n for _k, n in ld.TAB_COLUMNS])
+        validity = ws.updates[-1][0][1]
+        self.assertEqual(validity[0], "Prices valid until")
+        self.assertEqual(validity[1], "n/a (live site)")
 
     def test_section_order_fruits_butchery_other(self):
         """Sections appear FRUITS, BUTCHERY, OTHER in grid order."""

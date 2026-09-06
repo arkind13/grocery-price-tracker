@@ -509,8 +509,10 @@ class TestDailyScan(unittest.TestCase):
                     fake_fetch.ref = refs[key]
                 ld.run_daily_scan(send=True, force=True)  # new codes
         self.assertEqual(n_after_first, 4)
-        self.assertEqual(n_after_repeat, n_after_first)
-        self.assertEqual(len(sent), 8)
+        # repeat scan: nothing new -> the heartbeat is the only
+        # extra message (user rule 2026-09-07)
+        self.assertEqual(n_after_repeat, n_after_first + 1)
+        self.assertEqual(len(sent), 9)
         first = [t for t in sent if "code: FRU0709260907)" in t]
         self.assertEqual(len(first), 1)
         self.assertIn("When posted:", first[0])
@@ -544,7 +546,11 @@ class TestDailyScan(unittest.TestCase):
                 ld._save_scan_state({})
                 rc = ld.run_daily_scan(send=True, force=True)
         self.assertEqual(rc, 0)
-        self.assertEqual(sent, [])
+        # silent stores, but the scan itself is NOT silent: exactly
+        # the heartbeat (user rule 2026-09-07)
+        self.assertEqual(len(sent), 1)
+        self.assertIn("no new posts", sent[0])
+        self.assertIn("✅", sent[0])
 
     def test_ignore_marks_and_scan_skips(self):
         import tempfile as tf
@@ -581,7 +587,8 @@ class TestDailyScan(unittest.TestCase):
                                   side_effect=lambda *a, **k:
                                   sent.append(1) or {"ok": True}):
                     ld.run_daily_scan(send=True, force=True)  # quiet
-                self.assertEqual(sent, [])
+                # nothing new -> exactly the heartbeat message
+                self.assertEqual(sent, [1])
 
     def test_code_is_alert_time_not_post_time(self):
         """User rule 2026-09-07: the code stamps the ALERT (scan)
@@ -647,19 +654,20 @@ class TestDailyScan(unittest.TestCase):
                               tzinfo=_ZI("Australia/Sydney")))
 
         class _P:
-            def __init__(self, ref, created):
+            def __init__(self, ref, created, text=""):
                 self.post_ref = ref
                 self.creation_time = created
-                self.text = ""
+                self.text = text
                 self.image_urls: list = []
 
-        # ref -> seconds before the CURRENT clock it was created
-        state_refs = {"p1": 3600.0}
+        # ref -> (seconds before the CURRENT clock it was created,
+        #         post text) — newest first, as the timeline returns
+        state_refs = {"p1": (3600.0, "")}
 
         def fake_fetch(store, *, max_posts=3, **kw):
             # newest first, as the timeline returns them
-            return [_P(ref, clock.now.timestamp() - off)
-                    for ref, off in state_refs.items()]
+            return [_P(ref, clock.now.timestamp() - off, text)
+                    for ref, (off, text) in state_refs.items()]
 
         sent = []
         with tf.TemporaryDirectory() as tmp:
@@ -677,14 +685,64 @@ class TestDailyScan(unittest.TestCase):
                 ld._save_scan_state({})
                 ld.run_daily_scan(send=True, force=True)  # baseline p1
                 # Missed windows: the shop posts p3 (14:00) and p2
-                # (11:00); the 15:07 scan sees both, none reported.
+                # (11:00) with DIFFERENT validity periods; the 15:07
+                # scan sees both, none reported.
                 clock.now += _td(hours=6)                 # 15:07
-                state_refs = {"p3": 4020.0, "p2": 14820.0}
+                state_refs = {
+                    "p3": (4020.0, "Valid until 12 September"),
+                    "p2": (14820.0, "Valid until 19 September"),
+                }
                 ld.run_daily_scan(send=True, force=True)
         fru = [t for t in sent if "(code: FRU" in t]
         self.assertEqual(len(fru), 3)      # baseline + two deltas
         self.assertIn("code: FRU0709261507)", fru[1])     # p3 newest
         self.assertIn("code: FRU0709261507_2)", fru[2])   # p2 next
+        # each post keeps its OWN validity period
+        self.assertIn("Valid until: Sat 12 Sep", fru[1])
+        self.assertIn("Valid until: Sat 19 Sep", fru[2])
+        # the alert says how many posts are pending for this shop
+        self.assertIn("📍 2 new posts from this shop in this scan: "
+                      "FRU0709261507, FRU0709261507_2", fru[1])
+        self.assertIn("📍 2 new posts from this shop in this scan: "
+                      "FRU0709261507, FRU0709261507_2", fru[2])
+
+    def test_heartbeat_notes_unchecked_shops(self):
+        """Partial fetch failure: the heartbeat still fires and names
+        the shops that could not be checked."""
+        import tempfile as tf
+        from extractors.fb_flyer_fetch import FetchUnavailable
+        from core import local_deals as ld
+
+        class _P:
+            post_ref = "fresh1"
+            creation_time = 1_000_000_000   # ancient -> quiet
+            text = ""
+            image_urls: list = []
+
+        def fake_fetch(store, *, max_posts=1, **kw):
+            if store["key"] in ("merjan", "abusalim"):
+                raise FetchUnavailable("HTTP 403 (no retry)")
+            return [_P()]
+
+        sent = []
+        with tf.TemporaryDirectory() as tmp:
+            with patch.object(ld, "SCAN_STATE_PATH",
+                              Path(tmp) / "s.json"), \
+                    patch("extractors.fb_timeline_fetch."
+                          "fetch_timeline_posts",
+                          side_effect=fake_fetch), \
+                    patch.object(ld, "_send_message",
+                                 side_effect=lambda *a, **k:
+                                 sent.append(a[2] if len(a) > 2
+                                             else k.get("text", ""))
+                                 or {"ok": True}):
+                ld._save_scan_state({})
+                rc = ld.run_daily_scan(send=True, force=True)
+        self.assertEqual(rc, 1)             # partial failure
+        self.assertEqual(len(sent), 1)      # the heartbeat
+        self.assertIn("no new posts", sent[0])
+        self.assertIn("Could not check: Merjan Brothers Quality "
+                      "Meats, Abu Salim Fruit Market", sent[0])
 
 
 class TestMergeStoreTab(unittest.TestCase):
@@ -756,6 +814,49 @@ class TestMergeStoreTab(unittest.TestCase):
                      if str(r[0]).strip().startswith("Cos Lettuce"))
         self.assertTrue(idx_f < idx_l < idx_b)      # inside block
 
+    def test_merge_stamps_validity_row(self):
+        """User rule 2026-09-07: row 2 carries 'Prices valid until'
+        per shop column; the Dunya SITE column is n/a (live site)."""
+        from datetime import date as _date
+        from core import local_deals as ld
+        tab = self._FakeTab(self._existing())
+        deals = [
+            {"item": "Apples", "raw_text": "Apples 3.2",
+             "price": 3.2, "unit": "kg",
+             "price_kind": "single", "multibuy_qty": None,
+             "bulk_size": None, "category": "fruits",
+             "notes": ""},
+        ]
+        rows = ld.merge_store_tab(tab, "fruitopia", deals,
+                                  valid_until=_date(2026, 9, 12))
+        self.assertGreater(rows, 0)
+        grid = tab.grid
+        self.assertEqual(grid[1][0], "Prices valid until")
+        self.assertEqual(grid[1][1], "n/a (live site)")   # Dunya site
+        self.assertEqual(grid[1][4], "valid until Sat 12 Sep")
+        self.assertEqual(grid[1][3], "")                  # Merjan
+        # no date given -> row exists, nothing stamped
+        tab2 = self._FakeTab(self._existing())
+        ld.merge_store_tab(tab2, "fruitopia", deals)
+        self.assertEqual(tab2.grid[1][0], "Prices valid until")
+        self.assertEqual(tab2.grid[1][4], "")
+
+    def test_rebuild_tab_includes_validity_row(self):
+        """rebuild_tab writes the canonical validity row under the
+        header and stamps any provided values."""
+        from core import local_deals as ld
+        tab = self._FakeTab([])
+        ld.rebuild_tab(
+            tab, {"FRUITS": [["Apples /kg", "", "", "", 3.2, "", ""]]},
+            ["fruitopia"],
+            validity={"fruitopia": "valid until Sat 12 Sep"})
+        grid = tab.grid
+        self.assertEqual(grid[0][0], "Product")
+        self.assertEqual(grid[1][0], "Prices valid until")
+        self.assertEqual(grid[1][1], "n/a (live site)")
+        self.assertEqual(grid[1][4], "valid until Sat 12 Sep")
+        self.assertEqual(grid[1][3], "")
+
 
 class TestIngestFlow(unittest.TestCase):
     """ingest_code: newest file, sheet merge, code freed."""
@@ -799,6 +900,10 @@ class TestIngestFlow(unittest.TestCase):
                                  return_value=state), \
                     patch("core.sheets_client."
                           "connect_spreadsheet"), \
+                    patch("core.sheets_client."
+                          "connect_worksheet"), \
+                    patch.object(ld, "_load_master_rows",
+                                 return_value=[]), \
                     patch.object(ld, "ensure_local_deals_tab",
                                  return_value=self._FakeTab([])), \
                     patch.object(ld, "merge_store_tab",
@@ -812,6 +917,139 @@ class TestIngestFlow(unittest.TestCase):
         # shop's pending codes (the next alert mints a fresh one)
         self.assertNotIn("p1",
                          state["stores"]["fruitopia"]["notified"])
+
+    def test_ingest_summary_includes_standout_check(self):
+        """User rule 2026-09-07: the >20% master-sheet standout check
+        runs AT ingest — its result is part of the summary message."""
+        import tempfile as tf
+        from core import local_deals as ld
+
+        with tf.TemporaryDirectory() as tmp:
+            inbox = Path(tmp) / "FRU0709260907"
+            inbox.mkdir(parents=True)
+            (inbox / "board.txt").write_text(
+                "Valid until 12 September\n"
+                "Cos Lettuce \u2013 99\u00a2 each\n", encoding="utf-8")
+            state = {"stores": {"fruitopia": {
+                "baselined": True,
+                "notified": {"p1": "FRU0709260907"}}}}
+            sent = []
+            with patch.object(ld, "INBOX_DIR", Path(tmp)), \
+                    patch.object(ld, "SCAN_STATE_PATH",
+                                 Path(tmp) / "s.json"), \
+                    patch.object(ld, "_save_scan_state"), \
+                    patch.object(ld, "_load_scan_state",
+                                 return_value=state), \
+                    patch("core.sheets_client."
+                          "connect_spreadsheet"), \
+                    patch("core.sheets_client."
+                          "connect_worksheet"), \
+                    patch.object(ld, "_load_master_rows",
+                                 return_value=[{"name": "x"}]), \
+                    patch.object(ld, "ensure_local_deals_tab",
+                                 return_value=self._FakeTab([])), \
+                    patch.object(ld, "merge_store_tab",
+                                 return_value=5), \
+                    patch.object(ld, "match_and_detect",
+                                 return_value=[object()]) as mad, \
+                    patch.object(ld, "render_post1",
+                                 return_value="🚨 STANDOUT TEST "
+                                              "LINE"), \
+                    patch.object(ld, "_send_message",
+                                 side_effect=lambda *a, **k:
+                                 sent.append(a[2] if len(a) > 2
+                                             else k.get("text", ""))
+                                 or {"ok": True}):
+                rc = ld.ingest_code("FRU0709260907")
+        self.assertEqual(rc, 0)
+        mad.assert_called_once()            # the check ran
+        self.assertEqual(len(sent), 1)
+        self.assertIn("🚨 STANDOUT TEST LINE", sent[0])
+
+    def test_multi_file_merge_newest_post_wins(self):
+        """Two posts of one shop in the folder with DIFFERENT prices
+        for the same item: the NEWEST post's price ends up on the
+        sheet (older posts never overwrite fresher prices)."""
+        import os as _os
+        import tempfile as tf
+        import time as _time
+        from core import local_deals as ld
+
+        tab = self._FakeTab([
+            ["Product", "Dunya (site)", "Dunya FB specials",
+             "Merjan Brothers Quality Meats",
+             "Fruitopia Mt Druitt", "Abu Salim Fruit Market",
+             "Comments"],
+        ])
+        with tf.TemporaryDirectory() as tmp:
+            inbox = Path(tmp) / "FRU0709260907"
+            inbox.mkdir(parents=True)
+            old = inbox / "old_post.txt"
+            new = inbox / "new_post.txt"
+            old.write_text(
+                "Valid until 12 September\n"
+                "Cos Lettuce \u2013 80\u00a2 each\n", encoding="utf-8")
+            new.write_text(
+                "Valid until 19 September\n"
+                "Cos Lettuce \u2013 99\u00a2 each\n", encoding="utf-8")
+            # make mtimes explicit: old older than new
+            t = _time.time()
+            _os.utime(old, (t - 120, t - 120))
+            _os.utime(new, (t, t))
+            state = {"stores": {"fruitopia": {
+                "baselined": True,
+                "notified": {"p1": "FRU0709260907"}}}}
+            with patch.object(ld, "INBOX_DIR", Path(tmp)), \
+                    patch.object(ld, "SCAN_STATE_PATH",
+                                 Path(tmp) / "s.json"), \
+                    patch.object(ld, "_save_scan_state"), \
+                    patch.object(ld, "_load_scan_state",
+                                 return_value=state), \
+                    patch("core.sheets_client."
+                          "connect_spreadsheet"), \
+                    patch("core.sheets_client."
+                          "connect_worksheet"), \
+                    patch.object(ld, "_load_master_rows",
+                                 return_value=[]), \
+                    patch.object(ld, "ensure_local_deals_tab",
+                                 return_value=tab), \
+                    patch.object(ld, "_send_message",
+                                 return_value={"ok": True}):
+                rc = ld.ingest_code("FRU0709260907")
+        self.assertEqual(rc, 0)
+        lettuce = next(r for r in tab.grid
+                       if r and str(r[0]).strip().startswith(
+                           "Cos Lettuce"))
+        self.assertEqual(lettuce[4], 0.99)  # NEWEST post's price
+        # validity stamp = the NEWEST dated file's period
+        self.assertEqual(tab.grid[1][4],
+                         "valid until Sat 19 Sep")
+
+    def test_set_date_records_and_archives(self):
+        """--set-date: fixes the double-appended inbox path (2026-09-07
+        production gap) — the needs_date file is found, dated, and
+        archived to processed/."""
+        import tempfile as tf
+        from core import local_deals as ld
+
+        with tf.TemporaryDirectory() as tmp:
+            needs = Path(tmp) / "FRUT" / "needs_date"
+            needs.mkdir(parents=True)
+            (needs / "board.txt").write_text("x", encoding="utf-8")
+            with patch.object(ld, "INBOX_DIR", Path(tmp)), \
+                    patch.object(ld, "POST_LOG_PATH",
+                                 Path(tmp) / "log.json"):
+                rc = ld.set_date_cmd("FRUT", "board.txt",
+                                     "12 September")
+                self.assertEqual(rc, 0)
+                processed = list((Path(tmp) / "FRUT" / "processed")
+                                 .iterdir())
+                self.assertEqual([p.name for p in processed],
+                                 ["board.txt"])
+                entries = [e for e in ld._load_post_log()
+                           if e.get("code") == "FRUT"]
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["valid_until"], "2026-09-12")
 
 
 class TestDunyaSiteSync(unittest.TestCase):
@@ -1007,8 +1245,8 @@ class TestScanWindowsAndCutoff(unittest.TestCase):
                 ld.run_daily_scan(send=True, force=True)
                 n3 = len(sent)
         self.assertEqual(n1, 4)      # backfill: one per store
-        self.assertEqual(n2, n1)     # pre-alert post: silent
-        self.assertEqual(n3, n1 + 4) # between-alerts post: notified
+        self.assertEqual(n2, n1 + 1) # pre-alert post silent -> heartbeat
+        self.assertEqual(n3, n1 + 5) # 4 between-alerts + prior heartbeat
 
 
 if __name__ == "__main__":
