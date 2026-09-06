@@ -547,3 +547,38 @@ user must confirm the 24-deal list (and the anniversary post = the
 "5 & 6 September" catalogue — TODO's posts (a) and (b) are ONE post)
 before 4b Merjan / 4c Dunya / 4d Abu Salim start. VPS redeploy is
 NOT done (TODO §7 comes after store verifications).
+
+## Round 2026-09-06, ~12:35 — live detector run + user-directed fixes
+
+- **Cadence fixed:** cron tick reduced from every-15-min to hourly
+  (`7 * * * *`); off-window ticks now exit BEFORE contacting
+  Facebook (zero credits, zero blocking risk — the scan itself only
+  fires 05:00-05:59 and 15:00-15:59 Sydney, once per window).
+  Manual runs need `--daily-scan --force`.
+- **Duplicates root-caused:** my local backfill and the VPS cron
+  each kept their own seen-state → double notifications. Fixed:
+  scans are VPS-only (single state owner); per-post codes (FRUT,
+  FRUT_1, …) name exactly which post each message is about.
+- **Between-alerts cutoff rule implemented (user rule):** each scan
+  records a Sydney cutoff; ongoing scans report only posts CREATED
+  after it. Unit-tested (pre-alert post silent, post-alert notified).
+- **Dunya site multibuy (user: "especially meat will have multibuy"):
+  `--dunya-site` now parses "2 FOR $30"-style offers from product
+  names into multibuy deals (effective rate in the specials column,
+  bundle note in Comments, offers flagged vs regular). Tested with
+  "Lamb Leg Roast … 2 FOR $30".
+- **Tab rebuilt in the 7-column layout:** Product | Dunya (site) |
+  Dunya FB specials | Merjan | Fruitopia | Abu Salim | Comments —
+  101 Dunya site items, 0 duplicate rows (verified).
+- **README + PROJECT-MAP + SKILL.md updated** (detector flow, inbox,
+  codes, dunya-site sync); catalogue regen --check OK.
+
+### LIVE run (VPS, 12:35 Sydney, real Telegram to topic 594)
+
+| PASS | Run 1 — first run = last 3 days | `--daily-scan --force` (state reset first) | DUNY: Sep 3 post aged past 3 days → quiet; MERJ: Fri 04 Sep 8:20pm → notified; FRUT: Fri 04 Sep 5:06pm, valid until Sun 06 Sep → notified; ABSA: 12d old → quiet. Exit 0 |
+| PASS | Run 2 — between-alerts proof | immediate re-run | zero new messages: DUNY/ABSA "predates the last alert — outside the between-alerts window"; MERJ/FRUT "already reported". Exit 0 |
+| PASS | Full suite | pytest | 1119 passed, 0 failed, 0 skipped |
+
+Three-way sync: tracker `caf0c24`, parent `1574931` pushed; VPS
+files md5-matched (local_deals.py, CLI, shop_site_catalogue, skill,
+catalogue).
