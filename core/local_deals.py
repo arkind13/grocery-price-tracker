@@ -22,6 +22,8 @@ STATE_PATH = (Path(__file__).resolve().parent.parent / "data"
               / "local_deals_cron_state.json")
 SCAN_STATE_PATH = (Path(__file__).resolve().parent.parent / "data"
                    / "local_deals_scan_state.json")
+POST_LOG_PATH = (Path(__file__).resolve().parent.parent / "data"
+                 / "local_deals_post_log.json")
 SCAN_WINDOWS = (5, 15)          # Sydney hours: 05:00 and 15:00
 INBOX_DIRNAME = "local_deals_inbox"
 INBOX_DIR = (Path(__file__).resolve().parent.parent / "data"
@@ -150,6 +152,17 @@ def daily_scan_window(now: datetime | None = None
     return open_now, key
 
 
+def _post_snippet(text: str, limit: int = 70) -> str:
+    """First non-empty line of a post, trimmed — the visual hook
+    that lets the user recognise WHICH post a notification means."""
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if line:
+            return (line[:limit] + "…") if len(line) > limit \
+                else line
+    return "(image-only post — no text)"
+
+
 def run_daily_scan(dry_run: bool = False, send: bool = True,
                    max_posts: int = 1, backfill_days: int = 3,
                    force: bool = False) -> int:
@@ -266,7 +279,8 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
             except ValueError:
                 pass                   # bad stored cutoff -> notify
 
-        # New post: assign the next free code for this shop.
+        # New post: assign the next free code for this shop
+        # (user notation: MERJ, MERJ_01, MERJ_02, ...).
         base = store["code"]
         used = {c for c in notified.values() if c == base
                 or c.startswith(base + "_")}
@@ -274,9 +288,9 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
             code = base
         else:
             n = 0
-            while f"{base}_{n + 1}" in used:
+            while f"{base}_{n + 1:02d}" in used:
                 n += 1
-            code = f"{base}_{n + 1}"
+            code = f"{base}_{n + 1:02d}"
 
         posted_line = "when posted: unknown"
         if newest.creation_time:
@@ -289,6 +303,7 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
                       if valid_end
                       else "Valid until: not written in the post — "
                            "I will ask you for the date")
+        snippet_line = f"Post starts with: \"{_post_snippet(newest.text)}\""
 
         if not baselined and age_days > backfill_days:
             print(f"[daily-scan] {store['key']}: newest post is "
@@ -298,7 +313,8 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
 
         seen["notified"] = {**notified, newest.post_ref: code}
         new_posts.append((store, newest, code,
-                          f"{posted_line}\n{valid_line}"))
+                          f"{posted_line}\n{valid_line}\n"
+                          f"{snippet_line}"))
         print(f"[daily-scan] {store['key']}: new post -> code "
               f"{code}")
 
@@ -380,6 +396,94 @@ def ignore_post(code: str) -> int:
     return 0
 
 
+def _load_post_log() -> list:
+    """Read local_deals_post_log.json ([] when missing/corrupt)."""
+    try:
+        return json.loads(POST_LOG_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
+def _save_post_log(entries: list) -> None:
+    POST_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    POST_LOG_PATH.write_text(json.dumps(entries, indent=2),
+                             encoding="utf-8")
+
+
+def post_log_cmd(code: str) -> int:
+    """'--post-log CODE' — show the remembered posts for a shop:
+    file, when ingested, validity date (the pipeline's memory)."""
+    code = code.strip().upper()
+    entries = [e for e in _load_post_log() if e.get("code") == code]
+    if not entries:
+        print(f"[post-log] {code}: nothing recorded yet")
+        return 1
+    print(f"[post-log] {code}: {len(entries)} post(s) on record")
+    for e in entries[-10:]:
+        print(f"   {e.get('file')} | ingested {e.get('ingested_at')}"
+              f" | valid until {e.get('valid_until') or 'UNKNOWN'}"
+              f" | {e.get('items')} items")
+    return 0
+
+
+def set_date_cmd(code: str, filename: str, date_text: str) -> int:
+    """'--set-date CODE FILE DATE' — record a validity date for a
+    pasted post whose board didn't show one, and archive the file.
+
+    Args:
+        code: the shop code (FRUT, FRUT_1, ...).
+        filename: the file name inside needs_date/.
+        date_text: e.g. "2026-09-12" or "12 September".
+    """
+    from core.sydney_time import sydney_today
+    from extractors.deal_text import parse_validity_end
+
+    code = code.strip().upper()
+    base = code.split("_")[0]
+    store = next((s for s in STORES if s.get("code") == base), None)
+    if store is None:
+        print(f"[set-date] unknown code: {code}")
+        return 1
+    valid_until = parse_validity_end("valid until " + date_text,
+                                     today=sydney_today())
+    if valid_until is None:
+        parsed = None
+        try:
+            parsed = date.fromisoformat(date_text.strip())
+        except ValueError:
+            pass
+        valid_until = parsed
+    if valid_until is None:
+        print(f"[set-date] could not read a date from: {date_text}")
+        return 1
+
+    needs = inbox_dir_for(code).parent / INBOX_DIRNAME / code \
+        / "needs_date"
+    src = needs / filename
+    if not src.exists():
+        print(f"[set-date] {filename} not in needs_date/")
+        return 1
+    done = inbox_dir_for(code).parent / INBOX_DIRNAME / code \
+        / "processed"
+    done.mkdir(parents=True, exist_ok=True)
+    src.replace(done / filename)
+
+    entries = _load_post_log()
+    for e in entries:
+        if e.get("code") == code and e.get("file") == filename:
+            e["valid_until"] = valid_until.isoformat()
+            break
+    else:
+        entries.append({"code": code, "file": filename,
+                        "valid_until": valid_until.isoformat(),
+                        "ingested_at": sydney_now().isoformat(
+                            timespec="seconds"), "items": None})
+    _save_post_log(entries)
+    print(f"[set-date] {filename}: valid until "
+          f"{valid_until:%a %d %b} recorded and archived")
+    return 0
+
+
 def inbox_dir_for(code: str) -> Path:
     """The per-code inbox folder, created on demand."""
     d = INBOX_DIR / code.strip().upper()
@@ -389,28 +493,40 @@ def inbox_dir_for(code: str) -> Path:
 
 def _newest_inbox_file(folder: Path) -> Path | None:
     """Newest non-hidden file in the folder (mtime), or None."""
+    files = _all_inbox_files(folder)
+    return files[0] if files else None
+
+
+def _all_inbox_files(folder: Path) -> list[Path]:
+    """Every non-hidden file in the folder, newest first.
+
+    The user may paste ALL of a shop's recent post images at once
+    (e.g. Merjan made 5 posts in 3 days) — ingest processes every
+    one of them, one vision call per image, in a single command.
+    """
     files = [p for p in folder.iterdir()
              if p.is_file() and not p.name.startswith(".")]
-    return max(files, key=lambda p: p.stat().st_mtime) if files \
-        else None
+    return sorted(files, key=lambda p: p.stat().st_mtime,
+                  reverse=True)
 
 
 def ingest_code(code: str, dry_run: bool = False) -> int:
-    """Process the newest file in data/local_deals_inbox/<CODE>/.
+    """Process EVERY file in data/local_deals_inbox/<CODE>/.
 
-    The user copies a post's content into the inbox and replies with
-    the code. Text files (.txt/.text/.md) run through the deal-line
-    parser; images (.jpg/.jpeg/.png/.webp) through the vision chain.
-    On success the Local_Deals tab is UPDATED for this store only
-    (other stores' rows untouched — merge, not wipe) and a reader-
-    friendly summary is posted to the local-deals topic.
+    The user copies a shop's post content into the inbox and replies
+    with the code — ALL files are processed, newest first (one vision
+    call per image; text files through the deal-line parser), so a
+    shop with several posts is one command. On success the
+    Local_Deals tab is UPDATED for this store only (merge — other
+    stores' rows untouched) and one combined summary is posted to
+    the local-deals topic.
 
     Args:
         code: the post's code from the notification (FRUT, FRUT_1...).
         dry_run: parse and print only; no sheet write, no Telegram.
 
     Returns:
-        int: 0 processed, 1 no file / no deals / bad code.
+        int: 0 processed, 1 nothing readable / bad code.
     """
     from extractors.deal_text import (
         parse_fruitopia_deals, parse_validity_end,
@@ -425,53 +541,72 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
         print(f"[ingest] unknown code: {code}")
         return 1
     folder = inbox_dir_for(code)
-    path = _newest_inbox_file(folder)
-    if path is None:
+    files = _all_inbox_files(folder)
+    if not files:
         print(f"[ingest] no file in {folder}")
         return 1
-    print(f"[ingest] {code}: processing {path.name}")
+    print(f"[ingest] {code}: processing {len(files)} file(s)")
     today = sydney_today()
 
-    if path.suffix.lower() in (".txt", ".text", ".md"):
-        text = path.read_text(encoding="utf-8", errors="replace")
-        deals = parse_fruitopia_deals(text)
-        source = "text"
-        valid_until = parse_validity_end(text, today=today)
-    elif path.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp"):
-        from core.flyer_vision import parse_board_images
-        payload = parse_board_images([path])
-        deals = payload.get("deals") or []
-        source = "vision"
-        raw_until = payload.get("valid_until")
-        try:
-            valid_until = (date.fromisoformat(str(raw_until))
-                           if raw_until else None)
-        except ValueError:
-            valid_until = None
-    else:
-        print(f"[ingest] unsupported file type: {path.suffix}")
-        return 1
-
-    if not deals:
-        print(f"[ingest] I could not read any prices from "
-              f"{path.name} — check the file and try again")
-        return 1
-
-    print(f"[ingest] read {len(deals)} items "
-          f"({source}; valid until {valid_until or 'UNKNOWN'})")
-    for d in deals:
-        note = f" ({d['multibuy_note']})" if d.get("multibuy_note") \
-            else ""
-        print(f"   - {d['item']} — {_money(d['price'])}"
-              f"/{d['unit']}{note}")
-    if valid_until is None:
-        print("[ingest] no validity date found — reply with the date "
-              "(e.g. 'valid until 12 September') and I will record it")
-
-    # Convert to the sheet schema and update the Local_Deals tab for
-    # THIS store only (merge — other stores' rows are untouched).
+    all_vision_deals: list[dict] = []
+    batches: list[dict] = []     # per-file summaries
     category = _store_kind(store["key"]) or "other"
-    vision_deals = [_to_vision_deal(d, category) for d in deals]
+    for path in files:
+        try:
+            if path.suffix.lower() in (".txt", ".text", ".md"):
+                text = path.read_text(encoding="utf-8",
+                                      errors="replace")
+                deals = parse_fruitopia_deals(text)
+                source = "text"
+                valid_until = parse_validity_end(text, today=today)
+            elif path.suffix.lower() in (".jpg", ".jpeg", ".png",
+                                         ".webp"):
+                from core.flyer_vision import parse_board_images
+                payload = parse_board_images([path])
+                deals = payload.get("deals") or []
+                source = "vision"
+                raw_until = payload.get("valid_until")
+                try:
+                    valid_until = (date.fromisoformat(str(raw_until))
+                                   if raw_until else None)
+                except ValueError:
+                    valid_until = None
+            else:
+                print(f"[ingest] {path.name}: unsupported type "
+                      f"{path.suffix} — skipped")
+                continue
+        except Exception as exc:   # noqa: BLE001 — file isolation
+            print(f"[ingest] {path.name}: "
+                  f"{exc.__class__.__name__} — skipped")
+            continue
+
+        if not deals:
+            print(f"[ingest] {path.name}: 0 prices read — skipped")
+            continue
+        valid_txt = (f"valid until {valid_until:%a %d %b}"
+                     if valid_until
+                     else "valid until — date to confirm")
+        print(f"[ingest] {path.name}: {len(deals)} items "
+              f"({source}; {valid_txt})")
+        for d in deals:
+            note = f" ({d['multibuy_note']})" \
+                if d.get("multibuy_note") else ""
+            print(f"   - {d['item']} — {_money(d['price'])}"
+                  f"/{d['unit']}{note}")
+        batches.append({"file": path.name, "deals": deals,
+                        "valid_until": valid_until,
+                        "valid_txt": valid_txt,
+                        "snippet": (
+                            _post_snippet(text)
+                            if source == "text" else
+                            ", ".join(d["item"] for d in deals[:3])
+                            + ("…" if len(deals) > 3 else ""))})
+        converted = [_to_vision_deal(d, category) for d in deals]
+        all_vision_deals.extend(converted)
+
+    if not all_vision_deals:
+        print("[ingest] nothing readable in the folder")
+        return 1
     if dry_run:
         print("[ingest] dry-run: sheet write + summary skipped")
         return 0
@@ -483,36 +618,68 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
     # "dunya_fb"); the site column is --dunya-site's.
     col_store = ("dunya_fb" if store["key"] == "dunya"
                  else store["key"])
-    rows = merge_store_tab(worksheet, col_store, vision_deals)
+    rows = merge_store_tab(worksheet, col_store, all_vision_deals)
     print(f"[ingest] Local_Deals tab updated ({rows} rows incl. "
           f"headers)")
 
     bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
     topic_id = _env_int(LOCAL_DEALS_TOPIC_ENV)
-    valid_txt = (f"valid until {valid_until:%a %d %b}" if valid_until
-                 else "valid until — date to confirm")
-    lines = [f"📥 {store['name']} board saved ({len(deals)} items, "
-             f"{valid_txt}):"]
-    for d in deals:
-        note = f" ({d['multibuy_note']})" if d.get("multibuy_note") \
-            else ""
-        lines.append(f"• {d['item']} — {_money(d['price'])}"
-                     f"/{d['unit']}{note}")
+    lines = [f"📥 {store['name']} — {len(batches)} post(s) saved, "
+             f"{len(all_vision_deals)} items total:"]
+    for b in batches:
+        lines.append(f"{b['file']} ({b['valid_txt']}):")
+        for d in b["deals"]:
+            note = f" ({d['multibuy_note']})" \
+                if d.get("multibuy_note") else ""
+            lines.append(f"• {d['item']} — {_money(d['price'])}"
+                         f"/{d['unit']}{note}")
     receipt = _send_message(bot_token, TELEGRAM_CHAT_ID,
-                            "\n".join(lines),
+                            "\n".join(lines)[:4000],
                             thread_id=topic_id or TELEGRAM_CHAT_ID)
     if not receipt.get("ok"):
         print("[ingest] telegram delivery failed")
 
-    # This post is handled: free its code (the next new post from
-    # this shop reuses the base code).
+    # Archive what was processed; route unknown-validity files to
+    # needs_date/ (settled later with --set-date). Everything is
+    # remembered in the post log: file, snippet, validity, items.
+    entries = _load_post_log()
+    for b in batches:
+        sub = "processed" if b["valid_until"] else "needs_date"
+        dest_dir = folder / sub
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        src = folder / b["file"]
+        try:
+            src.replace(dest_dir / b["file"])
+        except OSError:
+            pass
+        entries.append({"code": code, "file": b["file"],
+                        "valid_until": (b["valid_until"].isoformat()
+                                        if b["valid_until"]
+                                        else None),
+                        "ingested_at": sydney_now().isoformat(
+                            timespec="seconds"),
+                        "items": len(b["deals"]),
+                        "snippet": b["snippet"],
+                        "archived": sub})
+    _save_post_log(entries)
+    needs = [b for b in batches if not b["valid_until"]]
+    if needs:
+        print("[ingest] posts missing a validity date:")
+        for b in needs:
+            print(f"   {b['file']} — starts with: {b['snippet']}")
+        print("[ingest] reply with the dates (e.g. 'FRUT board.jpg "
+              "valid until 12 September') and I will record them")
+
+    # All posts are handled: free every pending code for this shop
+    # (the next new post reuses the base code).
     state = _load_scan_state()
     seen = state.setdefault("stores", {}).setdefault(store["key"], {})
-    notified = seen.get("notified", {})
-    ref = next((r for r, c in notified.items() if c == code), None)
-    if ref is not None:
-        notified.pop(ref)
-        _save_scan_state(state)
+    freed = sorted(seen.get("notified", {}).values())
+    seen["notified"] = {}
+    _save_scan_state(state)
+    if freed:
+        print(f"[ingest] code(s) {', '.join(freed)} completed — "
+              f"the next new post reuses the base code")
     return 0
 
 

@@ -495,11 +495,11 @@ class TestDailyScan(unittest.TestCase):
         self.assertEqual(n_after_first, 4)
         self.assertEqual(n_after_repeat, n_after_first)
         self.assertEqual(len(sent), 8)
-        frut_new = [t for t in sent if "code: FRUT_1)" in t]
+        frut_new = [t for t in sent if "code: FRUT_01)" in t]
         self.assertEqual(len(frut_new), 1)
         self.assertIn("When posted:", frut_new[0])
         self.assertIn("Valid until: Sat 12 Sep", frut_new[0])
-        self.assertIn("ignore FRUT_1", frut_new[0])
+        self.assertIn("ignore FRUT_01", frut_new[0])
 
     def test_first_sighting_older_than_backfill_silent(self):
         import tempfile as tf
