@@ -1707,16 +1707,20 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
 _SITE_DASH_RE = re.compile(
     r"\s*[–—-]\s*\d+(?:[.,]\d+)?(?:\s*[-–—]\s*\d+(?:[.,]\d+)?)?\s*"
     r"(?:kg|g|each|ea|pack)?\s*$", re.IGNORECASE)
+_SITE_MB_STRIP_RE = re.compile(
+    r"\s*[–—-]?\s*(?:buy\s*)?\d{1,2}\s*(?:for|x|×)\s*"
+    r"\$?\d{1,4}(?:[.,]\d{1,2})?\s*$", re.IGNORECASE)
 
 
 def _clean_site_name(name: str) -> str:
     """WooCommerce product name -> clean display/product name.
 
     Decodes HTML entities ("Lamb Leg Roast &#8211; 2.5-3kg" keeps an
-    en dash as text), then drops a TRAILING "– 2.5-3kg" size fragment
-    after a dash so the same roast is always ONE Local_Deals row
-    instead of sprouting size-specific duplicates. Names without a
-    size fragment pass through unchanged.
+    en dash as text), then drops TRAILING offer/size fragments —
+    "– 2.5-3kg" (size) and "2 FOR $30" (multi-buy wording) in any
+    order — so the same roast is always ONE Local_Deals row instead
+    of sprouting duplicates. Names without such fragments pass
+    through unchanged.
     """
     import html as _html
 
@@ -1724,8 +1728,37 @@ def _clean_site_name(name: str) -> str:
     clean = re.sub(r"\s+", " ", clean)
     clean = re.sub(r"\s*\(per kg\)|\s*\(each\)", "", clean,
                    flags=re.IGNORECASE)
-    clean = _SITE_DASH_RE.sub("", clean).strip(" –—-")
+    for _ in range(3):                 # size and offer can co-exist
+        stripped = _SITE_MB_STRIP_RE.sub("", clean)
+        stripped = _SITE_DASH_RE.sub("", stripped).strip(" –—-")
+        if stripped == clean:
+            break
+        clean = stripped
     return clean or str(name or "").strip()
+
+
+_SITE_MULTIBUY_RE = re.compile(
+    r"(?:buy\s*)?(\d{1,2})\s*(?:for|x|×)\s*\$?(\d{1,4}(?:[.,]\d{1,2})?)",
+    re.IGNORECASE)
+
+
+def _parse_site_multibuy(name: str) -> tuple[int, float] | None:
+    """(qty, bundle_total) when a site product NAME carries a multi-
+    buy offer ("2 FOR $20", "BUY 3 FOR 30", "2 x $15"), else None.
+
+    Butchery specials are mostly multi-buys, and the WooCommerce API
+    has no dedicated multibuy field — the offer wording lives in the
+    product name, so it is parsed here (user rule 2026-09-06: handle
+    multibuy discounts in the site sync).
+    """
+    m = _SITE_MULTIBUY_RE.search(name or "")
+    if not m:
+        return None
+    qty = int(m.group(1))
+    total = float(m.group(2).replace(",", "."))
+    if qty <= 0 or total <= 0:
+        return None
+    return qty, round(total, 2)
 
 
 def sync_dunya_site(dry_run: bool = False, send: bool = True,
@@ -1763,22 +1796,45 @@ def sync_dunya_site(dry_run: bool = False, send: bool = True,
         return 1
 
     # WC Store API prices are minor units (cents) — verified
-    # 2026-09-05: BEEF MINCE (5KG) 6499 -> $64.99.
+    # 2026-09-05: BEEF MINCE (5KG) 6499 -> $64.99. Multi-buy offers
+    # ("2 FOR $20") are parsed from the product NAME into
+    # price_kind=multibuy (the site's specials are mostly multi-buys,
+    # especially meat): the specials cell gets the effective unit
+    # rate and the Comments column the bundle note (same as FB posts).
     deals = []
     for i in items:
         name = _clean_site_name(i["name"])
+        price = round(i["price"] / 100, 2)
+        regular = (round(i["regular_price"] / 100, 2)
+                   if i.get("regular_price") else None)
+        mb = _parse_site_multibuy(i["name"]) or \
+            _parse_site_multibuy(name)
+        if mb:
+            qty, total = mb
+            deals.append({
+                "item": name,
+                "raw_text": i["name"],
+                "price": total,
+                "unit": i.get("unit") or "ea",
+                "price_kind": "multibuy",
+                "multibuy_qty": qty,
+                "bulk_size": None,
+                "category": "butchery",
+                "notes": "",
+                "regular_price": regular,
+            })
+            continue
         deals.append({
             "item": name,
             "raw_text": i["name"],
-            "price": round(i["price"] / 100, 2),
+            "price": price,
             "unit": i.get("unit") or "ea",
             "price_kind": "single",
             "multibuy_qty": None,
             "bulk_size": None,
             "category": "butchery",
             "notes": "",
-            "regular_price": (round(i["regular_price"] / 100, 2)
-                              if i.get("regular_price") else None),
+            "regular_price": regular,
         })
 
     on_offer = [d for d in deals

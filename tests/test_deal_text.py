@@ -766,5 +766,30 @@ class TestDunyaSiteSync(unittest.TestCase):
         self.assertEqual(tab.updates, [])
 
 
+    def test_multibuy_site_offers_parsed_from_names(self):
+        """Meat specials are mostly multi-buys: '2 FOR $30' in the
+        name -> multibuy deal, effective rate in the specials cell,
+        bundle note in Comments, offer flagged vs regular."""
+        tab = self._FakeTab([])
+        catalogue = [
+            {"name": "Lamb Leg Roast &#8211; 2.5-3kg 2 FOR $30",
+             "price": 3000, "regular_price": 4000,
+             "categories": [], "unit": "ea"},
+        ]
+        rc, sent = self._sync(tab, catalogue=catalogue)
+        self.assertEqual(rc, 0)
+        grid = tab.grid
+        lamb = next(r for r in grid
+                    if str(r[0]).strip().startswith("Lamb Leg Roast"))
+        # clean name (entity decoded, size fragment dropped)
+        self.assertEqual(lamb[0], "Lamb Leg Roast /ea")
+        # specials cell = effective unit rate ($30 / 2)
+        self.assertEqual(lamb[1], 15.0)
+        # comments = the bundle note
+        self.assertEqual(lamb[6],
+                         "[multi buy 2 for $30.00 — $15.00/ea]")
+        self.assertIn("1 on offer", sent[0])
+
+
 if __name__ == "__main__":
     unittest.main()
