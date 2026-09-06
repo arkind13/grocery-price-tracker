@@ -683,10 +683,43 @@ report plus a `Local_Deals` sheet tab:
 
 Subcommands: `local-deals` (flags: `--stores`, `--dry-run`,
 `--no-telegram`, `--refresh-catalogue`, `--friday-gate`,
-`--provision-topic`) and `backfill-halal-check` (below). The Friday
+`--provision-topic`, `--daily-scan`, `--ingest CODE`, `--ignore CODE`,
+`--dunya-site`) and `backfill-halal-check` (below). The Friday
 cron runs with `--friday-gate` so it sends once per Friday inside the
 05:00-05:59 Sydney window. Every Telegram message prints a
 secret-free receipt line (`[telegram] ok message_id=…`) for auditing.
+
+### Twice-daily new-post detector + inbox flow (2026-09-06)
+
+Cookies for Facebook are banned (Woolworths/Coles browser-login
+lesson). Instead, a twice-daily cron detector (hourly cron tick; the
+scan itself fires only 05:00-05:59 and 15:00-15:59 Sydney, once per
+window) renders each public page logged out and reports the newest
+post:
+
+- Every notification carries the shop's code — FRUT (Fruitopia),
+  MERJ (Merjan), DUNY (Dunya), ABSA (Abu Salim) — plus the posted
+  time (Sydney) and the validity date parsed from the post text
+  (`FRUT_1`, `FRUT_2`, … when several posts of one shop are pending).
+- To process a post: save its picture or text into
+  `grocery-price-tracker/data/local_deals_inbox/<CODE>/`, then run
+  `local-deals --ingest CODE` (images → vision; text → deal parser).
+  Ingest UPDATES the `Local_Deals` tab for that store only (merge —
+  other stores' rows are never wiped) and posts the summary to the
+  topic.
+- `local-deals --ignore CODE` retires a notified post permanently.
+- First-ever scan of a shop reports only posts from the last
+  `backfill_days` (3) days; older pages stay quiet.
+
+### Dunya site sync (2026-09-06)
+
+`local-deals --dunya-site` syncs the `Local_Deals` tab straight from
+dunyabutchery.com.au (WooCommerce Store API via Scrape.do; prices are
+minor units → converted to dollars). It builds/updates the Dunya
+column only (merge — never touches the other stores) and reports
+on-offer items (site sale price vs regular price) plus any price
+changes since the previous sync. `--refresh-catalogue` bypasses the
+28-day cache.
 
 Secrets used: `SCRAPEDO_API_KEY`, `zlm_url`/`zlm_claw`,
 `OPENROUTER_API_KEY`, `TELEGRAM_CLAW_BOT`,
