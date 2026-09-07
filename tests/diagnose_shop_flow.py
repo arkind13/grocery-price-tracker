@@ -96,18 +96,15 @@ label_set = {normalize_subcategory(x) for x in labels}
 
 
 def _mode(phrase: str) -> str:
-    key = normalize_subcategory(phrase)
-    if key in label_set:
-        plan = resolve_shop_items(ws, [phrase])
-        if plan["halted"]:
-            return "CATEGORY-halt"
-        if plan["cold"]:
-            return "CATEGORY-cold"
-        return "CATEGORY-P"
     plan = resolve_shop_items(ws, [phrase])
-    for item, name in plan["compare"]:
-        if name != item:
-            return "PRODUCT-exact"
+    if plan["halted"]:
+        return "CATEGORY-halt"
+    if plan["cold"]:
+        return "CATEGORY-cold"
+    if plan["compare"]:
+        for item, name in plan["compare"]:
+            if name != item:
+                return "PRODUCT-exact"
     return "RAW-TEXT"
 
 

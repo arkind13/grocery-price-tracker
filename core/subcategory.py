@@ -44,27 +44,30 @@ def normalize_subcategory(s: str) -> str:
 _SIZE_TOKEN = re.compile(
     r"^\d+(?:\.\d+)?\s*(?:kg|g|ml|l|ltr|litre|litres|pack|pk|pks|"
     r"sheet|sheets|roll|rolls|pc|pcs|piece|pieces|tub|tubs)$")
+_UNITS = {"kg", "g", "ml", "l", "ltr", "litre", "litres", "pack",
+          "pk", "pks", "sheet", "sheets", "roll", "rolls", "pc",
+          "pcs", "piece", "pieces", "tub", "tubs"}
+_BARE_NUMBER = re.compile(r"^\d+(?:\.\d+)?$")
 _STORE_PREFIXES = {"woolworths", "woolies", "coles", "aldi"}
 _FILLER = {"original", "fresh", "large", "small", "mini", "free",
            "range", "market", "brand"}
 
 
 def strip_phrase(phrase: str) -> list[str]:
-    """Tokens for sub-category matching: plural-folded, size tokens,
-    store prefixes and filler words removed ("Sugar-2 kg" ->
-    ["sugar"]; "woolworths full cream milk 3l" -> ["full", "cream",
-    "milk"]). Order preserved; never empty (falls back to raw
-    lowercased tokens)."""
-    from core.lookup import _token_variants
+    """Tokens for sub-category matching: size tokens (both glued
+    "2kg" and split "2 kg"), store prefixes and filler words removed
+    ("Sugar-2 kg" -> ["sugar"]; "woolworths full cream milk 3l" ->
+    ["full", "cream", "milk"]). Tokens stay WHOLE — plural folding
+    happens on both sides inside match_subcategory. Never empty
+    (falls back to raw lowercased tokens)."""
     text = normalize_subcategory(phrase).replace("-", " ")
     out: list[str] = []
     for tok in text.split():
-        if _SIZE_TOKEN.match(tok):
+        if _SIZE_TOKEN.match(tok) or _BARE_NUMBER.match(tok):
             continue
-        if tok in _STORE_PREFIXES or tok in _FILLER:
+        if tok in _UNITS or tok in _STORE_PREFIXES or tok in _FILLER:
             continue
-        base = sorted(_token_variants(tok))[0]  # shortest = stem
-        out.append(base)
+        out.append(tok)
     return out or normalize_subcategory(phrase).split()
 
 
@@ -89,26 +92,34 @@ def match_subcategory(phrase: str, sheet_labels: list[str]) -> str:
     want = set(strip_phrase(phrase))
     if not want:
         return ""
+    # raw-token reorder: "cucumber mini" and "mini cucumber" share a
+    # token set — a label whose tokens equal the RAW phrase tokens
+    # wins immediately (word-order independence).
+    raw_tokens = set(normalize_subcategory(phrase).split())
     want_var = variants(want)
     best: tuple[int, int, str, str] | None = None
-    # (-len, -match, label, norm)
+    # exact-token-set first, then longest label, then most matched
     for raw in sheet_labels:
         norm = normalize_subcategory(raw)
         if not norm:
             continue
         if norm == normalize_subcategory(phrase):
             return raw
+        if raw_tokens and set(norm.split()) == raw_tokens:
+            return raw
         lab_tokens = set(norm.split())
         if not lab_tokens:
             continue
         lab_var = variants(lab_tokens)
-        if lab_var <= want_var:
-            matched = len(lab_tokens)
-        elif want_var <= lab_var:
-            matched = len(want)
-        else:
+        exact = 1 if lab_var == want_var else 0
+        if lab_var <= want_var or want_var <= lab_var:
+            matched = len(lab_tokens) if lab_var <= want_var \
+                else len(want)
+        elif not exact:
             continue
-        key = (-len(norm), -matched, norm, raw)
+        else:
+            matched = 0
+        key = (-exact, -len(norm), -matched, norm, raw)
         if best is None or key < best:
             best = key
     return best[3] if best else ""

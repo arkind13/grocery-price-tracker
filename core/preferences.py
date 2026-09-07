@@ -294,16 +294,18 @@ def resolve_shop_items(worksheet, items: list[str]) -> dict:
           warns:   list[{item, name, subcategory}] (S5 override);
           notes:   list[str] — multi-P ⚠️ lines (§8.3).
     """
-    from core.subcategory import all_labels
+    from core.subcategory import all_labels, match_subcategory
     rows = read_qrs(worksheet)
     norm_map = {}  # normalised Col A -> row (first wins)
     for r in rows:
         key = normalize_subcategory(r["name"])
         norm_map.setdefault(key, r)
     sub_labels = {normalize_subcategory(x) for x in all_labels()}
+    sheet_labels: list[str] = [x for x in all_labels()]
     for r in rows:
         if r["subcategory"]:
             sub_labels.add(r["subcategory"])
+            sheet_labels.append(r["subcategory"])
 
     compare: list = []
     halted: list = []
@@ -311,8 +313,26 @@ def resolve_shop_items(worksheet, items: list[str]) -> dict:
     warns: list = []
     notes: list = []
     for item in items:
-        key = normalize_subcategory(item)
-        if key in sub_labels:  # ---- category mode (S4/S1/S0) ----
+        # A specific product name (exact Col A hit) ALWAYS wins over
+        # category matching — the user named THAT product (S5).
+        hit = norm_map.get(normalize_subcategory(item))
+        if hit is not None:
+            if hit["subcategory"]:
+                pref = get_preferred(rows, hit["subcategory"])
+                if pref is None or pref["row_index"] != \
+                        hit["row_index"]:
+                    warns.append({"item": item, "name": hit["name"],
+                                  "subcategory":
+                                  hit["subcategory"]})
+            compare.append((item, hit["name"]))
+            continue
+        # D4 (2026-09-07): match the phrase against the SHEET's live
+        # labels (+ the halal-protected taxonomy) — sizes/brands/
+        # plurals ("Sugar-2 kg", "egg") engage category mode.
+        matched = match_subcategory(item, sheet_labels)
+        key = (normalize_subcategory(matched) if matched
+               else normalize_subcategory(item))
+        if key in sub_labels or matched:  # ---- category mode ----
             members = [r for r in rows if r["subcategory"] == key]
             if not members:
                 cold.append({"item": item, "subcategory": key})
@@ -337,15 +357,7 @@ def resolve_shop_items(worksheet, items: list[str]) -> dict:
                                  r["item_code"])
                                 for r in members],
                 })
-        else:  # ---- product mode (S5) ----
-            hit = norm_map.get(key)
-            if hit is not None and hit["subcategory"]:
-                pref = get_preferred(rows, hit["subcategory"])
-                if pref is None or pref["row_index"] != \
-                        hit["row_index"]:
-                    warns.append({"item": item, "name": hit["name"],
-                                  "subcategory":
-                                  hit["subcategory"]})
-            compare.append((item, hit["name"] if hit else item))
+        else:  # ---- no category match: pass the raw text through ----
+            compare.append((item, item))
     return {"compare": compare, "halted": halted, "cold": cold,
             "warns": warns, "notes": notes}
