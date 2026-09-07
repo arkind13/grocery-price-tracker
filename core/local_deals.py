@@ -914,13 +914,19 @@ def friday_gate_mark_fired(now: datetime | None = None) -> None:
 
 SECTION_ORDER = ("FRUITS", "BUTCHERY", "OTHER")
 
-TAB_COLUMNS = [  # Local_Deals tab layout (user rule 2026-09-06)
-    ("dunya", "Dunya (site)"),      # dunyabutchery.com.au prices
-    ("dunya_fb", "Dunya FB specials"),  # Facebook post prices
-    ("merjan", "Merjan Brothers Quality Meats"),
-    ("fruitopia", "Fruitopia Mt Druitt"),
-    ("abusalim", "Abu Salim Fruit Market"),
-    ("comments", "Comments"),       # multi-buy / bulk notes
+TAB_COLUMNS = [  # Local_Deals tab layout v2 (user rule 2026-09-07):
+    # every shop gets a PERMANENT column (no validity) and a SPECIAL
+    # column (validity-stamped cells); comparisons read special
+    # first, then permanent.
+    ("dunya_perm", "Dunya perm (site)"),   # dunyabutchery.com.au
+    ("dunya_sp", "Dunya special (FB)"),    # Facebook post prices
+    ("merjan_perm", "Merjan perm"),
+    ("merjan_sp", "Merjan special"),
+    ("fruitopia_perm", "Fruitopia perm"),
+    ("fruitopia_sp", "Fruitopia special"),
+    ("abusalim_perm", "Abu Salim perm"),
+    ("abusalim_sp", "Abu Salim special"),
+    ("comments", "Comments"),       # shop-tagged multibuy/bulk notes
 ]
 # Kept for callers that reason about the four physical shops.
 STORE_COLUMNS = [
@@ -930,12 +936,155 @@ STORE_COLUMNS = [
     ("abusalim", "Abu Salim Fruit Market"),
 ]
 TAB_NAME = "Local_Deals"
+SHOP_TAGS = {"dunya": "DUN", "merjan": "MER",
+             "fruitopia": "FRU", "abusalim": "ABS"}
+
+
+def _grid_col(key: str) -> int | None:
+    """Row-list index for a TAB_COLUMNS key (0 = Product name;
+    'comments' -> 9). Sheet column = index + 1 (A1 range is fixed)."""
+    return next((i + 1 for i, (k, _n) in enumerate(TAB_COLUMNS)
+                 if k == key), None)
+
+
+def _perm_column_for(store_key: str) -> int | None:
+    """1-based permanent-price column for a shop key."""
+    return _grid_col(f"{store_key}_perm")
+
+
+def _special_column_for(store_key: str) -> int | None:
+    """1-based special-price column for a shop key."""
+    return _grid_col(f"{store_key}_sp")
+
+
+def _target_column(store_key: str) -> tuple[int | None, str]:
+    """(1-based column, kind) a deals store_key writes to.
+
+    'dunya' (site catalogue) -> permanent column; every FB-post key
+    ('dunya_fb', or a plain shop key) -> the SPECIAL column.
+    """
+    if store_key == "dunya":
+        return _perm_column_for("dunya"), "perm"
+    if store_key == "dunya_fb":
+        return _special_column_for("dunya"), "special"
+    return _special_column_for(store_key), "special"
 
 
 def _column_for(store_key: str) -> int | None:
-    """1-based grid column for a store key ('comments' -> 6)."""
-    return next((i + 1 for i, (k, _n) in enumerate(TAB_COLUMNS)
-                 if k == store_key), None)
+    """Legacy shim: the column a store key targets (perm for the
+    Dunya site key, special for every FB-post key)."""
+    return _target_column(store_key)[0]
+
+
+def _comment_tag(store_key: str) -> str:
+    """Shop tag for the shared Comments column ('FRU', 'MER', ...)."""
+    return SHOP_TAGS.get(store_key.replace("_fb", ""), "DUN")
+
+
+def _tag_note(store_key: str, note: str) -> str:
+    """'[FRU] multi buy 2 for $1.50 — $0.75/ea' (shop-tagged)."""
+    return f"[{_comment_tag(store_key)}] {note}"
+
+
+_TAG_RE = re.compile(r"\[(DUN|MER|FRU|ABS)\]\s*")
+_TAG_TO_SHOP = {"DUN": "dunya", "MER": "merjan",
+                "FRU": "fruitopia", "ABS": "abusalim"}
+
+
+def _shop_key_for_tag(tag: str) -> str:
+    """'FRU' -> 'fruitopia' (the shop behind a Comments tag)."""
+    return _TAG_TO_SHOP.get(tag, "dunya")
+
+
+def _strip_shop_segments(existing: str, shop_keys) -> str:
+    """Comments cell without the given shops' tag segments."""
+    cur = str(existing or "")
+    for sk in shop_keys:
+        cur = _merge_comment_cell(cur, sk, "")
+    return cur
+
+
+def _merge_comment_cell(existing: str, store_key: str, note: str
+                        ) -> str:
+    """Shared Comments cell for one row: THIS shop's tagged note is
+    replaced, every OTHER shop's tag segment is kept (user rule
+    2026-09-07 — two shops sharing a row keep their notes apart).
+
+    Args:
+        existing: current Comments cell text (may be "").
+        store_key: the shop writing a note.
+        note: the note text ("" clears this shop's segment).
+
+    Returns:
+        The merged cell text ('' when nothing remains).
+    """
+    tag = _comment_tag(store_key)
+    others = [seg.strip() for seg in str(existing or "").split(";")
+              if seg.strip()
+              and _TAG_RE.match(seg.strip()).group(1) != tag]
+    if not note:
+        return "; ".join(others)
+    return "; ".join(others + [_tag_note(store_key, note)])
+
+
+# --- validity-stamped special cells -------------------------------------
+# Format: "<price or offer> (till 12 Sep)" — the date is parsed by
+# the sweep and ignored by numeric readers; undated cells stay until
+# replaced (never swept).
+
+_TILL_RE = re.compile(
+    r"\s*\((?:valid )?till\s+(\d{1,2})\s+([A-Za-z]+)\)\s*$", re.I)
+
+
+def _stamp_validity(cell, valid_until: "date | None"):
+    """Append ' (till 12 Sep)' to a special cell (date aware)."""
+    if valid_until is None or cell is None:
+        return cell
+    return f"{cell} (till {valid_until.day} {valid_until:%b})"
+
+
+def _strip_till(text: str) -> str:
+    """'0.75 (till 12 Sep)' -> '0.75' (the cell without its stamp)."""
+    return _TILL_RE.sub("", str(text or "")).strip()
+
+
+def _month_num(token: str) -> int | None:
+    """Month number for 'Sep' / 'september' (3-letter prefix match)."""
+    from extractors.deal_text import MONTHS
+    t = (token or "").lower()[:3]
+    return next((num for name, num in MONTHS.items()
+                 if name[:3] == t), None)
+
+
+def _cell_till_date(cell, today: "date") -> "date | None":
+    """The validity end stamped in a special cell, or None.
+
+    Accepts ' (till 12 Sep)' / ' (till 12 September)'. The year is
+    today's year, rolled back one year when that would land more
+    than 180 days ahead (a stale cell from last December).
+    """
+    m = _TILL_RE.search(str(cell or ""))
+    if not m:
+        return None
+    month = _month_num(m.group(2))
+    if month is None:
+        return None
+    try:
+        candidate = date(today.year, month, int(m.group(1)))
+    except ValueError:
+        return None
+    if (candidate - today).days > 180:
+        try:
+            candidate = date(today.year - 1, month, int(m.group(1)))
+        except ValueError:
+            return None
+    return candidate
+
+
+def _special_expired(cell, today: "date") -> bool:
+    """True when a special cell carries a validity date in the past."""
+    until = _cell_till_date(cell, today)
+    return until is not None and until < today
 
 
 def ensure_local_deals_tab(spreadsheet) -> "Worksheet":
@@ -949,7 +1098,7 @@ def ensure_local_deals_tab(spreadsheet) -> "Worksheet":
         pass
     try:
         return spreadsheet.add_worksheet(title=TAB_NAME, rows=200,
-                                         cols=7)
+                                         cols=10)
     except Exception as exc:  # noqa: BLE001 — secret-free re-raise
         raise RuntimeError(
             f"Failed to ensure {TAB_NAME} tab: "
@@ -1044,31 +1193,37 @@ def _cell_for(deal: dict) -> tuple:
 
 
 def build_rows(all_store_deals: dict) -> dict:
-    """{section: [[Product, Dunya(site), Dunya FB specials, Merjan,
-    Fruitopia, Abu Salim, Comments], ...]}.
+    """{section: [[Product, Dunya perm(site), Dunya special(FB),
+    Merjan perm, Merjan special, Fruitopia perm, Fruitopia special,
+    Abu Salim perm, Abu Salim special, Comments], ...]}.
 
     Canonical rows (RF1): equivalent IN-DOMAIN items share ONE row
-    keyed by canonical_key; the numeric specials price sits in the
-    store's column while multi-buy/bulk NOTE text goes to the
-    Comments column (user rule 2026-09-06). Dunya has TWO columns:
-    site prices (dunyabutchery.com.au, `--dunya-site`) and Facebook
-    specials (DUNY ingest), side by side. Out-of-domain items NEVER
-    merge into domain rows (Oreo rule) — standalone rows under OTHER.
+    keyed by canonical_key. The Dunya SITE key writes its PERMANENT
+    column; every FB-post key writes its shop's SPECIAL column,
+    validity-stamped ' (till 12 Sep)' when the deal carries a
+    valid_until (user rule 2026-09-07). Multi-buy/bulk NOTE text is
+    shop-tagged into the shared Comments column ('[FRU] ...'; two
+    shops sharing a row keep their notes apart). Out-of-domain items
+    NEVER merge into domain rows (Oreo rule) — standalone rows under
+    OTHER.
 
     Args:
         all_store_deals: {store_key: [deal dicts with category +
-            price_kind fields from the vision schema]}. store_key
-            "dunya" targets the SITE column; "dunya_fb" targets the
-            Facebook specials column.
+            price_kind fields from the vision schema; optional
+            valid_until date]}. store_key "dunya" targets the
+            PERMANENT site column; "dunya_fb" and plain shop keys
+            target the SPECIAL columns.
 
     Returns:
-        section -> grid rows (7 cells each, "" for absent stores).
+        section -> grid rows (10 cells each, "" for absent stores).
     """
     rows_by_section: dict[str, list[list]] = {
         s: [] for s in SECTION_ORDER}
     row_index: dict[tuple, int] = {}
+    comments_col = _grid_col("comments")
     for store_key, deals in all_store_deals.items():
         in_domain_kind = _store_kind(store_key)
+        col, kind = _target_column(store_key)
         for deal in deals:
             in_domain = deal.get("category") == in_domain_kind
             if not in_domain:
@@ -1077,68 +1232,160 @@ def build_rows(all_store_deals: dict) -> dict:
                        canonical_key(deal.get("item") or ""))
             else:
                 # One row per canonical base: the numeric specials
-                # price sits in the store column and any multi-buy/
-                # bulk note goes to Comments (never mixed).
+                # price sits in the store's special column and the
+                # multibuy/bulk note is shop-tagged in Comments.
                 section = _section_for(deal)
                 key = canonical_key(deal.get("item") or "")
             cell, comment = _cell_for(deal)
+            if kind == "special":
+                cell = _stamp_validity(cell, deal.get("valid_until"))
             display = _display_name(deal)
             slot = row_index.get((section, key))
             if slot is None:
-                grid_row = [display] + [""] * 6
+                grid_row = [display] + [""] * (len(TAB_COLUMNS))
                 rows_by_section[section].append(grid_row)
                 row_index[(section, key)] = \
                     len(rows_by_section[section]) - 1
                 slot = row_index[(section, key)]
-            col = _column_for(store_key)
             if col is not None and cell is not None:
                 rows_by_section[section][slot][col] = cell
             if col is not None and comment:
-                rows_by_section[section][slot][6] = comment
+                cur = rows_by_section[section][slot][comments_col]
+                rows_by_section[section][slot][comments_col] = \
+                    _merge_comment_cell(cur, store_key, comment)
     return {s: rows for s, rows in rows_by_section.items() if rows}
 
 
 def rebuild_tab(worksheet, rows_by_section: dict,
                 store_keys: list[str],
                 validity: dict[str, str] | None = None) -> None:
-    """Wipe + rewrite the tab (idempotent). Freeze the header +
-    validity rows. ONE batch update A1:G{N}.
+    """Rewrite THIS run's shops' SPECIAL columns; preserve everything
+    else (idempotent). ONE batch update A1:J{N}.
 
-    Row 2 is the "Prices valid until" row (user rule 2026-09-07):
-    one validity stamp per shop column; the Dunya SITE column is
-    marked n/a (site prices are live, no validity period). Values
-    are blank after a rebuild unless `validity` supplies
-    {store_key: text} — ingest stamps its column on every run.
+    Layout v2 semantics (user rule 2026-09-07):
+    - PERMANENT columns (Dunya site + manual perm entries) are NEVER
+      wiped — they survive rebuilds, subset runs and failures.
+    - SPECIAL columns of shops IN this run are fully rebuilt from
+      the parsed boards (an item no longer posted loses its special
+      cell — old specials never linger).
+    - SPECIAL columns of shops NOT in this run (fetch failed /
+      --stores subset) are PRESERVED — a store whose list wasn't
+      parsed is never marked (master-sync principle).
+    - The shared Comments column is shop-tagged: this run's notes
+      replace their shop's segment, other shops' notes survive.
+
+    Row 2 is the "Prices valid until" summary row: one stamp per
+    shop column (newest dated special); per-cell dates are
+    authoritative. The Dunya PERM column is n/a (live site prices).
 
     Args:
         worksheet: gspread/Fake worksheet handle for Local_Deals.
         rows_by_section: build_rows() output.
-        store_keys: stores in THIS run (other columns stay blank).
-        validity: optional {store_key: "valid until …"} stamps.
+        store_keys: shops in THIS run (their FB-post keys, e.g.
+            "dunya_fb"; other shops' columns stay untouched).
+        validity: optional {store_key: "valid until …"} row-2
+            summary stamps.
     """
-    active = {k.strip() for k in (store_keys or [])
-              if k and k.strip()} or {k for k, _n in TAB_COLUMNS}
+    run_keys = {k.strip() for k in (store_keys or []) if k and
+                k.strip()}
+    # Grid key -> the TAB_COLUMNS key this run's shop writes to.
+    run_cols = {}
+    for key in run_keys:
+        col, _kind = _target_column(key)
+        if col is not None:
+            run_cols[col] = key
+    comments_col = _grid_col("comments")
+    perm_cols = {c for c in (_perm_column_for(s)
+                             for s in SHOP_TAGS) if c is not None}
+
+    old = worksheet.get_all_values() or []
+    width = len(TAB_COLUMNS) + 1
+    old = [(list(r) + [""] * width)[:width] for r in old]
+    # Preserve: per (section, Col A name) the permanent cells, the
+    # non-run shops' special cells, and the non-run shops' comments.
+    preserved: dict[tuple, dict] = {}
+    section = ""
+    for row in old[1:]:
+        first = str(row[0]).strip()
+        if first in SECTION_ORDER:
+            section = first
+            continue
+        if not first or section == "":
+            continue
+        keep = {"comments": str(row[comments_col] or "")}
+        for i, (k, _n) in enumerate(TAB_COLUMNS, start=1):
+            if i in perm_cols or i not in run_cols:
+                if i != comments_col and str(row[i] or "").strip():
+                    keep.setdefault("cells", {})[i] = row[i]
+        preserved[(section, first)] = keep
+
+    run_shop_keys = [k.replace("_fb", "") for k in run_keys]
     grid = [["Product"] + [name for _k, name in TAB_COLUMNS],
             ["Prices valid until", "n/a (live site)",
-             "", "", "", "", ""]]
-    for key, text in (validity or {}).items():
-        col = _column_for(key)
-        if col is not None and col != _column_for("dunya"):
-            grid[1][col] = text
-    for section in SECTION_ORDER:
-        section_rows = rows_by_section.get(section) or []
+             "", "", "", "", "", "", "", ""]]
+    # Row 2: keep non-run shops' existing summary stamps.
+    if len(old) > 1 and str(old[1][0]).strip() == \
+            "Prices valid until":
+        for i in range(1, width):
+            if i not in run_cols:
+                grid[1][i] = old[1][i]
+
+    seen: set[tuple] = set()
+    for sec in SECTION_ORDER:
+        section_rows = rows_by_section.get(sec) or []
         if not section_rows:
             continue
-        grid.append([section] + [""] * 6)
+        grid.append([sec] + [""] * len(TAB_COLUMNS))
         for row in section_rows:
             row = list(row)
-            for i, (k, _n) in enumerate(TAB_COLUMNS, start=1):
-                if k not in active:
-                    row[i] = ""  # columns not in this run stay blank
+            name = str(row[0]).strip()
+            # Overlay preserved non-run data on the rebuilt row:
+            # permanent cells and non-run shops' special cells fill
+            # only blanks; comments merge (other shops kept, this
+            # run's notes replace their own).
+            keep = preserved.get((sec, name))
+            if keep:
+                for i, cellv in (keep.get("cells") or {}).items():
+                    if not str(row[i] or "").strip():
+                        row[i] = cellv
+                merged = _strip_shop_segments(
+                    keep.get("comments") or "", run_shop_keys)
+                for seg in str(row[comments_col] or "").split(";"):
+                    seg = seg.strip()
+                    m = _TAG_RE.match(seg)
+                    if m:
+                        merged = _merge_comment_cell(
+                            merged,
+                            _shop_key_for_tag(m.group(1)),
+                            seg[m.end():].strip())
+                row[comments_col] = merged
+            seen.add((sec, name))
             grid.append(row)
+    # Re-append rows this run no longer carries but which still hold
+    # preserved data (other shops' prices / perm entries). This run's
+    # shops' notes drop with their rebuilt specials.
+    for sec in SECTION_ORDER:
+        for (psec, name), keep in preserved.items():
+            if psec != sec or (sec, name) in seen:
+                continue
+            cells = keep.get("cells") or {}
+            comments = _strip_shop_segments(
+                keep.get("comments") or "", run_shop_keys)
+            if not (cells or comments):
+                continue
+            row = [name] + [""] * len(TAB_COLUMNS)
+            for i, cellv in cells.items():
+                row[i] = cellv
+            row[comments_col] = comments
+            grid.append(row)
+    # Row 2 summary stamps for THIS run's shops.
+    for key, text in (validity or {}).items():
+        col = _target_column(key)[0]
+        if col is not None and col != _perm_column_for("dunya"):
+            grid[1][col] = text
     worksheet.clear()
     worksheet.freeze(rows=2)
-    worksheet.update(values=grid, range_name=f"A1:G{len(grid)}")
+    worksheet.update(values=grid, range_name=f"A1:J{len(grid)}")
 
 
 @dataclass
@@ -1166,14 +1413,15 @@ def _numeric_price(cell) -> float | None:
     """float > 0 when the cell parses as a price, else None (D-LD3).
 
     Decodes multi-buy cells via core.multibuy decode_multibuy_cell
-    first (the rate IS the cell's price). Marker cells (N/A <date>,
-    unavailable <date>, GONE, blank) return None.
+    first (the rate IS the cell's price); a validity stamp
+    (' (till 12 Sep)') is stripped before parsing. Marker cells
+    (N/A <date>, unavailable <date>, GONE, blank) return None.
     """
     if isinstance(cell, bool):
         return None
     if isinstance(cell, (int, float)):
         return float(cell) if cell > 0 else None
-    text = str(cell or "").strip()
+    text = _strip_till(str(cell or ""))
     if not text:
         return None
     from core.multibuy import decode_multibuy_cell, effective_unit_rate
@@ -2100,29 +2348,34 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
                     ) -> int:
     """Merge ONE store's deals into the existing Local_Deals tab.
 
-    Unlike rebuild_tab (wipe + rewrite for a full run), the ingest
-    flow must NOT touch the other stores' rows: the current grid is
-    read, matching Product rows (same section, same Col A text) get
-    this store's column cell updated, unmatched rows are appended
-    inside their section block, and the FULL grid is written back in
-    ONE batch update (same layout as rebuild_tab: header, "Prices
-    valid until" row, then per section a title row + item rows).
+    The ingest flow must NOT touch the other stores' cells: the
+    current grid is read, matching Product rows (same section, same
+    Col A text) get this store's column cell updated, unmatched rows
+    are appended inside their section block, and the FULL grid is
+    written back in ONE batch update (layout: header, "Prices valid
+    until" row, then per section a title row + item rows).
 
     Args:
         worksheet: gspread/Fake worksheet handle for Local_Deals.
         store_key: the store whose column is updated ("dunya" =
-            site column, "dunya_fb" = FB specials column).
-        deals: vision-schema deal dicts (see _to_vision_deal).
-        valid_until: optional datetime.date — stamped into row 2 of
-            this store's column (user rule 2026-09-07). Never
-            stamped for the Dunya SITE column (live site prices —
-            no validity period).
+            PERMANENT site column; "dunya_fb" / shop keys = the
+            shop's SPECIAL column).
+        deals: vision-schema deal dicts (see _to_vision_deal). A
+            deal may carry its own `valid_until` date — special
+            cells are stamped per deal (' (till 12 Sep)'), so two
+            posts with different end dates coexist (user rule
+            2026-09-07).
+        valid_until: optional datetime.date — row-2 summary stamp
+            for this store's column (newest dated post). Never
+            stamped for the Dunya PERMANENT column (live site
+            prices — no validity period).
 
     Returns:
         int: number of grid rows written (header included).
     """
     rows_by_section = build_rows({store_key: deals})
-    col = _column_for(store_key)
+    col, kind = _target_column(store_key)
+    comments_col = _grid_col("comments")
 
     grid = worksheet.get_all_values() or [["Product"] + [
         name for _k, name in TAB_COLUMNS]]
@@ -2136,9 +2389,9 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
     if len(grid) < 2 or str(grid[1][0]).strip() != \
             "Prices valid until":
         grid.insert(1, ["Prices valid until", "n/a (live site)",
-                        "", "", "", "", ""])
+                        "", "", "", "", "", "", "", ""])
     if valid_until is not None and col is not None \
-            and col != _column_for("dunya"):
+            and kind == "special":
         grid[1][col] = f"valid until {valid_until:%a %d %b}"
 
     for section in SECTION_ORDER:
@@ -2151,7 +2404,7 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
                          None)
         if title_idx is None:
             title_idx = len(grid)
-            grid.append([section] + [""] * 6)
+            grid.append([section] + [""] * len(TAB_COLUMNS))
             block_end = title_idx + 1
         else:
             block_end = title_idx + 1
@@ -2172,12 +2425,250 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
             elif col is not None:
                 if row[col] != "":
                     grid[match][col] = row[col]
-                if row[6] != "":
-                    grid[match][6] = row[6]
+                incoming = str(row[comments_col])
+                if incoming:
+                    # build_rows already tagged the note — strip the
+                    # tag before re-merging (no double [FRU] [FRU]).
+                    raw_note = _TAG_RE.sub("", incoming,
+                                           count=1).strip()
+                    grid[match][comments_col] = _merge_comment_cell(
+                        grid[match][comments_col], store_key,
+                        raw_note)
     worksheet.clear()
-    worksheet.freeze(rows=1)
-    worksheet.update(values=grid, range_name=f"A1:G{len(grid)}")
+    worksheet.freeze(rows=2)
+    worksheet.update(values=grid, range_name=f"A1:J{len(grid)}")
     return len(grid)
+
+
+# --- special-first tab reading (user rule 2026-09-07) --------------------
+
+def tab_store_price(row: list, store_key: str,
+                    today: "date | None" = None
+                    ) -> tuple[float | None, str]:
+    """(price, source) for one shop row: SPECIAL cell first, then
+    PERMANENT (user rule 2026-09-07). Expired specials are skipped
+    even before the sweep runs; non-numeric cells (bulk offer text)
+    return None — bulk/multibuy never enter the maths.
+
+    Args:
+        row: one Local_Deals grid row (get_all_values row).
+        store_key: shop key ("dunya" ... "abusalim").
+        today: injectable Sydney date (tests); default real today.
+
+    Returns:
+        (float price or None, "special" | "permanent" | "").
+    """
+    today = today or sydney_today()
+    for col, label in ((_special_column_for(store_key), "special"),
+                       (_perm_column_for(store_key), "permanent")):
+        if col is None or len(row) <= col:
+            continue
+        cell = row[col]
+        if _special_expired(cell, today):
+            continue
+        price = _numeric_price(cell)
+        if price is not None:
+            return price, label
+    return None, ""
+
+
+def sweep_expired_specials(worksheet, today: "date | None" = None
+                           ) -> list[str]:
+    """Clear SPECIAL cells whose ' (till ...)' date has passed.
+
+    User rule 2026-09-07: a price valid till 6-Sep is removed from
+    the sheet on 7-Sep morning. Only DATED cells are removed —
+    undated special cells stay until the shop's next post replaces
+    them. Rows are KEPT (only the cell is cleared, user decision
+    2026-09-07); expired row-2 summary stamps are cleared too.
+    PERMANENT columns are never touched.
+
+    Args:
+        worksheet: gspread/Fake worksheet handle for Local_Deals.
+        today: injectable Sydney date (tests); default real today.
+
+    Returns:
+        list[str]: report lines, e.g. "Fruitopia: Carrots 1kg Bag
+        /ea — 0.75 (till 6 Sep) removed". Empty when nothing
+        expired (or the tab is missing/empty).
+    """
+    today = today or sydney_today()
+    try:
+        grid = worksheet.get_all_values() or []
+    except Exception:  # noqa: BLE001 — missing tab -> nothing to do
+        return []
+    if len(grid) < 3:
+        return []
+    width = len(TAB_COLUMNS) + 1
+    grid = [(list(r) + [""] * width)[:width] for r in grid]
+    names = {k: name for k, name in STORE_COLUMNS}
+    lines: list[str] = []
+    changed = False
+
+    # Row 2 summary stamps ("valid until Fri 06 Sep").
+    if str(grid[1][0]).strip() == "Prices valid until":
+        for key in SHOP_TAGS:
+            col = _special_column_for(key)
+            cell = str(grid[1][col] or "")
+            m = re.search(r"(\d{1,2})\s+([A-Za-z]+)", cell)
+            if not m:
+                continue
+            month = _month_num(m.group(2))
+            if month is None:
+                continue
+            try:
+                stamp = date(today.year, month, int(m.group(1)))
+            except ValueError:
+                continue
+            if (stamp - today).days > 180:
+                try:
+                    stamp = date(today.year - 1, month,
+                                 int(m.group(1)))
+                except ValueError:
+                    continue
+            if stamp < today:
+                lines.append(f"{names[key]}: validity stamp "
+                             f"'{cell.strip()}' removed (expired)")
+                grid[1][col] = ""
+                changed = True
+
+    for row in grid[2:]:
+        name = str(row[0]).strip()
+        if not name or name in SECTION_ORDER:
+            continue
+        for key in SHOP_TAGS:
+            col = _special_column_for(key)
+            cell = row[col]
+            if not _special_expired(cell, today):
+                continue
+            until = _cell_till_date(cell, today)
+            lines.append(
+                f"{names[key]}: {name} — {cell} removed "
+                f"(expired {until:%d %b})")
+            row[col] = ""
+            changed = True
+
+    if changed:
+        worksheet.clear()
+        worksheet.update(values=grid, range_name=f"A1:J{len(grid)}")
+    return lines
+
+
+# --- manual pricing entry (permanent / special) --------------------------
+
+_BASE_NAME_RE = re.compile(r"\s*/\s*(kg|ea|each)\s*$", re.I)
+
+
+def _base_name(col_a: str) -> str:
+    """Row Col A without its ' /kg' / ' /ea' unit suffix."""
+    return _BASE_NAME_RE.sub("", str(col_a or "")).strip()
+
+
+def set_store_prices(worksheet, store_key: str, kind: str,
+                     entries: list[dict],
+                     till: "date | None" = None) -> list[str]:
+    """Write PERMANENT or SPECIAL prices for one shop by hand.
+
+    User rule 2026-09-07: chat messages like 'update permanent
+    pricing for fruitopia - carrots @ 6.50/kg' land here. Rows are
+    matched by EXACT canonical key (the Col A unit suffix ignored);
+    a non-matching item APPENDS a new row in the shop's domain
+    section (butcheries -> BUTCHERY, fruit shops -> FRUITS).
+    Permanent cells carry NO validity; special cells are stamped
+    ' (till <d Mon>)' when `till` is given. An optional per-entry
+    note is shop-tagged into the shared Comments column.
+
+    Args:
+        worksheet: gspread/Fake worksheet handle for Local_Deals.
+        store_key: one of dunya/merjan/fruitopia/abusalim.
+        kind: "perm" | "special".
+        entries: [{item, price, unit, note?}] — price is the NUMERIC
+            rate (multibuy rate precomputed by the caller).
+        till: validity end for special entries (optional; undated
+            specials are legal but the sweep can never clear them).
+
+    Returns:
+        list[str]: report lines ("Fruitopia special: Carrots /kg =
+        0.75 (till 12 Sep) [row 112, new row]").
+    """
+    shop = dict(STORE_COLUMNS).get(store_key, store_key)
+    kind = "perm" if kind == "perm" else "special"
+    col = (_perm_column_for(store_key) if kind == "perm"
+           else _special_column_for(store_key))
+    comments_col = _grid_col("comments")
+    section = "BUTCHERY" if _store_kind(store_key) == "butchery" \
+        else "FRUITS"
+
+    grid = worksheet.get_all_values() or [["Product"] + [
+        name for _k, name in TAB_COLUMNS]]
+    width = len(TAB_COLUMNS) + 1
+    grid = [(list(r) + [""] * width)[:width] for r in grid]
+    if len(grid) < 2 or str(grid[1][0]).strip() != \
+            "Prices valid until":
+        grid.insert(1, ["Prices valid until", "n/a (live site)",
+                        "", "", "", "", "", "", "", ""])
+
+    lines: list[str] = []
+    for entry in entries:
+        item = str(entry.get("item") or "").strip()
+        price = entry.get("price")
+        unit = str(entry.get("unit") or "").strip().lower()
+        note = str(entry.get("note") or "").strip()
+        if not item or not isinstance(price, (int, float)) \
+                or price <= 0:
+            lines.append(f"{shop}: skipped unreadable entry "
+                         f"'{item or '?'}'")
+            continue
+        display = _display_name({"item": item, "unit": unit,
+                                 "price_kind": "single"})
+        if unit not in ("kg", "ea"):
+            display = item           # no suffix without a unit
+        target_key = canonical_key(_base_name(display))
+
+        # Locate the shop's domain section block.
+        title_idx = next((i for i, row in enumerate(grid)
+                          if str(row[0]).strip() == section), None)
+        if title_idx is None:
+            title_idx = len(grid)
+            grid.append([section] + [""] * len(TAB_COLUMNS))
+            block_end = title_idx + 1
+        else:
+            block_end = title_idx + 1
+            while block_end < len(grid):
+                first = str(grid[block_end][0]).strip()
+                if first and first in SECTION_ORDER:
+                    break
+                block_end += 1
+
+        match = next(
+            (i for i in range(title_idx + 1, block_end)
+             if canonical_key(_base_name(grid[i][0])) == target_key),
+            None)
+        cell = _stamp_validity(round(float(price), 2), till) \
+            if kind == "special" else round(float(price), 2)
+        if match is None:
+            row = [display] + [""] * len(TAB_COLUMNS)
+            row[col] = cell
+            if note:
+                row[comments_col] = _tag_note(store_key, note)
+            grid.insert(block_end, row)
+            lines.append(f"{shop} {kind}: {display} = {cell}"
+                         f" [new row]")
+        else:
+            old = grid[match][col]
+            grid[match][col] = cell
+            if note:
+                grid[match][comments_col] = _merge_comment_cell(
+                    grid[match][comments_col], store_key, note)
+            lines.append(
+                f"{shop} {kind}: {display} = {cell}"
+                f" — was {old or 'empty'} [row {match + 1}]")
+        if kind == "special" and till is not None:
+            grid[1][col] = f"valid until {till:%a %d %b}"
+
+    worksheet.clear()
+    worksheet.update(values=grid, range_name=f"A1:J{len(grid)}")
+    return lines
 
 
 _SITE_DASH_RE = re.compile(
