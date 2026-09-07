@@ -1289,5 +1289,73 @@ class TestFridayGateRetired(unittest.TestCase):
         run_ds.assert_called_once()
 
 
+class TestValidityStampsFromRealPost(unittest.TestCase):
+    """Checker round 2026-09-08: the REAL Fruitopia anniversary text
+    ("Saturday & Sunday, 5 & 6 September") must produce (till 6 Sep)
+    stamps — never 12/19 Sep (the pre-rework bad data)."""
+
+    TEXT = (
+        "\U0001f389 FRUITOPIA MT DRUITT IS TURNING 3!\n"
+        "\ud83d\udd00 Saturday & Sunday, 5 & 6 September\n"
+        "\ud83e\udd6c Cos Lettuce \u2013 99\u00a2 each\n"
+        "\ud83c\udf73 Sweet Corn \u2013 88\u00a2 each\n"
+        "\ud83e\uddc5 Celery \u2013 2 for $2.99\n"
+        "\ud83e\udd69 Strawberries \u2013 $1.80 each\n"
+        "\u23f3 Saturday & Sunday only \u2014 while stocks last!"
+    )
+
+    def test_parser_gets_6_sep_not_12_or_19(self):
+        from datetime import date
+        from extractors.deal_text import parse_validity_end
+        got = parse_validity_end(self.TEXT,
+                                 today=date(2026, 9, 7))
+        self.assertEqual(got, date(2026, 9, 6))
+
+    def test_ingest_stamps_cells_till_6_sep(self):
+        from datetime import date
+        from extractors.deal_text import (parse_fruitopia_deals,
+                                          parse_validity_end)
+        deals = parse_fruitopia_deals(self.TEXT)
+        valid = parse_validity_end(self.TEXT, today=date(2026, 9, 7))
+        stamped = [ld._stamp_validity(d.get("price", ""),
+                                      valid) for d in deals[:2]]
+        self.assertTrue(all("(till 6 Sep)" in c for c in stamped))
+
+
+class TestRestampUndated(unittest.TestCase):
+    """--set-date must re-stamp the SHEET (checker fix 2026-09-08):
+    undated special cells + row 2 get the date; dated cells keep
+    their own date."""
+
+    def _grid(self):
+        return [
+            ["Product"] + [""] * 9,
+            ["Prices valid until", "n/a (live site)"] + [""] * 8,
+            ["FRUITS"] + [""] * 9,
+            ["Cos Lettuce /ea", "", "", "", "", "", "0.99",
+             "", "", ""],
+            ["Celery /ea", "", "", "", "", "", "2 for $2.99",
+             "", "", ""],
+            ["Carrots /kg", "", "", "", "", "",
+             "0.75 (till 5 Sep)", "", "", ""],
+        ]
+
+    def test_undated_cells_stamped_row2_updated(self):
+        from datetime import date
+        grid, n = ld._restamp_undated(self._grid(), "fruitopia",
+                                      date(2026, 9, 11))
+        self.assertEqual(n, 2)                    # 2 undated cells
+        self.assertIn("(till 11 Sep)", grid[3][6])
+        self.assertIn("(till 11 Sep)", grid[4][6])
+        self.assertIn("valid until Fri 11 Sep", grid[1][6])
+        self.assertIn("(till 5 Sep)", grid[5][6])  # dated kept
+
+    def test_unknown_store_noop(self):
+        from datetime import date
+        grid, n = ld._restamp_undated(self._grid(), "nope",
+                                      date(2026, 9, 11))
+        self.assertEqual(n, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

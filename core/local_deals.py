@@ -624,14 +624,50 @@ def post_log_cmd(code: str) -> int:
     return 0
 
 
+def _restamp_undated(grid: list, store_key: str,
+                     valid_until: "date") -> tuple[list, int]:
+    """Stamp the store's UNDATED special cells + row 2 (checker fix
+    2026-09-08: --set-date previously recorded the date only in the
+    post log — the sheet kept bare cells and a blank validity row, so
+    the user could not see the validity).
+
+    Only cells WITHOUT an existing ' (till ...)' stamp are touched
+    (a dated cell keeps its own date); row 2 gets the store summary
+    stamp. Returns (grid, stamped_count).
+    """
+    if isinstance(store_key, dict):     # _store_for_code() shape
+        store_key = store_key.get("key", "")
+    col = _special_column_for(store_key)
+    if col is None:
+        return grid, 0
+    grid = [list(r) for r in grid]
+    width = len(TAB_COLUMNS) + 1
+    grid = [(r + [""] * width)[:width] for r in grid]
+    if len(grid) < 2 or str(grid[1][0]).strip() != \
+            "Prices valid until":
+        return grid, 0
+    stamped = 0
+    for row in grid[2:]:
+        cell = str(row[col]) if len(row) > col else ""
+        if cell.strip() and "(till" not in cell.lower():
+            row[col] = _stamp_validity(cell, valid_until)
+            stamped += 1
+    grid[1][col] = f"valid until {valid_until:%a %d %b}"
+    return grid, stamped
+
+
 def set_date_cmd(code: str, filename: str, date_text: str) -> int:
     """'--set-date CODE FILE DATE' — record a validity date for a
     pasted post whose board didn't show one, and archive the file.
 
+    The date is ALSO stamped onto the sheet: every undated special
+    cell of that store + the row-2 summary (checker fix 2026-09-08).
+
     Args:
         code: the notification's inbox code (FRU0709260507; legacy
             FRUT / FRUT_1).
-        filename: the file name inside needs_date/.
+        filename: the file name inside needs_date/ (or processed/
+            when re-running set-date to fix stamps).
         date_text: e.g. "2026-09-12" or "12 September".
     """
     from core.sydney_time import sydney_today
@@ -658,17 +694,20 @@ def set_date_cmd(code: str, filename: str, date_text: str) -> int:
     folder = inbox_dir_for(code)
     needs = folder / "needs_date"
     src = needs / filename
-    if not src.exists():
-        print(f"[set-date] {filename} not in needs_date/")
-        return 1
     done = folder / "processed"
     done.mkdir(parents=True, exist_ok=True)
-    src.replace(done / filename)
+    if src.exists():
+        src.replace(done / filename)
+    elif not (done / filename).exists():
+        print(f"[set-date] {filename} not in needs_date/ "
+              f"(or processed/)")
+        return 1
 
     entries = _load_post_log()
     for e in entries:
         if e.get("code") == code and e.get("file") == filename:
             e["valid_until"] = valid_until.isoformat()
+            e["archived"] = "processed"
             break
     else:
         entries.append({"code": code, "file": filename,
@@ -676,8 +715,23 @@ def set_date_cmd(code: str, filename: str, date_text: str) -> int:
                         "ingested_at": sydney_now().isoformat(
                             timespec="seconds"), "items": None})
     _save_post_log(entries)
+
+    # Sheet stamps (checker fix): the tab reflects the date now.
+    stamped = 0
+    try:
+        from core.sheets_client import connect_worksheet
+        tab = connect_worksheet().spreadsheet.worksheet(TAB_NAME)
+        grid, stamped = _restamp_undated(tab.get_all_values(),
+                                         store, valid_until)
+        tab.clear()
+        tab.freeze(rows=2)
+        tab.update(values=grid,
+                   range_name=f"A1:J{len(grid)}")
+    except Exception as exc:  # noqa: BLE001 — log update already safe
+        print(f"[set-date] ⚠️ sheet re-stamp failed: {exc}")
     print(f"[set-date] {filename}: valid until "
-          f"{valid_until:%a %d %b} recorded and archived")
+          f"{valid_until:%a %d %b} recorded and archived"
+          + (f" · {stamped} cell(s) stamped" if stamped else ""))
     return 0
 
 
