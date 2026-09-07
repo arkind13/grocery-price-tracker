@@ -210,11 +210,14 @@ def render_questions(questions: list[dict]) -> str:
 def parse_answers(text: str) -> dict[int, str]:
     """'1=2; 2=woolworths; 3=y' -> {1:'2', 2:'woolworths', 3:'y'}.
 
-    Splits on ';' or newline; each part is '<qid>=<value>' split on
-    the FIRST '='. Unknown/invalid parts are ignored by the caller
-    via the applied log (here: silently skipped)."""
+    Splits on ';', ',' or newline — the questions message suggests
+    comma-separated replies ("1=1, 2=coles"), so commas are primary
+    separators (typed product names with commas must be sent via ';'
+    separators). Each part is '<qid>=<value>' split on the FIRST '='.
+    Unknown/invalid parts are ignored by the caller via the applied
+    log (here: silently skipped)."""
     out: dict[int, str] = {}
-    for part in re.split(r"[;\n]+", str(text or "")):
+    for part in re.split(r"[;,\n]+", str(text or "")):
         part = part.strip()
         if not part or "=" not in part:
             continue
@@ -277,31 +280,32 @@ def _handshake(worksheet, item: dict, query: str, store: str,
     """
     from core.add_to_list import add_entry
     from core.sheets_sync import add_product_row, update_single_price
+    from core.subcategory import NEEDS_REVIEW, classify_subcategory
 
     ww_ranked, coles_ranked, status = _live_pair(query)
     ranked = ww_ranked if store == "woolworths" else coles_ranked
     if not ranked:
-        # the answered store failed — fall back to the other store's
-        # top result rather than dropping the item (B8: the name is
-        # still the user's; the store switch is announced).
-        other = coles_ranked if store == "woolworths" else ww_ranked
-        if other:
-            log.append(f"⚠️ {store} search unavailable — used the "
-                       f"other store's top result for '{query}'.")
-            ranked = other
-    if not ranked:
-        log.append(f"⚠️ '{query}' not found live at {store} — give "
-                   f"another name or skip.")
+        # B8 (checker defect #4, 2026-09-07): NEVER borrow the OTHER
+        # store's listing for the store the user named — a Coles
+        # result written as a Woolworths row is a store-attribution
+        # mix-up. Re-ask instead: retry, name it for the other
+        # store, or skip.
+        other = "coles" if store == "woolworths" else "woolworths"
         item["stage"] = "ask_store"
         item["user_name"] = query
         item["store"] = store
-        item["note"] = f"not found live at {store}"
+        item["note"] = (f"{store} search unavailable/empty — retry, "
+                        f"name it for {other}, or skip")
+        log.append(f"⚠️ '{query}' not found at {store} — retry, name "
+                   f"it for {other}, or skip.")
         return {"added": False}
 
     chosen = ranked[0]
     unit = _resolve_unit(chosen.raw_name,
                          getattr(chosen, "size", "") or "")
     if chosen.price and chosen.price > 0:
+        label = classify_subcategory(chosen.raw_name)[0] \
+            or NEEDS_REVIEW          # B4: never a silent guess
         res = add_product_row(
             generic_name=chosen.raw_name,
             store=store,
@@ -313,7 +317,7 @@ def _handshake(worksheet, item: dict, query: str, store: str,
             alias=alias,
             is_special=bool(getattr(chosen, "is_special", False)),
             special_desc=str(getattr(chosen, "special_desc", "") or ""),
-            subcategory=item.get("subcategory") or "",
+            subcategory=(item.get("subcategory") or label),
         )
         created = not res.get("merged")
         row_index = res.get("row_index")
@@ -447,6 +451,14 @@ def apply_answers(worksheet, sess: dict,
                 item["subcategory"] = "needs review"
             else:
                 item["subcategory"] = v
+            # spec §4.10: the label answer WRITES the row's Q cell
+            if item.get("row_index"):
+                try:
+                    worksheet.update(
+                        values=[[item["subcategory"]]],
+                        range_name=f"Q{item['row_index']}")
+                except Exception as exc:  # noqa: BLE001 — report only
+                    log.append(f"⚠️ label write failed: {exc}")
             item["stage"] = "priced" if item.get("resolved_name") \
                 else "skipped"
 
@@ -460,6 +472,7 @@ def _handshake_auto(worksheet, item: dict, chosen, store: str,
     """Auto-add path of the handshake (D2): a ranked live result."""
     from core.add_to_list import add_entry
     from core.sheets_sync import add_product_row
+    from core.subcategory import NEEDS_REVIEW, classify_subcategory
 
     unit = _resolve_unit(chosen.raw_name,
                          getattr(chosen, "size", "") or "")
@@ -469,6 +482,10 @@ def _handshake_auto(worksheet, item: dict, chosen, store: str,
         log.append(f"⚠️ {item['raw']}: live price unusable ($0) — "
                    f"skipped.")
         return
+    # B4/D4 (spec §4.10): classify the new row — taxonomy label, else
+    # the literal needs review marker; an uncertain label becomes a
+    # QUESTION (ask-first), never a silent guess.
+    label = classify_subcategory(chosen.raw_name)[0] or NEEDS_REVIEW
     res = add_product_row(
         generic_name=chosen.raw_name,
         store=store,
@@ -480,7 +497,7 @@ def _handshake_auto(worksheet, item: dict, chosen, store: str,
         alias=item["raw"],
         is_special=bool(getattr(chosen, "is_special", False)),
         special_desc=str(getattr(chosen, "special_desc", "") or ""),
-        subcategory="",
+        subcategory=label,
     )
     created = not res.get("merged")
     row_index = res.get("row_index")
@@ -506,6 +523,13 @@ def _handshake_auto(worksheet, item: dict, chosen, store: str,
     item["row_index"] = row_index
     item["live_done"] = True
     item["store"] = store
+    item["subcategory"] = label
+    if label == NEEDS_REVIEW:
+        # uncertain label -> ONE question (spec §4.9 template); the
+        # answer writes the row's Q cell (apply_answers label branch)
+        item["stage"] = "ask_label"
+        log.append(f"? {item['raw']}: label needs review — the next "
+                   f"message asks for it.")
     log.append(f"✔ {item['raw']}: added '{chosen.raw_name}' · "
                f"{store} ${chosen.price:.2f} — to-do "
                f"[{entry.get('code', '')}] (reply 'wrong "

@@ -162,6 +162,12 @@ class TestQuestionsAndAnswers(unittest.TestCase):
         self.assertEqual(got, {1: "2", 2: "woolworths", 3: "y",
                                4: "skip", 5: "Macro Organic Eggs"})
 
+    def test_parse_answers_comma_separated(self):
+        """The questions message suggests '1=1, 2=coles' — commas are
+        primary separators (04 Checker defect #3)."""
+        self.assertEqual(parse_answers("1=1, 2=coles, 3=y"),
+                         {1: "1", 2: "coles", 3: "y"})
+
     def test_parse_answers_invalid_qid_ignored(self):
         self.assertEqual(parse_answers("x=1; 2=; =y; 3= y "),
                          {3: "y"})
@@ -206,10 +212,11 @@ class TestQuestionsAndAnswers(unittest.TestCase):
             self.assertEqual(it["stage"], "ask_store")
             with mock.patch.object(
                     sf, "_live_pair",
-                    return_value=([_live_result("Coles Raw Sugar "
+                    return_value=([],
+                                  [_live_result("Coles Raw Sugar "
                                                 "2kg", 3.0,
                                                 store="coles")],
-                                  [], "ok")), \
+                                  "ok")), \
                 mock.patch("core.sheets_sync.add_product_row",
                            return_value={"row_index": 4,
                                          "merged": False}) as apr, \
@@ -250,11 +257,17 @@ class TestQuestionsAndAnswers(unittest.TestCase):
                            return_value={"added": True, "entry": {
                                "code": "LHT"}}):
                 sess, log = apply_answers(ws, sess, {qid: "y"})
-            self.assertEqual(sess["items"][0]["stage"], "priced")
+            # "Lindt Hot Choc Flakes" matches no taxonomy rule ->
+            # needs review + ask_label (spec 4.10, checker fix)
+            self.assertEqual(sess["items"][0]["stage"], "ask_label")
+            self.assertEqual(sess["items"][0]["subcategory"],
+                             "needs review")
             self.assertEqual(sess["items"][0]["auto_add"]["code"],
                              "LHT")
             kwargs = apr.call_args.kwargs
             self.assertEqual(kwargs.get("store_keyword"), "")
+            self.assertEqual(kwargs.get("subcategory"),
+                             "needs review")
             self.assertTrue(any("wrong LHT" in ln for ln in log))
 
     def test_apply_live_no_skips(self):
@@ -281,11 +294,43 @@ class TestQuestionsAndAnswers(unittest.TestCase):
                 sess, log = apply_answers(
                     ws, sess, {it["question_id"]: "coles"})
             self.assertEqual(it["stage"], "ask_store")
-            self.assertIn("not found", it.get("note", ""))
+            self.assertIn("unavailable/empty", it.get("note", ""))
             qs = build_questions(sess)
             self.assertEqual(qs[0]["kind"], "store")
-            self.assertIn("not found live at coles",
+            self.assertIn("name it for woolworths",
                           render_questions(qs))
+
+    def test_handshake_never_borrows_other_store(self):
+        """B8 (checker defect #4): when the ANSWERED store's search
+        returns nothing, the handshake must re-ask — never write the
+        other store's listing under the answered store's name."""
+        tmp, patches = _patched_session()
+        with tmp, patches[0], patches[1]:
+            ws = FakeWorksheet()
+            sess = start_run(ws, ["sugar"])
+            sess, _ = apply_answers(ws, sess, {1: "Some Coles-Only "
+                                                    "Product 500g"})
+            it = sess["items"][0]
+            self.assertEqual(it["stage"], "ask_store")
+            # Woolworths empty, Coles HAS results:
+            with mock.patch.object(
+                    sf, "_live_pair",
+                    return_value=([],
+                                  [_live_result("Some Coles-Only "
+                                                "Product 500g", 4.0,
+                                                store="coles")],
+                                  "ok")), \
+                    mock.patch("core.sheets_sync.add_product_row") \
+                    as apr, \
+                    mock.patch("core.add_to_list.add_entry") as ae:
+                sess, log = apply_answers(ws, sess,
+                                          {it["question_id"]:
+                                           "woolworths"})
+            apr.assert_not_called()
+            ae.assert_not_called()
+            self.assertEqual(sess["items"][0]["stage"], "ask_store")
+            self.assertIn("not found at woolworths",
+                          " ".join(log) + it.get("note", ""))
 
     def test_label_answer_review_marks_needs_review(self):
         tmp, patches = _patched_session()
@@ -405,6 +450,107 @@ class TestUndoAndStaleness(unittest.TestCase):
         render_final_list(ws2, {"run_id": "2026-09-07T00:00:00+00:00",
                                 "items": [], "next_qid": 1})
         self.assertEqual(ws2.reads, 1)
+
+
+class TestCheckerDefectFixes(unittest.TestCase):
+    """04 Checker defects (2026-09-07): §4.10 label handling and
+    §4.1 undo-after-completion."""
+
+    def test_auto_add_unclassifiable_name_marks_needs_review(self):
+        """A new row whose name matches no taxonomy rule gets the
+        literal needs review label AND an ask_label question (B4)."""
+        tmp, patches = _patched_session()
+        with tmp, patches[0], patches[1]:
+            ws = FakeWorksheet()
+            sess = start_run(ws, ["zzqx plonk"])
+            qid = sess["items"][0]["question_id"]
+            with mock.patch.object(
+                    sf, "_live_pair",
+                    return_value=([_live_result("Zzqx Plonk Deluxe "
+                                                "900g", 7.5)], [],
+                                  "ok")), \
+                mock.patch("core.sheets_sync.add_product_row",
+                           return_value={"row_index": 12,
+                                         "merged": False}) as apr, \
+                mock.patch("core.add_to_list.add_entry",
+                           return_value={"added": True, "entry": {
+                               "code": "ZPQ"}}):
+                sess, _log = apply_answers(ws, sess, {qid: "y"})
+            kwargs = apr.call_args.kwargs
+            self.assertEqual(kwargs.get("subcategory"),
+                             "needs review")
+            self.assertEqual(sess["items"][0]["stage"], "ask_label")
+            qs = build_questions(sess)
+            self.assertEqual(qs[0]["kind"], "label")
+            self.assertIn("new row label", render_questions(qs))
+
+    def test_auto_add_classified_name_gets_label_no_question(self):
+        """A name the taxonomy recognises takes its label silently —
+        no label question (confident match, §4.10)."""
+        tmp, patches = _patched_session()
+        with tmp, patches[0], patches[1]:
+            ws = FakeWorksheet()
+            sess = start_run(ws, ["something new"])
+            qid = sess["items"][0]["question_id"]
+            with mock.patch.object(
+                    sf, "_live_pair",
+                    return_value=([_live_result("Woolworths Sugar "
+                                                "2kg", 2.9)], [],
+                                  "ok")), \
+                mock.patch("core.sheets_sync.add_product_row",
+                           return_value={"row_index": 12,
+                                         "merged": False}) as apr, \
+                mock.patch("core.add_to_list.add_entry",
+                           return_value={"added": True, "entry": {
+                               "code": "SGR"}}):
+                sess, _log = apply_answers(ws, sess, {qid: "y"})
+            self.assertEqual(kwargs_subcategory := apr.call_args
+                             .kwargs.get("subcategory"), "sugar")
+            self.assertEqual(sess["items"][0]["stage"], "priced")
+            self.assertEqual(build_questions(sess), [])
+
+    def test_label_answer_writes_q_cell(self):
+        """Answering a label question writes the row's Col Q."""
+        tmp, patches = _patched_session()
+        with tmp, patches[0], patches[1]:
+            ws = FakeWorksheet()
+            sess = start_run(ws, ["zzqx plonk"])
+            it = sess["items"][0]
+            it.update(stage="ask_label", row_index=12,
+                      resolved_name="Zzqx Plonk Deluxe 900g",
+                      subcategory="needs review")
+            sess, _log = apply_answers(ws, sess,
+                                       {it["question_id"]:
+                                        "protein snacks"})
+            self.assertEqual(len(ws.updates), 1)
+            _args, kwargs = ws.updates[0]
+            self.assertEqual(kwargs.get("range_name"), "Q12")
+            self.assertEqual(kwargs.get("values"),
+                             [["protein snacks"]])
+            self.assertEqual(sess["items"][0]["stage"], "priced")
+
+    def test_undo_works_after_completed_run(self):
+        """Completion keeps the session (CLI writes completed=true);
+        load_session still returns it so --undo can reverse adds."""
+        tmp, patches = _patched_session()
+        with tmp, patches[0], patches[1]:
+            ws = FakeWorksheet()
+            sess = start_run(ws, ["milk"])   # priced instantly
+            sess["completed"] = True
+            sess["items"][0]["auto_add"] = {
+                "code": "MLK", "row_index": 2, "created_row": True,
+                "prev_price": ""}
+            save_session(sess)
+            reloaded = load_session()
+            self.assertIsNotNone(reloaded)
+            self.assertTrue(reloaded.get("completed"))
+            with mock.patch("core.add_to_list.remove_by_code",
+                            return_value={"removed": [{}]}):
+                res = undo_auto_add(ws, "MLK")
+            self.assertTrue(res["undone"])
+            # a NEW run overwrites the completed session
+            fresh = start_run(FakeWorksheet(), ["bread"])
+            self.assertNotIn("completed", fresh)
 
 
 if __name__ == "__main__":
