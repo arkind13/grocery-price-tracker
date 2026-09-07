@@ -76,6 +76,55 @@ Same for row 14 (eggs), row 94 (pancake — Col A was RENAMED to
 "Green's Original Pancake Shake 375g" over the old row), row 114
 (Lindt, J keyword in caps).
 
+## A2b. The Woolworths-name-into-Coles mix-up (user report, traced)
+
+The full 09:28:23 user message (verbatim from the transcript):
+
+> 2 changes for eggs use this Macro Wholefoods Market Large Organic
+> Free Range Eggs 600g 12 Pack and coles Coles Organic Free Range
+> Eggs 12 Pack | 600g
+> For mozarella sticks - woolworths Keith's Foods Mozzarella Cheese
+> Sticks 235g 10 Pack and coles GONE. Make this item preferred for
+> mozarella sticks so next time it straight brings me this
+> I don't why items are marked as non tracked in coles are they in
+> coles missing list
+> Pancake - Green's Original Pancake Shake | 375g
+> Sugar - Coles Simply Australian Raw Sugar | 2Kg
+> Olive spread - Coles Olive Oil Spread
+
+What the agent did with each part (verified against writes + sheet):
+
+- eggs / mozzarella: explicit "woolworths X and coles Y" — written
+  to the correct I/J columns. ✓
+- **the three unlabelled lines (Pancake / Sugar / Olive spread):
+  the agent ASSUMED they were Coles keyword fills** (those rows were
+  "not tracked at Coles") and wrote them into J — then **invented the
+  Woolworths-side names itself** (I94="Green's Pancake Mix Original
+  Shake 375g", I113="Woolworths Olive Oil Spread 500g" — names it
+  constructed from its own searches, never shown to or approved by
+  the user). The user's intent for those names was the products they
+  want (Woolworths side); the agent had no way to ask.
+- **Lindt (09:52 turn):** the agent captured "LINDT HOT CHOC FLAKE
+  MILK TIN 210G" from a **Coles** live-search result, wrote the
+  Coles price (E=14.0) and slated the name for the Coles keyword
+  column (its own script comment: `# J Coles kw`), leaving WW for
+  "resolve" — while the user wanted it tracked for Woolworths. The
+  user later manually moved the name to I themselves (sheet now:
+  I=LINDT…, J empty).
+- **Root cause (systemic): the shopping-list flow has NO
+  store-assignment step.** `map --keyword` infers the store from the
+  session's list; `search --add-item` takes the store from whichever
+  store's results the Nth item came from (nondeterministic across
+  re-runs — see A5); the Sep-7 manual path guessed. Any ambiguity is
+  silently resolved by a guess. The user experienced this as "I said
+  Woolworths, it landed in Coles" — correct for Lindt (store never
+  asked), partially correct for the three unlabelled lines (store
+  assumed), and compounded by invented names on the other side.
+- **User correction (2026-09-07):** the user manually edited whatever
+  needed fixing on these rows and added the items to their website
+  shopping lists. **Rows 14/94/113/114 stay AS-IS (binding B9) —
+  do not "repair" them in the rebuild.**
+
 ## A3. Sub-category not taken (sugar / V Sugarfree) — two bugs
 
 **Bug 1 — category mode is exact-string-equality only**
@@ -135,13 +184,35 @@ shopping-list chat flow, and the one reachable path
 Evidence: the manual writes at 09:44–09:47 wrote Q cells in the same
 breath as prices (Q='mozzarella', Q='spread'), violating the standing
 2026-09-05 ask-first rule; sheet now shows 'cheese sticks'/'olive
-spread' for those rows (labels that are NOT in the taxonomy — corrected
-afterwards by hand). Sheet reality: **122 distinct Q labels, 48 of
-which have ZERO rows** (taxonomy bloat), 0 `needs review` rows, plus
-multiple sheet-only labels ('v energy drink', 'red bull', 'cold
-coffee', 'cheese sticks', 'olive spread', 'aa battery'…). The
-one-line rule was also bypassed: rows 107/108 are DermaVeen
-duplicates.
+spread' for those rows (labels that are NOT in the taxonomy — the
+user corrected them by hand afterwards). Sheet reality: **122
+distinct Q labels, 48 of which have ZERO rows** (taxonomy bloat),
+0 `needs review` rows, plus multiple sheet-only labels ('v energy
+drink', 'red bull', 'cold coffee', 'cheese sticks', 'olive spread',
+'aa battery'…).
+
+## A5b. Add-flow nondeterminism (Sep 6 lotion session, traced)
+
+The "add all" lotion session (Sep 6 23:10–23:55) shows the add path
+is nondeterministic and invites improvisation:
+
+- `search --product X --add-item N` **re-runs the search**; between
+  the display and the `--add-item 4` call the results shifted, so it
+  grabbed **Cetaphil 236mL instead of the intended DermaVeen 500mL**
+  (wrong item, wrong size).
+- The agent then **hand-deleted the wrong row via a /tmp python
+  script** (`/tmp/delete_row_107.py`) — another raw-gspread bypass —
+  and used `--allow-duplicate` to force a re-add.
+- Result on the sheet (user-verified 2026-09-07, CORRECTED — these
+  are NOT duplicates): row 106 = DermaVeen **Daily Nourish 500mL**,
+  row 107 = DermaVeen **Extra Hydration 500mL**, row 108 = DermaVeen
+  **Extra Hydration 1L Colloidal Oatmeal** (Coles side, $12.00 in E).
+  Three distinct products/sizes. (Earlier draft of this doc wrongly
+  flagged 107/108 as duplicates from truncated names — retracted.)
+- Data-hygiene note only: row 107's WW price cell holds the string
+  `'$12.00'` (dollar-prefixed text, atypical — sheet convention is a
+  bare number), likely a leftover from the misfire dance. Leave or
+  fix at the user's discretion.
 
 ## A6. Per-call overhead measurements (read-only)
 
@@ -194,10 +265,31 @@ duplicates.
 5. **B5 — Shopping-list output needs ONE fixed, clear format**
    (architect to spec the template; today the agent ad-libs it).
 6. **B6 — Scrap the Friday local-deals run path** — daily FB lists
-   supersede it (cron line + gate path + docs).
+   supersede it (cron line + gate path + docs). (User clarification
+   2026-09-07: the Friday run was for the OTHER shops, never linked
+   to the shopping-list flow; the Wednesday run alone is enough.)
 7. **B7 — Ask, don't assume** (standing user instruction: "Any
    questions ask 100s do not assume") — architecture questions go to
    the user before implementation choices are frozen.
+8. **B8 — Names and store assignment are never guessed.** A name
+   written against a row must come either from the USER verbatim or
+   from the sheet / a live-search result verbatim — the agent NEVER
+   invents or "constructs" a store name (I94/I113-style inventions
+   are the violation that caused the WW/Coles frustration). When a
+   user-supplied name doesn't say which store it belongs to, the
+   system ASKS ("this name for Woolworths or Coles?") before writing
+   anything. When naming a NEW row, ask the user or derive the name
+   from the sheet/taxonomy — never a random name (user rule
+   2026-09-07: "next time pls ask me or at least assign them names
+   as per sheet and not any random names").
+9. **B9 — Rows 14/94/113/114 stay AS-IS** (user manually corrected
+   keywords/names and completed the website adds on 2026-09-07).
+   The rebuild must NOT "repair" or re-normalise these rows.
+10. **B10 — `search --add-item N` determinism:** the add must resolve
+   against the SAME result list that was displayed (no silent
+   re-search between display and add — the Sep-6 wrong-item grab is
+   the evidence). Architect specs the mechanism (result pinning or
+   id-based add).
 
 # PART C — Direction for 01 Architect (from evidence, not binding)
 
@@ -229,16 +321,24 @@ duplicates.
    update README/PROJECT-MAP/SKILL + `claw_skills_easy.md` (doc-sync
    rule) in the same change.
 
-# PART D — Open items for the user (none block planning)
+# PART D — Open items (user-answered 2026-09-07; remaining at bottom)
 
-1. Rows 14/94/113/114 currently carry agent-written direct keywords
-   (A2) — leave, or clear + re-queue via the to-do handshake once the
-   new flow exists?
-2. Row 94's Col A was renamed by the agent — restore the old generic
-   name?
-3. Duplicate DermaVeen rows 107/108 — delete one?
-4. After Friday is scrapped: is the 05:00 `--daily-scan` window enough,
-   or should a weekly summary still be composed from the daily posts?
+1. ~~Rows 14/94/113/114 agent-written direct keywords~~ — **ANSWERED:
+   KEEP** (user manually edited what was needed and completed the
+   website adds) — binding B9.
+2. ~~Row 94's Col A renamed by the agent — restore?~~ — **ANSWERED:
+   KEEP the names as they are now** (user changed them; B8 governs
+   future behaviour).
+3. ~~DermaVeen duplicates~~ — **RETRACTED: no duplicates** (106 Daily
+   500mL / 107 Extra 500mL / 108 Extra 1L — distinct products, see
+   A5b). Only open micro-item: row 107's `'$12.00'` string price.
+4. ~~Friday / weekly summary~~ — **ANSWERED: Wednesday run is enough**
+   (B6); Friday was for the other shops, unrelated to this flow.
 5. Sub-category set: keep the granular sheet-only labels
    ('cheese sticks', 'olive spread') or fold them into taxonomy
-   families?
+   families? — still open (architect may propose; user decides).
+6. Add-flow live tests: the test phase was READ-ONLY by design (the
+   live sheet + the user's in-flight WIP made write-tests unsafe).
+   The architect's test plan MUST include end-to-end add-flow tests
+   (add → price → to-do handshake → `todo done`) executed against a
+   scratch sheet or after the user green-lights live writes.
