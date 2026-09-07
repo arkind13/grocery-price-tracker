@@ -667,10 +667,16 @@ report plus a `Local_Deals` sheet tab:
    → OpenRouter GLM → OpenRouter Gemini, hard 2-attempt cap per post.
 3. **Freshness:** boards with a printed end date in the past are
    dropped; undated boards are kept.
-4. **Tab rebuild:** the `Local_Deals` tab is wiped + rewritten every
-   run (idempotent). Equivalent in-domain items share one row
-   (word-order-insensitive, variety-aware); bulk/multi-buy cells hold
-   note text while a unit-price store keeps its numeric cell.
+4. **Tab write (layout v2, 2026-09-07):** the `Local_Deals` tab gives
+   every shop a PERMANENT pricing column (no validity) and a SPECIAL
+   column (validity-stamped cells), plus one shared shop-tagged
+   Comments column. A run rebuilds ONLY its shops' special columns —
+   permanent cells, other shops' specials and other shops' comment
+   segments are preserved (fetch failures and `--stores` subsets
+   never wipe data). Equivalent in-domain items share one row
+   (word-order-insensitive, variety-aware); multi-buy/bulk notes are
+   shop-tagged into Comments while a comparable numeric rate stays in
+   the shop's special column.
 5. **Domain-gated compare:** butcheries compare ONLY against raw
    meat/chicken master rows; fruit shops ONLY against fruit & veg
    rows. Out-of-domain items are recorded and shown but never
@@ -684,10 +690,43 @@ report plus a `Local_Deals` sheet tab:
 Subcommands: `local-deals` (flags: `--stores`, `--dry-run`,
 `--no-telegram`, `--refresh-catalogue`, `--friday-gate`,
 `--provision-topic`, `--daily-scan`, `--ingest CODE`, `--ignore CODE`,
-`--dunya-site`) and `backfill-halal-check` (below). The Friday
+`--dunya-site`, `--set-permanent`, `--set-special`, `--expire-sweep`)
+and `backfill-halal-check` (below). The Friday
 cron runs with `--friday-gate` so it sends once per Friday inside the
 05:00-05:59 Sydney window. Every Telegram message prints a
 secret-free receipt line (`[telegram] ok message_id=…`) for auditing.
+
+### Permanent + special pricing columns (2026-09-07)
+
+`Local_Deals` layout v2 (10 columns): per shop a PERMANENT column and
+a SPECIAL column, then one shared Comments column.
+
+- **Validity stamps:** special cells carry ` (till 12 Sep)` — the
+  per-cell date is AUTHORITATIVE; tab row 2 keeps a per-shop summary
+  stamp ("valid until Sat 12 Sep") for readability only. Permanent
+  cells never carry validity.
+- **Expiry sweep:** `sweep_expired_specials` clears every special
+  cell whose stamp date has passed (rows are KEPT — only the cell is
+  cleared; undated specials stay until the shop's next post replaces
+  them; expired row-2 stamps are cleared too). It runs automatically
+  inside the 05:00 daily-scan window (removals ride the heartbeat or
+  first alert message) and on demand via `local-deals
+  --expire-sweep`.
+- **Manual pricing entries (chat phrases):**
+  - "update permanent pricing for fruitopia - carrots @ 6.50/kg" →
+    `local-deals --set-permanent fruitopia carrots 6.50/kg`
+  - `local-deals --set-special merjan 'beef mince' 8.99/kg --till
+    "12 September" --note 'multi buy 2 for $15'` — optional till +
+    shop-tagged note. Items match by canonical name (the Col A unit
+    suffix is ignored); unknown items append a row in the shop's
+    domain section. Permanent = no stamp; special = stamped and
+    swept. Dunya manual entries are written AS SENT (no site
+    re-check); `--dunya-site` still overwrites.
+- **Special-first reads:** `tab_store_price` (used by the halal
+  tier-3 butcher reader) takes the SPECIAL price first — skipping
+  expired cells even before the sweep runs — and falls back to the
+  PERMANENT price; non-numeric offer text never enters the maths.
+  One row can answer for several shops, each named in the result.
 
 ### Twice-daily new-post detector + inbox flow (2026-09-06)
 
@@ -721,10 +760,11 @@ never silently drops a middle post):
   stores' rows are never wiped; when several posts list the same
   item the NEWEST post's price wins), the summary INCLUDES the >20%
   standout check vs the master sheet, and each file keeps its OWN
-  validity period (alert, summary and post log). Tab row 2 is a
-  "Prices valid until" row — one stamp per shop column, refreshed at
-  every ingest (newest dated post wins); the Dunya site column is
-  n/a because site prices are always live.
+  validity period (alert, summary and post log). Every special cell
+  carries its own post's ` (till d Mon)` stamp; tab row 2 is a
+  "Prices valid until" summary row — one stamp per shop column,
+  refreshed at every ingest (newest dated post wins); the Dunya site
+  column is n/a because site prices are always live.
 - `local-deals --ignore CODE` retires a notified post permanently.
 - First-ever scan of a shop reports only posts from the last
   `backfill_days` (3) days; older pages stay quiet.
@@ -759,7 +799,8 @@ Raw meat/chicken queries are **halal-by-default**:
   products (each top candidate verified by an LLM web check; >= 0.8
   confidence auto-adds the row, <= 20 checks per run, 90-day verdict
   cache in `data/halal_status.json`) → the Local_Deals butchery tab
-  ("🔪 Local butcher (halal): …") → a clean "not available this
+  ("🔪 Local butcher (halal): …", special price first per shop, each
+  pricing shop named) → a clean "not available this
   week" message. Negatives NEVER touch the sheet — they live only in
   the ledger.
 - The shopping list (`shop`/`optimize`) runs a halal gate:

@@ -130,12 +130,18 @@ class _FakeSheet:
 
 
 class _TabSheet:
-    """Local_Deals tab layout: 5 columns, no taxonomy column."""
+    """Local_Deals tab layout v2: perm+special pair per shop, shared
+    shop-tagged Comments (2026-09-07)."""
 
     def __init__(self, rows):
-        self._rows = [["Product", "Dunya Butchery",
-                       "Merjan Brothers", "Fruitopia",
-                       "Abu Salim"]] + [list(r) for r in rows]
+        self._rows = [
+            ["Product", "Dunya perm (site)", "Dunya special (FB)",
+             "Merjan perm", "Merjan special", "Fruitopia perm",
+             "Fruitopia special", "Abu Salim perm",
+             "Abu Salim special", "Comments"],
+            ["Prices valid until", "n/a (live site)", "", "", "", "",
+             "", "", "", ""],
+        ] + [list(r) for r in rows]
 
     def get_all_values(self):
         return [list(r) for r in self._rows]
@@ -250,7 +256,8 @@ class TestTierChain(unittest.TestCase):
         sheet = _FakeSheet([["Full Cream Milk", "3L", "", "", "", ""]])
         engine = self._engine(sheet._rows)
         tab = _TabSheet([
-            ["Beef Diced /kg", "12.99", "", "", ""],
+            ["Beef Diced /kg", "", "12.99 (till 12 Sep)", "", "", "",
+             "", "", "", ""],
         ])
         with patch("core.lookup.LookupEngine", return_value=engine), \
              patch.object(engine, "_live_search_pair",
@@ -292,8 +299,10 @@ class TestTierChain(unittest.TestCase):
         """Local_Deals reader answers ONLY BUTCHERY-domain rows —
         nuggets/prepared never answer (§8.4)."""
         tab = _TabSheet([
-            ["Beef Diced /kg", "12.99", "", "", ""],
-            ["Chicken Nuggets", "", "8.50", "", ""],
+            ["Beef Diced /kg", "12.99", "", "", "", "", "", "", "",
+             ""],
+            ["Chicken Nuggets", "", "8.50", "", "", "", "", "", "",
+             ""],
         ])
         with patch("core.sheets_client.connect_worksheet",
                    return_value=tab):
@@ -303,6 +312,49 @@ class TestTierChain(unittest.TestCase):
             self.assertIn("Beef Diced", hits[0]["item"])
             self.assertEqual(query_local_butchers("chicken nuggets"),
                              [])
+
+    def test_tier3_special_price_wins_over_permanent(self):
+        """User rule 2026-09-07: the SPECIAL cell is read first."""
+        tab = _TabSheet([
+            ["Beef Diced /kg", "12.99", "9.99 (till 12 Sep)", "", "",
+             "", "", "", "", ""],
+        ])
+        with patch("core.sheets_client.connect_worksheet",
+                   return_value=tab):
+            from core.halal import query_local_butchers
+            hits = query_local_butchers("beef diced")
+        self.assertEqual(len(hits), 1)
+        self.assertIn("9.99", hits[0]["price_text"])
+        self.assertIn("special", hits[0]["price_text"])
+
+    def test_tier3_expired_special_falls_back_to_permanent(self):
+        """An expired special is skipped; the permanent price answers
+        (the sweep may not have run yet)."""
+        tab = _TabSheet([
+            ["Beef Diced /kg", "12.99", "9.99 (till 1 Sep)", "", "",
+             "", "", "", "", ""],
+        ])
+        with patch("core.sheets_client.connect_worksheet",
+                   return_value=tab):
+            from core.halal import query_local_butchers
+            hits = query_local_butchers("beef diced")
+        self.assertEqual(len(hits), 1)
+        self.assertIn("12.99", hits[0]["price_text"])
+        self.assertIn("permanent", hits[0]["price_text"])
+
+    def test_tier3_multi_shop_row_names_every_store(self):
+        """One row carrying two shops -> one hit per shop, named."""
+        tab = _TabSheet([
+            ["Beef Diced /kg", "12.99", "", "", "", "",
+             "10.50 (till 12 Sep)", "", "", ""],
+        ])
+        with patch("core.sheets_client.connect_worksheet",
+                   return_value=tab):
+            from core.halal import query_local_butchers
+            hits = query_local_butchers("beef diced")
+        stores = {h["store"] for h in hits}
+        self.assertEqual(stores, {"Dunya (site)",
+                                  "Fruitopia Mt Druitt"})
 
 
 class TestLLMPipeline(unittest.TestCase):

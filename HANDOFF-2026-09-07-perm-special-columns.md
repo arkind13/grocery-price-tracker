@@ -1,8 +1,11 @@
 # HANDOFF — Local_Deals perm/special columns (paused 2026-09-07)
 
-> Resume point for the next session. Read THIS file first — it contains
-> everything: objective, decisions, what is already coded, and the exact
-> remaining steps. No need to re-read the whole codebase.
+> **✅ COMPLETED 2026-09-07 (later session).** All §4 items done:
+> valid_until wiring, special-first halal reader, CLI
+> `--set-permanent`/`--set-special`/`--expire-sweep`, 05:00 morning
+> sweep hook, tests (1165 passing), live 7-col → 10-col migration +
+> first sweep (0 expired), docs + skill updated, three-way sync done.
+> Kept as the design record — do not resume from this file.
 
 ## 1. Objective (user request, 2026-09-07)
 

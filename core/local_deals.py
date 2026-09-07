@@ -231,6 +231,29 @@ def _post_snippet(text: str, limit: int = 70) -> str:
     return "(image-only post — no text)"
 
 
+def _run_morning_sweep() -> list[str]:
+    """Connect to the sheet and sweep expired specials (05:00 hook).
+
+    Module-level so tests can patch it — the daily-scan suite must
+    stay hermetic even when run INSIDE the real 05:00 Sydney window.
+
+    Returns:
+        list[str]: the sweep's report lines ([] on any failure —
+        the sweep never kills the scan; the next morning retries).
+    """
+    try:
+        from core.sheets_client import connect_spreadsheet
+        worksheet = ensure_local_deals_tab(connect_spreadsheet())
+        lines = sweep_expired_specials(worksheet)
+    except Exception as exc:  # noqa: BLE001 — degrade, never raise
+        print(f"[daily-scan] expiry sweep failed: "
+              f"{exc.__class__.__name__}")
+        return []
+    for line in lines:
+        print(f"[daily-scan] sweep: {line}")
+    return lines
+
+
 def run_daily_scan(dry_run: bool = False, send: bool = True,
                    max_posts: int = 3, backfill_days: int = 3,
                    force: bool = False) -> int:
@@ -294,6 +317,18 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
     if open_now and not dry_run and windows.get(window_key) == "done":
         return 0                      # this window already serviced
 
+    # Morning expiry sweep (user rule 2026-09-07): a special valid
+    # till 6-Sep must be OFF the tab on 7-Sep morning. Runs inside the
+    # once-per-window guard, 05:00 window only — independent of the
+    # Facebook fetches (a failed fetch never skips the cleanup).
+    sweep_lines: list[str] = []
+    if open_now and window_key.endswith(":5") and not dry_run:
+        sweep_lines = _run_morning_sweep()
+    sweep_block = ""
+    if sweep_lines:
+        sweep_block = ("\n🧹 Expired specials removed:\n"
+                       + "\n".join(f"• {ln}" for ln in sweep_lines))
+
     print(f"[daily-scan] window={window_key or 'off-schedule'}"
           f"{' (forced)' if force else ''}"
           f"{' (dry-run)' if dry_run else ''}")
@@ -316,6 +351,13 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
             failures.append(store["key"])
             print(f"[daily-scan] {store['key']}: "
                   f"{exc.__class__.__name__}")
+            continue
+        if not posts:
+            # Empty timeline (FB hiccup): skip the store instead of
+            # crashing on posts[0] — reported via the heartbeat.
+            failures.append(store["key"])
+            print(f"[daily-scan] {store['key']}: timeline returned "
+                  f"no posts")
             continue
         newest = posts[0]
         seen = stores.get(store["key"], {})
@@ -420,6 +462,7 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
             windows[window_key] = "done"
         _save_scan_state(state)
 
+    sweep_attached = False
     for store, post, code, detail in new_posts:
         shop_codes = [c for s, _p, c, _d in new_posts
                       if s["key"] == store["key"]]
@@ -437,6 +480,9 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
             # keeps its OWN validity date above).
             text += (f"\n📍 {len(shop_codes)} new posts from this "
                      f"shop in this scan: {', '.join(shop_codes)}")
+        if sweep_block and not sweep_attached:
+            text += sweep_block      # first message carries the sweep
+            sweep_attached = True
         print(text)
         if send and not dry_run:
             bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
@@ -464,6 +510,8 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
                     f"Sydney)")
             if bad:
                 text += f"\n⚠️ Could not check: {', '.join(bad)}"
+        text += sweep_block           # heartbeat carries it when no
+        # new-post message went out
         print(text)
         if send and not dry_run:
             bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
@@ -750,6 +798,12 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
                             ", ".join(d["item"] for d in deals[:3])
                             + ("…" if len(deals) > 3 else ""))})
         converted = [_to_vision_deal(d, category) for d in deals]
+        for c in converted:
+            # Per-post validity rides on every deal — merge_store_tab
+            # stamps each special cell with ITS OWN post's date, so
+            # two posts with different end dates coexist (user rule
+            # 2026-09-07).
+            c["valid_until"] = valid_until
         all_vision_deals.extend(converted)
 
     if not all_vision_deals:
@@ -2203,7 +2257,7 @@ def _process_store_timeline(store: dict, run_dir: Path, today_syd
         print(f"[local-deals] {store['key']}: post {post.post_ref} "
               f"has NO date in text — needs date review, excluded")
     deals: list[dict] = []
-    for post, _end in kept:
+    for post, end in kept:
         post_deals, source, vision_until = extract_post_deals(
             post, run_dir, store["key"])
         if source == "vision" and vision_until is not None \
@@ -2212,12 +2266,18 @@ def _process_store_timeline(store: dict, run_dir: Path, today_syd
                   f"{post.post_ref} board expired {vision_until} "
                   f"(vision date) — dropped")
             continue
+        # The post's validity rides on every deal so the tab's
+        # special cells stamp per post (user rule 2026-09-07);
+        # a vision-parsed date (image-only board) refines the text.
+        deal_until = (vision_until if source == "vision"
+                      and vision_until else end)
         for deal in post_deals:
             deals.append({**deal,
                           "store_key": store["key"],
                           "store_name": store["name"],
                           "post_ref": post.post_ref,
-                          "source": source})
+                          "source": source,
+                          "valid_until": deal_until})
     if not deals:
         raise FetchUnavailable(
             "no in-scope deals from timeline (last 3 posts)")
@@ -2258,17 +2318,19 @@ def _process_store(store: dict, run_dir: Path, today_syd) -> list[dict]:
     for post in posts:
         payload = parse_board_images(post.files)
         valid_until = payload.get("valid_until")
-        if valid_until:
-            try:
-                if date.fromisoformat(str(valid_until)) < today_syd:
-                    continue   # expired board — freshness drop (§5)
-            except ValueError:
-                pass           # unparseable date keeps the post
+        try:
+            board_until = (date.fromisoformat(str(valid_until))
+                           if valid_until else None)
+        except ValueError:
+            board_until = None
+        if board_until and board_until < today_syd:
+            continue   # expired board — freshness drop (§5)
         for deal in payload.get("deals") or []:
             deals.append({**deal,
                           "store_key": store["key"],
                           "store_name": store["name"],
-                          "post_ref": post.post_ref})
+                          "post_ref": post.post_ref,
+                          "valid_until": board_until})
     if not deals:
         from extractors.fb_flyer_fetch import FetchUnavailable
         raise FetchUnavailable("no deals parsed from any post")
@@ -2823,8 +2885,7 @@ def sync_dunya_site(dry_run: bool = False, send: bool = True,
     spreadsheet = connect_spreadsheet()
     worksheet = ensure_local_deals_tab(spreadsheet)
     grid_before = worksheet.get_all_values() or []
-    dunya_col = next(i for i, (k, _n) in enumerate(STORE_COLUMNS)
-                     if k == "dunya") + 1
+    dunya_col = _perm_column_for("dunya")     # site prices column
     before = {str(r[0]).strip(): r[dunya_col]
               for r in grid_before[1:] if len(r) > dunya_col}
     rows = merge_store_tab(worksheet, "dunya",
@@ -2963,8 +3024,18 @@ def run_local_deals(stores=None, dry_run: bool = False,
             spreadsheet = connect_spreadsheet()
             worksheet = ensure_local_deals_tab(spreadsheet)
             rows_by_section = build_rows(store_deals)
+            # Row-2 summary stamp per shop: the NEWEST dated post of
+            # the run (per-cell stamps are authoritative; this is
+            # readability only).
+            validity = {}
+            for key, shop_deals in store_deals.items():
+                dated = [d["valid_until"] for d in shop_deals
+                         if d.get("valid_until")]
+                if dated:
+                    validity[key] = (f"valid until "
+                                     f"{max(dated):%a %d %b}")
             rebuild_tab(worksheet, rows_by_section,
-                        list(store_deals.keys()))
+                        list(store_deals.keys()), validity=validity)
         except Exception as exc:  # noqa: BLE001 — tab write is not
             # allowed to kill the report; the run still delivers.
             print(f"[local-deals] tab rebuild failed: "

@@ -535,6 +535,8 @@ class TestDailyScan(unittest.TestCase):
         with tf.TemporaryDirectory() as tmp:
             with patch.object(ld, "SCAN_STATE_PATH",
                               Path(tmp) / "s.json"), \
+                    patch.object(ld, "_run_morning_sweep",
+                                 return_value=[]), \
                     patch("extractors.fb_timeline_fetch."
                           "fetch_timeline_posts",
                           return_value=[_P()]), \
@@ -566,6 +568,8 @@ class TestDailyScan(unittest.TestCase):
         with tf.TemporaryDirectory() as tmp:
             with patch.object(ld, "SCAN_STATE_PATH",
                               Path(tmp) / "s.json"), \
+                    patch.object(ld, "_run_morning_sweep",
+                                 return_value=[]), \
                     patch("extractors.fb_timeline_fetch."
                           "fetch_timeline_posts",
                           return_value=[_P()]):
@@ -728,6 +732,8 @@ class TestDailyScan(unittest.TestCase):
         with tf.TemporaryDirectory() as tmp:
             with patch.object(ld, "SCAN_STATE_PATH",
                               Path(tmp) / "s.json"), \
+                    patch.object(ld, "_run_morning_sweep",
+                                 return_value=[]), \
                     patch("extractors.fb_timeline_fetch."
                           "fetch_timeline_posts",
                           side_effect=fake_fetch), \
@@ -743,6 +749,55 @@ class TestDailyScan(unittest.TestCase):
         self.assertIn("no new posts", sent[0])
         self.assertIn("Could not check: Merjan Brothers Quality "
                       "Meats, Abu Salim Fruit Market", sent[0])
+
+
+    def test_morning_sweep_fires_at_5am_only(self):
+        """User rule 2026-09-07: the 05:00 scan sweeps expired
+        specials and reports the removals in the heartbeat; the
+        15:00 scan does not sweep."""
+        import tempfile as tf
+        from datetime import datetime as _dtmod
+        from zoneinfo import ZoneInfo as _ZI
+        from core import local_deals as ld
+
+        sweeps = []
+
+        def fake_sweep():
+            sweeps.append(1)
+            return ["Fruitopia Mt Druitt: Carrots /ea — 0.75 "
+                    "(till 6 Sep) removed (expired 06 Sep)"]
+
+        def _scan(hour):
+            sent = []
+            with tf.TemporaryDirectory() as tmp:
+                with patch.object(ld, "SCAN_STATE_PATH",
+                                  Path(tmp) / "s.json"), \
+                        patch.object(ld, "sydney_now",
+                                     lambda: _dtmod(
+                                         2026, 9, 7, hour, 7,
+                                         tzinfo=_ZI(
+                                             "Australia/Sydney"))), \
+                        patch.object(ld, "_run_morning_sweep",
+                                     side_effect=fake_sweep), \
+                        patch("extractors.fb_timeline_fetch."
+                              "fetch_timeline_posts",
+                              return_value=[]), \
+                        patch.object(ld, "_send_message",
+                                     side_effect=lambda *a, **k:
+                                     sent.append(a[2] if len(a) > 2
+                                                 else k.get("text",
+                                                            ""))
+                                     or {"ok": True}):
+                    ld._save_scan_state({})
+                    ld.run_daily_scan(send=True, force=True)
+            return sent
+
+        sent5 = _scan(5)
+        self.assertEqual(sweeps, [1])               # swept once
+        self.assertTrue(any("🧹 Expired specials removed" in t
+                            and "Carrots" in t for t in sent5))
+        _scan(15)
+        self.assertEqual(sweeps, [1])               # NOT swept again
 
 
 class TestMergeStoreTab(unittest.TestCase):
@@ -768,14 +823,14 @@ class TestMergeStoreTab(unittest.TestCase):
 
     def _existing(self):
         return [
-            ["Product", "Dunya (site)", "Dunya FB specials",
-             "Merjan Brothers Quality Meats",
-             "Fruitopia Mt Druitt", "Abu Salim Fruit Market",
-             "Comments"],
-            ["FRUITS", "", "", "", "", "", ""],
-            ["Apples", "", "", "", 3.2, "", ""],
-            ["BUTCHERY", "", "", "", "", "", ""],
-            ["Beef Diced", 12.99, "", "", "", "", ""],
+            ["Product", "Dunya perm (site)", "Dunya special (FB)",
+             "Merjan perm", "Merjan special", "Fruitopia perm",
+             "Fruitopia special", "Abu Salim perm",
+             "Abu Salim special", "Comments"],
+            ["FRUITS", "", "", "", "", "", "", "", "", ""],
+            ["Apples", "", "", "", "", "", 3.2, "", "", ""],
+            ["BUTCHERY", "", "", "", "", "", "", "", "", ""],
+            ["Beef Diced", 12.99, "", "", "", "", "", "", "", ""],
         ]
 
     def test_merge_updates_and_appends_without_wiping(self):
@@ -798,14 +853,14 @@ class TestMergeStoreTab(unittest.TestCase):
         grid = tab.grid
         apples = next(r for r in grid
                       if r and str(r[0]).strip() == "Apples")
-        self.assertEqual(apples[4], 3.2)            # updated (Fruitopia col)
-        self.assertEqual(apples[1], "")             # Dunya intact
+        self.assertEqual(apples[6], 3.2)   # updated (Fruitopia special)
+        self.assertEqual(apples[1], "")             # Dunya perm intact
         beef = next(r for r in grid
                     if r and str(r[0]).strip() == "Beef Diced")
         self.assertEqual(beef[1], 12.99)            # untouched
         lettuce = next(r for r in grid
                        if str(r[0]).strip().startswith("Cos Lettuce"))
-        self.assertEqual(lettuce[4], 0.99)          # appended
+        self.assertEqual(lettuce[6], 0.99)          # appended
         idx_f = next(i for i, r in enumerate(grid)
                      if r and r[0] == "FRUITS")
         idx_b = next(i for i, r in enumerate(grid)
@@ -833,13 +888,13 @@ class TestMergeStoreTab(unittest.TestCase):
         grid = tab.grid
         self.assertEqual(grid[1][0], "Prices valid until")
         self.assertEqual(grid[1][1], "n/a (live site)")   # Dunya site
-        self.assertEqual(grid[1][4], "valid until Sat 12 Sep")
-        self.assertEqual(grid[1][3], "")                  # Merjan
+        self.assertEqual(grid[1][6], "valid until Sat 12 Sep")
+        self.assertEqual(grid[1][4], "")                  # Merjan
         # no date given -> row exists, nothing stamped
         tab2 = self._FakeTab(self._existing())
         ld.merge_store_tab(tab2, "fruitopia", deals)
         self.assertEqual(tab2.grid[1][0], "Prices valid until")
-        self.assertEqual(tab2.grid[1][4], "")
+        self.assertEqual(tab2.grid[1][6], "")
 
     def test_rebuild_tab_includes_validity_row(self):
         """rebuild_tab writes the canonical validity row under the
@@ -847,15 +902,16 @@ class TestMergeStoreTab(unittest.TestCase):
         from core import local_deals as ld
         tab = self._FakeTab([])
         ld.rebuild_tab(
-            tab, {"FRUITS": [["Apples /kg", "", "", "", 3.2, "", ""]]},
+            tab, {"FRUITS": [["Apples /kg", "", "", "", "", "", 3.2,
+                              "", "", ""]]},
             ["fruitopia"],
             validity={"fruitopia": "valid until Sat 12 Sep"})
         grid = tab.grid
         self.assertEqual(grid[0][0], "Product")
         self.assertEqual(grid[1][0], "Prices valid until")
         self.assertEqual(grid[1][1], "n/a (live site)")
-        self.assertEqual(grid[1][4], "valid until Sat 12 Sep")
-        self.assertEqual(grid[1][3], "")
+        self.assertEqual(grid[1][6], "valid until Sat 12 Sep")
+        self.assertEqual(grid[1][4], "")
 
 
 class TestIngestFlow(unittest.TestCase):
@@ -976,10 +1032,10 @@ class TestIngestFlow(unittest.TestCase):
         from core import local_deals as ld
 
         tab = self._FakeTab([
-            ["Product", "Dunya (site)", "Dunya FB specials",
-             "Merjan Brothers Quality Meats",
-             "Fruitopia Mt Druitt", "Abu Salim Fruit Market",
-             "Comments"],
+            ["Product", "Dunya perm (site)", "Dunya special (FB)",
+             "Merjan perm", "Merjan special", "Fruitopia perm",
+             "Fruitopia special", "Abu Salim perm",
+             "Abu Salim special", "Comments"],
         ])
         with tf.TemporaryDirectory() as tmp:
             inbox = Path(tmp) / "FRU0709260907"
@@ -1020,9 +1076,9 @@ class TestIngestFlow(unittest.TestCase):
         lettuce = next(r for r in tab.grid
                        if r and str(r[0]).strip().startswith(
                            "Cos Lettuce"))
-        self.assertEqual(lettuce[4], 0.99)  # NEWEST post's price
-        # validity stamp = the NEWEST dated file's period
-        self.assertEqual(tab.grid[1][4],
+        self.assertEqual(lettuce[6], "0.99 (till 19 Sep)")
+        # NEWEST post's price, stamped with ITS OWN post's validity
+        self.assertEqual(tab.grid[1][6],
                          "valid until Sat 19 Sep")
 
     def test_set_date_records_and_archives(self):
@@ -1152,11 +1208,11 @@ class TestDunyaSiteSync(unittest.TestCase):
                     if str(r[0]).strip().startswith("Lamb Leg Roast"))
         # clean name (entity decoded, size fragment dropped)
         self.assertEqual(lamb[0], "Lamb Leg Roast /ea")
-        # specials cell = effective unit rate ($30 / 2)
+        # PERM cell (site prices are permanent) = effective unit rate
         self.assertEqual(lamb[1], 15.0)
-        # comments = the bundle note
-        self.assertEqual(lamb[6],
-                         "[multi buy 2 for $30.00 — $15.00/ea]")
+        # comments = the shop-tagged bundle note
+        self.assertEqual(lamb[9],
+                         "[DUN] [multi buy 2 for $30.00 — $15.00/ea]")
         self.assertIn("1 on offer", sent[0])
 
 
@@ -1219,6 +1275,8 @@ class TestScanWindowsAndCutoff(unittest.TestCase):
         with tf.TemporaryDirectory() as tmp:
             with patch.object(ld, "SCAN_STATE_PATH",
                               Path(tmp) / "s.json"), \
+                    patch.object(ld, "_run_morning_sweep",
+                                 return_value=[]), \
                     patch("extractors.fb_timeline_fetch."
                           "fetch_timeline_posts",
                           side_effect=fake_fetch), \

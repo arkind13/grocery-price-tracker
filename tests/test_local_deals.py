@@ -162,8 +162,10 @@ class TestSheetRebuild(unittest.TestCase):
         self.assertEqual(len(fruit_rows), 1)
         row = fruit_rows[0]
         self.assertIn("multi buy 5kg for $2.99", str(row))
-        # fruitopia numeric on the same row (col 4 in the 7-col tab)
-        self.assertEqual(row[4], 3.00)
+        # 10-col layout v2: abusalim special = idx 8 (bulk price),
+        # fruitopia special = idx 6 on the SAME canonical row.
+        self.assertEqual(row[8], 2.99)
+        self.assertEqual(row[6], 3.00)
 
     def test_out_of_domain_items_recorded_under_other(self):
         """Out-of-domain items are recorded (never dropped) under
@@ -435,20 +437,22 @@ class TestReport(unittest.TestCase):
                      category="fruits", kind="bulk_pack", price=2.99,
                      unit="pack", bulk_size="5kg")
         rows = ld.build_rows({"abusalim": [deal]})
-        # New layout: numeric specials price in the store column,
-        # the multi-buy/bulk note moved to the Comments column.
-        self.assertEqual(rows["FRUITS"][0][5], 2.99)
-        self.assertEqual(rows["FRUITS"][0][6],
-                         "[multi buy 5kg for $2.99]")
+        # Layout v2: numeric specials price in the shop's SPECIAL
+        # column (abusalim = idx 8), the bulk note shop-tagged in
+        # Comments (idx 9).
+        self.assertEqual(rows["FRUITS"][0][8], 2.99)
+        self.assertEqual(rows["FRUITS"][0][9],
+                         "[ABS] [multi buy 5kg for $2.99]")
         results = ld.match_and_detect([deal], [], {})
         self.assertEqual(results[0].multibuy_note,
                          "multi buy 5kg for $2.99 — $0.60/kg")
         mb = _deal(item="Sausages", kind="multibuy", price=15.0,
                    unit="pack", multibuy_qty=2)
         rows2 = ld.build_rows({"dunya_fb": [mb]})
+        # Layout v2: dunya special (FB) = idx 2, Comments = idx 9.
         self.assertEqual(rows2["BUTCHERY"][0][2], 7.5)
-        self.assertEqual(rows2["BUTCHERY"][0][6],
-                         "[multi buy 2 for $15.00 — $7.50/ea]")
+        self.assertEqual(rows2["BUTCHERY"][0][9],
+                         "[DUN] [multi buy 2 for $15.00 — $7.50/ea]")
 
     def test_no_prices_warn_line(self):
         """A run with one active store -> ⚠️ lines for the other
@@ -844,6 +848,378 @@ class TestFreshness(unittest.TestCase):
              patch.object(ff, "_download", fake_download):
             posts = ff.fetch_store_posts(ff.STORES[0], Path(tmp))
         self.assertEqual(len(posts), 3)
+
+
+# ---------------------------------------------------------------------------
+# Layout v2: validity stamps, sweep, special-first reads, manual entry
+# ---------------------------------------------------------------------------
+def _v2_grid():
+    """Header + validity row of the 10-column layout v2."""
+    return [["Product"] + [n for _k, n in ld.TAB_COLUMNS],
+            ["Prices valid until", "n/a (live site)",
+             "", "", "", "", "", "", "", ""]]
+
+
+def _v2_ws(data_rows):
+    """FakeWorksheet preloaded with a layout-v2 tab."""
+    ws = FakeWorksheet()
+    ws.rows = _v2_grid() + [list(r) for r in data_rows]
+    return ws
+
+
+class TestValidityStamps(unittest.TestCase):
+    """' (till 12 Sep)' stamp parse/expire helpers."""
+
+    def test_stamp_and_strip_roundtrip(self):
+        stamped = ld._stamp_validity(0.75, datetime(2026, 9, 12).date())
+        self.assertEqual(stamped, "0.75 (till 12 Sep)")
+        self.assertEqual(ld._strip_till(stamped), "0.75")
+        self.assertEqual(ld._stamp_validity(0.75, None), 0.75)
+
+    def test_cell_till_date_parses_day_month(self):
+        d = datetime(2026, 9, 7).date()
+        self.assertEqual(ld._cell_till_date("0.75 (till 12 Sep)", d),
+                         datetime(2026, 9, 12).date())
+        self.assertEqual(
+            ld._cell_till_date("0.75 (till 12 September)", d),
+            datetime(2026, 9, 12).date())
+        self.assertIsNone(ld._cell_till_date("0.75", d))
+        self.assertIsNone(ld._cell_till_date("[multi buy 2 for $1.50]",
+                                             d))
+
+    def test_special_expired_boundary(self):
+        d = datetime(2026, 9, 7).date()
+        self.assertTrue(ld._special_expired("0.75 (till 6 Sep)", d))
+        self.assertFalse(ld._special_expired("0.75 (till 7 Sep)", d))
+        self.assertFalse(ld._special_expired("0.75 (till 12 Sep)", d))
+        self.assertFalse(ld._special_expired("0.75", d))  # undated
+
+    def test_numeric_price_ignores_stamp(self):
+        self.assertEqual(ld._numeric_price("0.75 (till 12 Sep)"),
+                         pytest.approx(0.75))
+
+
+class TestTabStorePrice(unittest.TestCase):
+    """Special-first reading with permanent fallback."""
+
+    TODAY = datetime(2026, 9, 7).date()
+
+    def test_special_wins_over_permanent(self):
+        row = ["Carrots /kg", "", "", "", "", 6.50, 0.75, "", "", ""]
+        price, source = ld.tab_store_price(row, "fruitopia",
+                                           today=self.TODAY)
+        self.assertEqual(price, pytest.approx(0.75))
+        self.assertEqual(source, "special")
+
+    def test_expired_special_skipped_permanent_fallback(self):
+        row = ["Carrots /kg", "", "", "", "", 6.50,
+               "0.75 (till 6 Sep)", "", "", ""]
+        price, source = ld.tab_store_price(row, "fruitopia",
+                                           today=self.TODAY)
+        self.assertEqual(price, pytest.approx(6.50))
+        self.assertEqual(source, "permanent")
+
+    def test_non_numeric_offer_text_is_none(self):
+        row = ["Carrots /ea", "", "", "", "", "",
+               "[multi buy 2 for $1.50 — $0.75/ea]", "", "", ""]
+        price, source = ld.tab_store_price(row, "fruitopia",
+                                           today=self.TODAY)
+        self.assertIsNone(price)
+        self.assertEqual(source, "")
+
+    def test_other_shops_cells_invisible(self):
+        row = ["Carrots /kg", "", "", "", "", 6.50, 0.75, "", "", ""]
+        price, _src = ld.tab_store_price(row, "merjan",
+                                         today=self.TODAY)
+        self.assertIsNone(price)
+
+
+class TestSweepExpiredSpecials(unittest.TestCase):
+    """Morning sweep: dated expired cells cleared, everything else
+    kept (rows never deleted, permanent never touched)."""
+
+    TODAY = datetime(2026, 9, 7).date()
+
+    def test_expired_cell_cleared_row_and_comment_kept(self):
+        ws = _v2_ws([
+            ["FRUITS", "", "", "", "", "", "", "", "", ""],
+            ["Carrots /ea", "", "", "", "", "",
+             "0.75 (till 6 Sep)", "", "",
+             "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
+        ])
+        lines = ld.sweep_expired_specials(ws, today=self.TODAY)
+        self.assertEqual(len(lines), 1)
+        self.assertIn("Carrots", lines[0])
+        grid = ws.get_all_values()
+        self.assertEqual(grid[3][0], "Carrots /ea")   # row KEPT
+        self.assertEqual(grid[3][6], "")              # cell cleared
+        self.assertIn("multi buy", grid[3][9])        # comment kept
+
+    def test_future_dated_and_undated_specials_kept(self):
+        ws = _v2_ws([
+            ["FRUITS", "", "", "", "", "", "", "", "", ""],
+            ["Carrots /ea", "", "", "", "", "",
+             "0.75 (till 12 Sep)", "", "", ""],
+            ["Apples /kg", "", "", "", "", "", 2.50, "", "", ""],
+        ])
+        self.assertEqual(ld.sweep_expired_specials(
+            ws, today=self.TODAY), [])
+        grid = ws.get_all_values()
+        self.assertEqual(grid[3][6], "0.75 (till 12 Sep)")
+        self.assertEqual(grid[4][6], 2.50)
+
+    def test_permanent_cell_never_swept_even_if_stamped(self):
+        ws = _v2_ws([
+            # stamp sits in the FRUITOPIA PERM column (idx 5) —
+            # permanent columns are outside the sweep's remit
+            ["FRUITS", "", "", "", "", "6.50 (till 1 Sep)",
+             "", "", "", ""],
+        ])
+        self.assertEqual(ld.sweep_expired_specials(
+            ws, today=self.TODAY), [])
+        self.assertEqual(ws.get_all_values()[2][5],
+                         "6.50 (till 1 Sep)")
+
+    def test_expired_row2_summary_stamp_cleared(self):
+        ws = _v2_ws([
+            ["FRUITS", "", "", "", "", "", "", "", "", ""],
+            ["Carrots /ea", "", "", "", "", "", 0.75, "", "", ""],
+        ])
+        ws.rows[1][6] = "valid until Sun 06 Sep"   # fruitopia sp
+        ws.rows[1][4] = "valid until Sat 12 Sep"   # merjan sp
+        lines = ld.sweep_expired_specials(ws, today=self.TODAY)
+        self.assertEqual(len(lines), 1)
+        grid = ws.get_all_values()
+        self.assertEqual(grid[1][6], "")
+        self.assertEqual(grid[1][4], "valid until Sat 12 Sep")
+
+    def test_no_write_when_nothing_expired(self):
+        ws = _v2_ws([])
+        ws.clear_calls = 0
+        self.assertEqual(ld.sweep_expired_specials(ws,
+                                                   today=self.TODAY),
+                         [])
+        self.assertEqual(ws.clear_calls, 0)
+
+
+class TestSetStorePrices(unittest.TestCase):
+    """Manual pricing entry: canonical match, stamps, tagged notes."""
+
+    TILL = datetime(2026, 9, 12).date()
+
+    def test_new_row_appended_in_shop_section_with_stamp(self):
+        ws = _v2_ws([])
+        lines = ld.set_store_prices(ws, "fruitopia", "special",
+                                    [{"item": "Carrots",
+                                      "price": 0.75, "unit": "ea"}],
+                                    till=self.TILL)
+        grid = ws.get_all_values()
+        self.assertEqual(grid[2][0], "FRUITS")
+        self.assertEqual(grid[3][0], "Carrots /ea")
+        self.assertEqual(grid[3][6], "0.75 (till 12 Sep)")
+        self.assertEqual(grid[1][6], "valid until Sat 12 Sep")
+        self.assertIn("[new row]", lines[0])
+
+    def test_existing_row_matched_ignoring_unit_suffix(self):
+        ws = _v2_ws([
+            ["FRUITS", "", "", "", "", "", "", "", "", ""],
+            ["Carrots /kg", "", "", "", "", "", 1.20, "", "", ""],
+        ])
+        lines = ld.set_store_prices(ws, "fruitopia", "special",
+                                    [{"item": "carrots",
+                                      "price": 0.75, "unit": "ea"}])
+        grid = ws.get_all_values()
+        self.assertEqual(len(grid), 4)            # no row appended
+        self.assertEqual(grid[3][6], 0.75)
+        self.assertIn("[row 4]", lines[0])
+
+    def test_permanent_write_has_no_stamp(self):
+        ws = _v2_ws([])
+        ld.set_store_prices(ws, "fruitopia", "perm",
+                            [{"item": "Carrots", "price": 6.50,
+                              "unit": "kg"}])
+        grid = ws.get_all_values()
+        self.assertEqual(grid[3][5], 6.50)        # fruitopia PERM
+        self.assertEqual(grid[1][5], "")          # no validity stamp
+        self.assertEqual(grid[3][6], "")          # special untouched
+
+    def test_notes_shop_tagged_and_merged_across_shops(self):
+        ws = _v2_ws([
+            ["FRUITS", "", "", "", "", "", "", "", "", ""],
+            ["Carrots /ea", "", "", "", "", "", 0.75, "", "",
+             "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
+        ])
+        # abusalim is a FRUITS shop -> same section block -> merge
+        ld.set_store_prices(ws, "abusalim", "special",
+                            [{"item": "Carrots", "price": 0.80,
+                              "unit": "ea",
+                              "note": "bulk 3 for $2"}])
+        grid = ws.get_all_values()
+        self.assertEqual(
+            grid[3][9],
+            "[FRU] multi buy 2 for $1.50 — $0.75/ea; "
+            "[ABS] bulk 3 for $2")
+
+    def test_butchery_shop_entries_route_to_butchery_section(self):
+        """Merjan (butchery) pricing beef merges inside BUTCHERY;
+        a butchery's produce entry appends under BUTCHERY too."""
+        ws = _v2_ws([
+            ["BUTCHERY", "", "", "", "", "", "", "", "", ""],
+            ["Beef Diced /kg", "", "", 9.50, "", "", "", "", "",
+             ""],
+        ])
+        lines = ld.set_store_prices(ws, "merjan", "special",
+                                    [{"item": "beef diced",
+                                      "price": 8.99, "unit": "kg"}])
+        grid = ws.get_all_values()
+        self.assertEqual(grid[3][4], 8.99)        # matched, no dup
+        self.assertEqual(len(grid), 4)
+        self.assertIn("[row 4]", lines[0])
+
+    def test_unreadable_entry_reported_not_written(self):
+        ws = _v2_ws([])
+        lines = ld.set_store_prices(ws, "fruitopia", "special",
+                                    [{"item": "", "price": 0.75,
+                                      "unit": "ea"}])
+        self.assertIn("skipped", lines[0])
+        self.assertEqual(len(ws.get_all_values()), 2)
+
+
+class TestRebuildPreservation(unittest.TestCase):
+    """Layout-v2 rebuild: perm + non-run shops + comments survive."""
+
+    def _rebuild(self, ws, deals, keys, validity=None):
+        rows = ld.build_rows(deals)
+        ld.rebuild_tab(ws, rows, keys, validity=validity)
+
+    def test_permanent_survives_special_rebuild(self):
+        ws = _v2_ws([
+            ["FRUITS", "", "", "", "", "", "", "", "", ""],
+            ["Carrots /kg", 6.49, "", "", "", "", "0.75 (till 6 Sep)",
+             "", "", ""],
+        ])
+        deals = {"fruitopia": [_deal(item="Carrots",
+                                     store="fruitopia",
+                                     category="fruits", price=0.80,
+                                     unit="kg",
+                                     valid_until=datetime(
+                                         2026, 9, 12).date())]}
+        self._rebuild(ws, deals, ["fruitopia"],
+                      validity={"fruitopia":
+                                "valid until Sat 12 Sep"})
+        grid = ws.get_all_values()
+        carrot = next(r for r in grid if r[0] == "Carrots /kg")
+        self.assertEqual(carrot[1], 6.49)         # dunya PERM kept
+        self.assertEqual(carrot[6], "0.8 (till 12 Sep)")
+        self.assertEqual(grid[1][6], "valid until Sat 12 Sep")
+
+    def test_non_run_shop_special_survives(self):
+        ws = _v2_ws([
+            ["BUTCHERY", "", "", "", "", "", "", "", "", ""],
+            ["Beef Diced /kg", "", 12.99, "", 9.50, "", "", "", "",
+             ""],
+        ])
+        deals = {"dunya_fb": [_deal(item="Beef Diced", store="dunya",
+                                    category="butchery",
+                                    price=11.99)]}
+        self._rebuild(ws, deals, ["dunya_fb"])
+        grid = ws.get_all_values()
+        beef = next(r for r in grid if r[0] == "Beef Diced /kg")
+        self.assertEqual(beef[2], 11.99)          # this run rebuilt
+        self.assertEqual(beef[4], 9.50)           # MERJAN special kept
+
+    def test_comment_segments_merge_both_directions(self):
+        ws = _v2_ws([
+            ["FRUITS", "", "", "", "", "", "", "", "", ""],
+            ["Carrots /ea", "", "", "", "", "", 0.75, "", "",
+             "[MER] bulk 3 for $2"],
+        ])
+        deals = {"fruitopia": [_deal(
+            item="Carrots", store="fruitopia", category="fruits",
+            price=0.75, unit="ea", kind="multibuy", multibuy_qty=2)]}
+        self._rebuild(ws, deals, ["fruitopia"])
+        grid = ws.get_all_values()
+        carrot = next(r for r in grid if r[0] == "Carrots /ea")
+        self.assertIn("[MER] bulk 3 for $2", carrot[9])
+        self.assertIn("[FRU]", carrot[9])
+        self.assertIn("multi buy 2 for", carrot[9])
+
+    def test_row_only_other_shop_data_reappended(self):
+        ws = _v2_ws([
+            ["FRUITS", "", "", "", "", "", "", "", "", ""],
+            ["Mangoes /ea", "", "", "", 3.00, "", "", "", "", ""],
+        ])
+        deals = {"fruitopia": [_deal(item="Apples",
+                                     store="fruitopia",
+                                     category="fruits", price=2.00)]}
+        self._rebuild(ws, deals, ["fruitopia"])
+        grid = ws.get_all_values()
+        mango = next(r for r in grid if r[0] == "Mangoes /ea")
+        self.assertEqual(mango[4], 3.00)   # merjan-only row survives
+
+    def test_stale_special_of_run_shop_cleared(self):
+        ws = _v2_ws([
+            ["FRUITS", "", "", "", "", "", "", "", "", ""],
+            ["Mangoes /ea", "", "", "", "", "", 3.00, "", "", ""],
+        ])
+        deals = {"fruitopia": [_deal(item="Apples",
+                                     store="fruitopia",
+                                     category="fruits", price=2.00)]}
+        self._rebuild(ws, deals, ["fruitopia"])
+        grid = ws.get_all_values()
+        self.assertFalse(any(r[0] == "Mangoes /ea" and r[6]
+                             for r in grid))
+
+
+class TestValidUntilAttach(unittest.TestCase):
+    """Deals carry their post's validity into the tab builders."""
+
+    def test_timeline_deals_carry_post_validity(self):
+        post = type("P", (), {
+            "text": "Valid until 12 September\nSPECIALS\n"
+                    "Carrots 0.75/ea",
+            "image_urls": [], "post_ref": "fru-p1",
+            "creation_time": None})()
+        with patch("extractors.fb_timeline_fetch."
+                   "fetch_timeline_posts", return_value=[post]), \
+             patch.object(ld, "extract_post_deals",
+                          return_value=([{"item": "Carrots",
+                                          "price": 0.75,
+                                          "unit": "ea"}],
+                                        "text", None)):
+            deals = ld._process_store_timeline(
+                {"key": "fruitopia", "name": "Fruitopia Mt Druitt",
+                 "pipeline": "timeline"},
+                Path("unused"), datetime(2026, 9, 7).date())
+        self.assertEqual(deals[0]["valid_until"],
+                         datetime(2026, 9, 12).date())
+
+    def test_photos_deals_carry_board_validity(self):
+        from extractors.fb_flyer_fetch import PostImages
+        posts = [PostImages(post_ref="dunya-p1",
+                            files=[Path("x.jpg")])]
+        with patch("extractors.fb_flyer_fetch.fetch_store_posts",
+                   return_value=posts), \
+             patch("core.flyer_vision.parse_board_images",
+                   return_value={"valid_until": "2026-09-12",
+                                 "deals": [{"item": "Beef Diced",
+                                            "price": 9.0}]}):
+            deals = ld._process_store(
+                {"key": "dunya", "name": "Dunya Butchery"},
+                Path("unused"), datetime(2026, 9, 7).date())
+        self.assertEqual(deals[0]["valid_until"],
+                         datetime(2026, 9, 12).date())
+
+    def test_build_rows_stamps_special_cell_with_deal_date(self):
+        deals = {"fruitopia": [_deal(item="Carrots",
+                                     store="fruitopia",
+                                     category="fruits", price=0.75,
+                                     unit="ea",
+                                     valid_until=datetime(
+                                         2026, 9, 12).date())]}
+        rows = ld.build_rows(deals)
+        self.assertEqual(rows["FRUITS"][0][6], "0.75 (till 12 Sep)")
+        self.assertEqual(rows["FRUITS"][0][9], "")  # no note, no tag
 
 
 if __name__ == "__main__":

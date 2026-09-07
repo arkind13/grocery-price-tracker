@@ -387,16 +387,21 @@ def query_local_butchers(term: str) -> list[dict]:
     classified via core.subcategory and kept only when the label is
     in BUTCHERY_DOMAIN — nuggets/patties/schnitzels never answer
     (§8.4). Rows match when token_set_ratio >= 0.5 or the query
-    tokens are contained. Missing/empty tab -> []. Butcheries are
-    assumed halal (D-H6).
+    tokens are contained. Prices read SPECIAL-FIRST per shop via
+    tab_store_price (expired specials skipped, permanent falls back,
+    non-numeric offer text never enters) — layout v2 can carry up to
+    four shops on one row, so one row may yield several hits.
+    Missing/empty tab -> []. Butcheries are assumed halal (D-H6).
 
     Args:
         term: raw meat query.
 
     Returns:
-        [{store, item, price_text}] matches (display-ready).
+        [{store, item, price_text}] matches (display-ready; store is
+        the shop's display name, price_text source-aware).
     """
-    from core.local_deals import BUTCHERY_DOMAIN
+    from core.local_deals import (BUTCHERY_DOMAIN, SECTION_ORDER,
+                                  STORE_COLUMNS, tab_store_price)
     from core.name_matcher import similarity_tokens, token_set_ratio
     from core.subcategory import classify_subcategory
     words = set(re.findall(r"[a-z0-9]+", (term or "").lower()))
@@ -418,6 +423,8 @@ def query_local_butchers(term: str) -> list[dict]:
         if not row or not str(row[0]).strip():
             continue
         name = str(row[0]).strip()
+        if name in SECTION_ORDER or name == "Prices valid until":
+            continue                  # structural row, not an item
         label, _conf = classify_subcategory(name)
         if label not in BUTCHERY_DOMAIN:
             continue
@@ -425,11 +432,14 @@ def query_local_butchers(term: str) -> list[dict]:
         containment = bool(query_tokens) and query_tokens.issubset(
             similarity_tokens(name))
         if ratio >= 0.5 or containment:
-            price_text = next(
-                (str(cell).strip() for cell in row[1:]
-                 if str(cell).strip() not in ("", "0")), "")
-            matches.append({"store": "", "item": name,
-                            "price_text": price_text})
+            for key, shop_name in STORE_COLUMNS:
+                price, source = tab_store_price(row, key)
+                if price is None or price <= 0:
+                    continue
+                unit = "kg" if name.lower().endswith("/kg") else "ea"
+                matches.append({
+                    "store": shop_name, "item": name,
+                    "price_text": f"${price:.2f}/{unit} ({source})"})
     return matches
 
 
@@ -506,10 +516,16 @@ def resolve_halal_item(query: str, worksheet=None) -> HalalResolution:
 
     butchers = query_local_butchers(query)
     if butchers:
-        b = butchers[0]
-        price_part = f" — {b['price_text']}" if b["price_text"] else ""
-        line = (f"🔪 Local butcher (halal): {b['item']}"
-                f"{price_part} (this week's board)")
+        # One row can carry several shops (layout v2) — show every
+        # shop's special/permanent price, shop named (user rule
+        # 2026-09-07).
+        parts = []
+        for b in butchers[:3]:
+            price_part = (f" — {b['price_text']}"
+                          if b["price_text"] else "")
+            parts.append(f"{b['item']} @ {b['store']}{price_part}")
+        line = ("🔪 Local butcher (halal): " + "; ".join(parts)
+                + " (this week's board)")
         return HalalResolution(tier=3, butcher_line=line)
     return HalalResolution(tier=0, butcher_line=(
         f"no halal source found for '{query}' — "
