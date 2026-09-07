@@ -292,6 +292,42 @@ def remove_by_numbers(numbers: list[int]) -> dict:
     return {"removed": removed, "remaining_count": len(remaining)}
 
 
+def remove_by_code(code: str) -> dict:
+    """Remove ONE entry by its 3-letter code (plan S3.6, shop --undo).
+
+    Tombstones the code exactly like remove_by_numbers. Unknown code
+    raises ValueError (file untouched).
+
+    Args:
+        code (str): the entry's 3-letter code (case-insensitive).
+
+    Returns:
+        dict: {"removed": [entry], "remaining_count": int}.
+
+    Raises:
+        ValueError: queue empty or code not found. File untouched.
+        OSError: when the atomic rewrite fails.
+    """
+    ordered = ordered_entries()
+    if not ordered:
+        raise ValueError("add_to_list is empty — nothing to remove.")
+    want = str(code or "").strip().upper()
+    target = next((e for e in ordered
+                   if str(e.get("code", "")).strip().upper() == want),
+                  None)
+    if target is None:
+        raise ValueError(f"No to-do entry carries code {want!r}.")
+    remaining = [e for e in ordered
+                 if str(e.get("code", "")).strip().upper() != want]
+    save_pending(remaining)
+    if want:
+        try:
+            _add_code_tombstones([want])
+        except OSError:
+            pass  # a tombstone failure must not fail the removal
+    return {"removed": [target], "remaining_count": len(remaining)}
+
+
 def render_show() -> str:
     """Render the 'add-to-list show' output block.
 

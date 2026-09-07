@@ -184,8 +184,8 @@ the same commands for you):
 | `wednesday [--source docx] [--no-prompt]` | The full Wednesday pipeline (see §6). **Docx is the ONLY mode now** — it shows the queue first, waits while you add those items on the store websites and paste the updated lists, then syncs on `done`. ~~Live mode~~ RETIRED 2026-09-02 (the browser-window war was lost — see `lostbattle.md`). |
 | `backfill-keywords` | Fill the alias column (P) from existing data. |
 | `backfill-sizes` | Fill empty unit cells (C) by parsing sizes out of product names. Never overwrites a filled cell; unparseable cells stay blank and show "unit unavailable" in answers. |
-| `shop --items "eggs, apples"` | Shopping-list compare (see §6F): auto-picks your preferred row per sub-category; asks one question when it can't. |
-| `prefer --code ABC` / `prefer --pick N` | Make that row your preferred (P) item for its sub-category, then finish any pending shop run. |
+| `shop --items "…" / --answers / --status / --undo / --abort` | Shopping-list flow v2 (see §6F): ONE batched questions message, then the final list; auto-adds untracked items (price + row + to-do); `wrong CODE` undoes. |
+| `prefer --code ABC` / `prefer --pick N` | Standalone "X is my usual" (outside a shop run): makes that row your preferred (P) item. |
 | `subcategories` | List the sub-category labels and how many sheet rows each has. |
 | `backfill-subcategories` | One-time fill of empty sub-category cells (Q) using the classifier; unsure rows get the literal "needs review" — never a guess, never overwrites. |
 | `backfill-codes` | One-time fill of empty item-code cells (R) with unique permanent 3-letter codes. |
@@ -276,7 +276,7 @@ session says so and offers pick/forget/skip instead of garbage results.
 live. Items the sheet knows are shown with plain prices (Woolworths display
 prices always carry the 5% team discount; the sheet stores raw prices).
 
-### Local deals (Friday + twice-daily detector)
+### Local deals (twice-daily detector; Friday run RETIRED 2026-09-07)
 
 `local-deals` reads the Facebook price boards of four local shops
 (Dunya Butchery, Merjan Brothers, Fruitopia, Abu Salim), parses them
@@ -285,8 +285,9 @@ B7), compares in-domain items against Woolworths/Coles sheet prices
 (>20% = standout), and posts TWO Telegram messages: standouts, then
 every shop's full board. Butcheries only compare against raw meat;
 fruit shops only against produce — everything else is shown but never
-compared. The Friday cron (05:00-05:59 Sydney, once per Friday) uses
-`--friday-gate`; any-day manual runs are fine. Failures degrade to
+compared. **The Friday cron run was RETIRED on 2026-09-07** (the
+daily FB lists supersede it — user decision B6); `--friday-gate`
+only prints a retirement notice. Failures degrade to
 "⚠️ No prices found this week: …" lines — never silence.
 
 Twice-daily detector (2026-09-06; cookies for Facebook are banned):
@@ -327,22 +328,28 @@ are excluded ("excluded (non-halal — database only)"), unverified
 ones fail safe. `backfill-halal-check` sweeps unknown rows through
 the same LLM check.
 
-### F. Shopping list (shop) — the preference flow
+### F. Shopping list (shop) — the v2 flow (2026-09-07)
 
-1. You send a list ("eggs, apples, bread"). The agent normalises each
-   item to a sub-category (or a specific product) and calls
-   `shop --items "…"`.
-2. Each sub-category with a Preferred (P) row is compared
-   automatically using that row.
-3. No P yet? The CLI asks ONE question (the numbered prompt with
-   full names + codes). Reply with a code or number → `prefer` sets
-   P and finishes the comparison.
-4. Not tracked at all? Offer a keyword → normal `search --add-item`
-   flow; the new row arrives with Q/R/S filled and S empty — the
-   next `shop` asks the one question (nothing is ever auto-preferred).
-5. Asked for a specific variant that is NOT your preferred? You get
-   the comparison plus the switch/keep warning. "keep" writes
-   nothing.
+1. You send a list ("Milk, Egg, Sugar-2 kg"). `shop --items` matches
+   each phrase to a SHEET sub-category (sizes/brands/plurals folded —
+   "Sugar-2 kg" finds sugar), and prints EITHER the final list OR
+   **one batched questions message** covering everything: preferred
+   picks per sub-category, which store a supplied name belongs to,
+   live-search confirms for untracked items, and label checks.
+2. You answer once (e.g. `1=2, 2=coles, 3=y`); the agent relays it to
+   `shop --answers`. Next message: more questions or THE FINAL LIST
+   (fixed format: per-item WW/Coles prices, 🏆 cheapest, totals,
+   to-do tail).
+3. Untracked items you approve are AUTO-ADDED: top live match →
+   price + new row + TO-DO entry (keyword column stays empty; reply
+   `wrong <CODE>` to undo). Names are never invented and never
+   written straight into keyword columns (B2/B8).
+4. Preferred (P) picks write via the one-writer `set_preferred`.
+   Sub-categories are never guessed: unsure labels become
+   `needs review` or a question (B4).
+5. `shop --status` resumes; `--abort` drops the run; `--undo CODE`
+   reverses one auto-add. Standalone `prefer --code ABC` still works
+   outside a run.
 Item-Code (Col R) is a DIFFERENT namespace from queue codes: `prefer
 ABC` vs `todo done ABC` never collide.
 

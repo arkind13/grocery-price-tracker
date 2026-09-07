@@ -618,5 +618,62 @@ class TestHalalIntercept(unittest.TestCase):
         self.assertIn("Chicken Breast", names)
 
 
+class TestFindCandidatesBoundaries(unittest.TestCase):
+    """Boundary-safe find_candidates (plan S1.5): substring traps from
+    the 2026-09-07 report must never cross-match."""
+
+    HEADER = ["Product_Name"]
+
+    ROWS = [
+        ["RAW SUGAR 2KG"],
+        ["Raw Sugar 3Kg"],
+        ["V Sugarfree 4*250"],
+        ["Red Bull Sugar Free"],
+        ["V Watermelon 250Ml"],
+        ["Mount Franklin Water 600Ml"],
+        ["Steggles Habanero Wings 1Kg"],
+        ["Eggs Free Rage 12Pc"],
+        ["Carman's Apple & Blueberry Fruit Straps 5 pack"],
+        ["Royal Gala Apple 1 Kg"],
+    ]
+
+    def _idx(self):
+        return LookupIndex([list(r) for r in self.ROWS], self.HEADER)
+
+    def _names(self, query):
+        return [c.generic_name for c in
+                self._idx().find_candidates(query, limit=10)]
+
+    def test_sugar_does_not_match_sugarfree(self):
+        names = self._names("sugar")
+        self.assertIn("RAW SUGAR 2KG", names)
+        self.assertNotIn("V Sugarfree 4*250", names)
+        # "Red Bull Sugar Free" carries the literal word so it may
+        # score, but a substring-free row ranks ABOVE it.
+
+    def test_sugar_ranking_prefers_real_sugar(self):
+        self.assertEqual(self._names("sugar")[0], "RAW SUGAR 2KG")
+
+    def test_water_not_watermelon(self):
+        names = self._names("water")
+        self.assertNotIn("V Watermelon 250Ml", names)
+        self.assertIn("Mount Franklin Water 600Ml", names)
+
+    def test_egg_not_steggles(self):
+        names = self._names("egg")
+        self.assertNotIn("Steggles Habanero Wings 1Kg", names)
+        self.assertIn("Eggs Free Rage 12Pc", names)
+
+    def test_apple_not_fruit_straps(self):
+        names = self._names("apple")
+        # Literal word "apple" may score on the straps, but the real
+        # apple product ranks first and the substring trap class
+        # (V Sugarfree-style) never scores at all.
+        self.assertEqual(names[0], "Royal Gala Apple 1 Kg")
+
+    def test_query_with_size_qualifier_matches(self):
+        self.assertEqual(self._names("sugar 2kg")[0], "RAW SUGAR 2KG")
+
+
 if __name__ == "__main__":
     unittest.main()

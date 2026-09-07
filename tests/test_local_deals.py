@@ -1222,5 +1222,72 @@ class TestValidUntilAttach(unittest.TestCase):
         self.assertEqual(rows["FRUITS"][0][9], "")  # no note, no tag
 
 
+class TestFridayGateRetired(unittest.TestCase):
+    """B6 retirement (plan S3.5): --friday-gate only prints the
+    notice and exits 0 — no FB fetch, no sheet write, no telegram."""
+
+    def test_friday_gate_retired_notice(self):
+        import argparse
+        import contextlib
+        import io
+        import sys
+        from pathlib import Path
+        from unittest.mock import patch
+
+        _root = Path(__file__).resolve().parent.parent.parent
+        if str(_root) not in sys.path:
+            sys.path.insert(0, str(_root))
+        import grocery_price_cli as gpc
+
+        args = argparse.Namespace(
+            friday_gate=True, daily_scan=False, ingest=None,
+            ignore=None, dunya_site=False, dry_run=True,
+            no_telegram=True, stores=None, refresh_catalogue=False,
+            provision_topic=False, set_permanent=None,
+            set_special=None, till=None, note=None,
+            expire_sweep=False, set_date=None, post_log=None)
+        with patch.object(gpc, "_load_env"), \
+                patch("core.local_deals.run_local_deals") as run_ld, \
+                patch("core.local_deals.run_daily_scan") as run_ds:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = gpc._cmd_local_deals(args)
+        self.assertEqual(rc, 0)
+        self.assertIn("RETIRED", buf.getvalue())
+        run_ld.assert_not_called()
+        run_ds.assert_not_called()
+
+    def test_daily_scan_still_runs(self):
+        """--daily-scan is untouched by the Friday retirement."""
+        import argparse
+        import contextlib
+        import io
+        import sys
+        from pathlib import Path
+        from unittest.mock import patch
+
+        _root = Path(__file__).resolve().parent.parent.parent
+        if str(_root) not in sys.path:
+            sys.path.insert(0, str(_root))
+        import grocery_price_cli as gpc
+
+        args = argparse.Namespace(
+            friday_gate=False, daily_scan=True, ingest=None,
+            ignore=None, dunya_site=False, dry_run=True,
+            no_telegram=True, stores=None, refresh_catalogue=False,
+            provision_topic=False, set_permanent=None,
+            set_special=None, till=None, note=None,
+            expire_sweep=False, set_date=None, post_log=None,
+            force=False)
+        with patch.object(gpc, "_load_env"), \
+                patch("core.local_deals.run_daily_scan",
+                      return_value=0) as run_ds:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = gpc._cmd_local_deals(args)
+        self.assertEqual(rc, 0)
+        run_ds.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

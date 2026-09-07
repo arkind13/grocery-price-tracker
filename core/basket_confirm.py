@@ -281,7 +281,7 @@ def hydrate_matched_names(items: list, rows: dict) -> list:
 # Classification (plan time — the user's decision tree)
 # ---------------------------------------------------------------------------
 def find_substitute(keyword: str, store: str, exclude_row_index,
-                    idx) -> dict | None:
+                    idx, family: str = "") -> dict | None:
     """Find the closest sheet row with a usable price for one store.
 
     "Closest substitute on the sheet" (user rule 2026-09-03): sibling
@@ -289,11 +289,16 @@ def find_substitute(keyword: str, store: str, exclude_row_index,
     excluding the item's own row. Read-only — the substitute's price is
     used for the comparison and never written anywhere.
 
+    FAMILY GATE (2026-09-07, plan S1.6): when `family` is a non-empty
+    sub-category label, only rows of THAT sub-category are offered —
+    "Chocolate Hazelnut Spread" can never answer "olive spread".
+
     Args:
         keyword: the basket keyword.
         store: the store whose price is missing.
         exclude_row_index: the item's own sheet row (or None).
         idx: pre-built LookupIndex.
+        family: the item's Sub_Category label ("" disables the gate).
 
     Returns:
         dict | None: {"row_index", "generic_name", "price"} of the best
@@ -308,6 +313,8 @@ def find_substitute(keyword: str, store: str, exclude_row_index,
         row = idx.get_row(cand.row_index)
         if not row:
             continue
+        if family and (row.get("subcategory") or "") != family:
+            continue  # family gate — never cross-family substitutes
         price = (row.get("prices") or {}).get(store)
         if price:
             return {"row_index": row["row_index"],
@@ -389,11 +396,18 @@ def classify_basket(items: list, rows: dict, idx=None,
                  else ("A" if missing[0] == "coles" else "B"))
 
         # 2b / 3: pricing missing or error -> closest sheet sub first.
+        # Family gate: substitutes must share the item's sub-category
+        # (plan S1.6); family comes from the index row when resolvable.
+        family = ""
+        if idx is not None and row.get("row_index"):
+            family = ((idx.get_row(row["row_index"]) or {})
+                      .get("subcategory") or "")
         sub_names: dict = {}
         still_missing = []
         for store in missing:
             sub = find_substitute(item.name, store,
-                                  row.get("row_index"), idx)
+                                  row.get("row_index"), idx,
+                                  family=family)
             if sub:
                 sub_names[store] = sub["generic_name"]
                 item.prices[store] = sub["price"]

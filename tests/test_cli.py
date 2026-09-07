@@ -1514,20 +1514,21 @@ class TestAddToListCLI(unittest.TestCase):
     @patch("core.sheets_sync.set_store_keyword")
     @patch("grocery_price_cli._load_env")
     def test_map_keyword_leaves_queue_untouched(self, mock_env, mock_kw):
-        """B20: --keyword "X" (found=True) leaves the queue untouched."""
+        """B2 retirement (plan S3.4): --keyword prints the notice,
+        exits 1, never writes a keyword or the queue."""
         from grocery_price_cli import _cmd_map_noninteractive
         with tempfile.TemporaryDirectory() as tmpdir:
             with self._atl_ctx(tmpdir):
                 from core import add_to_list as atl
-                mock_kw.return_value = {"found": True, "row_index": 2}
                 args = self._map_args(keyword="X")
-                code, _out = self._capture_stdout(
+                code, out = self._capture_stdout(
                     _cmd_map_noninteractive, args, "wool",
                     ["Item One"], 0, {},
                     Path(tmpdir) / "progress.json", Path(tmpdir))
                 self.assertFalse(atl.ADD_TO_LIST_PATH.exists())
-        self.assertEqual(code, 0)
-        mock_kw.assert_called_once()
+        self.assertEqual(code, 1)
+        self.assertIn("retired", out)
+        mock_kw.assert_not_called()
 
     @patch("grocery_price_cli._add_from_live_search")
     @patch("core.lookup.LookupEngine")
@@ -1648,11 +1649,16 @@ class TestCLIPartB(unittest.TestCase):
         if own_tmp:
             tmp_holder = tempfile.TemporaryDirectory()
             tmpdir = tmp_holder.name
+        import grocery_price_cli as gpc
         try:
             with patch.object(atl, "ADD_TO_LIST_PATH",
                               Path(tmpdir) / "add_to_list.json"), \
                     patch.object(atl, "A_L_TOMBSTONES_PATH",
                                  Path(tmpdir) / "tombstones.json"), \
+                    patch.object(
+                        gpc, "_search_pin_path",
+                        MagicMock(return_value=Path(tmpdir) /
+                                  "search_last_results.json")), \
                     patch("extractors.woolworths_extractor."
                           "fetch_woolworths_search_noauth",
                           return_value=ww or []), \
@@ -3262,20 +3268,19 @@ class TestBackfillCodesCmd(unittest.TestCase):
 
 
 class TestShopCmd(unittest.TestCase):
-    """shop handler: preference state machine (S21, §6.2-6.5)."""
+    """shop handler: batched-questions flow (spec §4, plan S3.2)."""
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
-        self.pending_path = Path(self._tmp.name) / "shop_pending.json"
-        patcher = patch("core.preferences.PENDING_PATH",
-                        self.pending_path)
+        patcher = patch("core.shop_flow.SESSION_PATH",
+                        Path(self._tmp.name) / "shop_session.json")
         patcher.start()
         self.addCleanup(patcher.stop)
 
     def _ws(self):
         return _qrs_sheet([
-            # idx: 0 name, 3 D(ww), 4 E(coles), 16 Q, 17 R, 18 S
+            # 0 name, 3 D(ww), 4 E(coles), 16 Q, 17 R, 18 S
             ["Woolworths Eggs 700g", "", "", "$5.00", *[""] * 12,
              "eggs", "AAA", "P"],
             ["Coles Eggs XL", "", "", "", "$4.80", *[""] * 11,
@@ -3291,38 +3296,34 @@ class TestShopCmd(unittest.TestCase):
         mock_conn.return_value = self._ws()
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            rc = _cmd_shop(argparse.Namespace(items="eggs"))
+            rc = _cmd_shop(argparse.Namespace(
+                items="eggs, milk", answers=None, status=False,
+                undo=None, abort=False))
         self.assertEqual(rc, 0)
         text = out.getvalue()
-        # Table renders with the P row's price.
-        self.assertIn("BASKET COMPARISON", text)
-        self.assertIn("$5.00", text)
+        self.assertIn("🛒 YOUR SHOPPING LIST (2 item(s))", text)
+        self.assertIn("Woolworths Eggs 700g", text)
+        self.assertIn("Home Brand Milk 2L", text)
         self.assertNotIn("Which one would you like", text)
 
     @patch("core.sheets_client.connect_worksheet")
     def test_shop_halts_with_exact_prompt(self, mock_conn):
-        import core.preferences as prefs
+        import core.shop_flow as sf
         from grocery_price_cli import _cmd_shop
         mock_conn.return_value = self._ws()
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            rc = _cmd_shop(argparse.Namespace(items="apples"))
+            rc = _cmd_shop(argparse.Namespace(
+                items="apples", answers=None, status=False,
+                undo=None, abort=False))
         self.assertEqual(rc, 0)
         text = out.getvalue()
-        self.assertIn(
-            "Sub-Category: apples - Which one would you like to make "
-            "your preferred item?", text)
-        self.assertIn("1 - Royal Gala Apples 1kg - CCC", text)
-        self.assertIn("Or: Not in list? Provide another keyword for "
-                      "live search.", text)
-        self.assertIn("1 item(s) halted", text)
-        # Pending file written with the options (JSON: tuples -> lists).
-        pending = prefs.load_pending()
-        self.assertIsNotNone(pending)
-        self.assertEqual(pending["items"], ["apples"])
-        self.assertEqual(
-            pending["halted"][0]["options"],
-            [[4, "Royal Gala Apples 1kg", "CCC"]])
+        self.assertIn("🛒 SHOPPING LIST — 1 question(s)", text)
+        self.assertIn("1. apples — preferred?", text)
+        self.assertIn("Royal Gala Apples 1kg [CCC]", text)
+        sess = sf.load_session()
+        self.assertIsNotNone(sess)
+        self.assertEqual(sess["items"][0]["stage"], "ask_pick")
 
     @patch("core.sheets_client.connect_worksheet")
     def test_shop_cold_item_offer(self, mock_conn):
@@ -3330,62 +3331,92 @@ class TestShopCmd(unittest.TestCase):
         mock_conn.return_value = self._ws()
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            rc = _cmd_shop(argparse.Namespace(items="bread"))
+            rc = _cmd_shop(argparse.Namespace(
+                items="bread", answers=None, status=False,
+                undo=None, abort=False))
         self.assertEqual(rc, 0)
-        self.assertIn("no tracked products yet", out.getvalue())
+        self.assertIn("bread — not tracked. Live search now?",
+                      out.getvalue())
 
     @patch("core.sheets_client.connect_worksheet")
-    def test_shop_override_warning_exact_text(self, mock_conn):
+    def test_shop_answers_apply_pick_and_finish(self, mock_conn):
         from grocery_price_cli import _cmd_shop
         mock_conn.return_value = self._ws()
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            rc = _cmd_shop(argparse.Namespace(items="coles eggs xl"))
+            _cmd_shop(argparse.Namespace(
+                items="apples", answers=None, status=False,
+                undo=None, abort=False))
+        with patch("core.preferences.set_preferred",
+                   return_value={"wrote": True, "row_index": 4,
+                                 "subcategory": "apples",
+                                 "cleared": 0}):
+            out2 = io.StringIO()
+            with contextlib.redirect_stdout(out2):
+                rc = _cmd_shop(argparse.Namespace(
+                    items=None, answers="1=1", status=False,
+                    undo=None, abort=False))
         self.assertEqual(rc, 0)
-        text = out.getvalue()
-        self.assertIn("⚠️ Warning: [Coles Eggs XL] is not your "
-                      "preferred item for sub-category [eggs].", text)
-        self.assertIn("Reply 'switch' to make it preferred, or "
-                      "'keep' to continue without switching.", text)
+        text = out2.getvalue()
+        self.assertIn("🛒 YOUR SHOPPING LIST (1 item(s))", text)
 
     @patch("core.sheets_client.connect_worksheet")
-    def test_shop_multi_p_note_topmost(self, mock_conn):
+    def test_shop_status_and_abort(self, mock_conn):
         from grocery_price_cli import _cmd_shop
-        ws = _qrs_sheet([
-            ["Eggs One", "", "", "$5.00", *[""] * 12,
-             "eggs", "AAA", "P"],
-            ["Eggs Two", "", "", "", "$5.50", *[""] * 11,
-             "eggs", "BBB", "P"],
-        ])
-        mock_conn.return_value = ws
+        mock_conn.return_value = self._ws()
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            rc = _cmd_shop(argparse.Namespace(items="eggs"))
+            rc = _cmd_shop(argparse.Namespace(
+                items=None, answers=None, status=True,
+                undo=None, abort=False))
         self.assertEqual(rc, 0)
-        text = out.getvalue()
-        self.assertIn("2 P flags", text)
-        self.assertIn("$5.00", text)   # topmost (Eggs One) priced
+        self.assertIn("No pending run", out.getvalue())
+        with contextlib.redirect_stdout(out):
+            _cmd_shop(argparse.Namespace(
+                items="apples", answers=None, status=False,
+                undo=None, abort=False))
+        out2 = io.StringIO()
+        with contextlib.redirect_stdout(out2):
+            _cmd_shop(argparse.Namespace(
+                items=None, answers=None, status=False,
+                undo=None, abort=True))
+        self.assertIn("Run cleared", out2.getvalue())
+
+    @patch("core.sheets_client.connect_worksheet")
+    def test_shop_undo_calls_flow(self, mock_conn):
+        from grocery_price_cli import _cmd_shop
+        mock_conn.return_value = self._ws()
+        with patch("core.shop_flow.undo_auto_add",
+                   return_value={"undone": True,
+                                 "detail": "row 9 deleted"}) as ua:
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = _cmd_shop(argparse.Namespace(
+                    items=None, answers=None, status=False,
+                    undo="kat", abort=False))
+        self.assertEqual(rc, 0)
+        ua.assert_called_once_with(mock_conn.return_value, "KAT")
+        self.assertIn("Undone: row 9 deleted", out.getvalue())
+
+    def test_shop_no_flags_errors(self):
+        from grocery_price_cli import _cmd_shop
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            rc = _cmd_shop(argparse.Namespace(
+                items=None, answers=None, status=False,
+                undo=None, abort=False))
+        self.assertEqual(rc, 1)
+        self.assertIn("--items", err.getvalue())
 
     def test_shop_empty_items_errors(self):
         from grocery_price_cli import _cmd_shop
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
-            rc = _cmd_shop(argparse.Namespace(items=" , ; "))
+            rc = _cmd_shop(argparse.Namespace(
+                items=" , ; ", answers=None, status=False,
+                undo=None, abort=False))
         self.assertEqual(rc, 1)
         self.assertIn("--items is required", err.getvalue())
-
-    @patch("core.sheets_client.connect_worksheet")
-    def test_shop_completed_items_render_with_halts(self, mock_conn):
-        from grocery_price_cli import _cmd_shop
-        mock_conn.return_value = self._ws()
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            rc = _cmd_shop(argparse.Namespace(items="eggs, apples"))
-        self.assertEqual(rc, 0)
-        text = out.getvalue()
-        # BOTH the comparison table AND the disambiguation prompt.
-        self.assertIn("BASKET COMPARISON", text)
-        self.assertIn("Which one would you like", text)
 
 
 class TestPreferCmd(unittest.TestCase):
@@ -3545,6 +3576,20 @@ class TestLocalDealsCLI(unittest.TestCase):
         self.assertTrue(args.provision_topic)
         self.assertEqual(args.func, gpc._cmd_local_deals)
 
+    def test_local_deals_set_date_and_post_log_flags(self):
+        """--set-date CODE FILE DATE and --post-log CODE parse and
+        dispatch (2026-09-07: the skill documented them but the
+        parser never had them — production gap found by Claw)."""
+        import grocery_price_cli as gpc
+        parser = gpc.build_parser()
+        args = parser.parse_args([
+            "local-deals", "--set-date", "MERJ", "board.jpg",
+            "12 September"])
+        self.assertEqual(args.set_date,
+                         ["MERJ", "board.jpg", "12 September"])
+        args = parser.parse_args(["local-deals", "--post-log", "FRUT"])
+        self.assertEqual(args.post_log, "FRUT")
+
     def test_local_deals_dispatch_calls_run_local_deals(self):
         """Dispatch maps args; a CLOSED friday gate runs nothing."""
         import grocery_price_cli as gpc
@@ -3608,27 +3653,34 @@ class TestBackfillHalalCheckCLI(unittest.TestCase):
 
     def test_shop_prints_excluded_non_halal_note(self):
         """shop prints the exclusion note for gated-out items."""
+        import core.shop_flow as sf
         import grocery_price_cli as gpc
-        args = argparse.Namespace(items="beef mince", mode="sheet",
-                                  list_name=None)
-        plan = {"compare": [("beef mince", "Plain Beef Mince")],
-                "halted": [], "notes": [], "cold": [],
-                "warns": []}
+        args = argparse.Namespace(items="beef mince", answers=None,
+                                  status=False, undo=None,
+                                  abort=False)
         gate = {"included": [], "notes": [],
                 "excluded": [("Plain Beef Mince",
-                              "excluded (non-halal — database "
+                              "excluded (non-halal - database "
                               "only)")]}
+        fake_ws = MagicMock()
+        fake_ws.get_all_values.return_value = []
+        sess_path = (Path(tempfile.mkdtemp()) /
+                     "shop_session.json")
+        priced_row = {"row_index": 2, "name": "Plain Beef Mince",
+                      "subcategory": "beef mince", "item_code": "BFM",
+                      "preferred": "P", "keywords": ""}
         with patch.object(gpc, "_load_env"), \
-             patch("core.sheets_client.connect_worksheet",
-                   return_value=MagicMock()), \
-             patch("core.preferences.resolve_shop_items",
-                   return_value=plan), \
-             patch("core.halal.halal_list_gate", return_value=gate):
+                patch("core.sheets_client.connect_worksheet",
+                      return_value=fake_ws), \
+                patch("core.preferences.read_qrs",
+                      return_value=[priced_row]), \
+                patch("core.halal.halal_list_gate",
+                      return_value=gate), \
+                patch.object(sf, "SESSION_PATH", sess_path):
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
                 gpc._cmd_shop(args)
-        self.assertIn("Plain Beef Mince — excluded (non-halal",
-                      buf.getvalue())
+        self.assertIn("excluded (non-halal", buf.getvalue())
 
     def test_optimize_drops_excluded_from_totals(self):
         """optimize removes gated-out names before basket maths."""
@@ -3662,6 +3714,143 @@ class TestBackfillHalalCheckCLI(unittest.TestCase):
                     pass
         self.assertIn("beef mince — excluded (non-halal",
                       buf.getvalue())
+
+
+class TestSearchPinDeterminism(unittest.TestCase):
+    """B10 (plan S3.3): add-by-N resolves against the PINNED result
+    list — never a silent re-search (Sep-6 wrong-item grab)."""
+
+    def _ctx(self, tmpdir):
+        import grocery_price_cli as gpc
+        from core import add_to_list as atl
+        return [
+            patch.object(atl, "ADD_TO_LIST_PATH",
+                         Path(tmpdir) / "add_to_list.json"),
+            patch.object(atl, "A_L_TOMBSTONES_PATH",
+                         Path(tmpdir) / "tombstones.json"),
+            patch.object(
+                gpc, "_search_pin_path",
+                MagicMock(return_value=Path(tmpdir) /
+                          "search_last_results.json")),
+        ]
+
+    def test_add_item_uses_pin_no_research(self):
+        """A fresh pin for the same product is used verbatim: the
+        live extractors are NOT called a second time."""
+        import json
+        import grocery_price_cli as gpc
+        from grocery_price_cli import _cmd_search
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ctx = self._ctx(tmpdir)
+            pin = {
+                "saved_at": datetime.now(timezone.utc)
+                .isoformat(timespec="seconds"),
+                "product": "yogurt",
+                "results": [
+                    {"name": "WW Yogurt A", "store": "woolworths",
+                     "price": 5.0, "brand": "B", "size": "1kg",
+                     "category": "", "is_special": False,
+                     "special_desc": ""},
+                ],
+            }
+            Path(tmpdir, "search_last_results.json").write_text(
+                json.dumps(pin), encoding="utf-8")
+            with ctx[0], ctx[1], ctx[2], \
+                    patch("extractors.woolworths_extractor."
+                          "fetch_woolworths_search_noauth") as m_ww, \
+                    patch("extractors.coles_extractor."
+                          "fetch_coles_search_status") as m_coles, \
+                    patch("core.sheets_sync.add_product_row",
+                          return_value={"wrote": True,
+                                        "merged": False,
+                                        "row_index": 9}), \
+                    patch("grocery_price_cli._load_env"):
+                args = argparse.Namespace(product="yogurt",
+                                          expand=False, add_item=1)
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    code = _cmd_search(args)
+            self.assertEqual(code, 0)
+            m_ww.assert_not_called()
+            m_coles.assert_not_called()
+            out = buf.getvalue()
+            self.assertIn("WW Yogurt A", out)
+
+    def test_add_item_pin_stale_falls_back(self):
+        """A stale pin (>30 min) is ignored: the search re-runs."""
+        import json
+        import grocery_price_cli as gpc
+        from grocery_price_cli import _cmd_search
+        stale = (datetime.now(timezone.utc) - timedelta(minutes=31)
+                 ).isoformat(timespec="seconds")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ctx = self._ctx(tmpdir)
+            pin = {"saved_at": stale, "product": "yogurt",
+                   "results": [{"name": "OLD PIN ROW",
+                                "store": "woolworths", "price": 1.0,
+                                "brand": "", "size": "1kg",
+                                "category": "",
+                                "is_special": False,
+                                "special_desc": ""}]}
+            Path(tmpdir, "search_last_results.json").write_text(
+                json.dumps(pin), encoding="utf-8")
+            ww = [SimpleNamespace(raw_name="Fresh Yogurt 1kg",
+                                  price=5.0, store="woolworths",
+                                  brand="B", size="1kg",
+                                  category="", is_special=False,
+                                  special_desc="")]
+            with ctx[0], ctx[1], ctx[2], \
+                    patch("extractors.woolworths_extractor."
+                          "fetch_woolworths_search_noauth",
+                          return_value=ww), \
+                    patch("extractors.coles_extractor."
+                          "fetch_coles_search_status",
+                          return_value=([], "ok")), \
+                    patch("core.sheets_sync.add_product_row",
+                          return_value={"wrote": True,
+                                        "merged": False,
+                                        "row_index": 9}), \
+                    patch("grocery_price_cli._load_env"):
+                args = argparse.Namespace(product="yogurt",
+                                          expand=False, add_item=1)
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    code = _cmd_search(args)
+            self.assertEqual(code, 0)
+            self.assertIn("Fresh Yogurt 1kg", buf.getvalue())
+            self.assertNotIn("OLD PIN ROW", buf.getvalue())
+
+    def test_search_pin_written_on_display(self):
+        """A plain display run saves the numbered list to the pin."""
+        import json
+        import grocery_price_cli as gpc
+        from grocery_price_cli import _cmd_search
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ctx = self._ctx(tmpdir)
+            ww = [SimpleNamespace(raw_name="WW Yogurt A", price=5.0,
+                                  store="woolworths", brand="B",
+                                  size="1kg", category="",
+                                  is_special=False,
+                                  special_desc="")]
+            with ctx[0], ctx[1], ctx[2], \
+                    patch("extractors.woolworths_extractor."
+                          "fetch_woolworths_search_noauth",
+                          return_value=ww), \
+                    patch("extractors.coles_extractor."
+                          "fetch_coles_search_status",
+                          return_value=([], "ok")), \
+                    patch("grocery_price_cli._load_env"):
+                args = argparse.Namespace(product="yogurt",
+                                          expand=False, add_item=None)
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    code = _cmd_search(args)
+            self.assertEqual(code, 0)
+            pin = json.loads(
+                Path(tmpdir, "search_last_results.json")
+                .read_text(encoding="utf-8"))
+            self.assertEqual(pin["product"], "yogurt")
+            self.assertEqual(pin["results"][0]["name"], "WW Yogurt A")
 
 
 if __name__ == "__main__":

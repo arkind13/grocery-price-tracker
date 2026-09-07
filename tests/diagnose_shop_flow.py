@@ -90,23 +90,42 @@ QUALIFIERS = [
     ("label + brand prefix",   "woolworths {l}"),
 ]
 
+from core.subcategory import normalize_subcategory  # noqa: E402
+
+label_set = {normalize_subcategory(x) for x in labels}
+
+
+def _mode(phrase: str) -> str:
+    key = normalize_subcategory(phrase)
+    if key in label_set:
+        plan = resolve_shop_items(ws, [phrase])
+        if plan["halted"]:
+            return "CATEGORY-halt"
+        if plan["cold"]:
+            return "CATEGORY-cold"
+        return "CATEGORY-P"
+    plan = resolve_shop_items(ws, [phrase])
+    for item, name in plan["compare"]:
+        if name != item:
+            return "PRODUCT-exact"
+    return "RAW-TEXT"
+
+
+from collections import Counter  # noqa: E402
+
 fails, total = 0, 0
 for label in labels:
     for name, tpl in QUALIFIERS:
+        if name == "exact label":
+            continue
         phrase = tpl.format(l=label, L=label.capitalize())
         total += 1
-        plan = resolve_shop_items(ws, [phrase])
-        hit = bool(plan["compare"]) or bool(plan["halted"])
-        if name != "exact label" and not hit:
+        if _mode(phrase).startswith("RAW"):
             fails += 1
-            sample = (f"  MISS {name!r}: '{phrase}' -> "
-                      f"compare={len(plan['compare'])} "
-                      f"halted={len(plan['halted'])} "
-                      f"cold={len(plan['cold'])}")
             if fails <= 12:
-                print(sample)
-print(f"\nT1 RESULT: {fails}/{total} qualifier phrases FAILED to reach "
-      f"their sub-category (fell through to raw-text product mode)")
+                print(f"  RAW-fallthrough: '{phrase}'")
+print(f"\nT1 RESULT: {fails}/{total} qualifier phrases fell through "
+      f"to raw-text mode (gate: must be 0 after the fix)")
 
 # ---------------------------------------------------------------- T2
 print("\n" + "=" * 70)

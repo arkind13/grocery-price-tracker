@@ -406,16 +406,24 @@ class LookupIndex:
         if not tokens:
             return []
 
+        q_variant_sets = [_token_variants(t) for t in tokens]
+        q_token_set = set(norm_query.split())
+
         scored: list[tuple[int, dict]] = []
         for row_dict in self._rows:
             norm_a = self._normalize(row_dict["generic_name"])
+            a_tokens = set(norm_a.split())
+            a_variant_sets = [_token_variants(t) for t in a_tokens]
             score = 0
-            if norm_query in norm_a:
+            # Boundary-safe containment: whole TOKEN sets, never raw
+            # substrings ("sugar" must not score "sugarfree", "egg"
+            # must not score "stEggles" — 2026-09-07 user report).
+            if q_token_set and q_token_set <= a_tokens:
                 score += 2
-            if norm_a in norm_query:
+            if q_token_set and a_tokens <= q_token_set:
                 score += 2
-            for token in tokens:
-                if any(v in norm_a for v in _token_variants(token)):
+            for vs in q_variant_sets:
+                if any(vs & av for av in a_variant_sets):
                     score += 1
             if score > 0:
                 scored.append((score, row_dict))

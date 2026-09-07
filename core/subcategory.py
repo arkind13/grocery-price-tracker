@@ -41,11 +41,97 @@ def normalize_subcategory(s: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+_SIZE_TOKEN = re.compile(
+    r"^\d+(?:\.\d+)?\s*(?:kg|g|ml|l|ltr|litre|litres|pack|pk|pks|"
+    r"sheet|sheets|roll|rolls|pc|pcs|piece|pieces|tub|tubs)$")
+_STORE_PREFIXES = {"woolworths", "woolies", "coles", "aldi"}
+_FILLER = {"original", "fresh", "large", "small", "mini", "free",
+           "range", "market", "brand"}
+
+
+def strip_phrase(phrase: str) -> list[str]:
+    """Tokens for sub-category matching: plural-folded, size tokens,
+    store prefixes and filler words removed ("Sugar-2 kg" ->
+    ["sugar"]; "woolworths full cream milk 3l" -> ["full", "cream",
+    "milk"]). Order preserved; never empty (falls back to raw
+    lowercased tokens)."""
+    from core.lookup import _token_variants
+    text = normalize_subcategory(phrase).replace("-", " ")
+    out: list[str] = []
+    for tok in text.split():
+        if _SIZE_TOKEN.match(tok):
+            continue
+        if tok in _STORE_PREFIXES or tok in _FILLER:
+            continue
+        base = sorted(_token_variants(tok))[0]  # shortest = stem
+        out.append(base)
+    return out or normalize_subcategory(phrase).split()
+
+
+def match_subcategory(phrase: str, sheet_labels: list[str]) -> str:
+    """Best sheet label for a shopping-list phrase, or "".
+
+    Deterministic: (1) exact normalized equality; (2) label whose
+    token set (singular/plural folded) is a subset of the phrase
+    tokens, or the phrase tokens a subset of the label tokens —
+    longest label wins, then most matched tokens, then alphabetical.
+    Only whole tokens count ("mini cucumber" phrase matches label
+    "cucumber" via subset; "cucumber mini" also tries the joined
+    form). Sheet labels ONLY (D4 — the sheet is the truth)."""
+    from core.lookup import _token_variants
+
+    def variants(tokens: set[str]) -> set[str]:
+        out: set[str] = set()
+        for tok in tokens:
+            out |= _token_variants(tok)
+        return out
+
+    want = set(strip_phrase(phrase))
+    if not want:
+        return ""
+    want_var = variants(want)
+    best: tuple[int, int, str, str] | None = None
+    # (-len, -match, label, norm)
+    for raw in sheet_labels:
+        norm = normalize_subcategory(raw)
+        if not norm:
+            continue
+        if norm == normalize_subcategory(phrase):
+            return raw
+        lab_tokens = set(norm.split())
+        if not lab_tokens:
+            continue
+        lab_var = variants(lab_tokens)
+        if lab_var <= want_var:
+            matched = len(lab_tokens)
+        elif want_var <= lab_var:
+            matched = len(want)
+        else:
+            continue
+        key = (-len(norm), -matched, norm, raw)
+        if best is None or key < best:
+            best = key
+    return best[3] if best else ""
+
+
 # (pattern, label) — ORDER IS BINDING: first match wins; compounds
 # BEFORE generic parents ("cheese slice" before "cheese").
 # \b anchors on single words (2026-09-05): substrings must never
 # guess wrong — "sugarfree"/"watermelon"/"eggplant"/"pineapple" fall
 # through to needs review instead of a confident misfire.
+#
+# SLIM-DOWN 2026-09-07 (plan S1.3): labels with no live sheet row AND
+# not referenced by core/halal.py (HALAL_CHECK_CATEGORIES) or
+# core/local_deals.py (PRODUCE_SUBCATEGORIES) were removed — 33 dead
+# rules deleted (chicken schnitzel kept with the meat family;
+# corn chips kept: active sheet label + top-of-list cross-family
+# guard). Deleted: cheese slice, cream cheese, mozzarella, parmesan,
+# feta, cheese, yoghurt, long life milk, iced coffee, coffee syrup,
+# coffee, croissant, muffins, mineral water, spring water, energy
+# drink, liquid breakfast, sports drink, soft drink, chocolate bar,
+# chewing gum, potato chips, popcorn, biscuits, slices, lollies,
+# frozen snacks, frozen berries, cereal, flour, oil, spread. New rows
+# in those families now classify to "needs review" (ask-first, B4).
 _RULE_DEFS: list[tuple[str, str]] = [
     # Cross-family compounds that must outrank EVERY generic rule
     # below (e.g. "Supreme Cheese Corn Chips" -> "corn chips", not
@@ -67,25 +153,23 @@ _RULE_DEFS: list[tuple[str, str]] = [
     (r"sausages?|kebab|skewer", "processed meats"),
     (r"schnitzel|crumbed\s*chicken|chicken\s*schnitzel",
      "chicken schnitzel"),
-    # --- cheese (compounds first) ---
-    (r"cheese\s*slice", "cheese slice"),
+    # --- cheese (compounds first; base "cheese" removed 2026-09-07 —
+    #     sheet carries the active cheese labels) ---
     (r"shredded\s*cheese|grated\s*cheese", "shredded cheese"),
-    (r"cream\s*cheese", "cream cheese"),
-    (r"mozzarella", "mozzarella"),
-    (r"parmesan", "parmesan"),
-    (r"feta", "feta"),
     (r"cheese\s*&?\s*cracker|\bcrackers?\b", "crackers"),
-    (r"\bcheese\b", "cheese"),
     # --- dairy ---
     (r"greek\s*yogh?urt", "greek yoghurt"),
-    (r"yogh?urt", "yoghurt"),
     (r"\beggs?\b", "eggs"),
-    (r"long\s*life\s*milk|\buht\b", "long life milk"),
     (r"\bmilk\b", "milk"),
-    (r"iced\s*coffee", "iced coffee"),
-    (r"coffee\s*syrup", "coffee syrup"),
-    (r"\bcoffee\b", "coffee"),
-    # --- fruit & veg ---
+    # --- drinks (sheet-active labels only) ---
+    (r"\bjuice\b", "juice"),
+    (r"\bwater\b", "water"),
+    (r"choc\s*hazelnut|hazelnut\s*chocolate|chocolate\s*spread",
+     "chocolate spread"),
+    (r"\bchocolate\b", "chocolate"),
+    (r"\bmints?\b", "mints"),
+    # --- fruit & veg (produce labels protected by
+    #     core/local_deals.py::PRODUCE_SUBCATEGORIES) ---
     (r"spring\s*onion", "spring onion"),
     (r"\bonions?\b", "onion"),
     (r"\bbananas?\b", "bananas"),
@@ -102,44 +186,13 @@ _RULE_DEFS: list[tuple[str, str]] = [
     # --- bakery ---
     # \b anchors: "breading"/"breadcrumbs" must never match (§4).
     (r"\bbreads?\b", "bread"),
-    (r"croissants?", "croissant"),
     (r"pancake\s*mix", "pancake mix"),
-    (r"\bmuffins?\b", "muffins"),
-    # --- drinks ---
-    (r"\bjuice\b", "juice"),
-    (r"mineral\s*water", "mineral water"),
-    (r"spring\s*water", "spring water"),
-    (r"\bwater\b", "water"),
-    (r"energy\s*drink", "energy drink"),
-    (r"liquid\s*breakfast", "liquid breakfast"),
-    (r"sports?\s*drink", "sports drink"),
-    (r"soft\s*drink|\bsodas?\b", "soft drink"),
-    # --- snacks / confectionery ---
-    (r"chocolate\s*bar", "chocolate bar"),
-    (r"choc\s*hazelnut|hazelnut\s*chocolate|chocolate\s*spread",
-     "chocolate spread"),
-    (r"\bchocolate\b", "chocolate"),
-    (r"chewing\s*gum", "chewing gum"),
-    (r"\bmints?\b", "mints"),
-    (r"potato\s*chips|grain\s*waves|grainwaves|\bchips\b",
-     "potato chips"),
-    (r"popcorn", "popcorn"),
-    (r"\bbiscuits?|quadratini", "biscuits"),
-    (r"choc\s*slice|cake\s*slice|\bslices?\b", "slices"),
-    (r"loll(ie)?s|lolly", "lollies"),
-    # --- freezer ---
-    (r"ice\s*cream|frozen\s*dessert", "ice cream"),
-    (r"frozen\s*snacks?|nuggets?|pickers|frozen\s*veg", "frozen snacks"),
-    (r"frozen\s*berries", "frozen berries"),
     # --- pantry ---
     (r"\bsugars?\b", "sugar"),
-    (r"\bcereal\b", "cereal"),
     (r"\bpasta\b", "pasta"),
     (r"\brice\b", "rice"),
-    (r"\bflour\b", "flour"),
-    (r"\boils?\b", "oil"),
     (r"\bsauces?\b", "sauce"),
-    (r"\bspreads?\b", "spread"),
+    (r"ice\s*cream|frozen\s*dessert", "ice cream"),
     # --- household / other ---
     (r"\bpads?\b|\btampons?\b", "pads"),
     (r"hand\s*warmers?", "hand warmers"),

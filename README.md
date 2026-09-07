@@ -399,8 +399,8 @@ The most complex tool. Tracks Australian supermarket prices (Woolworths, Coles, 
 | `wednesday` | `[--source docx]` (live RETIRED 2026-09-02 — refused at dispatch; see `lostbattle.md`) `[--dry-run]` `[--no-scp]` `[--no-telegram]` `[--no-prompt]` | Full pipeline. **STARTS WITH THE TO-DO LIST (2026-09-03 user flow):** Step 0 pulls + union-merges + pushes back the queue, then prints the to-do list — add those items on the store website lists, re-paste the docx lists, type `done` (auto-skips with no TTY / `--no-prompt`). Then: parse lists → **Step 1c auto-heal** links exact sheet names (writing keywords) → match/sync prices → **Step 3b two-strike dead-row auto-delete:** both-dead rows deleted only when a PREVIOUS run saw them dead (`data/delete_candidates.json`; deletions archived to `data/deleted_rows.json`) → **Step 3c TO-DO TALLY:** to-do entries whose sheet row now carries the keyword are cleared, and the UPDATED to-do list prints → resolve lists + scp → Telegram post (to-do FIRST, then unmatched, wool/coles missing, **missed pricing** — GROUPED Woolworths / Coles / Both-stores headers with per-item codes + updated week counts, then forgotten as a COUNT) → specials report → **Step 9** mirrors the queue back to the VPS. **Docx is the ONLY live source** — the live window was retired after the lost store-bot war; the manual website adds during the pause replace the flush |
 | `backfill-keywords` | — | Backfill Col P keywords from existing data |
 | `backfill-sizes` | `[--dry-run]` | One-time Col C (size) backfill parsed from Col A/I/J names; fills only blank cells, never overwrites |
-| `shop` | `--items "a, b, c"` | Shopping-list compare: resolves each item to its sub-category, auto-picks the preferred (P) row, asks ONE question when none is preferred |
-| `prefer` | `--code ABC` / `--pick N` | Sets the Preferred (P) row for a sub-category; resumes a pending shop run |
+| `shop` | `--items "…"` / `--answers "1=2; 2=coles"` / `--status` / `--undo CODE` / `--abort` | **Shopping-list flow v2 (2026-09-07):** one batched questions message (preferred picks, store of a supplied name, live-search confirms, label checks), then the final list. Untracked items AUTO-ADD the top live match (price + new row + to-do entry; `--undo CODE` reverses). Keywords are NEVER written directly — `todo done` writes them after the website add (B2/B3) |
+| `prefer` | `--code ABC` / `--pick N` | Standalone "X is my usual" (outside a shop run): sets the Preferred (P) row for a sub-category |
 | `subcategories` | — | Lists sub-category labels + live row counts |
 | `backfill-subcategories` | `[--dry-run]` | One-time Col Q backfill; classifier-confident labels only, else "needs review"; never overwrites |
 | `backfill-codes` | `[--dry-run]` | One-time Col R Item-Code backfill; unique permanent codes; idempotent |
@@ -631,7 +631,7 @@ the agent asks the user for the right label; nothing is ever guessed.
 
 ### Shopping list & preferences (2026-09-04)
 
-`shop --items "eggs, apples, bread"` compares a whole shopping list
+`shop --items "eggs, apples, bread"` (v2, 2026-09-07) runs a whole shopping list through ONE batched questions message
 against your stored preferences — full flow in
 [PROJECT-MAP.md](PROJECT-MAP.md) §6F. The preference state machine:
 
@@ -651,7 +651,7 @@ auto-sets P, and the Wednesday sync never touches it. Note:
 `Item_Code` (Col R) is a DIFFERENT namespace from the to-do queue
 codes — `prefer ABC` and `todo done ABC` never collide.
 
-### Local deals — Friday Mt Druitt shops (2026-09-05)
+### Local deals — Mt Druitt shops (Friday run RETIRED 2026-09-07)
 
 `local-deals` reads the public Facebook price boards of four local
 shops — Dunya Butchery, Merjan Brothers Quality Meats, Fruitopia Mt
@@ -688,12 +688,12 @@ report plus a `Local_Deals` sheet tab:
    board in natural order. No message ever exceeds 4000 chars.
 
 Subcommands: `local-deals` (flags: `--stores`, `--dry-run`,
-`--no-telegram`, `--refresh-catalogue`, `--friday-gate`,
-`--provision-topic`, `--daily-scan`, `--ingest CODE`, `--ignore CODE`,
-`--dunya-site`, `--set-permanent`, `--set-special`, `--expire-sweep`)
-and `backfill-halal-check` (below). The Friday
-cron runs with `--friday-gate` so it sends once per Friday inside the
-05:00-05:59 Sydney window. Every Telegram message prints a
+`--no-telegram`, `--refresh-catalogue`, `--provision-topic`,
+`--daily-scan`, `--ingest CODE`, `--ignore CODE`, `--dunya-site`,
+`--set-permanent`, `--set-special`, `--expire-sweep`)
+and `backfill-halal-check` (below). **The Friday cron run is RETIRED
+(2026-09-07)** — the daily FB lists supersede it; `--friday-gate`
+only prints a retirement notice. Every Telegram message prints a
 secret-free receipt line (`[telegram] ok message_id=…`) for auditing.
 
 ### Permanent + special pricing columns (2026-09-07)

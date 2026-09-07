@@ -21,6 +21,7 @@ from core.subcategory import (
     NEEDS_REVIEW,
     all_labels,
     classify_subcategory,
+    match_subcategory,
     normalize_subcategory,
 )
 
@@ -46,14 +47,13 @@ class TestClassify(unittest.TestCase):
     """Classifier rules: spec examples, ordering, boundary safety."""
 
     def test_spec_examples(self):
-        # Spec-mandated examples (§2): bread, apples, eggs,
-        # shredded cheese, cheese slice.
+        # Spec-mandated examples; "cheese slice" slimmed 2026-09-07
+        # (plan S1.3) — such rows now classify to needs review.
         cases = {
             "Woolworths White Bread 650g": "bread",
             "Royal Gala Apples 1kg": "apples",
             "Woolworths 12 Extra Large Free Range Eggs 700g": "eggs",
             "Coles Shredded Cheese Tasty 500g": "shredded cheese",
-            "Devondale Cheese Slices Full Fat 500g": "cheese slice",
         }
         for name, want in cases.items():
             got, conf = classify_subcategory(name)
@@ -61,12 +61,14 @@ class TestClassify(unittest.TestCase):
             self.assertEqual(conf, 1.0, msg=name)
 
     def test_compound_before_generic(self):
-        # D-SC ordering: "Hillview Cheese Slices Full Fat 500g" must
-        # hit "cheese slice", NOT "cheese" and NOT "slices".
+        # D-SC ordering survives the slim-down: corn chips still
+        # outranks the generic chips family; sliced cheese now falls
+        # to review (slim-down 2026-09-07, plan S1.3).
+        got, _conf = classify_subcategory("Supreme Cheese Corn Chips")
+        self.assertEqual(got, "corn chips")
         got, conf = classify_subcategory(
             "Hillview Cheese Slices Full Fat 500g")
-        self.assertEqual(got, "cheese slice")
-        self.assertEqual(conf, 1.0)
+        self.assertEqual((got, conf), ("", 0.0))
 
     def test_breading_not_bread(self):
         # Boundary safety: "breading" must NOT match the \bbreads?\b
@@ -104,8 +106,11 @@ class TestClassify(unittest.TestCase):
         # energy drink label when the wording is on the pack. A
         # brand-only wording ("V Guarana Energy") has NO rule match —
         # it goes to review (ask-first), never to a food cluster.
+        # energy-drink rule slimmed 2026-09-07 (plan S1.3): the
+        # sheet carries "v energy drink" as its own label; classifier
+        # sends both wordings to review now (ask-first).
         got, conf = classify_subcategory("V Energy Drink 500ml")
-        self.assertEqual((got, conf), ("energy drink", 1.0))
+        self.assertEqual((got, conf), ("", 0.0))
         got, conf = classify_subcategory("V Guarana Energy 250ml")
         self.assertEqual((got, conf), ("", 0.0))
 
@@ -115,7 +120,6 @@ class TestClassify(unittest.TestCase):
             "Coles Sugar 1kg": "sugar",
             "Mount Franklin Water 600ml": "water",
             "Sun Rice Long Grain 2kg": "rice",
-            "PB Spread Smooth 500g": "spread",
         }
         for name, want in cases.items():
             got, conf = classify_subcategory(name)
@@ -155,17 +159,16 @@ class TestAllLabels(unittest.TestCase):
         for label in labels:
             self.assertTrue(label)
             self.assertEqual(label, label.strip().lower())
-        # Rule order = precedence order: "cheese slice" precedes
-        # "cheese"; "corn chips" precedes "potato chips".
-        self.assertLess(labels.index("cheese slice"),
-                        labels.index("cheese"))
-        self.assertLess(labels.index("corn chips"),
-                        labels.index("potato chips"))
+        # Rule order = precedence order: "corn chips" still first
+        # (cross-family guard); meat labels keep taxonomy positions.
+        self.assertEqual(labels[0], "corn chips")
+        self.assertLess(labels.index("beef mince"),
+                        labels.index("lamb & mutton"))
 
     def test_spec_mandated_labels_present(self):
-        # §2 mandated example labels.
-        for want in ("bread", "apples", "eggs", "shredded cheese",
-                     "cheese slice"):
+        # §2 mandated example labels ("cheese slice" slimmed
+        # 2026-09-07 — plan S1.3).
+        for want in ("bread", "apples", "eggs", "shredded cheese"):
             self.assertIn(want, all_labels())
 
     def test_needs_review_is_not_a_taxonomy_label(self):
@@ -245,6 +248,54 @@ class TestMeatTaxonomy(unittest.TestCase):
                          {"lamb & mutton", "goat", "veal"})
         self.assertNotIn(classify_subcategory("Potato Chips")[0],
                          {"processed meats", "beef diced"})
+
+
+LABELS = ["eggs", "sugar", "milk", "bread", "cucumber",
+          "mini cucumber", "cheese sticks", "olive spread",
+          "mozzarella", "potatoes", "v energy drink"]
+
+
+class TestMatchSubcategory(unittest.TestCase):
+    """match_subcategory: shopping-list phrases -> sheet labels
+    (plan S1.2 — the 2026-09-07 'Sugar-2 kg' regression matrix)."""
+
+    def test_bare_label_exact(self):
+        self.assertEqual(match_subcategory("sugar", LABELS), "sugar")
+
+    def test_label_with_size_qualifier(self):
+        for phrase in ("Sugar-2 kg", "sugar 2kg", "2kg sugar"):
+            self.assertEqual(match_subcategory(phrase, LABELS),
+                             "sugar", phrase)
+
+    def test_singular_plural_folding(self):
+        self.assertEqual(match_subcategory("egg", LABELS), "eggs")
+        self.assertEqual(match_subcategory("potato", LABELS),
+                         "potatoes")
+
+    def test_store_prefix_stripped(self):
+        self.assertEqual(match_subcategory("woolworths milk", LABELS),
+                         "milk")
+
+    def test_multiword_label_via_subset(self):
+        self.assertEqual(match_subcategory("cucumber mini", LABELS),
+                         "mini cucumber")
+
+    def test_users_2026_09_07_list(self):
+        """The exact phrases from the 2026-09-07 09:12 message."""
+        expects = {"Milk": "milk", "Egg": "eggs", "Bread": "bread",
+                   "Olive spread": "olive spread",
+                   "Cucumber mini": "mini cucumber"}
+        for phrase, want in expects.items():
+            self.assertEqual(match_subcategory(phrase, LABELS), want,
+                             phrase)
+
+    def test_no_match_returns_empty(self):
+        self.assertEqual(match_subcategory("lindt powder", LABELS), "")
+
+    def test_longest_label_wins(self):
+        labels = ["cheese", "shredded cheese"]
+        self.assertEqual(match_subcategory("shredded cheese", labels),
+                         "shredded cheese")
 
 
 if __name__ == "__main__":
