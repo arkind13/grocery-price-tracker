@@ -610,9 +610,23 @@ def _save_post_log(entries: list) -> None:
 
 def post_log_cmd(code: str) -> int:
     """'--post-log CODE' — show the remembered posts for a shop:
-    file, when ingested, validity date (the pipeline's memory)."""
+    file, when ingested, validity date (the pipeline's memory).
+
+    The code resolves to its STORE (marathon G8 fix 2026-09-08): FRU,
+    legacy FRUT and timestamped FRUddmmyyHHMM all show the same
+    shop's posts."""
     code = code.strip().upper()
-    entries = [e for e in _load_post_log() if e.get("code") == code]
+    store = _store_for_code(code)
+    if store is None:
+        print(f"[post-log] unknown code: {code}")
+        return 1
+    key = store["key"]
+
+    def _same_shop(entry_code: str) -> bool:
+        s = _store_for_code(str(entry_code or ""))
+        return s is not None and s["key"] == key
+
+    entries = [e for e in _load_post_log() if _same_shop(e.get("code"))]
     if not entries:
         print(f"[post-log] {code}: nothing recorded yet")
         return 1
