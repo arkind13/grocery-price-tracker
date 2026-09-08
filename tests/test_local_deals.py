@@ -1094,6 +1094,38 @@ class TestSetStorePrices(unittest.TestCase):
 
     TILL = datetime(2026, 9, 12).date()
 
+    def test_note_with_dollar_amounts_lands_verbatim_r2_10(self):
+        """R2-10 (R14): a --note carrying $<digit> must land VERBATIM
+        in the Comments cell — '$15', '$2x', '\\$1' all survive. (The
+        verification round's 'eaten $1' receipt shows the note already
+        mangled ON THE COMMAND LINE — the verifier's shell expanded
+        the unquoted $15; the code path writes the note verbatim, and
+        this test pins that contract so a future re.sub-with-user-repl
+        regression cannot slip in.)"""
+        ws = _v2_ws([["BUTCHERY", "", "", "", "", "", "", "", "", ""]])
+        lines = ld.set_store_prices(
+            ws, "merjan", "special",
+            [{"item": "beef mince", "price": 8.99, "unit": "kg",
+              "note": "multi buy 2 for $15"}],
+            till=self.TILL)
+        self.assertTrue(lines)
+        grid = ws.get_all_values()
+        comment = next(r[9] for r in grid if str(r[0]).startswith(
+            "beef mince"))
+        self.assertEqual(comment, "[MER] multi buy 2 for $15")
+
+        # Second write on the same row replaces the segment — still
+        # verbatim, '$2x' intact.
+        ld.set_store_prices(
+            ws, "merjan", "special",
+            [{"item": "beef mince", "price": 7.99, "unit": "kg",
+              "note": "deal $2x this week only"}],
+            till=self.TILL)
+        grid = ws.get_all_values()
+        comment = next(r[9] for r in grid if str(r[0]).startswith(
+            "beef mince"))
+        self.assertEqual(comment, "[MER] deal $2x this week only")
+
     def test_new_row_appended_in_shop_section_with_stamp(self):
         ws = _v2_ws([])
         lines = ld.set_store_prices(ws, "fruitopia", "special",
