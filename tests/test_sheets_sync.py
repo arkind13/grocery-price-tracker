@@ -75,6 +75,13 @@ class FakeWorksheet:
     def get_all_values(self):
         return [list(r) for r in self._values]
 
+    def row_values(self, n):
+        """1-based row read (FIX-9 read-back verify support)."""
+        idx = int(n) - 1
+        if 0 <= idx < len(self._values):
+            return list(self._values[idx])
+        return []
+
     def update(self, *, values, range_name):
         self.updates.append((values, range_name))
         # Parse range and apply write to in-memory grid
@@ -1995,3 +2002,73 @@ class TestAddProductRowHalalHooks(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAddPathVolumeIntegrity(unittest.TestCase):
+    """FIX-9 (D16): add-path anomalies at volume — the 500-item
+    battery saw 3 phantom "already tracked (row N)" refusals where N
+    was the refused item's OWN future row, and more sheet rows than
+    successful adds. Offline: written-count MUST equal created-rows,
+    zero refusals, zero merges — and a corrupted write becomes LOUD."""
+
+    HEADER = [
+        "Product_Name", "Category", "Size", "Woolworths_Price",
+        "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+        "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+        "Search_Keyword_Aldi", "Aldi_Refresh",
+        "Woolworths_Specials", "Coles_Specials", "Rewards_Points",
+        "Keywords",
+    ]
+
+    def test_387_unique_adds_written_count_equals_rows(self):
+        ws = FakeWorksheet([list(self.HEADER)])
+        wrote = merged = refused = 0
+        refusal_errors: list = []
+        for i in range(1, 388):
+            name = f"ZWidget Type {i:03d} 500g"
+            res = add_product_row(
+                generic_name=name,
+                store="woolworths",
+                price=round(1.0 + (i % 90) * 0.1, 2),
+                brand="",
+                size="500g",
+                worksheet=ws,
+            )
+            if res.get("wrote") and not res.get("merged"):
+                wrote += 1
+            elif res.get("merged"):
+                merged += 1
+            else:
+                refused += 1
+                refusal_errors.append((name, res.get("error", "")))
+        data = [r for r in ws.get_all_values()[1:]
+                if str(r[0]).strip()]
+        self.assertEqual(refused, 0, refusal_errors[:3])
+        self.assertEqual(merged, 0)
+        self.assertEqual(wrote, 387)
+        self.assertEqual(len(data), 387)      # rows == written-count
+        names = [str(r[0]).strip() for r in data]
+        self.assertEqual(len(set(names)), 387)   # all unique, no dups
+
+    def test_corrupted_write_raises_loudly(self):
+        """A write that lands wrong (the live anomaly class) raises
+        RuntimeError — never a silent wrote=True."""
+
+        class _LyingWorksheet(FakeWorksheet):
+            def update(self, *, values, range_name):
+                # Simulate the phantom: the write lands with the
+                # WRONG name (concurrent writer / shifted index).
+                import copy
+                corrupted = copy.deepcopy(list(values))
+                corrupted[0][0] = "SOMEONE ELSE'S ROW"
+                super().update(values=corrupted,
+                               range_name=range_name)
+
+        ws = _LyingWorksheet([list(self.HEADER)])
+        with self.assertRaises(RuntimeError) as ctx:
+            add_product_row(
+                generic_name="Probe Widget 250g",
+                store="woolworths", price=2.0, brand="",
+                size="250g", worksheet=ws,
+            )
+        self.assertIn("add verify failed", str(ctx.exception))

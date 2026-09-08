@@ -1350,6 +1350,34 @@ def add_product_row(
 
     range_name = f"A{new_row_index}:{_col_letter(target_width - 1)}{new_row_index}"
     _update_with_backoff(worksheet, [new_row], range_name)
+
+    # FIX-9 (D16) read-back verify: the 500-item battery showed adds
+    # refused "already tracked (row N)" where N was the refused item's
+    # OWN future row, and more sheet rows than successful adds. An
+    # offline probe cannot reproduce it, so the anomaly is made LOUD
+    # instead of silent: read the written row back and raise on any
+    # name mismatch (the caller never sees wrote=True for a phantom).
+    # No destructive rollback: the pre-write content of a mismatched
+    # row is unknowable — raising + not reporting success is the
+    # honest recovery (retry or investigate).
+    _row_values_fn = getattr(worksheet, "row_values", None)
+    if callable(_row_values_fn):
+        try:
+            _read_back = _row_values_fn(new_row_index)
+        except Exception as _exc:   # noqa: BLE001 — a broken read-back
+            # is itself the anomaly; never mask the write silently
+            raise RuntimeError(
+                f"add verify failed: row {new_row_index} unreadable "
+                f"({_exc.__class__.__name__}) after writing "
+                f"'{generic_name}'") from _exc
+        _rb_name = (str(_read_back[0]).strip()
+                    if _read_back else "")
+        if _rb_name != generic_name.strip():
+            raise RuntimeError(
+                f"add verify failed: row {new_row_index} reads "
+                f"'{_rb_name or '(empty)'}' after writing "
+                f"'{generic_name}' — row not reported as written")
+
     if item_code:
         # Register + optimistic verify (§8.2): the A:S row write WAS
         # the reservation; a concurrent duplicate is caught here.
