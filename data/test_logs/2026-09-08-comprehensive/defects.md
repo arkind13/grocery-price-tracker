@@ -217,3 +217,35 @@ P2 = loophole or misleading output · P3 = cosmetic / robustness.
   Multipack) because the fake test line sat at the END of the file, not
   position 2. Restored (E44=4, J44 empty) immediately. H44 (timestamp)
   now shows 2026-09-08 — only residue.
+
+## New findings reported by Round A (fix round, 2026-09-09) — to be CONFIRMED by Round B
+
+### D18. compare is no longer strictly read-only on meat terms (contract change risk)
+- FIX-6 wired the halal chain into compare/recipe. The chain's tier 2 can
+  AUTO-ADD a sheet row when exactly one live candidate is LLM-confirmed
+  (pre-existing shop-flow behaviour) — so `compare --items "chicken
+  breast"` may now WRITE a row, contradicting the documented contract
+  "compare | Never writes" (PROJECT-MAP §commands).
+- Round B MUST test this: does a meat-term compare add a row / to-do
+  entry? If yes, the user decides: accept + update the docs, or make
+  compare's halal chain render-only (report the butcher line, never
+  auto-add). Not a regression — a NEW exposed surface.
+
+### D13-R. Second location of the silent-Coles-failure class
+- `_search_store_with_fallback` (map wool/coles sessions) prints
+  "No coles results found" identically whether the Scrape.do breaker is
+  open or the product is genuinely not listed — same user-facing problem
+  as D13, different code path. Store-scoped, no cross-store risk. Fold
+  into the next diagnostics fix alongside D13.
+
+### Round-B watch (behaviour change, not a defect yet)
+- FIX-6's negation guard blocks auto-pick of "Lactose Free Milk" for
+  query "milk" (interactive surfaces unaffected). Round B should
+  sanity-check that AUTO_PICK_MIN_SCORE + the negation guard don't
+  over-block common legitimate matches beyond this documented trade-off.
+
+### Round A deferrals correctly left for later (already on the books)
+- R2 (specials --store coles leak), R3 (junk live-searched before
+  forget), R8 (empty compare rc=0), D9/D10 (stale map files, two-queue
+  divergence), D15 (bare multi-buy markers) — no FIX IDs existed, so the
+  fixer correctly did not touch them. They remain open.
