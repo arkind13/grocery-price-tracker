@@ -217,9 +217,13 @@ class SheetIndex:
             +2 if query_normalized is a substring of col_a_normalized
             +2 if col_a_normalized is a substring of query_normalized
             +1 per significant query word present in col_a_normalized
+                (singular/plural variants count — "apples" matches a
+                Col A containing "apple"; user report 2026-09-03)
         Return the highest-scoring row with score > 0. Tie-break: shortest
         Col A, then lowest row_index. None if no row scores > 0.
         """
+        from core.lookup import _token_variants
+
         norm_query = self._normalize(query)
         tokens = [
             w for w in norm_query.split()
@@ -238,7 +242,7 @@ class SheetIndex:
             if norm_a in norm_query:
                 score += 2
             for token in tokens:
-                if token in norm_a:
+                if any(v in norm_a for v in _token_variants(token)):
                     score += 1
             if score > best_score:
                 best_score = score
@@ -315,6 +319,17 @@ class RecipeResolver:
                 note=f"matched generic '{exact.generic_name}'",
             )
 
+        # FIX-6 (D7): raw-meat terms resolve through the halal chain
+        # (halal-scoped sheet -> live halal tier + LLM verify ->
+        # Local_Deals butcher tier -> honest not-available) — the
+        # generic partial step must never answer a meat query with a
+        # same-word snack ("chicken breast" -> chicken chips).
+        from core.halal import is_meat_term
+        if is_meat_term(query):
+            halal_item = self._resolve_halal(query)
+            if halal_item is not None:
+                return halal_item
+
         # Step 2: partial
         partial = idx.find_partial(query)
         if partial is not None:
@@ -370,6 +385,59 @@ class RecipeResolver:
             note="no match in any source",
         )
 
+    def _resolve_halal(self, query: str) -> Optional[ResolvedItem]:
+        """FIX-6 (D7): map a HalalResolution onto a ResolvedItem.
+
+        Tiers 1/2 carry a LookupResult with prices -> a priced
+        ResolvedItem (source per the inner status). Tier 3 (butcher
+        line) and tier 0 (not available) -> a not_found ResolvedItem
+        whose note carries the chain's honest line. Returns None when
+        the chain itself fails (caller falls through to the generic
+        steps — never crash a recipe resolve).
+        """
+        try:
+            from core.halal import resolve_halal_item
+            halal = resolve_halal_item(query,
+                                       worksheet=self._worksheet)
+        except Exception as exc:   # noqa: BLE001 — degrade, don't crash
+            print(f"[recipe_resolver] halal chain failed: {exc}",
+                  file=sys.stderr)
+            return None
+        inner = getattr(halal, "result", None)
+        tier = getattr(halal, "tier", 0)
+        line = (getattr(halal, "butcher_line", "")
+                or "; ".join(getattr(halal, "notes", None) or []))
+        if inner is not None and getattr(inner, "prices", None):
+            from core.lookup import LookupStatus
+            if getattr(inner, "status", None) in (
+                    LookupStatus.EXACT_SHEET,
+                    LookupStatus.KEYWORD_ALIAS,
+                    LookupStatus.SHEET_AND_LIVE):
+                source, confidence = "exact_sheet", "exact"
+            else:
+                source, confidence = "live_search", "live"
+            return ResolvedItem(
+                query=query,
+                source=source,
+                confidence=confidence,
+                generic_name=getattr(inner, "generic_name", ""),
+                row_index=getattr(inner, "row_index", None),
+                prices=dict(inner.prices),
+                specials=dict(getattr(inner, "specials", None) or {}),
+                brand=getattr(inner, "brand", "") or "",
+                live_items=list(getattr(inner, "live_items", None)
+                                or []),
+                note=f"halal chain (tier {tier})"
+                     + (f": {line}" if line else ""),
+            )
+        return ResolvedItem(
+            query=query,
+            source="not_found",
+            confidence="none",
+            note=line or f"halal chain: '{query}' not available this "
+                         f"week",
+        )
+
     def resolve_list(self, items_str) -> list[ResolvedItem]:
         """Parse a comma/newline/semicolon string (or list) and resolve each.
 
@@ -397,16 +465,25 @@ class RecipeResolver:
         return out
 
     def _live_search(self, query: str) -> list:
-        """Call fetch_woolworths_search + fetch_coles_search for the query.
-        Concatenate results. Swallow exceptions (return [] on failure)."""
+        """Call fetch_woolworths_search_noauth + fetch_coles_search.
+
+        The noauth curl_cffi path replaced the legacy cookie-based
+        search (2026-09-01): the cookie path's plain-requests client is
+        Akamai-blocked (HTTP 403) on server runners, silently returning
+        empty results.
+
+        Concatenate results. Swallow exceptions (return [] on failure).
+        """
         if not query or not query.strip():
             return []
         out = []
         # Lazy imports to avoid import cycles and keep test import cheap
-        from extractors.woolworths_extractor import fetch_woolworths_search
+        from extractors.woolworths_extractor import (
+            fetch_woolworths_search_noauth,
+        )
         from extractors.coles_extractor import fetch_coles_search
         try:
-            out += fetch_woolworths_search(query, page_size=5)
+            out += fetch_woolworths_search_noauth(query, page_size=5)
         except Exception as exc:
             print(
                 f"[recipe_resolver] woolworths live search failed: {exc}",

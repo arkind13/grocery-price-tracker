@@ -531,6 +531,90 @@ def rank_live_results(query: str, items: list) -> list:
 # prices are within 10x of each other (spec §3.2.3).
 PAIR_PRICE_CEILING = 10.0
 
+# ---------------------------------------------------------------------------
+# FIX-6 / FIX-7 (defects D5 + D7): auto-pick floors — a query is never
+# silently priced from a match that shares nothing meaningful with it.
+# Tunable in ONE place per the fix spec.
+# ---------------------------------------------------------------------------
+# Step-3 sheet auto-pick (compare auto mode): candidates score +2 for
+# token-set containment (either direction) and +1 per significant
+# shared token. A single shared word ("banana" in "xyzzy plugh quantum
+# banana 999" -> "Banana Kids 5") scores 1 and is BELOW the floor.
+AUTO_PICK_MIN_SCORE = 2
+# Live auto-selection (Step 5): the fraction of the query's significant
+# tokens present in a product name as WHOLE tokens (singular/plural
+# folded) must reach this floor, OR the full-string similarity must be
+# this close — substring crossings ("sugar" inside "sugarfree") never
+# count, so junk and Sugarfree-drink answers are refused.
+LIVE_MIN_TOKEN_FRACTION = 0.5
+LIVE_MIN_SIMILARITY = 0.62
+
+
+def _significant_query_tokens(query: str) -> list:
+    """Significant (len>=MIN_WORD_LEN, non-stopword) query tokens."""
+    return [t for t in LookupIndex._normalize(query).split()
+            if len(t) >= MIN_WORD_LEN and t not in STOPWORDS]
+
+
+# Negation tokens: a candidate whose shared token sits NEXT to one of
+# these describes the ABSENCE of the queried thing ("Red Bull Sugar
+# Free", "Dare No Sugar", "V Energy Zero Sugar" for query "sugar") —
+# ported from the subcategory boundary philosophy (FIX-6, D5).
+_NEGATION_TOKENS = {"free", "no", "zero", "less", "sugarfree"}
+
+
+def _negation_crossed(query: str, name: str) -> bool:
+    """FIX-6 (D5): does a query token appear NEGATED in the name?
+
+    True when a significant query token sits adjacent to a negation
+    token in the candidate name ("sugar" in "Red Bull Sugar Free" /
+    "Dare No Sugar") while the query itself carries no negation —
+    such candidates are never auto-picked (they may still be shown
+    interactively, labelled).
+    """
+    q_tokens = set(_significant_query_tokens(query))
+    if not q_tokens:
+        return False
+    name_tokens = LookupIndex._normalize(name).replace("-", " ").split()
+    for i, tok in enumerate(name_tokens):
+        if tok not in q_tokens:
+            continue
+        for j in (i - 1, i + 1):
+            if (0 <= j < len(name_tokens)
+                    and name_tokens[j] in _NEGATION_TOKENS
+                    and name_tokens[j] not in q_tokens):
+                return True
+    return False
+
+
+def _relevant_live_match(query: str, name: str) -> bool:
+    """FIX-6 (D5/D7) boundary + relevance floor for live auto-selection.
+
+    True when at least LIVE_MIN_TOKEN_FRACTION of the query's
+    significant tokens appear in the product name as WHOLE tokens
+    (singular/plural folded — substring crossings like 'sugar' inside
+    'sugarfree' never count), OR the normalised full strings are at
+    least LIVE_MIN_SIMILARITY alike (close fuzzy matches such as
+    'milkk' vs 'Milk 2L' still auto-answer). Negation crossings
+    ('sugar' in 'Red Bull Sugar Free') never qualify. Queries with no
+    significant tokens cannot be gated (True).
+    """
+    if _negation_crossed(query, name):
+        return False
+    q_tokens = _significant_query_tokens(query)
+    if not q_tokens:
+        return True
+    norm_name = LookupIndex._normalize(name)
+    name_variants = {v for t in norm_name.split()
+                     for v in _token_variants(t)}
+    overlap = sum(1 for t in q_tokens
+                  if _token_variants(t) & name_variants)
+    if overlap / len(q_tokens) >= LIVE_MIN_TOKEN_FRACTION:
+        return True
+    return difflib.SequenceMatcher(
+        None, LookupIndex._normalize(query), norm_name).ratio() \
+        >= LIVE_MIN_SIMILARITY
+
 
 def select_live_pair(query: str, ww_items: list,
                      coles_items: list) -> dict:
@@ -573,11 +657,23 @@ def select_live_pair(query: str, ww_items: list,
     for ww_item in ww_ranked:
         ww_size = parse_size(getattr(ww_item, "size", "") or "")
         for coles_item in coles_ranked:
-            coles_size = parse_size(getattr(coles_item, "size", "") or "")
+            coles_size = parse_size(
+                getattr(coles_item, "size", "") or "")
             cmp = compare_sizes(ww_size, coles_size)
             if cmp.verdict in (Verdict.COMPARABLE_SAME,
                                Verdict.COMPARABLE_TOLERANT):
-                passing.append((ww_item, coles_item))
+                # FIX-6 (D5): relevance floor — the pair must share
+                # something MEANINGFUL with the query on at least one
+                # side (whole-token overlap or close similarity);
+                # substring crossings ("sugar" in "sugarfree") never
+                # qualify. Rejected pairs still rank for the
+                # found-block display — they are never auto-priced.
+                if (_relevant_live_match(query, ww_item.raw_name)
+                        or _relevant_live_match(query,
+                                                coles_item.raw_name)):
+                    passing.append((ww_item, coles_item))
+                elif not first_reason:
+                    first_reason = "low_relevance"
             elif not first_reason and cmp.reason:
                 first_reason = cmp.reason
 
@@ -784,10 +880,38 @@ class LookupEngine:
                     note=(f"{len(candidates)} candidate(s) found "
                           f"— pick one to persist alias"),
                 )
-            # Non-interactive: auto-pick the top candidate
-            top = candidates[0]
-            row_dict = idx.get_row(top.row_index)
-            if row_dict is not None:
+            # Non-interactive: auto-pick the FIRST candidate that
+            # passes the FIX-6/FIX-7 guards —
+            #   * score >= AUTO_PICK_MIN_SCORE (D5: one shared word
+            #     must never price a nonsense query),
+            #   * no negation crossing (D5: "Red Bull Sugar Free" is
+            #     not "sugar"),
+            #   * for raw-meat queries: the row is halal-legitimate
+            #     (D7: "Jumpy's Chicken Multipack" is chips — an
+            #     in-scope meat row or halal-marked only).
+            # Nothing passes -> fall through to the live stage /
+            # honest not-found.
+            from core.halal import is_auto_halal_scope, is_halal_row
+            chosen = None
+            for cand in candidates:
+                row_dict = idx.get_row(cand.row_index)
+                if row_dict is None:
+                    continue
+                if cand.score < AUTO_PICK_MIN_SCORE:
+                    continue
+                if _negation_crossed(query, cand.generic_name):
+                    continue
+                if halal_scoped and not (
+                        is_auto_halal_scope(
+                            row_dict.get("subcategory", ""))
+                        or is_halal_row(
+                            "|".join(row_dict.get("aliases", []) or []),
+                            row_dict.get("generic_name", ""))):
+                    continue
+                chosen = (cand, row_dict)
+                break
+            if chosen is not None:
+                top, row_dict = chosen
                 sheet_res = LookupResult(
                     query=query,
                     status=LookupStatus.EXACT_SHEET,
@@ -803,7 +927,8 @@ class LookupEngine:
                                    for s in row_dict["prices"]},
                     matched_sizes={s: row_dict.get("size", "")
                                    for s in row_dict["prices"]},
-                    note=f"auto-picked candidate: '{top.generic_name}'",
+                    note=f"auto-picked candidate: "
+                         f"'{top.generic_name}'",
                 )
                 return self._finish_sheet_result(
                     sheet_res, query, interactive)
@@ -1028,8 +1153,10 @@ class LookupEngine:
         # Single-sided: Woolworths only
         if ww_ranked and not coles_ranked:
             top = ww_ranked[0]
-            if coles_unavailable:
-                # B4.3: show the Woolworths-only answer.
+            if coles_unavailable and _relevant_live_match(query,
+                                                          top.raw_name):
+                # B4.3: show the Woolworths-only answer (FIX-6: only
+                # when the result is meaningfully related to the query).
                 return LookupResult(
                     query=query,
                     status=LookupStatus.LIVE_SEARCH,
@@ -1044,7 +1171,8 @@ class LookupEngine:
                     live_items=ww_ranked,
                     note="woolworths only — coles not checked",
                 )
-            # Coles returned 0 hits: no price enters the report (IN-1).
+            # Coles returned 0 hits (or the WW top is irrelevant —
+            # FIX-6): no price enters the report (IN-1).
             return LookupResult(
                 query=query,
                 status=LookupStatus.LIVE_SEARCH,

@@ -87,6 +87,20 @@ def _make_header(base_only: bool = False) -> list:
     return header
 
 
+def _make_halal_tier1(rows):
+    """FIX-6 helper: a tier-1 HalalResolution over the first data row."""
+    from core.halal import HalalResolution
+    from core.lookup import LookupResult, LookupStatus
+    row = rows[1]
+    return HalalResolution(tier=1, result=LookupResult(
+        query="beef mince", status=LookupStatus.EXACT_SHEET,
+        row_index=2, generic_name=row[0],
+        prices={"woolworths": 8.0, "coles": 7.5},
+        matched_names={"woolworths": row[0], "coles": row[0]},
+        matched_sizes={"woolworths": row[2], "coles": row[2]},
+        note="exact match"))
+
+
 def _make_product_item(store: str, raw_name: str, price: float, *,
                        is_special: bool = False,
                        special_desc: str = "",
@@ -414,21 +428,42 @@ class TestComparator(unittest.TestCase):
         self.assertEqual(result.prices["woolworths"], 4.50)
 
     def test_resolver_partial_substring_match(self):
-        """Query 'beef mince' matches 'Beef Mince 500g' via partial."""
+        """A non-meat query matches its sheet row via partial (FIX-6:
+        meat terms now route through the halal chain, so the partial
+        step is asserted with a pantry query)."""
         from core.recipe_resolver import RecipeResolver
         header = _make_header()
         rows = [
             header,
             # No keyword in Col I/J/K — forces fallthrough to partial matching
+            ["Basmati Rice 5kg", "Pantry", "5kg", "$8.00", "$7.50", "",
+             "", "", "", "", "", "", "", "", ""],
+        ]
+        ws = FakeWorksheet(rows)
+        resolver = RecipeResolver(worksheet=ws)
+        result = resolver.resolve("basmati rice")
+        self.assertEqual(result.source, "partial_sheet")
+        self.assertEqual(result.confidence, "partial")
+        self.assertEqual(result.generic_name, "Basmati Rice 5kg")
+
+    def test_resolver_meat_term_routes_through_halal_chain(self):
+        """FIX-6 (D7): raw-meat terms resolve via the halal chain —
+        the generic partial step never answers them."""
+        from core.recipe_resolver import RecipeResolver
+        header = _make_header()
+        rows = [
+            header,
             ["Beef Mince 500g", "Meat", "500g", "$8.00", "$7.50", "",
              "", "", "", "", "", "", "", "", ""],
         ]
         ws = FakeWorksheet(rows)
         resolver = RecipeResolver(worksheet=ws)
-        result = resolver.resolve("beef mince")
-        self.assertEqual(result.source, "partial_sheet")
-        self.assertEqual(result.confidence, "partial")
-        self.assertEqual(result.generic_name, "Beef Mince 500g")
+        with patch("core.halal.resolve_halal_item",
+                   return_value=_make_halal_tier1(rows)) as rh:
+            result = resolver.resolve("beef mince")
+        rh.assert_called_once()
+        self.assertEqual(result.source, "exact_sheet")
+        self.assertEqual(result.note, "halal chain (tier 1)")
 
     def test_resolver_live_search_fallback(self):
         """Query not in sheet falls back to live search stubs."""
@@ -1100,13 +1135,17 @@ class TestUomReportMatrix(unittest.TestCase):
         self.assertEqual(report.max_savings, 0.0)
 
     def test_p13_no_prices_no_found_block(self):
-        """P-13: empty closest + no prices -> existing rendering only."""
+        """P-13 (+FIX-7): empty closest + no prices -> the honest
+        no-match line (never the SIZES found-block, never totals)."""
         ws = self._ws([_make_header()])
         report = self._auto("xyzunknown", [], ([], "empty"), ws)
         self.assertEqual(report.items[0].closest, {})
+        self.assertEqual(report.items[0].uom_reason, "no_match")
         text = format_report(report)
         self.assertIn("No prices available for any store", text)
-        self.assertNotIn("No matching product", text)
+        self.assertIn("looked at both stores, couldn't price", text)
+        # The SIZES found-block (closest-based) still never renders.
+        self.assertNotIn("sizes don't compare", text)
 
     def test_p14_no_per_unit_price_strings(self):
         """P-14: report contains NO per-unit price strings, ever."""
@@ -1436,3 +1475,161 @@ class TestComparatorMultiBuyDisplay(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLookupGuards(unittest.TestCase):
+    """FIX-6 (D7) + FIX-7 (D5): the auto-pick floor, the halal chain
+    wiring, and the boundary/negation guards on compare answers. Row
+    names mirror the real sheet dump (t8_sheet_snapshot.json)."""
+
+    HEADER = _make_header() + [
+        "Keywords", "Sub_Category", "Item_Code", "Preferred"]
+
+    def _row(self, name, subcat, ww="$5.00", coles="$4.50"):
+        return [name, "Cat", "", ww, coles, "", "", "", "", "", "",
+                "", "", "", "", "", subcat, "", ""]
+
+    def _ws(self, rows):
+        return FakeWorksheet([self.HEADER] + rows)
+
+    def _auto(self, names, ww, coles_result, ws, **kwargs):
+        def stub_ww(term, page_size=5):
+            return ww
+        with patch(
+            "extractors.woolworths_extractor."
+            "fetch_woolworths_search_noauth",
+            side_effect=stub_ww,
+        ), patch(
+            "extractors.coles_extractor.fetch_coles_search_status",
+            side_effect=lambda t, **kw: coles_result,
+        ):
+            return compare_basket(names, mode="auto", worksheet=ws,
+                                  **kwargs)
+
+    def test_chicken_breast_never_answered_by_chips(self):
+        """FIX-6 (D7): compare "chicken breast" never prices the
+        Jumpy's chips rows — the halal chain answers (butcher line or
+        honest not-available)."""
+        from core.halal import HalalResolution
+        ws = self._ws([
+            self._row("Jumpy's Chicken Multipack", "chicken chips"),
+            self._row("Jumpy's Chicken Potato Chips 5 pack",
+                      "chicken chips"),
+        ])
+        sentinel = HalalResolution(
+            tier=3,
+            butcher_line="🔪 Local butcher (halal): Chicken Breast "
+                         "@ Fruitopia — $8.99/kg (this week's board)")
+        with patch("core.halal.resolve_halal_item",
+                   return_value=sentinel) as rh:
+            report = self._auto(["chicken breast"], [], ([], "empty"),
+                                ws)
+        rh.assert_called_once()
+        item = report.items[0]
+        self.assertEqual(item.prices, {})          # no chips price
+        self.assertIn("Local butcher", item.halal_note)
+        text = format_report(report)
+        self.assertNotIn("Jumpy", text)
+        self.assertIn("Local butcher", text)
+        self.assertEqual(report.raw_totals, {})    # never in totals
+
+    def test_sugar_real_rows_resolve_to_raw_sugar(self):
+        """FIX-6 (D5): with the real sheet rows, "sugar" resolves a
+        RAW SUGAR row — the negation guard refuses Red Bull Sugar
+        Free / Dare No Sugar / V Energy Zero Sugar rows."""
+        ws = self._ws([
+            self._row("Red Bull Sugar Free", "red bull"),
+            self._row("V Sugarfree 4*250", "v energy drink"),
+            self._row("Dare No Sugar Dbl Expresso 2L", "cold coffee"),
+            self._row("V Energy Zero Sugar Drink Blackcurrant & Yuzu "
+                      "250mL", "v energy drink"),
+            self._row("Raw Sugar 3Kg", "sugar"),
+        ])
+        report = self._auto(["sugar"], [], ([], "empty"), ws)
+        item = report.items[0]
+        self.assertEqual(item.matched_names.get("woolworths"),
+                         "Raw Sugar 3Kg")
+        self.assertEqual(item.prices, {"woolworths": 5.0,
+                                       "coles": 4.5})
+        text = format_report(report)
+        self.assertNotIn("Red Bull", text)
+        self.assertNotIn("Sugarfree", text)
+
+    def test_sugar_drink_only_sheet_never_auto_priced(self):
+        """No real sugar row exists — the drink rows must NOT be
+        silently priced (not-found path, honest line)."""
+        ws = self._ws([
+            self._row("Red Bull Sugar Free", "red bull"),
+            self._row("V Sugarfree 4*250", "v energy drink"),
+        ])
+        report = self._auto(["sugar"], [], ([], "empty"), ws)
+        item = report.items[0]
+        self.assertEqual(item.prices, {})
+        self.assertEqual(report.raw_totals, {})
+
+    def test_junk_query_never_reaches_totals(self):
+        """FIX-7 (D5): the nonsense query from outputs/T1.V07 renders
+        the honest no-match line — no price, no totals, even with a
+        Banana row on the sheet sharing one word."""
+        ws = self._ws([self._row("Banana Kids 5", "bananas")])
+        report = self._auto(["xyzzy plugh quantum banana 999"], [],
+                            ([], "empty"), ws)
+        item = report.items[0]
+        self.assertEqual(item.prices, {})
+        self.assertEqual(item.uom_reason, "no_match")
+        self.assertEqual(report.raw_totals, {})
+        text = format_report(report)
+        self.assertIn("couldn't price", text)
+        self.assertNotIn("Banana Kids", text)
+
+    def test_junk_query_live_results_also_refused(self):
+        """The live stage refuses the same junk query even when the
+        store APIs return banana products for it."""
+        ws = self._ws([])
+        banana = _make_product_item("woolworths", "Banana Kids 5",
+                                    3.0, brand="")
+        banana.size = ""
+        report = self._auto(["xyzzy plugh quantum banana 999"],
+                            [banana], ([], "empty"), ws)
+        item = report.items[0]
+        self.assertEqual(item.prices, {})
+        self.assertEqual(report.raw_totals, {})
+
+    def test_fuzzy_milkk_still_prices_above_floor(self):
+        """FIX-7: close fuzzy matches still auto-answer — "milkk" via
+        the similarity arm of the relevance floor."""
+        ws = self._ws([])
+        ww_milk = _make_product_item("woolworths", "Milk 2L", 3.10)
+        ww_milk.size = "2L"
+        coles_milk = _make_product_item("coles", "Coles Milk 2L", 2.90)
+        coles_milk.size = "2L"
+        report = self._auto(["milkk"], [ww_milk],
+                            ([coles_milk], "ok"), ws)
+        item = report.items[0]
+        self.assertEqual(item.prices,
+                         {"woolworths": 3.1, "coles": 2.9})
+
+    def test_two_token_match_still_auto_priced(self):
+        """FIX-7: multi-token sheet matches above the floor still
+        auto-price from the sheet."""
+        ws = self._ws([
+            self._row("Washed Potatoes 5kg Bag", "potatoes",
+                      ww="$4.50", coles="$3.90"),
+        ])
+        report = self._auto(["washed potatoes"], [], ([], "empty"), ws)
+        item = report.items[0]
+        self.assertEqual(item.sources,
+                         {"woolworths": "sheet", "coles": "sheet"})
+        self.assertEqual(item.prices, {"woolworths": 4.5,
+                                       "coles": 3.9})
+
+    def test_egg_boundary_cases_stay_correct(self):
+        """FIX-6: "eggplant"-style boundary cases never resolve the
+        Eggs row (token-level containment already refuses them)."""
+        ws = self._ws([
+            self._row("Eggs Free Range 12 Pack", "eggs"),
+        ])
+        report = self._auto(["eggplant"], [], ([], "empty"), ws)
+        item = report.items[0]
+        self.assertEqual(item.prices, {})
+        self.assertEqual(report.raw_totals, {})

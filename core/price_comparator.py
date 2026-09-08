@@ -50,6 +50,10 @@ class BasketItem:
             "no_results_<store>").
         store_unavailable: stores not checked for this item (e.g. Coles
             when Scrape.do was unavailable/breaker-open/cap-exceeded).
+        halal_note: FIX-6 (D7) — halal-chain outcome line for raw-meat
+            queries (tier-2/3 notes or the honest not-available text);
+            rendered instead of prices when the chain found no sheet
+            row.
     """
     name: str
     prices: dict = field(default_factory=dict)
@@ -65,6 +69,7 @@ class BasketItem:
     closest: dict = field(default_factory=dict)
     uom_reason: str = ""
     store_unavailable: list = field(default_factory=list)
+    halal_note: str = ""
 
 
 # ============================================================================
@@ -240,6 +245,7 @@ def compare_basket(
                 closest=dict(item.closest),
                 uom_reason=item.uom_reason,
                 store_unavailable=list(item.store_unavailable),
+                halal_note=item.halal_note,
             )
 
     # 4. Compute raw_totals per store
@@ -573,6 +579,7 @@ def _gather_lookup_prices(
         closest: dict = {}
         uom_reason = ""
         store_unavailable: list = []
+        halal_note = ""
 
         try:
             result = engine.find_product(name, interactive=False)
@@ -582,6 +589,17 @@ def _gather_lookup_prices(
                 file=sys.stderr,
             )
             result = None
+
+        # FIX-6 (D7): raw-meat queries come back as a HalalResolution
+        # (tier 1/2 carry a LookupResult; tier 3/0 carry the butcher
+        # line or the honest not-available text). Unwrap it — the
+        # comparator must never crash-and-swallow the chain's answer.
+        from core.halal import HalalResolution
+        if isinstance(result, HalalResolution):
+            halal_note = (getattr(result, "butcher_line", "")
+                          or "; ".join(getattr(result, "notes", None)
+                                       or []))
+            result = getattr(result, "result", None)
 
         if result is not None:
             if result.status in (
@@ -594,6 +612,8 @@ def _gather_lookup_prices(
                 brand = result.brand
                 matched_names = dict(result.matched_names)
                 matched_sizes = dict(result.matched_sizes)
+                if halal_note:
+                    halal_note = ""    # priced — the note is not needed
             elif result.status == LookupStatus.LIVE_SEARCH:
                 # Live prices from store APIs (Step 5) — the pair already
                 # passed the UOM gate (or is honestly absent, IN-1).
@@ -606,6 +626,8 @@ def _gather_lookup_prices(
                 closest = dict(result.closest)
                 uom_reason = result.uom_reason
                 store_unavailable = list(result.store_unavailable)
+                if halal_note:
+                    halal_note = ""    # priced — the note is not needed
             elif result.status == LookupStatus.SHEET_AND_LIVE:
                 # Merged (2026-09-03): usable sheet prices kept, missing
                 # stores live-filled — result.sources is authoritative
@@ -618,6 +640,13 @@ def _gather_lookup_prices(
                 matched_names = dict(result.matched_names)
                 matched_sizes = dict(result.matched_sizes)
                 store_unavailable = list(result.store_unavailable)
+                if halal_note:
+                    halal_note = ""    # priced — the note is not needed
+            elif result.status == LookupStatus.NOT_FOUND:
+                # FIX-7 (D5): an honest "looked everywhere, no price"
+                # marker — the item never reaches totals and the
+                # report says WHY instead of rendering a bare name.
+                uom_reason = "no_match"
 
         items.append(BasketItem(
             name=name,
@@ -630,6 +659,7 @@ def _gather_lookup_prices(
             closest=closest,
             uom_reason=uom_reason,
             store_unavailable=store_unavailable,
+            halal_note=halal_note,
         ))
     return items
 
@@ -798,6 +828,17 @@ def format_report(report: ComparisonReport) -> str:
             # Non-comparable item: the exact §3.3 found-block. No prices
             # -> excluded from totals and can never win 🏆 (automatic).
             store_lines.extend(_found_block_lines(item))
+        if not store_lines and item.halal_note:
+            # FIX-6 (D7): the halal chain answered — butcher line or
+            # honest not-available; never a price from the chain-free
+            # generic path.
+            store_lines.append(warn(item.halal_note))
+        if not store_lines and item.uom_reason == "no_match":
+            # FIX-7 (D5): looked at sheet + both stores, no meaningful
+            # match — honest line, never totals.
+            store_lines.append(warn(
+                "No matching product — looked at both stores, "
+                "couldn't price."))
         for store in item.store_unavailable:
             store_lines.append(warn(
                 f"{store.capitalize()} not checked (unavailable)"))
