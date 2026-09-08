@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import sys
 import unittest
+import contextlib
+import io
 from datetime import date
 from pathlib import Path
 from unittest.mock import patch
@@ -111,15 +113,20 @@ class TestFruitopiaDealGrammar(unittest.TestCase):
         self.assertEqual(deals["Chokos"]["price"], 1.99)
         self.assertEqual(deals["Chokos"]["unit"], "kg")
 
-    def test_multibuy_divided_out_with_note(self):
+    def test_multibuy_bundle_total_with_note(self):
+        # FIX-3 contract: the parser returns the BUNDLE TOTAL (same
+        # convention as the vision schema); unit_price is the
+        # display-only per-unit rate; _cell_for is the ONLY divider.
         deals = {d["item"]: d for d in
                  parse_fruitopia_deals(ANNIVERSARY_TEXT)}
         celery = deals["Celery"]
         self.assertEqual(celery["multibuy"], 2)
-        self.assertEqual(celery["price"], 1.5)   # 2.99/2 round 2dp
+        self.assertEqual(celery["price"], 2.99)   # bundle total
+        self.assertEqual(celery["unit_price"], 1.5)   # 2.99/2
         self.assertEqual(celery["multibuy_note"], "2 for $2.99")
         carrots = deals["Carrots 1kg Bag"]
-        self.assertEqual(carrots["price"], 1.5)
+        self.assertEqual(carrots["price"], 2.99)
+        self.assertEqual(carrots["unit_price"], 1.5)
         self.assertEqual(carrots["unit"], "ea")
 
     def test_non_deal_lines_skipped(self):
@@ -974,6 +981,54 @@ class TestIngestFlow(unittest.TestCase):
         self.assertNotIn("p1",
                          state["stores"]["fruitopia"]["notified"])
 
+    def test_expired_board_writes_nothing(self):
+        """FIX-4 (D2): a board whose validity end is in the past
+        writes 0 cells (the 6-Sep FRUT board was fully written on
+        8-Sep); the file is archived and post-logged expired: true."""
+        import json
+        import tempfile as tf
+        from datetime import timedelta
+        from core import local_deals as ld
+        from core.sydney_time import sydney_today
+
+        ended = sydney_today() - timedelta(days=2)
+        board = (f"Valid until {ended.day} {ended:%B}\n"
+                 "\U0001f9c5 Celery \u2013 2 for $2.99\n")
+        with tf.TemporaryDirectory() as tmp:
+            inbox = Path(tmp) / "FRUT"
+            inbox.mkdir(parents=True)
+            (inbox / "board.txt").write_text(board, encoding="utf-8")
+            log_path = Path(tmp) / "post_log.json"
+            state = {"stores": {"fruitopia": {
+                "baselined": True, "notified": {"p1": "FRUT"}}}}
+            with patch.object(ld, "INBOX_DIR", Path(tmp)), \
+                    patch.object(ld, "SCAN_STATE_PATH",
+                                 Path(tmp) / "s.json"), \
+                    patch.object(ld, "POST_LOG_PATH", log_path), \
+                    patch.object(ld, "_save_scan_state"), \
+                    patch.object(ld, "_load_scan_state",
+                                 return_value=state), \
+                    patch("core.sheets_client."
+                          "connect_spreadsheet"), \
+                    patch.object(ld, "ensure_local_deals_tab",
+                                 return_value=self._FakeTab([])), \
+                    patch.object(ld, "merge_store_tab",
+                                 return_value=5) as mst, \
+                    patch.object(ld, "_send_message",
+                                 return_value={"ok": True}):
+                with contextlib.redirect_stdout(io.StringIO()) as out:
+                    rc = ld.ingest_code("FRUT")
+            self.assertEqual(rc, 0)
+            mst.assert_not_called()          # 0 cells written
+            self.assertIn("nothing written", out.getvalue())
+            # Archived + post-logged with the expired flag.
+            self.assertTrue((inbox / "processed" / "board.txt")
+                            .is_file())
+            entries = json.loads(
+                log_path.read_text(encoding="utf-8"))
+            self.assertEqual(len(entries), 1)
+            self.assertIs(entries[0].get("expired"), True)
+
     def test_ingest_summary_includes_standout_check(self):
         """User rule 2026-09-07: the >20% master-sheet standout check
         runs AT ingest — its result is part of the summary message."""
@@ -1080,6 +1135,57 @@ class TestIngestFlow(unittest.TestCase):
         # NEWEST post's price, stamped with ITS OWN post's validity
         self.assertEqual(tab.grid[1][6],
                          "valid until Sat 19 Sep")
+
+    def test_plain_repricing_clears_stale_comment(self):
+        """FIX-4 (D11): a newer post that re-prices an item WITHOUT
+        the promo must leave the Comments cell EMPTY — the old
+        '[FRU] [multi buy …]' segment never outlives its price
+        (user rule 2026-09-09)."""
+        import tempfile as tf
+        from core import local_deals as ld
+
+        tab = self._FakeTab([
+            ["Product", "Dunya perm (site)", "Dunya special (FB)",
+             "Merjan perm", "Merjan special", "Fruitopia perm",
+             "Fruitopia special", "Abu Salim perm",
+             "Abu Salim special", "Comments"],
+            ["Prices valid until", "", "", "", "", "", "", "", "",
+             ""],
+            ["FRUITS", "", "", "", "", "", "", "", "", ""],
+            ["Carrots /ea", "", "", "", "", "",
+             "0.75 (till 6 Sep)", "", "",
+             "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
+        ])
+        with tf.TemporaryDirectory() as tmp:
+            inbox = Path(tmp) / "FRUT"
+            inbox.mkdir(parents=True)
+            (inbox / "board.txt").write_text(
+                "Valid until 19 September\n"
+                "Carrots \u2013 $1.20 each\n", encoding="utf-8")
+            state = {"stores": {"fruitopia": {
+                "baselined": True, "notified": {}}}}
+            with patch.object(ld, "INBOX_DIR", Path(tmp)), \
+                    patch.object(ld, "SCAN_STATE_PATH",
+                                 Path(tmp) / "s.json"), \
+                    patch.object(ld, "_save_scan_state"), \
+                    patch.object(ld, "_load_scan_state",
+                                 return_value=state), \
+                    patch("core.sheets_client."
+                          "connect_spreadsheet"), \
+                    patch("core.sheets_client."
+                          "connect_worksheet"), \
+                    patch.object(ld, "_load_master_rows",
+                                 return_value=[]), \
+                    patch.object(ld, "ensure_local_deals_tab",
+                                 return_value=tab), \
+                    patch.object(ld, "_send_message",
+                                 return_value={"ok": True}):
+                rc = ld.ingest_code("FRUT")
+        self.assertEqual(rc, 0)
+        carrots = next(r for r in tab.grid
+                       if r and str(r[0]).strip() == "Carrots /ea")
+        self.assertEqual(carrots[6], "1.2 (till 19 Sep)")
+        self.assertEqual(carrots[9], "")   # promo comment GONE
 
     def test_set_date_records_and_archives(self):
         """--set-date: fixes the double-appended inbox path (2026-09-07

@@ -940,12 +940,16 @@ class TestSweepExpiredSpecials(unittest.TestCase):
 
     TODAY = datetime(2026, 9, 7).date()
 
-    def test_expired_cell_cleared_row_and_comment_kept(self):
+    def test_expired_cell_cleared_comment_dies_with_it(self):
+        # FIX-4 (user rule 2026-09-09): the shop-tagged comment
+        # segment is removed WITH its expired price; other shops'
+        # segments survive.
         ws = _v2_ws([
             ["FRUITS", "", "", "", "", "", "", "", "", ""],
             ["Carrots /ea", "", "", "", "", "",
              "0.75 (till 6 Sep)", "", "",
-             "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
+             "[FRU] multi buy 2 for $1.50 — $0.75/ea; "
+             "[MER] 3 for $4.00 — $1.33/ea"],
         ])
         lines = ld.sweep_expired_specials(ws, today=self.TODAY)
         self.assertEqual(len(lines), 1)
@@ -953,7 +957,8 @@ class TestSweepExpiredSpecials(unittest.TestCase):
         grid = ws.get_all_values()
         self.assertEqual(grid[3][0], "Carrots /ea")   # row KEPT
         self.assertEqual(grid[3][6], "")              # cell cleared
-        self.assertIn("multi buy", grid[3][9])        # comment kept
+        self.assertNotIn("[FRU]", grid[3][9])         # FRU segment died
+        self.assertIn("[MER]", grid[3][9])            # MER untouched
 
     def test_future_dated_and_undated_specials_kept(self):
         ws = _v2_ws([
@@ -1355,6 +1360,61 @@ class TestRestampUndated(unittest.TestCase):
         grid, n = ld._restamp_undated(self._grid(), "nope",
                                       date(2026, 9, 11))
         self.assertEqual(n, 0)
+
+
+class TestMultibuySingleDivider(unittest.TestCase):
+    """FIX-3 (defect D1): one convention, one divider.
+
+    The text parser returns the BUNDLE TOTAL (vision-schema contract);
+    _cell_for is the ONLY effective_unit_rate call on the write path.
+    Live symptom was a double division: '2 for $2.99' written as 0.75
+    with the note '[multi buy 2 for $1.50 — $0.75/ea]'."""
+
+    FRUT_TEXT = (
+        "\U0001f34e Celery \u2013 2 for $2.99\n"
+        "\U0001f34e Carrots 1kg Bag \u2013 2 for $2.99\n"
+    )
+
+    def test_real_frut_text_cell_and_note_correct(self):
+        from extractors.deal_text import parse_fruitopia_deals
+        deals = parse_fruitopia_deals(self.FRUT_TEXT)
+        converted = [ld._to_vision_deal(d, "fruits") for d in deals]
+        for deal in converted:
+            cell, note = ld._cell_for(deal)
+            self.assertEqual(cell, 1.5)          # 2.99/2 — ONCE
+            self.assertEqual(note,
+                             "[multi buy 2 for $2.99 — $1.50/ea]")
+
+    def test_vision_any2_6_dollar_deal(self):
+        # Vision-schema "Any 2 | $6.00" (price = bundle total).
+        cell, note = ld._cell_for({
+            "item": "Soft Drink Cans", "price": 6.00, "unit": "ea",
+            "price_kind": "multibuy", "multibuy_qty": 2,
+        })
+        self.assertEqual(cell, 3.0)
+        self.assertEqual(note, "[multi buy 2 for $6.00 — $3.00/ea]")
+
+    def test_vision_bulk_pack_cell(self):
+        # "10kg box $55" — bulk packs carry the bundle price as-is.
+        cell, note = ld._cell_for({
+            "item": "Potatoes", "price": 55.0, "unit": "ea",
+            "price_kind": "bulk_pack", "bulk_size": "10kg",
+        })
+        self.assertEqual(cell, 55.0)
+        self.assertEqual(note, "[multi buy 10kg for $55.00]")
+
+    def test_scan_path_gets_true_bundle_total(self):
+        # The standout scan (match_and_detect) reads price as the
+        # bundle total too — the per-unit note must divide 2.99 -> 1.50
+        # exactly once from the parser's bundle.
+        results = ld.match_and_detect([{
+            "store_key": "fruitopia", "store_name": "Fruitopia",
+            "item": "Celery", "price": 2.99, "unit": "ea",
+            "price_kind": "multibuy", "multibuy_qty": 2,
+            "category": "fruits",
+        }], [], {})
+        self.assertEqual(results[0].multibuy_note,
+                         "multi buy 2 for $2.99 — $1.50/ea")
 
 
 if __name__ == "__main__":

@@ -79,16 +79,22 @@ def _parse_price_part(part: str) -> dict | None:
     "$1.80 each" / "2 for $2.99".
 
     Returns:
-        dict | None: {"price": per-unit float (2dp), "unit": "ea"|
-        "kg", "multibuy": int|None, "multibuy_note": str|None},
-        or None when the part holds no parseable price.
+        dict | None: {"price": float (2dp) — the BUNDLE TOTAL for
+        multibuy deals (FIX-3: same convention as the vision schema;
+        core.local_deals._cell_for is the ONLY divider), per-unit
+        otherwise; "unit_price": display-only per-unit rate
+        (multibuy only); "unit": "ea"|"kg", "multibuy": int|None,
+        "multibuy_note": str|None}, or None when the part holds no
+        parseable price.
     """
     part = part.strip().replace("\u00a0", " ")
     mb = MULTIBUY_RE.match(part)
     if mb:
         qty = int(mb.group(1))
         bundle = round(float(mb.group(2)), 2)
-        return {"price": round(bundle / qty, 2), "unit": "ea",
+        return {"price": bundle,
+                "unit_price": round(bundle / qty, 2),
+                "unit": "ea",
                 "multibuy": qty,
                 "multibuy_note": f"{qty} for ${bundle:.2f}"}
     unit_tail = r"(?:\s*(?:/\s*)?(kg|each))?"
@@ -121,9 +127,11 @@ def parse_fruitopia_deals(text: str) -> list[dict]:
         text: the decoded post text.
 
     Returns:
-        list[dict]: {"item", "price", "unit", "multibuy",
-        "multibuy_note", "raw"} in post order. Price is per-unit
-        (multibuy bundles are divided out and carried in the note).
+        list[dict]: {"item", "price", "unit_price", "unit",
+        "multibuy", "multibuy_note", "raw"} in post order. price is
+        the BUNDLE TOTAL for multibuy deals (single divider:
+        core.local_deals._cell_for — FIX-3); unit_price is the
+        display-only per-unit rate.
     """
     deals: list[dict] = []
     for raw_line in (text or "").splitlines():

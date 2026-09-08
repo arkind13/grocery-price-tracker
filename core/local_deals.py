@@ -813,7 +813,8 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
     today = sydney_today()
 
     all_vision_deals: list[dict] = []
-    batches: list[dict] = []     # per-file summaries
+    batches: list[dict] = []     # per-file summaries (writable)
+    expired_batches: list[dict] = []   # FIX-4 (D2): read, never written
     category = _store_kind(store["key"]) or "other"
     for path in files:
         try:
@@ -847,6 +848,21 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
         if not deals:
             print(f"[ingest] {path.name}: 0 prices read — skipped")
             continue
+        # FIX-4 (D2): freshness gate — a board whose printed end date
+        # is already past writes NOTHING (user rule 2026-09-09; the
+        # 6-Sep FRUT board was fully written on 8-Sep). Undated boards
+        # keep today's behavior (needs-date review).
+        if valid_until is not None and valid_until < today:
+            print(f"[ingest] {path.name}: deals ended "
+                  f"{valid_until:%a %d %b} — nothing written")
+            expired_batches.append({
+                "file": path.name, "deals": deals,
+                "valid_until": valid_until, "expired": True,
+                "snippet": (
+                    _post_snippet(text) if source == "text" else
+                    ", ".join(d["item"] for d in deals[:3])
+                    + ("…" if len(deals) > 3 else ""))})
+            continue
         valid_txt = (f"valid until {valid_until:%a %d %b}"
                      if valid_until
                      else "valid until — date to confirm")
@@ -855,7 +871,8 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
         for d in deals:
             note = f" ({d['multibuy_note']})" \
                 if d.get("multibuy_note") else ""
-            print(f"   - {d['item']} — {_money(d['price'])}"
+            print(f"   - {d['item']} — "
+                  f"{_money(d.get('unit_price', d['price']))}"
                   f"/{d['unit']}{note}")
         batches.append({"file": path.name, "deals": deals,
                         "valid_until": valid_until,
@@ -874,92 +891,95 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
             c["valid_until"] = valid_until
         all_vision_deals.extend(converted)
 
-    if not all_vision_deals:
+    if not all_vision_deals and not expired_batches:
         print("[ingest] nothing readable in the folder")
         return 1
     if dry_run:
         print("[ingest] dry-run: sheet write + summary skipped")
         return 0
 
-    from core.sheets_client import connect_spreadsheet
-    spreadsheet = connect_spreadsheet()
-    worksheet = ensure_local_deals_tab(spreadsheet)
-    # FB-post ingest targets the shop's FB specials column (Dunya:
-    # "dunya_fb"); the site column is --dunya-site's.
-    col_store = ("dunya_fb" if store["key"] == "dunya"
-                 else store["key"])
-    # Files are newest-first; reversed so the NEWEST post's deal wins
-    # when two posts list the same item (older posts never overwrite
-    # fresher prices on the sheet). Validity stays per post/file in
-    # the post log + summary — never merged away.
-    newest_valid = next((b["valid_until"] for b in batches
-                         if b["valid_until"]), None)
-    rows = merge_store_tab(worksheet, col_store,
-                           list(reversed(all_vision_deals)),
-                           valid_until=newest_valid)
-    print(f"[ingest] Local_Deals tab updated ({rows} rows incl. "
-          f"headers)")
+    if all_vision_deals:
+        from core.sheets_client import connect_spreadsheet
+        spreadsheet = connect_spreadsheet()
+        worksheet = ensure_local_deals_tab(spreadsheet)
+        # FB-post ingest targets the shop's FB specials column (Dunya:
+        # "dunya_fb"); the site column is --dunya-site's.
+        col_store = ("dunya_fb" if store["key"] == "dunya"
+                     else store["key"])
+        # Files are newest-first; reversed so the NEWEST post's deal
+        # wins when two posts list the same item (older posts never
+        # overwrite fresher prices on the sheet). Validity stays per
+        # post/file in the post log + summary — never merged away.
+        newest_valid = next((b["valid_until"] for b in batches
+                             if b["valid_until"]), None)
+        rows = merge_store_tab(worksheet, col_store,
+                               list(reversed(all_vision_deals)),
+                               valid_until=newest_valid)
+        print(f"[ingest] Local_Deals tab updated ({rows} rows incl. "
+              f"headers)")
 
-    # Standout check vs the master sheet — the SAME >20% machinery as
-    # the Friday/on-demand report (user rule 2026-09-07: the alert
-    # must show up at ingest time, not only in the report). Each
-    # batch carries its OWN validity; expired batches are recorded
-    # but never compared.
-    standout_block: list[str]
-    try:
-        from core.sheets_client import connect_worksheet
-        master_rows = _load_master_rows(connect_worksheet())
-        scan_rows = []
+        # Standout check vs the master sheet — the SAME >20% machinery
+        # as the Friday/on-demand report (user rule 2026-09-07: the
+        # alert must show up at ingest time, not only in the report).
+        # Each batch carries its OWN validity; expired batches are
+        # recorded but never compared.
+        standout_block: list[str]
+        try:
+            from core.sheets_client import connect_worksheet
+            master_rows = _load_master_rows(connect_worksheet())
+            scan_rows = []
+            for b in batches:
+                for d in b["deals"]:
+                    row = dict(d)
+                    row["store_key"] = store["key"]
+                    if b["valid_until"]:
+                        row["valid_until"] = b["valid_until"]
+                    scan_rows.append(row)
+            results = match_and_detect(scan_rows, master_rows, {})
+            standout_block = render_post1(
+                results,
+                sydney_now().strftime("%a %Y-%m-%d")).splitlines()
+        except Exception as exc:  # noqa: BLE001 — degrade cleanly
+            print(f"[ingest] standout check failed: "
+                  f"{exc.__class__.__name__}")
+            standout_block = ["⚠️ Standout check failed — run the "
+                              "local-deals report later"]
+
+        bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
+        topic_id = _env_int(LOCAL_DEALS_TOPIC_ENV)
+        lines = [f"📥 {store['name']} — {len(batches)} post(s) saved, "
+                 f"{len(all_vision_deals)} items total:"]
         for b in batches:
+            lines.append(f"{b['file']} ({b['valid_txt']}):")
             for d in b["deals"]:
-                row = dict(d)
-                row["store_key"] = store["key"]
-                if b["valid_until"]:
-                    row["valid_until"] = b["valid_until"]
-                scan_rows.append(row)
-        results = match_and_detect(scan_rows, master_rows, {})
-        standout_block = render_post1(
-            results,
-            sydney_now().strftime("%a %Y-%m-%d")).splitlines()
-    except Exception as exc:      # noqa: BLE001 — degrade cleanly
-        print(f"[ingest] standout check failed: "
-              f"{exc.__class__.__name__}")
-        standout_block = ["⚠️ Standout check failed — run the "
-                          "local-deals report later"]
-
-    bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
-    topic_id = _env_int(LOCAL_DEALS_TOPIC_ENV)
-    lines = [f"📥 {store['name']} — {len(batches)} post(s) saved, "
-             f"{len(all_vision_deals)} items total:"]
-    for b in batches:
-        lines.append(f"{b['file']} ({b['valid_txt']}):")
-        for d in b["deals"]:
-            note = f" ({d['multibuy_note']})" \
-                if d.get("multibuy_note") else ""
-            lines.append(f"• {d['item']} — {_money(d['price'])}"
-                         f"/{d['unit']}{note}")
-    lines.append("")
-    lines.extend(standout_block)
-    expired = [b for b in batches if b["valid_until"]
-               and b["valid_until"] < sydney_today()]
-    if expired:
+                note = f" ({d['multibuy_note']})" \
+                    if d.get("multibuy_note") else ""
+                lines.append(f"• {d['item']} — "
+                             f"{_money(d.get('unit_price', d['price']))}"
+                             f"/{d['unit']}{note}")
         lines.append("")
-        lines.append("⏳ Expired — recorded, not compared:")
-        for b in expired:
-            lines.append(f"• {b['file']} (valid until "
-                         f"{b['valid_until']:%a %d %b})")
-    receipt = _send_message(bot_token, TELEGRAM_CHAT_ID,
-                            "\n".join(lines)[:4000],
-                            thread_id=topic_id or TELEGRAM_CHAT_ID)
-    if not receipt.get("ok"):
-        print("[ingest] telegram delivery failed")
+        lines.extend(standout_block)
+        receipt = _send_message(bot_token, TELEGRAM_CHAT_ID,
+                                "\n".join(lines)[:4000],
+                                thread_id=topic_id or TELEGRAM_CHAT_ID)
+        if not receipt.get("ok"):
+            print("[ingest] telegram delivery failed")
+    else:
+        # FIX-4 (D2): every readable post was already expired — the
+        # freshness gate wrote 0 cells; say so.
+        print("[ingest] 0 cells written — every readable post had "
+              "already ended")
 
     # Archive what was processed; route unknown-validity files to
     # needs_date/ (settled later with --set-date). Everything is
-    # remembered in the post log: file, snippet, validity, items.
+    # remembered in the post log: file, snippet, validity, items —
+    # expired boards included, flagged expired: true (FIX-4: read,
+    # refused, never re-alerted).
     entries = _load_post_log()
-    for b in batches:
-        sub = "processed" if b["valid_until"] else "needs_date"
+    for b in batches + expired_batches:
+        is_expired = bool(b.get("expired"))
+        sub = ("processed" if (b["valid_until"] or is_expired)
+               else "needs_date")
         dest_dir = folder / sub
         dest_dir.mkdir(parents=True, exist_ok=True)
         src = folder / b["file"]
@@ -967,15 +987,18 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
             src.replace(dest_dir / b["file"])
         except OSError:
             pass
-        entries.append({"code": code, "file": b["file"],
-                        "valid_until": (b["valid_until"].isoformat()
-                                        if b["valid_until"]
-                                        else None),
-                        "ingested_at": sydney_now().isoformat(
-                            timespec="seconds"),
-                        "items": len(b["deals"]),
-                        "snippet": b["snippet"],
-                        "archived": sub})
+        entry = {"code": code, "file": b["file"],
+                 "valid_until": (b["valid_until"].isoformat()
+                                 if b["valid_until"]
+                                 else None),
+                 "ingested_at": sydney_now().isoformat(
+                     timespec="seconds"),
+                 "items": len(b["deals"]),
+                 "snippet": b["snippet"],
+                 "archived": sub}
+        if is_expired:
+            entry["expired"] = True
+        entries.append(entry)
     _save_post_log(entries)
     needs = [b for b in batches if not b["valid_until"]]
     if needs:
@@ -1371,7 +1394,10 @@ def build_rows(all_store_deals: dict) -> dict:
                 slot = row_index[(section, key)]
             if col is not None and cell is not None:
                 rows_by_section[section][slot][col] = cell
-            if col is not None and comment:
+            if col is not None:
+                # FIX-4 (D11): the NEWEST deal owns this shop's
+                # comment segment — a plain price (empty note) CLEARS
+                # it. Comments never outlive their prices.
                 cur = rows_by_section[section][slot][comments_col]
                 rows_by_section[section][slot][comments_col] = \
                     _merge_comment_cell(cur, store_key, comment)
@@ -2555,15 +2581,14 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
             elif col is not None:
                 if row[col] != "":
                     grid[match][col] = row[col]
+                # FIX-4 (D11): the Comments cell is rebuilt from the
+                # NEWEST post — an empty note CLEARS this shop's
+                # segment instead of keeping the last promo text.
                 incoming = str(row[comments_col])
-                if incoming:
-                    # build_rows already tagged the note — strip the
-                    # tag before re-merging (no double [FRU] [FRU]).
-                    raw_note = _TAG_RE.sub("", incoming,
-                                           count=1).strip()
-                    grid[match][comments_col] = _merge_comment_cell(
-                        grid[match][comments_col], store_key,
-                        raw_note)
+                raw_note = (_TAG_RE.sub("", incoming, count=1).strip()
+                            if incoming else "")
+                grid[match][comments_col] = _merge_comment_cell(
+                    grid[match][comments_col], store_key, raw_note)
     worksheet.clear()
     worksheet.freeze(rows=2)
     worksheet.update(values=grid, range_name=f"A1:J{len(grid)}")
@@ -2632,6 +2657,7 @@ def sweep_expired_specials(worksheet, today: "date | None" = None
     width = len(TAB_COLUMNS) + 1
     grid = [(list(r) + [""] * width)[:width] for r in grid]
     names = {k: name for k, name in STORE_COLUMNS}
+    comments_col = _grid_col("comments")
     lines: list[str] = []
     changed = False
 
@@ -2676,6 +2702,11 @@ def sweep_expired_specials(worksheet, today: "date | None" = None
                 f"{names[key]}: {name} — {cell} removed "
                 f"(expired {until:%d %b})")
             row[col] = ""
+            # FIX-4 (user rule 2026-09-09): the shop-tagged comment
+            # segment dies WITH its price — other shops' segments stay.
+            if comments_col is not None:
+                row[comments_col] = _merge_comment_cell(
+                    row[comments_col], key, "")
             changed = True
 
     if changed:
