@@ -150,6 +150,9 @@ def compare_basket(
     team_discount=None,       # None -> follow TEAM_DISCOUNT_ENABLED switch
     extra_discount_pct: float = 0.0,
     worksheet=None,           # optional pre-connected gspread Worksheet
+    allow_auto_add: bool = True,   # R2-7 (D18): False = halal tier-2
+                                    # render-only (compare/recipe pass
+                                    # False — "compare | Never writes")
 ) -> ComparisonReport:
     """Compare a basket of products across Woolworths and Coles.
 
@@ -206,7 +209,8 @@ def compare_basket(
     elif mode == "auto":
         # Rewired (Phase 9.2.h): use the lookup engine chain
         # Steps 1 -> 2 -> 3 (auto-pick) -> 5 (live search) -> 6.
-        items = _gather_lookup_prices(names, worksheet)
+        items = _gather_lookup_prices(names, worksheet,
+                                      allow_auto_add=allow_auto_add)
     else:
         raise ValueError(
             f"Unknown mode '{mode}'. Use 'sheet', 'live', or 'auto'."
@@ -546,6 +550,7 @@ def _gather_live_prices(names: list[str]) -> list[BasketItem]:
 def _gather_lookup_prices(
     names: list[str],
     worksheet=None,
+    allow_auto_add: bool = True,
 ) -> list[BasketItem]:
     """Build BasketItems via the lookup engine chain (Steps 1->2->3->5->6).
 
@@ -582,7 +587,8 @@ def _gather_lookup_prices(
         halal_note = ""
 
         try:
-            result = engine.find_product(name, interactive=False)
+            result = engine.find_product(name, interactive=False,
+                                         allow_auto_add=allow_auto_add)
         except Exception as exc:
             print(
                 f"[price_comparator] lookup failed for '{name}': {exc}",
@@ -612,8 +618,12 @@ def _gather_lookup_prices(
                 brand = result.brand
                 matched_names = dict(result.matched_names)
                 matched_sizes = dict(result.matched_sizes)
-                if halal_note:
-                    halal_note = ""    # priced — the note is not needed
+                if halal_note and prices:
+                    # priced — the note is not needed. R2-7 (D18): an
+                    # UNPRICED result (found-block / render-only halal
+                    # candidate) keeps its note — the resolution must
+                    # still render.
+                    halal_note = ""
             elif result.status == LookupStatus.LIVE_SEARCH:
                 # Live prices from store APIs (Step 5) — the pair already
                 # passed the UOM gate (or is honestly absent, IN-1).
@@ -626,8 +636,12 @@ def _gather_lookup_prices(
                 closest = dict(result.closest)
                 uom_reason = result.uom_reason
                 store_unavailable = list(result.store_unavailable)
-                if halal_note:
-                    halal_note = ""    # priced — the note is not needed
+                if halal_note and prices:
+                    # priced — the note is not needed. R2-7 (D18): an
+                    # UNPRICED result (found-block / render-only halal
+                    # candidate) keeps its note — the resolution must
+                    # still render.
+                    halal_note = ""
             elif result.status == LookupStatus.SHEET_AND_LIVE:
                 # Merged (2026-09-03): usable sheet prices kept, missing
                 # stores live-filled — result.sources is authoritative
@@ -640,8 +654,12 @@ def _gather_lookup_prices(
                 matched_names = dict(result.matched_names)
                 matched_sizes = dict(result.matched_sizes)
                 store_unavailable = list(result.store_unavailable)
-                if halal_note:
-                    halal_note = ""    # priced — the note is not needed
+                if halal_note and prices:
+                    # priced — the note is not needed. R2-7 (D18): an
+                    # UNPRICED result (found-block / render-only halal
+                    # candidate) keeps its note — the resolution must
+                    # still render.
+                    halal_note = ""
             elif result.status == LookupStatus.NOT_FOUND:
                 # FIX-7 (D5): an honest "looked everywhere, no price"
                 # marker — the item never reaches totals and the

@@ -1555,6 +1555,41 @@ class TestLookupGuards(unittest.TestCase):
         self.assertNotIn("Red Bull", text)
         self.assertNotIn("Sugarfree", text)
 
+    def test_compare_halal_confirmed_writes_nothing_r2_7(self):
+        """R2-7 (D18): compare is a READ-ONLY surface — a unique
+        LLM-confirmed halal live candidate renders (note naming it)
+        but the sheet gains NO row and no cell is written (the live
+        incident: compare 'halal chicken mince' auto-added the Zwan
+        row)."""
+        from types import SimpleNamespace
+        from extractors.models import ProductItem
+        ws = self._ws([
+            self._row("Full Cream Milk", "dairy"),
+        ])
+        rows_before = len(ws.get_all_values())
+        zwan = ProductItem(
+            "woolworths", "Zwan Luncheon Meat Halal Chicken 850g",
+            10.70, size="850g")
+        verdict = SimpleNamespace(verdict="halal", confidence=0.95)
+        with patch("core.halal.check_halal_via_llm",
+                   return_value=verdict), \
+             patch("core.halal.query_local_butchers",
+                   return_value=[]):
+            report = self._auto(["halal chicken mince"], [zwan],
+                                ([], "empty"), ws,
+                                allow_auto_add=False)
+        # NOTHING written: no new row, no cell update.
+        self.assertEqual(len(ws.get_all_values()), rows_before)
+        self.assertEqual(ws.updates, [])
+        # The resolution still renders — the note names the candidate
+        # and says where to add it.
+        item = report.items[0]
+        self.assertTrue(any("render-only" in ln or "Zwan" in ln
+                            for ln in [item.halal_note]),
+                        item.halal_note)
+        self.assertNotIn("Zwan Luncheon Meat Halal Chicken 850g",
+                         [r[0] for r in ws.get_all_values()[1:]])
+
     def test_sugar_drink_only_sheet_never_auto_priced(self):
         """No real sugar row exists — the drink rows must NOT be
         silently priced (not-found path, honest line)."""

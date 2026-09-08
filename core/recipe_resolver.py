@@ -397,8 +397,11 @@ class RecipeResolver:
         """
         try:
             from core.halal import resolve_halal_item
+            # R2-7 (D18): recipe is a read-only surface — the halal
+            # chain renders its answer, never auto-adds a sheet row.
             halal = resolve_halal_item(query,
-                                       worksheet=self._worksheet)
+                                       worksheet=self._worksheet,
+                                       allow_auto_add=False)
         except Exception as exc:   # noqa: BLE001 — degrade, don't crash
             print(f"[recipe_resolver] halal chain failed: {exc}",
                   file=sys.stderr)

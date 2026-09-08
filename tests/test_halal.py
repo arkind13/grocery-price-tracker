@@ -295,6 +295,55 @@ class TestTierChain(unittest.TestCase):
                                     interactive=False)
         rh.assert_not_called()
 
+    def test_tier2_render_only_never_writes_r2_7(self):
+        """R2-7 (D18): allow_auto_add=False — the single confirmed
+        candidate is REPORTED (render-only note naming it and where to
+        add it), add_product_row is never called. The verification
+        round proved the live write (compare 'halal chicken mince'
+        auto-added the Zwan row); read-only surfaces must stay
+        read-only."""
+        from core.lookup import LookupResult, LookupStatus
+        item = MagicMock()
+        item.raw_name = "Zwan Luncheon Meat Halal Chicken 850g"
+        item.brand = "Zwan"
+        item.store = "woolworths"
+        item.price = 10.70
+        item.size = "850g"
+
+        not_found = LookupResult(query="halal chicken mince",
+                                 status=LookupStatus.NOT_FOUND)
+        live = LookupResult(query="halal chicken mince",
+                            status=LookupStatus.LIVE_SEARCH,
+                            live_items=[item])
+        engine = MagicMock()
+        engine.find_product.side_effect = [not_found, live]
+
+        with patch("core.halal.check_halal_via_llm",
+                   return_value=_verdict("halal", 0.95)), \
+             patch("core.lookup.LookupEngine", return_value=engine), \
+             patch("core.sheets_sync.add_product_row") as add, \
+             patch("core.halal.query_local_butchers",
+                   return_value=[]):
+            res = resolve_halal_item("halal chicken mince",
+                                     allow_auto_add=False)
+        add.assert_not_called()
+        self.assertEqual(res.tier, 2)
+        self.assertTrue(any("render-only" in n for n in res.notes))
+        self.assertTrue(any("Zwan" in n for n in res.notes))
+
+    def test_find_product_threads_allow_auto_add_r2_7(self):
+        """find_product(allow_auto_add=False) forwards the flag into
+        the halal chain — the plumbing compare/recipe rely on."""
+        from core.lookup import LookupEngine
+        ws = _FakeSheet([["Full Cream Milk", "3L", "", "", "", ""]])
+        engine = LookupEngine(ws)
+        with patch("core.halal.resolve_halal_item") as rh, \
+             patch.object(engine, "_live_search_pair",
+                          return_value=([], [], "ok")):
+            engine.find_product("chicken mince", interactive=False,
+                                allow_auto_add=False)
+        self.assertIs(rh.call_args.kwargs.get("allow_auto_add"), False)
+
     def test_tier3_butchery_reader_domain_only(self):
         """Local_Deals reader answers ONLY BUTCHERY-domain rows —
         nuggets/prepared never answer (§8.4)."""

@@ -786,7 +786,8 @@ class LookupEngine:
     def find_product(self, query: str, *,
                      interactive: bool = True,
                      store_scope: str | None = None,
-                     _halal_chain: bool = False) -> LookupResult:
+                     _halal_chain: bool = False,
+                     allow_auto_add: bool = True) -> LookupResult:
         """Run the lookup chain Steps 1 -> 2 -> 3 -> 5 -> 6 for one query.
 
         Args:
@@ -805,6 +806,11 @@ class LookupEngine:
                 resolve_halal_item can verify candidates (prevents
                 resolve_halal_item <-> find_product infinite
                 recursion).
+            allow_auto_add: R2-7 (D18) — False makes the halal tier-2
+                chain RENDER-ONLY (confirmed candidate reported, never
+                written). Read-only surfaces (compare, recipe) pass
+                False; the default keeps the D-H2 auto-add for the
+                explicit flows (shop, search --add-item, map --add).
 
         Returns:
             LookupResult with the terminal status.
@@ -967,7 +973,8 @@ class LookupEngine:
             if _halal_chain:
                 return self._live_result(halal_search_suffix(query),
                                          store_scope=store_scope)
-            return resolve_halal_item(query, worksheet=self._worksheet)
+            return resolve_halal_item(query, worksheet=self._worksheet,
+                                      allow_auto_add=allow_auto_add)
         return self._live_result(query, store_scope=store_scope)
 
     def _gate_mixed_additions(self, additions: dict, live: "LookupResult",

@@ -443,7 +443,8 @@ def query_local_butchers(term: str) -> list[dict]:
     return matches
 
 
-def resolve_halal_item(query: str, worksheet=None) -> HalalResolution:
+def resolve_halal_item(query: str, worksheet=None,
+                       allow_auto_add: bool = True) -> HalalResolution:
     """The 3-tier chain orchestrator (§12.1 rule 5, plan §1.4.9).
 
     Tier 1: halal-SCOPED sheet stages via LookupEngine.find_product(
@@ -457,9 +458,15 @@ def resolve_halal_item(query: str, worksheet=None) -> HalalResolution:
     confirmed -> CANDIDATES list, NOTHING written. None confirmed ->
     tier 3. Non-meat queries never enter (caller guarantees).
 
+    R2-7 (D18): allow_auto_add=False makes tier 2 RENDER-ONLY — the
+    confirmed candidate is reported, never written. Read-only surfaces
+    (compare, recipe) pass False; auto-add stays exclusive to the
+    explicit flows (shop, search --add-item, map --add).
+
     Args:
         query: raw meat term.
         worksheet: optional Products_Master handle for auto-add.
+        allow_auto_add: False = never write (render-only chain).
 
     Returns:
         HalalResolution (never raises to the caller).
@@ -492,8 +499,16 @@ def resolve_halal_item(query: str, worksheet=None) -> HalalResolution:
                 verdict.confidence >= HALAL_WRITE_CONFIDENCE:
             confirmed.append(item)
     if len(confirmed) == 1:
-        from core.sheets_sync import add_product_row
         item = confirmed[0]
+        if not allow_auto_add:
+            # R2-7 (D18): read-only surface — render the confirmed
+            # candidate, write NOTHING ("compare | Never writes").
+            return HalalResolution(tier=2, result=live, notes=[
+                f"halal candidate confirmed: "
+                f"{getattr(item, 'raw_name', '')} "
+                f"(render-only — add it via shop / search --add-item / "
+                f"map --add)"])
+        from core.sheets_sync import add_product_row
         result = add_product_row(
             getattr(item, "raw_name", "") or str(item),
             getattr(item, "store", "") or "",
