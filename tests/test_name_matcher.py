@@ -12,6 +12,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 # Bootstrap sys.path so core/ and extractors/ are importable
 _HERE = Path(__file__).resolve().parent  # tests/
@@ -161,12 +162,11 @@ class TestNameMatcher(unittest.TestCase):
     # --- Test 8: append_unmatched is idempotent ---
     def test_append_unmatched_is_idempotent(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            orig_path = QUEUE_PATH
-            try:
-                # Monkey-patch QUEUE_PATH to temp directory
-                import core.name_matcher as nm
-                test_queue = Path(tmpdir) / "unmapped_queue.json"
-                nm.QUEUE_PATH = test_queue
+            import core.name_matcher as nm
+            test_queue = Path(tmpdir) / "unmapped_queue.json"
+            # patch.object restores the LIVE value (conftest-isolated),
+            # never a stale import-time path (R2-8/R13).
+            with patch.object(nm, "QUEUE_PATH", test_queue):
 
                 item = _make_item("woolworths", "New Product XYZ 500g")
                 classification = classify_product(item.raw_name)
@@ -179,17 +179,13 @@ class TestNameMatcher(unittest.TestCase):
                 self.assertEqual(len(entries), 1)
                 self.assertEqual(entries[0]["count"], 2)
                 self.assertEqual(entries[0]["first_seen"], entries[0]["last_seen"])
-            finally:
-                nm.QUEUE_PATH = orig_path
 
     # --- Test 9: get_pending_mappings returns queued entries ---
     def test_get_pending_mappings_returns_queued(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             import core.name_matcher as nm
-            orig_path = nm.QUEUE_PATH
-            try:
-                test_queue = Path(tmpdir) / "unmapped_queue.json"
-                nm.QUEUE_PATH = test_queue
+            test_queue = Path(tmpdir) / "unmapped_queue.json"
+            with patch.object(nm, "QUEUE_PATH", test_queue):
 
                 item = _make_item("coles", "Another New Item 1kg")
                 classification = classify_product(item.raw_name)
@@ -200,17 +196,13 @@ class TestNameMatcher(unittest.TestCase):
                 self.assertEqual(pending[0]["store"], "coles")
                 self.assertEqual(pending[0]["raw_name"], "Another New Item 1kg")
                 self.assertEqual(pending[0]["status"], "pending")
-            finally:
-                nm.QUEUE_PATH = orig_path
 
     # --- Test 10: clear_resolved removes entry from pending ---
     def test_clear_resolved_removes_entry(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             import core.name_matcher as nm
-            orig_path = nm.QUEUE_PATH
-            try:
-                test_queue = Path(tmpdir) / "unmapped_queue.json"
-                nm.QUEUE_PATH = test_queue
+            test_queue = Path(tmpdir) / "unmapped_queue.json"
+            with patch.object(nm, "QUEUE_PATH", test_queue):
 
                 item = _make_item("woolworths", "Resolvable Item 300g")
                 classification = classify_product(item.raw_name)
@@ -223,8 +215,6 @@ class TestNameMatcher(unittest.TestCase):
 
                 # Idempotent: second call should not raise
                 clear_resolved("woolworths", "Resolvable Item 300g")
-            finally:
-                nm.QUEUE_PATH = orig_path
 
     # --- Test 11: empty index matches nothing ---
     def test_empty_index_matches_nothing(self):
@@ -430,9 +420,8 @@ class TestRecordMissesR2_5(unittest.TestCase):
     def test_record_misses_false_never_writes_queue(self):
         import core.name_matcher as nm
         with tempfile.TemporaryDirectory() as tmpdir:
-            orig_path = nm.QUEUE_PATH
-            try:
-                nm.QUEUE_PATH = Path(tmpdir) / "unmapped_queue.json"
+            test_queue = Path(tmpdir) / "unmapped_queue.json"
+            with patch.object(nm, "QUEUE_PATH", test_queue):
                 index = KeywordIndex([])
                 matcher = NameMatcher(index, record_misses=False)
                 result = matcher.match(
@@ -443,15 +432,12 @@ class TestRecordMissesR2_5(unittest.TestCase):
                 # created — no write happened at all.
                 self.assertFalse(nm.QUEUE_PATH.exists())
                 self.assertEqual(get_pending_mappings(), [])
-            finally:
-                nm.QUEUE_PATH = orig_path
 
     def test_record_misses_default_still_writes_queue(self):
         import core.name_matcher as nm
         with tempfile.TemporaryDirectory() as tmpdir:
-            orig_path = nm.QUEUE_PATH
-            try:
-                nm.QUEUE_PATH = Path(tmpdir) / "unmapped_queue.json"
+            test_queue = Path(tmpdir) / "unmapped_queue.json"
+            with patch.object(nm, "QUEUE_PATH", test_queue):
                 index = KeywordIndex([])
                 matcher = NameMatcher(index)
                 result = matcher.match(
@@ -461,8 +447,6 @@ class TestRecordMissesR2_5(unittest.TestCase):
                 self.assertEqual(len(pending), 1)
                 self.assertEqual(pending[0]["raw_name"],
                                  "Live Run Widget 500g")
-            finally:
-                nm.QUEUE_PATH = orig_path
 
 
 if __name__ == "__main__":
