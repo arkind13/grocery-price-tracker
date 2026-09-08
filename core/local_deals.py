@@ -1181,6 +1181,32 @@ _TILL_RE = re.compile(
     r"\s*\((?:valid )?till\s+(\d{1,2})\s+([A-Za-z]+)\)\s*$", re.I)
 
 
+def _stamp_date(cell: str, today: "date") -> "date | None":
+    """Row-2 summary-stamp date for 'valid until Fri 11 Sep', or None.
+
+    R2-6 (D21): the stamp carries a WEEKDAY-prefixed date ("%a %d %b"),
+    which _cell_till_date's '(till d Mon)' pattern cannot parse — this
+    helper keeps the old sweep's generic first-date extraction (with
+    the >180-day rollback for stale year-crossing stamps).
+    """
+    m = re.search(r"(\d{1,2})\s+([A-Za-z]+)", str(cell or ""))
+    if not m:
+        return None
+    month = _month_num(m.group(2))
+    if month is None:
+        return None
+    try:
+        stamp = date(today.year, month, int(m.group(1)))
+    except ValueError:
+        return None
+    if (stamp - today).days > 180:
+        try:
+            return date(today.year - 1, month, int(m.group(1)))
+        except ValueError:
+            return None
+    return stamp
+
+
 def _stamp_validity(cell, valid_until: "date | None"):
     """Append ' (till 12 Sep)' to a special cell (date aware)."""
     if valid_until is None or cell is None:
@@ -2640,8 +2666,16 @@ def sweep_expired_specials(worksheet, today: "date | None" = None
     the sheet on 7-Sep morning. Only DATED cells are removed —
     undated special cells stay until the shop's next post replaces
     them. Rows are KEPT (only the cell is cleared, user decision
-    2026-09-07); expired row-2 summary stamps are cleared too.
-    PERMANENT columns are never touched.
+    2026-09-07). PERMANENT columns are never touched.
+
+    R2-6 (D21): row-2 summary stamps are RE-DERIVED after the cell
+    sweep — from the store's REMAINING live special cells (max
+    remaining till date), so a stamp never dies (or goes stale) while
+    live specials of that store survive elsewhere (Merjan: row 104
+    till 11 Sep lived on while the stamp was cleared). A stamp is
+    DELETED only when the store has NO live specials left AND the
+    stamp itself is expired. An orphan FUTURE stamp with zero
+    specials is deliberately left alone (D12, awaiting user triage).
 
     Args:
         worksheet: gspread/Fake worksheet handle for Local_Deals.
@@ -2666,33 +2700,7 @@ def sweep_expired_specials(worksheet, today: "date | None" = None
     lines: list[str] = []
     changed = False
 
-    # Row 2 summary stamps ("valid until Fri 06 Sep").
-    if str(grid[1][0]).strip() == "Prices valid until":
-        for key in SHOP_TAGS:
-            col = _special_column_for(key)
-            cell = str(grid[1][col] or "")
-            m = re.search(r"(\d{1,2})\s+([A-Za-z]+)", cell)
-            if not m:
-                continue
-            month = _month_num(m.group(2))
-            if month is None:
-                continue
-            try:
-                stamp = date(today.year, month, int(m.group(1)))
-            except ValueError:
-                continue
-            if (stamp - today).days > 180:
-                try:
-                    stamp = date(today.year - 1, month,
-                                 int(m.group(1)))
-                except ValueError:
-                    continue
-            if stamp < today:
-                lines.append(f"{names[key]}: validity stamp "
-                             f"'{cell.strip()}' removed (expired)")
-                grid[1][col] = ""
-                changed = True
-
+    # --- Pass 1: expired special CELLS (rows kept, cell cleared) ----
     for row in grid[2:]:
         name = str(row[0]).strip()
         if not name or name in SECTION_ORDER:
@@ -2713,6 +2721,44 @@ def sweep_expired_specials(worksheet, today: "date | None" = None
                 row[comments_col] = _merge_comment_cell(
                     row[comments_col], key, "")
             changed = True
+
+    # --- Pass 2 (R2-6): row-2 stamps re-derived from what REMAINS ---
+    # Only EXISTING stamps are re-derived/cleared — a blank stamp cell
+    # stays blank (stamps are born in the ingest/set-special writers,
+    # not the sweep).
+    if str(grid[1][0]).strip() == "Prices valid until":
+        for key in SHOP_TAGS:
+            col = _special_column_for(key)
+            cell = str(grid[1][col] or "")
+            if not cell.strip():
+                continue
+            stamp = _stamp_date(cell, today)
+            live_tills: list = []
+            any_live = False
+            for row in grid[2:]:
+                if not str(row[0]).strip() or \
+                        str(row[0]).strip() in SECTION_ORDER:
+                    continue
+                live_cell = str(row[col]) if len(row) > col else ""
+                if not live_cell.strip():
+                    continue
+                any_live = True
+                till = _cell_till_date(live_cell, today)
+                if till is not None and till >= today:
+                    live_tills.append(till)
+            if live_tills:
+                wanted = f"valid until {max(live_tills):%a %d %b}"
+                if cell.strip() != wanted:
+                    lines.append(
+                        f"{names[key]}: validity stamp re-derived "
+                        f"to '{wanted}' (from live specials)")
+                    grid[1][col] = wanted
+                    changed = True
+            elif not any_live and stamp is not None and stamp < today:
+                lines.append(f"{names[key]}: validity stamp "
+                             f"'{cell.strip()}' removed (expired)")
+                grid[1][col] = ""
+                changed = True
 
     if changed:
         worksheet.clear()

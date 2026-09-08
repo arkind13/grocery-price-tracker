@@ -986,17 +986,36 @@ class TestSweepExpiredSpecials(unittest.TestCase):
                          "6.50 (till 1 Sep)")
 
     def test_expired_row2_summary_stamp_cleared(self):
+        # R2-6 (D21) contract: the stamp is deleted only when NO live
+        # specials remain — this fixture now has ZERO fruitopia
+        # specials (the undated Carrots row moved to the new test
+        # below; spec: undated specials are live specials).
         ws = _v2_ws([
             ["FRUITS", "", "", "", "", "", "", "", "", ""],
-            ["Carrots /ea", "", "", "", "", "", 0.75, "", "", ""],
+            ["Carrots /ea", "", "", "", "", "",
+             "0.75 (till 6 Sep)", "", "", ""],
         ])
         ws.rows[1][6] = "valid until Sun 06 Sep"   # fruitopia sp
         ws.rows[1][4] = "valid until Sat 12 Sep"   # merjan sp
         lines = ld.sweep_expired_specials(ws, today=self.TODAY)
-        self.assertEqual(len(lines), 1)
         grid = ws.get_all_values()
-        self.assertEqual(grid[1][6], "")
+        self.assertEqual(grid[3][6], "")           # expired cell gone
+        self.assertEqual(grid[1][6], "")           # stamp gone (no live)
         self.assertEqual(grid[1][4], "valid until Sat 12 Sep")
+
+    def test_expired_stamp_survives_while_undated_special_live(self):
+        # R2-6 (D21): an UNDATED special is a live special — its
+        # store's stamp is never deleted while it remains (there is no
+        # till date to re-derive from, so the stamp is left as-is).
+        ws = _v2_ws([
+            ["FRUITS", "", "", "", "", "", "", "", "", ""],
+            ["Carrots /ea", "", "", "", "", "", 0.75, "", "", ""],
+        ])
+        ws.rows[1][6] = "valid until Sun 06 Sep"   # expired stamp
+        lines = ld.sweep_expired_specials(ws, today=self.TODAY)
+        self.assertEqual(lines, [])
+        self.assertEqual(ws.get_all_values()[1][6],
+                         "valid until Sun 06 Sep")
 
     def test_no_write_when_nothing_expired(self):
         ws = _v2_ws([])
@@ -1005,6 +1024,69 @@ class TestSweepExpiredSpecials(unittest.TestCase):
                                                    today=self.TODAY),
                          [])
         self.assertEqual(ws.clear_calls, 0)
+
+
+class TestSweepStampReDerivationR2_6(unittest.TestCase):
+    """R2-6 (D21): the sweep RE-DERIVES each store's row-2 stamp from
+    its REMAINING live specials — the Merjan incident (row 104 'till
+    11 Sep' survived while the 'valid until Fri 11 Sep' stamp died)
+    must never repeat."""
+
+    TODAY = datetime(2026, 9, 8).date()
+
+    def _merjan_ws(self, stamp, rows):
+        ws = _v2_ws([["BUTCHERY", "", "", "", "", "", "", "", "", ""]]
+                    + rows)
+        ws.rows[1][4] = stamp        # merjan special column
+        return ws
+
+    def test_stamp_kept_when_matching_live_special_remains(self):
+        # The D21 acceptance: sweeping an UNRELATED expired Merjan
+        # cell keeps 'valid until Fri 11 Sep' (row 104 still live).
+        # grid: [0] header, [1] stamps, [2] BUTCHERY, [3..] items.
+        ws = self._merjan_ws("valid until Fri 11 Sep", [
+            ["Lamb Curry /ea", "", "", "", "27.99 (till 11 Sep)", "",
+             "", "", "", ""],       # the real row-104 shape (live)
+            ["Beef Mince /kg", "", "", "", "8.99 (till 11 Sep)", "",
+             "", "", "", ""],       # live
+            ["Chicken /ea", "", "", "", "12.50 (till 5 Sep)", "",
+             "", "", "", ""],       # expired — swept
+        ])
+        lines = ld.sweep_expired_specials(ws, today=self.TODAY)
+        grid = ws.get_all_values()
+        self.assertEqual(grid[5][4], "")            # expired cell gone
+        self.assertEqual(grid[4][4], "8.99 (till 11 Sep)")
+        self.assertEqual(grid[3][4], "27.99 (till 11 Sep)")
+        # Stamp untouched: max remaining till (11 Sep) matches it.
+        self.assertEqual(grid[1][4], "valid until Fri 11 Sep")
+        self.assertTrue(all("stamp" not in ln for ln in lines))
+
+    def test_stale_stamp_rederived_to_max_remaining(self):
+        # The stamp went stale/expired while a LATER special lives on
+        # (the set-special-overwrite shape behind the D21 evidence):
+        # re-derive to the max remaining till date.
+        ws = self._merjan_ws("valid until Sat 05 Sep", [
+            ["Lamb Curry /ea", "", "", "", "27.99 (till 11 Sep)", "",
+             "", "", "", ""],
+            ["Chicken /ea", "", "", "", "12.50 (till 5 Sep)", "",
+             "", "", "", ""],
+        ])
+        lines = ld.sweep_expired_specials(ws, today=self.TODAY)
+        grid = ws.get_all_values()
+        self.assertEqual(grid[4][4], "")            # expired swept
+        self.assertEqual(grid[1][4], "valid until Fri 11 Sep")
+        self.assertTrue(any("re-derived" in ln for ln in lines))
+
+    def test_zero_remaining_specials_lose_stamp(self):
+        ws = self._merjan_ws("valid until Sat 05 Sep", [
+            ["Chicken /ea", "", "", "", "12.50 (till 5 Sep)", "",
+             "", "", "", ""],
+        ])
+        lines = ld.sweep_expired_specials(ws, today=self.TODAY)
+        grid = ws.get_all_values()
+        self.assertEqual(grid[3][4], "")
+        self.assertEqual(grid[1][4], "")
+        self.assertTrue(any("removed (expired)" in ln for ln in lines))
 
 
 class TestSetStorePrices(unittest.TestCase):
