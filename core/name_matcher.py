@@ -187,6 +187,12 @@ _NAME_SIZE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Pack/count unit words (subset of the regex units that carry NO
+# measurement family — pack counts never distinguish two lines per the
+# one-line rule). Used by the R2-3 order-independent body pass.
+_PACK_UNIT_WORDS = frozenset(
+    {"pack", "packs", "pk", "pks", "ct", "ea", "each"})
+
 
 def split_name_size(name: str) -> tuple:
     """Split a product name into (body-token set, parsed size).
@@ -198,6 +204,15 @@ def split_name_size(name: str) -> tuple:
     pack count is not a distinguishing measurement for the one-line
     rule (a 5-pack and a 70g bag of the same product are ONE item per
     the 2026-09-02 user rule).
+
+    R2-3 (D22): pack-count extraction is ORDER-INDEPENDENT. The
+    adjacency regex alone stripped "14 pack" from "… Super 14 pack"
+    but left the bare "14" and the "pack" in the reordered "pack …
+    Super 14" — two bodies for one product, so the add path appended a
+    duplicate row. When ANY pack-unit word survives the adjacency pass,
+    the pack words and the bare number tokens are dropped from the body
+    wherever they sit, so a word-reorder of the same product yields the
+    SAME body-token set and the one-line rule merges it.
 
     Args:
         name (str): raw product name.
@@ -221,6 +236,11 @@ def split_name_size(name: str) -> tuple:
         if candidate is not None:
             parsed = candidate  # keep the last parseable one
     body_tokens = similarity_tokens(body)
+    if body_tokens & _PACK_UNIT_WORDS:
+        body_tokens = {
+            t for t in body_tokens
+            if t not in _PACK_UNIT_WORDS and not t.isdigit()
+        }
     return body_tokens, parsed
 
 

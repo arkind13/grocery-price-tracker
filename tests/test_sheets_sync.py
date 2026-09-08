@@ -2137,3 +2137,88 @@ class TestVariantBehaviorConsistent(unittest.TestCase):
         grid = ws.get_all_values()
         self.assertEqual(grid[1][4], 2.70)
         self.assertIn("milk", grid[1][15])
+
+
+class TestSizeTokenReorderMergeR2_3(unittest.TestCase):
+    """R2-3 (D22): a word-reorder that moves the size token ("14 pack"
+    -> "pack … 14") must MERGE into the canonical row — the size
+    extraction is order-independent, the merge key can no longer split.
+    Real-sheet names from the verification round's t8 run 3 Phase B."""
+
+    HEADER = [
+        "Product_Name", "Category", "Size", "Woolworths_Price",
+        "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+        "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+        "Search_Keyword_Aldi", "Aldi_Refresh",
+        "Woolworths_Specials", "Coles_Specials", "Rewards_Points",
+        "Keywords",
+    ]
+
+    def _ws(self):
+        return FakeWorksheet([
+            list(self.HEADER),
+            ["Evamay Pads With Wings Super 14 pack", "Health", "14 pack",
+             "", "", "", "", "", "", "", "", "", "", "", "", ""],
+        ])
+
+    def test_reorder_moving_pack_word_merges(self):
+        # The exact D22 variant: "pack" moved to the front leaves a
+        # bare trailing "14" — must still MERGE, not append.
+        ws = self._ws()
+        res = add_product_row(
+            generic_name="pack Evamay Pads With Wings Super 14",
+            store="coles", price=10.0, brand="", size="14 pack",
+            alias="evamay pads", worksheet=ws)
+        self.assertTrue(res["merged"])
+        self.assertTrue(res["wrote"])
+        grid = ws.get_all_values()
+        self.assertEqual(len(grid), 2)             # NO appended row
+        self.assertEqual(grid[1][0],
+                         "Evamay Pads With Wings Super 14 pack")
+        self.assertEqual(grid[1][4], 10.0)         # price merged in
+
+    def test_reorder_battery_all_merge(self):
+        # The reorder/lowercase variant battery shape from the t8 run
+        # — every true variant of the canonical name merges offline.
+        variants = [
+            "pack Evamay Pads With Wings Super 14",      # D22 case
+            "Evamay Pads With Wings Super pack 14",      # unit before num
+            "evamay pads with wings super 14 pack",      # lowercase
+            "Super 14 pack Evamay Pads With Wings",      # suffix moved
+            "14 pack Evamay Pads With Wings Super",      # prefix moved
+        ]
+        for variant in variants:
+            with self.subTest(variant=variant):
+                ws = self._ws()
+                res = add_product_row(
+                    generic_name=variant,
+                    store="coles", price=9.5, brand="", size="14 pack",
+                    alias="", worksheet=ws)
+                self.assertTrue(res["merged"], res)
+                self.assertEqual(len(ws.get_all_values()), 2)
+
+    def test_exact_duplicate_still_refused(self):
+        ws = self._ws()
+        res = add_product_row(
+            generic_name="Evamay Pads With Wings Super 14 pack",
+            store="coles", price=9.0, brand="", size="14 pack",
+            worksheet=ws)
+        self.assertFalse(res["wrote"])
+        self.assertFalse(res["merged"])
+        self.assertIn("already tracked", res["error"])
+
+    def test_different_unit_amount_still_appends(self):
+        # The 20% same-unit rule survives the order-independent pass:
+        # 200g vs 400g is a DIFFERENT amount of the same unit.
+        ws = FakeWorksheet([
+            list(self.HEADER),
+            ["Evamay Pads With Wings Super 200g", "Health", "200g",
+             "", "", "", "", "", "", "", "", "", "", "", "", ""],
+        ])
+        res = add_product_row(
+            generic_name="Evamay Pads With Wings Super 400g",
+            store="coles", price=12.0, brand="", size="400g",
+            worksheet=ws)
+        self.assertTrue(res["wrote"])
+        self.assertFalse(res.get("merged", False))
+        self.assertEqual(len(ws.get_all_values()), 3)
