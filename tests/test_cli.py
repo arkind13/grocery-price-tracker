@@ -4210,6 +4210,10 @@ class TestStoreUnavailableReasonR2_4(unittest.TestCase):
                 line = _store_unavailable_line("coles")
         self.assertIn("Coles unavailable (breaker open until", line)
         self.assertIn("nothing written, item left on the list", line)
+        # R3-3 (R18): exactly ONE ⚠️ — warn() adds it, the head must
+        # not embed a second copy (was "⚠️ ⚠️" at all 8 call sites).
+        self.assertTrue(line.startswith("⚠️ "), line)
+        self.assertNotIn("⚠️ ⚠️", line)
 
     def test_unavailable_line_without_reason_keeps_old_wording(self):
         from grocery_price_cli import _store_unavailable_line
@@ -4220,6 +4224,8 @@ class TestStoreUnavailableReasonR2_4(unittest.TestCase):
                 line = _store_unavailable_line("coles")
         self.assertIn("Coles unavailable right now", line)
         self.assertIn("item left on the list", line)
+        self.assertTrue(line.startswith("⚠️ "), line)
+        self.assertNotIn("⚠️ ⚠️", line)
 
     @patch("extractors.coles_extractor.fetch_coles_search_status")
     @patch("extractors.woolworths_extractor."
