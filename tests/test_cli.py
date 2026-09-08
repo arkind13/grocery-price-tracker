@@ -4474,5 +4474,30 @@ class TestUnmatchedLazyLiveR2_13(unittest.TestCase):
         return result, output
 
 
+# ============================================================================
+# R2-14 (R8): empty `compare --items ""` is a usage error — rc=2 with
+# "provide --items", never a silent empty-basket rc=0 report.
+# ============================================================================
+
+
+class TestCompareEmptyItemsR2_14(unittest.TestCase):
+
+    @patch("grocery_price_cli._load_env")
+    def test_empty_items_is_usage_error(self, mock_env):
+        from grocery_price_cli import _cmd_compare
+        for empty in ("", "   "):
+            with self.subTest(items=repr(empty)):
+                args = argparse.Namespace(
+                    items=empty, mode="auto", team_discount=None,
+                    extra_discount=0.0)
+                out, err = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(out), \
+                        contextlib.redirect_stderr(err):
+                    code = _cmd_compare(args)
+                self.assertEqual(code, 2)
+                self.assertEqual(out.getvalue(), "")   # no basket header
+                self.assertIn("provide --items", err.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
