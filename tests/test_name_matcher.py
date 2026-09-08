@@ -421,5 +421,49 @@ class TestColPTwoPass(unittest.TestCase):
         )
 
 
+class TestRecordMissesR2_5(unittest.TestCase):
+    """R2-5 (D8-residue): NameMatcher(record_misses=False) — the
+    wednesday --dry-run form — classifies misses but NEVER appends them
+    to the unmapped queue (unmapped_queue.json was the one data/ file a
+    dry run still mutated; verification round 2026-09-08 §4)."""
+
+    def test_record_misses_false_never_writes_queue(self):
+        import core.name_matcher as nm
+        with tempfile.TemporaryDirectory() as tmpdir:
+            orig_path = nm.QUEUE_PATH
+            try:
+                nm.QUEUE_PATH = Path(tmpdir) / "unmapped_queue.json"
+                index = KeywordIndex([])
+                matcher = NameMatcher(index, record_misses=False)
+                result = matcher.match(
+                    _make_item("woolworths", "Dry Run Widget 500g"))
+                self.assertFalse(result.matched)
+                self.assertEqual(result.strategy, "none")
+                # The miss was classified but the queue file was never
+                # created — no write happened at all.
+                self.assertFalse(nm.QUEUE_PATH.exists())
+                self.assertEqual(get_pending_mappings(), [])
+            finally:
+                nm.QUEUE_PATH = orig_path
+
+    def test_record_misses_default_still_writes_queue(self):
+        import core.name_matcher as nm
+        with tempfile.TemporaryDirectory() as tmpdir:
+            orig_path = nm.QUEUE_PATH
+            try:
+                nm.QUEUE_PATH = Path(tmpdir) / "unmapped_queue.json"
+                index = KeywordIndex([])
+                matcher = NameMatcher(index)
+                result = matcher.match(
+                    _make_item("coles", "Live Run Widget 500g"))
+                self.assertFalse(result.matched)
+                pending = get_pending_mappings()
+                self.assertEqual(len(pending), 1)
+                self.assertEqual(pending[0]["raw_name"],
+                                 "Live Run Widget 500g")
+            finally:
+                nm.QUEUE_PATH = orig_path
+
+
 if __name__ == "__main__":
     unittest.main()

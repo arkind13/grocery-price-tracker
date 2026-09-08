@@ -2036,7 +2036,7 @@ class TestWednesdayLiveRouting(unittest.TestCase):
             warnings=[])
 
         class _FakeMatcher:
-            def __init__(self, index):
+            def __init__(self, index, *, record_misses=True):
                 pass
 
             def match_batch(self, items):
@@ -2410,7 +2410,7 @@ class TestWednesdayDryRunWritesNothing(unittest.TestCase):
         ]
 
         class _FakeMatcher:
-            def __init__(self, index):
+            def __init__(self, index, *, record_misses=True):
                 pass
 
             def match_batch(self, items):
@@ -2481,6 +2481,107 @@ class TestWednesdayDryRunWritesNothing(unittest.TestCase):
         self.assertIn("[DRY RUN] would write 2 item(s)", out)
         self.assertIn("(would write) Zz New Widget 500g [woolworths]", out)
         self.assertIn("(would write) Zz New Slices 300g [coles]", out)
+
+    def test_dry_run_full_data_tree_untouched_with_real_matcher(self):
+        """R2-5 (D8-residue): the round-1 test above MOCKED NameMatcher,
+        so it could not see the parse step's append_unmatched leak (the
+        verification round caught it live: unmapped_queue.json count/
+        last_seen bumps). Here the REAL NameMatcher runs against an
+        EMPTY keyword index (every parsed item misses) and the FULL
+        data/ tree — subdirectories included — is hashed before/after:
+        a dry run must leave every byte untouched."""
+        from extractors.models import ProductItem
+        from core.name_matcher import KeywordIndex
+        import hashlib
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        tmp = Path(tmp.name)
+        data_dir = tmp / "data"
+        data_dir.mkdir()
+        (data_dir / "unmatched.txt").write_text(
+            "# Unmatched items (parsed from .docx but no keyword "
+            "hit) — 1 total\n\nOld Debt Widget 500g [woolworths]\n",
+            encoding="utf-8")
+        # Existing debt queue with a bumped-able count/last_seen — the
+        # exact mutation the verification round observed.
+        queue_entry = [{
+            "store": "woolworths", "raw_name": "Old Debt Widget 500g",
+            "normalized_key": "old debt widget 500g",
+            "classification": {}, "price": None,
+            "first_seen": "2026-09-01T00:00:00+00:00",
+            "last_seen": "2026-09-07T00:00:00+00:00",
+            "count": 3, "status": "pending",
+        }]
+        (data_dir / "unmapped_queue.json").write_text(
+            json.dumps(queue_entry, indent=2), encoding="utf-8")
+
+        def _tree_hash(root: Path) -> dict:
+            return {
+                str(p.relative_to(root)): hashlib.md5(
+                    p.read_bytes()).hexdigest()
+                for p in sorted(root.rglob("*")) if p.is_file()
+            }
+
+        before = _tree_hash(tmp)
+
+        fake_report = SimpleNamespace(
+            rows_examined=0, rows_updated=0, items_matched=0,
+            items_skipped=0, stores_synced=[], range_written="",
+            warnings=[])
+
+        import core.name_matcher as _nm
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch(
+                "grocery_price_cli._TRACKER", tmp))
+            stack.enter_context(patch(
+                "grocery_price_cli._load_env", return_value=None))
+            stack.enter_context(patch(
+                "extractors.doc_parser.parse_docx_cache",
+                side_effect=lambda store: [
+                    ProductItem(store=store,
+                                raw_name=f"{store} unmatched item",
+                                price=1.0)]))
+            stack.enter_context(patch(
+                "core.name_matcher.load_keyword_index",
+                return_value=KeywordIndex([])))
+            # NOTE: NameMatcher is NOT patched — the real one runs.
+            stack.enter_context(patch.object(
+                _nm, "QUEUE_PATH", data_dir / "unmapped_queue.json"))
+            stack.enter_context(patch(
+                "grocery_price_cli._extract_woolworths_specials",
+                return_value=[]))
+            stack.enter_context(patch(
+                "core.sheets_client.connect_worksheet",
+                return_value=FakeWorksheet([_make_header()])))
+            stack.enter_context(patch(
+                "grocery_price_cli._read_ignored_items",
+                return_value=set()))
+            stack.enter_context(patch(
+                "grocery_price_cli._reset_list_action_progress",
+                return_value=None))
+            stack.enter_context(patch(
+                "subprocess.run",
+                return_value=SimpleNamespace(returncode=0, stdout="",
+                                             stderr="")))
+            stack.enter_context(patch(
+                "core.sheets_sync.sync_prices",
+                return_value=fake_report))
+            old_stdout = sys.stdout
+            try:
+                sys.stdout = io.StringIO()
+                code = _cmd_wednesday_refs()[0](self._wed_args())
+                out = sys.stdout.getvalue()
+            finally:
+                sys.stdout = old_stdout
+
+        self.assertEqual(code, 0)
+        # The parse step really did MISS (the leak's precondition).
+        self.assertIn("0/1 matched", out)
+        self.assertIn("DRY RUN COMPLETE", out)
+        # FULL tree unchanged — no new files, no bumped counts, no
+        # content drift anywhere under the temp root.
+        self.assertEqual(before, _tree_hash(tmp))
 
 
 class TestDiscoveryStatusPrints(unittest.TestCase):

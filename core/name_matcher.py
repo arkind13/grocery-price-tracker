@@ -289,8 +289,17 @@ def is_same_product(a: str, b: str) -> bool:
 class NameMatcher:
     """Headless exact-keyword matcher. No fuzzy logic. No input() prompts."""
 
-    def __init__(self, index: KeywordIndex) -> None:
+    def __init__(self, index: KeywordIndex, *,
+                 record_misses: bool = True) -> None:
+        """Args:
+            index: the keyword index to match against.
+            record_misses: R2-5 (D8-residue) — when False (wednesday
+                --dry-run), misses are classified and returned but
+                NEVER appended to the unmapped queue: a dry run leaves
+                every byte of data/ untouched.
+        """
         self._index = index
+        self._record_misses = record_misses
 
     def match(self, item) -> MatchResult:
         """Match a single ProductItem against the keyword index.
@@ -298,9 +307,10 @@ class NameMatcher:
         1. Look up item.store / item.raw_name in the index.
         2. On hit -> MatchResult(matched=True, row_index, generic_name,
            strategy="exact_keyword").
-        3. On miss -> classify_product(item.raw_name), append_unmatched(...),
-           return MatchResult(matched=False, row_index=None, generic_name="",
-           strategy="none"). Never raises on a miss.
+        3. On miss -> classify_product(item.raw_name), append_unmatched(...)
+           (unless record_misses=False), return MatchResult(matched=False,
+           row_index=None, generic_name="", strategy="none"). Never
+           raises on a miss.
         """
         result = self._index.lookup(item.store, item.raw_name)
         if result is not None:
@@ -313,9 +323,10 @@ class NameMatcher:
                 raw_name=item.raw_name,
                 strategy="exact_keyword",
             )
-        # Miss: classify and queue
+        # Miss: classify and queue (R2-5: dry runs skip the queue write)
         classification = classify_product(item.raw_name)
-        append_unmatched(item, classification)
+        if self._record_misses:
+            append_unmatched(item, classification)
         return MatchResult(
             matched=False,
             row_index=None,
