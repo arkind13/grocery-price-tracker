@@ -1555,6 +1555,84 @@ class TestAddToListCLI(unittest.TestCase):
         self.assertEqual(code, 0)
         mock_add_live.assert_called_once()
 
+    # ------------------------------------------------------------------
+    # FIX-5 (D3): store-scoped map unmatched --add — the Yallamundi
+    # incident (coles-tagged debt resolved with a WOOLWORTHS product +
+    # WW to-do entry while the Coles breaker was open).
+    # ------------------------------------------------------------------
+
+    @patch("core.sheets_sync.add_product_row")
+    @patch("extractors.woolworths_extractor."
+           "fetch_woolworths_search_noauth")
+    @patch("extractors.coles_extractor.fetch_coles_search_status")
+    @patch("core.sheets_client.connect_worksheet")
+    @patch("grocery_price_cli._load_env")
+    def test_tagged_add_broken_store_never_borrows(
+            self, mock_env, mock_ws, mock_coles, mock_ww, mock_add_row):
+        """Coles-tagged debt + broken Coles + healthy Woolworths: no
+        sheet write, no to-do entry, honest message, position intact,
+        and the Woolworths API is never even called."""
+        from grocery_price_cli import _cmd_map_noninteractive
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                from core import add_to_list as atl
+                mock_ws.return_value = FakeWorksheet([_make_header()])
+                mock_coles.return_value = ([], "breaker_open")
+                mock_ww.return_value = []      # healthy = callable
+                progress_path = Path(tmpdir) / "progress.json"
+                args = self._map_args(add=True)
+                code, out = self._capture_stdout(
+                    _cmd_map_noninteractive, args, "unmatched",
+                    ["Yallamundi Farm Organic Free Range Eggs 12 Pack "
+                     "[coles]"], 0, {}, progress_path, Path(tmpdir))
+                self.assertFalse(atl.ADD_TO_LIST_PATH.exists())
+                self.assertFalse(progress_path.exists())
+        self.assertEqual(code, 1)
+        mock_add_row.assert_not_called()
+        mock_ww.assert_not_called()
+        self.assertIn("Coles unavailable right now", out)
+        self.assertIn("item left on the list", out)
+
+    @patch("core.sheets_sync.add_product_row")
+    @patch("extractors.woolworths_extractor."
+           "fetch_woolworths_search_noauth")
+    @patch("extractors.coles_extractor.fetch_coles_search_status")
+    @patch("core.sheets_client.connect_worksheet")
+    @patch("grocery_price_cli._load_env")
+    def test_tagged_add_healthy_store_adds_same_store(
+            self, mock_env, mock_ws, mock_coles, mock_ww, mock_add_row):
+        """Healthy Coles: the add writes the COLES product (price into
+        Col E) and queues a coles to-do entry — never the other store."""
+        from extractors.models import ProductItem
+        from grocery_price_cli import _cmd_map_noninteractive
+        coles_prod = ProductItem(
+            "coles", "Yallamundi Farm Organic Eggs 700g", 9.90,
+            size="700g")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._atl_ctx(tmpdir):
+                from core import add_to_list as atl
+                mock_ws.return_value = FakeWorksheet([_make_header()])
+                mock_coles.return_value = ([coles_prod], "ok")
+                mock_ww.return_value = []      # healthy but must NOT run
+                mock_add_row.return_value = {"wrote": True,
+                                             "row_index": 42}
+                progress_path = Path(tmpdir) / "progress.json"
+                args = self._map_args(add=True)
+                code, _out = self._capture_stdout(
+                    _cmd_map_noninteractive, args, "unmatched",
+                    ["Yallamundi Farm Organic Free Range Eggs 12 Pack "
+                     "[coles]"], 0, {}, progress_path, Path(tmpdir))
+                data = atl.load_pending()
+        self.assertEqual(code, 0)
+        mock_ww.assert_not_called()
+        mock_add_row.assert_called_once()
+        self.assertEqual(mock_add_row.call_args.kwargs.get("store"),
+                         "coles")
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["store"], "coles")
+        self.assertEqual(data[0]["keyword"],
+                         "Yallamundi Farm Organic Eggs 700g")
+
 
 class TestCLIPartB(unittest.TestCase):
     """Plan matrix CLI-1..CLI-16: search display/add-item, searched-items

@@ -666,6 +666,7 @@ class LookupEngine:
 
     def find_product(self, query: str, *,
                      interactive: bool = True,
+                     store_scope: str | None = None,
                      _halal_chain: bool = False) -> LookupResult:
         """Run the lookup chain Steps 1 -> 2 -> 3 -> 5 -> 6 for one query.
 
@@ -674,6 +675,11 @@ class LookupEngine:
             interactive: if True (default), Step 3 returns candidates for
                 the caller to present for user selection. If False, Step 3
                 auto-picks the top candidate (used by compare --mode auto).
+            store_scope: FIX-5 (D3) — restrict Step 5 live search to ONE
+                store ("woolworths"|"coles"). Used by the map-unmatched
+                resolve session for [<store>]-tagged debt entries: never
+                borrow across stores (shop-flow rule 2026-09-07). None
+                (default) searches both stores.
             _halal_chain: private recursion guard for the halal tier
                 chain — chain mode injects the 'halal ' prefix into
                 Step 5 and returns the plain live result so
@@ -811,9 +817,10 @@ class LookupEngine:
                 halal_search_suffix, resolve_halal_item,
             )
             if _halal_chain:
-                return self._live_result(halal_search_suffix(query))
+                return self._live_result(halal_search_suffix(query),
+                                         store_scope=store_scope)
             return resolve_halal_item(query, worksheet=self._worksheet)
-        return self._live_result(query)
+        return self._live_result(query, store_scope=store_scope)
 
     def _gate_mixed_additions(self, additions: dict, live: "LookupResult",
                               sheet_res: "LookupResult") -> dict:
@@ -928,20 +935,25 @@ class LookupEngine:
                   f"{', '.join(sorted(additions))}"),
         )
 
-    def _live_result(self, query: str) -> LookupResult:
+    def _live_result(self, query: str,
+                     store_scope: str | None = None) -> LookupResult:
         """Steps 5 -> 6: live search both stores (or honest not-found).
 
         Extracted verbatim from the former find_product tail so the
         sheet-result live-fill can reuse the exact same gate/found-block
-        behaviour.
+        behaviour. store_scope (FIX-5, D3) restricts the search to ONE
+        store for [store]-tagged map sessions — never both.
 
         Args:
             query: the user-typed product name.
+            store_scope: None (both stores) | "woolworths" | "coles".
 
         Returns:
             LookupResult: LIVE_SEARCH (pair / single-sided / found-block)
             or NOT_FOUND.
         """
+        if store_scope:
+            return self._scoped_live_result(query, store_scope)
         ww_items, coles_items, coles_status = self._live_search_pair(query)
         ww_ranked = rank_live_results(query, ww_items)
         coles_ranked = rank_live_results(query, coles_items)
@@ -1071,6 +1083,92 @@ class LookupEngine:
             note="no match in sheet or either store",
         )
 
+    def _scoped_live_result(self, query: str,
+                            store: str) -> LookupResult:
+        """FIX-5 (D3): live search ONE store only — the other store's
+        API is never called, so a tagged debt item can never resolve
+        with the other store's product (Yallamundi incident 2026-09-08).
+
+        Empty results mean "not listed" (found-block style result);
+        transport failures / breaker-open mean UNAVAILABLE
+        (store_unavailable carries the store — the caller must leave
+        the debt entry untouched, not fall back to the other store).
+        """
+        store = (store or "").strip().lower()
+        if store == "coles":
+            from extractors.coles_extractor import fetch_coles_search_status
+            try:
+                items, status = fetch_coles_search_status(
+                    query, page_size=5)
+            except Exception as exc:
+                print(f"[lookup] coles live search failed: {exc}",
+                      file=sys.stderr)
+                items, status = [], "unavailable"
+            if status in ("unavailable", "breaker_open",
+                          "cap_exceeded"):
+                return LookupResult(
+                    query=query, status=LookupStatus.LIVE_SEARCH,
+                    store_unavailable=["coles"],
+                    note="coles not checked (unavailable)",
+                )
+            ranked = rank_live_results(query, items or [])
+            if not ranked:
+                return LookupResult(
+                    query=query, status=LookupStatus.LIVE_SEARCH,
+                    uom_reason="no_results_coles",
+                    live_items=[],
+                    note="coles found no matching product",
+                )
+            top = ranked[0]
+            return LookupResult(
+                query=query, status=LookupStatus.LIVE_SEARCH,
+                generic_name=top.raw_name,
+                prices={"coles": top.price},
+                specials=({"coles": top.special_desc}
+                          if top.is_special and top.special_desc else {}),
+                brand=top.brand,
+                matched_names={"coles": top.raw_name},
+                matched_sizes={"coles": top.size},
+                live_items=ranked,
+                note="coles only (store-tagged item)",
+            )
+        # woolworths
+        from extractors.woolworths_extractor import (
+            fetch_woolworths_search_noauth,
+        )
+        try:
+            items = fetch_woolworths_search_noauth(
+                query, page_size=5) or []
+        except Exception as exc:
+            print(f"[lookup] woolworths live search failed: {exc}",
+                  file=sys.stderr)
+            return LookupResult(
+                query=query, status=LookupStatus.LIVE_SEARCH,
+                store_unavailable=["woolworths"],
+                note="woolworths not checked (unavailable)",
+            )
+        ranked = rank_live_results(query, items)
+        if not ranked:
+            return LookupResult(
+                query=query, status=LookupStatus.LIVE_SEARCH,
+                uom_reason="no_results_woolworths",
+                live_items=[],
+                note="woolworths found no matching product",
+            )
+        top = ranked[0]
+        return LookupResult(
+            query=query, status=LookupStatus.LIVE_SEARCH,
+            generic_name=top.raw_name,
+            prices={"woolworths": top.price},
+            specials=({"woolworths": top.special_desc}
+                      if top.is_special and top.special_desc else {}),
+            brand=top.brand,
+            matched_names={"woolworths": top.raw_name},
+            matched_sizes={"woolworths": top.size},
+            live_items=ranked,
+            note="woolworths only (store-tagged item)",
+        )
+
     def persist_alias(self, query: str, row_index: int, *,
                       worksheet=None) -> dict:
         """Step 4: persist the query string as an alias to Col P.
@@ -1185,13 +1283,18 @@ class LookupEngine:
             )
         return ww_items, coles_items or [], coles_status
 
-    def _live_search(self, query: str) -> list:
+    def _live_search(self, query: str,
+                     store_scope: str | None = None) -> list:
         """Legacy Step-5 concat (kept for compatibility): both stores in
         one list, Woolworths first. Swallow exceptions (return [] on
         total failure). Each store failure yields [] for that store.
+        store_scope (FIX-5, D3) restricts the search to ONE store.
         """
         if not query or not query.strip():
             return []
+        if store_scope:
+            return list(self._scoped_live_result(
+                query, store_scope).live_items)
         out = []
         # Lazy imports to avoid import cycles and keep test import cheap
         from extractors.woolworths_extractor import fetch_woolworths_search_noauth
