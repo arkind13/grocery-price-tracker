@@ -1123,15 +1123,21 @@ GRID_EXPAND_HEADROOM = 100
 def _worksheet_grid_rows(worksheet) -> Optional[int]:
     """The worksheet's grid row capacity, or None when unknown.
 
-    gspread Worksheet exposes `.rows` (from the fetched grid
-    properties). Test fakes without the attribute read as unknown —
-    the guard is skipped exactly as before R2-11.
+    gspread 6.2.1's Worksheet exposes `.row_count` — R2-11 keyed the
+    guard on `.rows`, an attribute real worksheets NEVER have, so the
+    guard silently never engaged live (raw 400s escaped mid-battery;
+    R3-1). `.rows` is read only as a legacy test-fake fallback: since
+    gspread lacks it, an object defining `.rows` is by definition a
+    fake, never a live worksheet.
     """
     try:
-        rows = getattr(worksheet, "rows", None)
-        return int(rows) if rows else None
+        for attr in ("row_count", "rows"):
+            rows = getattr(worksheet, attr, None)
+            if rows:
+                return int(rows)
     except Exception:  # noqa: BLE001 — property fetch may hit the API
-        return None
+        pass
+    return None
 
 
 def add_product_row(

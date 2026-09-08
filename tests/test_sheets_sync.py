@@ -25,6 +25,8 @@ if str(_PROJECT) not in sys.path:
 
 import core.item_codes as item_codes
 
+from gspread.exceptions import APIError
+
 from core.schema_upgrade import (
     EXPECTED_BASE_HEADERS,
     NEW_COLUMNS,
@@ -2303,6 +2305,134 @@ class TestGridCeilingGuardR2_11(unittest.TestCase):
         self.assertIn("grid is full", res["error"])
         self.assertIn("add rows", res["error"])
         # Nothing was appended.
+        self.assertEqual(len(ws.get_all_values()), 381)
+
+
+# ============================================================================
+# R3-1 (R2-11 residue): the grid guard must key on gspread 6.2.1's REAL
+# attribute — `.row_count` — not `.rows`. The fakes below mirror the
+# real Worksheet surface (row_count present, .rows absent, update()
+# past the grid raises the same raw APIError [400] the live battery
+# saw), so the at-limit test FAILS against the old `.rows`-keyed
+# helper — this is the test that would have caught R2-11.
+# ============================================================================
+
+
+class _FakeAPIResponse:
+    """Minimal requests.Response stand-in for APIError(response)."""
+
+    def __init__(self, code, message):
+        self.status_code = code
+        self.text = message
+        self._payload = {"error": {
+            "code": code, "message": message, "status": "INVALID_ARGUMENT"}}
+
+    def json(self):
+        return self._payload
+
+
+class _GspreadRealWorksheet(FakeWorksheet):
+    """Fake exposing ONLY gspread 6.2.1's real attribute surface:
+    `.row_count` grid capacity (deliberately NO `.rows` — real
+    worksheets have none), `add_rows()` growth, and an APIError [400]
+    'exceeds grid limits' on any update() past the grid — the exact
+    live failure mode (t8/t8r2_c_run.log, verification round 2)."""
+
+    def __init__(self, rows_data, row_count):
+        super().__init__(rows_data)
+        self.row_count = row_count
+        self.add_rows_calls = []
+
+    def add_rows(self, n):
+        self.add_rows_calls.append(n)
+        self.row_count += n
+
+    def update(self, *, values, range_name):
+        _sr, _sc, end_row, _ec = _parse_range(range_name)
+        if end_row > self.row_count:
+            raise APIError(_FakeAPIResponse(
+                400, f"Range ({range_name}) exceeds grid limits. "
+                     f"Max rows: {self.row_count}"))
+        super().update(values=values, range_name=range_name)
+
+
+class TestGridCeilingGuardR3_1(unittest.TestCase):
+    """R3-1: against a fake with gspread 6.2.1's REAL attribute surface
+    (row_count present, .rows ABSENT) the guard still engages — the
+    R2-11 helper keyed on `.rows`, read None here, and let the raw
+    APIError [400] escape (two live crashes, verification round 2)."""
+
+    HEADER = [
+        "Product_Name", "Category", "Size", "Woolworths_Price",
+        "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+        "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+        "Search_Keyword_Aldi", "Aldi_Refresh",
+        "Woolworths_Specials", "Coles_Specials", "Rewards_Points",
+        "Keywords",
+    ]
+
+    def _ws(self, n_data_rows, row_count, fail_expand=False):
+        rows = [list(self.HEADER)] + [
+            [f"Bulk Filler Item {i:04d}", "Cat", "1kg", "", "", "", "",
+             "", "", "", "", "", "", "", "", ""]
+            for i in range(n_data_rows)
+        ]
+        ws = _GspreadRealWorksheet(rows, row_count)
+        if fail_expand:
+            def _boom(n):
+                raise RuntimeError("simulated API failure")
+            ws.add_rows = _boom
+        return ws
+
+    def test_fake_mirrors_real_gspread_surface(self):
+        # The fake must NOT expose `.rows` — gspread 6.2.1 has none. If
+        # it did, the guard could pass for the wrong reason. And the
+        # helper must read the REAL attribute, `row_count`.
+        from core.sheets_sync import _worksheet_grid_rows
+        ws = self._ws(n_data_rows=3, row_count=380)
+        self.assertFalse(hasattr(ws, "rows"))
+        self.assertEqual(_worksheet_grid_rows(ws), 380)
+
+    def test_append_at_limit_expands_grid_no_raw_400(self):
+        # The R3-1 acceptance core: 380 data rows on a 381-row grid —
+        # the append targets row 382, the grid expands FIRST (with
+        # headroom), the write lands, and NO raw APIError escapes.
+        # Under the R2-11 helper this fake read as unknown-grid and the
+        # raw APIError [400] 'exceeds grid limits' propagated.
+        from core.sheets_sync import GRID_EXPAND_HEADROOM
+        ws = self._ws(n_data_rows=380, row_count=381)
+        res = add_product_row(
+            generic_name="New Item At The Ceiling 500g",
+            store="coles", price=3.5, brand="", size="500g",
+            worksheet=ws)
+        self.assertTrue(res["wrote"], res)
+        self.assertEqual(ws.add_rows_calls, [GRID_EXPAND_HEADROOM])
+        self.assertEqual(ws.row_count, 381 + GRID_EXPAND_HEADROOM)
+        self.assertEqual(len(ws.get_all_values()), 382)
+
+    def test_headroom_present_never_expands(self):
+        # Grid has room — the guard is a no-op even on the real-surface
+        # fake.
+        ws = self._ws(n_data_rows=10, row_count=381)
+        res = add_product_row(
+            generic_name="New Item With Room 500g",
+            store="coles", price=3.5, brand="", size="500g",
+            worksheet=ws)
+        self.assertTrue(res["wrote"], res)
+        self.assertEqual(ws.add_rows_calls, [])
+
+    def test_failed_expansion_returns_clear_error(self):
+        # Expansion fails -> a CLEAR actionable error dict, never the
+        # raw APIError.
+        ws = self._ws(n_data_rows=380, row_count=381, fail_expand=True)
+        res = add_product_row(
+            generic_name="New Item Blocked Ceiling 500g",
+            store="coles", price=3.5, brand="", size="500g",
+            worksheet=ws)
+        self.assertFalse(res["wrote"])
+        self.assertFalse(res.get("merged", False))
+        self.assertIn("grid is full", res["error"])
+        self.assertIn("add rows", res["error"])
         self.assertEqual(len(ws.get_all_values()), 381)
 
 
