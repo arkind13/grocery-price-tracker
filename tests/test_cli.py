@@ -4499,5 +4499,139 @@ class TestCompareEmptyItemsR2_14(unittest.TestCase):
                 self.assertIn("provide --items", err.getvalue())
 
 
+# ============================================================================
+# R2-16 (D9): map wool|coles sessions work from the LIVE sheet (rows
+# whose own store keyword is missing — the `lists` rule), never a
+# stale Wednesday .txt snapshot; progress is identity-anchored (names)
+# so the rebuild cannot lose the session's place; resolving an item
+# removes it from BOTH the session and the file.
+# ============================================================================
+
+
+class TestLiveMapWorklistR2_16(unittest.TestCase):
+
+    HEADER = ["Product_Name", "Category", "Size", "Woolworths_Price",
+              "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+              "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+              "Search_Keyword_Aldi", "Aldi_Refresh"]
+
+    # Live sheet: Milk + Bread missing the WW keyword (wool work),
+    # Cheese has "NA" (counts as populated), Eggs missing the COLES
+    # keyword (coles work, not wool).
+    SHEET = [
+        ["Milk 2L", "Dairy", "2L", "", "$2.80", "", "", "",
+         "", "Coles Milk 2L", "", ""],
+        ["Bread Loaf", "Bakery", "650g", "", "$2.20", "", "", "",
+         "", "Coles Bread 650g", "", ""],
+        ["Cheese Block", "Dairy", "500g", "", "$4.80", "", "", "",
+         "NA", "Coles Cheese 500g", "", ""],
+        ["Eggs 12pk", "Dairy", "12pk", "$4.50", "", "", "", "",
+         "WW Eggs 12pk", "", "", ""],
+    ]
+
+    def _setup(self, stale_file="# wool_missing — 1 total\n\nMilk 2L\n",
+               progress=None):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        tmp = Path(tmp.name)
+        data = tmp / "data"
+        data.mkdir()
+        (data / "wool_missing.txt").write_text(stale_file,
+                                               encoding="utf-8")
+        if progress is not None:
+            (data / "list_action_progress.json").write_text(
+                json.dumps(progress), encoding="utf-8")
+        return tmp, data
+
+    def _run_map(self, tmp, **action):
+        from grocery_price_cli import _cmd_map
+        defaults = {"next": False, "pick": None, "add": False,
+                    "skip": False, "na": False, "forget": False,
+                    "keyword": None, "unit": None}
+        defaults.update(action)
+        args = argparse.Namespace(list_name="wool", **defaults)
+        out = io.StringIO()
+        with patch("grocery_price_cli._TRACKER", tmp), \
+             patch("grocery_price_cli._load_env",
+                   return_value=None), \
+             patch("core.sheets_client.connect_worksheet",
+                   return_value=FakeWorksheet(
+                       [list(self.HEADER)] + [list(r) for r in
+                                              self.SHEET])), \
+             patch("extractors.woolworths_extractor."
+                   "fetch_woolworths_search_noauth", return_value=[]), \
+             contextlib.redirect_stdout(out):
+            code = _cmd_map(args)
+        return code, out.getvalue()
+
+    def test_session_count_equals_live_not_stale_file(self):
+        # Stale file holds ONE item; the live sheet has TWO
+        # missing-WW-keyword rows — the session must show 2/2.
+        tmp, _ = self._setup()
+        code, out = self._run_map(tmp, next=True)
+        self.assertEqual(code, 0)
+        self.assertIn("live work list: 2 of 2", out)
+        self.assertIn("Item 1/2", out)
+        self.assertIn("Milk 2L", out)
+
+    def test_resolve_removes_from_session_and_file(self):
+        tmp, data = self._setup()
+        with patch("core.sheets_sync.mark_not_available",
+                   return_value={"found": True, "row_index": 2}) \
+                as mark_na:
+            code, out = self._run_map(tmp, na=True)
+        self.assertEqual(code, 0)
+        mark_na.assert_called_once()
+        # Removed from the FILE (offline record)...
+        self.assertNotIn("Milk 2L",
+                         (data / "wool_missing.txt")
+                         .read_text(encoding="utf-8"))
+        # ...and from the SESSION by identity — a second start shows
+        # the reduced set even though the sheet row still matches the
+        # rule (the fake sheet is not mutated by the mock).
+        progress = json.loads(
+            (data / "list_action_progress.json")
+            .read_text(encoding="utf-8"))
+        self.assertEqual(progress["wool"]["resolved"], ["Milk 2L"])
+        code2, out2 = self._run_map(tmp, next=True)
+        self.assertEqual(code2, 0)
+        self.assertIn("live work list: 1 of 2", out2)
+        self.assertIn("Bread Loaf", out2)
+        self.assertNotIn("--- Item 1/2 ---\n  Looking up Woolworths: "
+                         "Milk 2L", out2)
+
+    def test_legacy_int_progress_migrates_by_identity(self):
+        # Old-format progress (index into the stale file): Milk (the
+        # file's first line) was already handled — it stays hidden in
+        # the live session; Bread still shows.
+        tmp, _ = self._setup(progress={"wool": 1, "unmatched": 0,
+                                       "coles": 0})
+        code, out = self._run_map(tmp, next=True)
+        self.assertEqual(code, 0)
+        self.assertIn("live work list: 1 of 2", out)
+        self.assertIn("Bread Loaf", out)
+
+    def test_sheet_unreachable_falls_back_to_file(self):
+        from grocery_price_cli import _cmd_map
+        tmp, _ = self._setup()
+        args = argparse.Namespace(list_name="wool", next=True,
+                                  pick=None, add=False, skip=False,
+                                  na=False, forget=False, keyword=None,
+                                  unit=None)
+        out = io.StringIO()
+        with patch("grocery_price_cli._TRACKER", tmp), \
+             patch("grocery_price_cli._load_env",
+                   return_value=None), \
+             patch("core.sheets_client.connect_worksheet",
+                   side_effect=RuntimeError("sheet down")), \
+             patch("extractors.woolworths_extractor."
+                   "fetch_woolworths_search_noauth", return_value=[]), \
+             contextlib.redirect_stdout(out):
+            code = _cmd_map(args)
+        self.assertEqual(code, 0)
+        # Falls back to the (stale) file — offline mode still works.
+        self.assertIn("Item 1/1", out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
