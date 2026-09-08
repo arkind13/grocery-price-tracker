@@ -1115,14 +1115,19 @@ class TestAddProductRowDuplicateGuard(unittest.TestCase):
         self.assertIn("already tracked", res["error"])
         self.assertEqual(len(ws.updates), 0)  # nothing appended
 
-    def test_normalized_match_refused(self):
+    def test_case_variant_merges_per_fix10(self):
+        """FIX-10 (D17): exact means EXACT (case-preserved) — a
+        lowercase/whitespace variant is NOT exact, so it MERGES via
+        the one-line rule (price updated) instead of the dead-end
+        refusal."""
         from core.sheets_sync import add_product_row
         ws = self._ws_with_milk()
         res = add_product_row(
             "  woolworths   FULL cream milk 3l ", "woolworths", 4.30,
             brand="Woolworths", size="3L", worksheet=ws)
-        self.assertFalse(res["wrote"])
-        self.assertIn("already tracked", res["error"])
+        self.assertTrue(res["merged"])
+        self.assertEqual(res.get("existing_name"),
+                         "Woolworths Full Cream Milk 3L")
 
     def test_new_name_still_appends(self):
         from core.sheets_sync import add_product_row
@@ -2072,3 +2077,63 @@ class TestAddPathVolumeIntegrity(unittest.TestCase):
                 size="250g", worksheet=ws,
             )
         self.assertIn("add verify failed", str(ctx.exception))
+
+
+class TestVariantBehaviorConsistent(unittest.TestCase):
+    """FIX-10 (D17): ONE documented behavior for name variants at the
+    add path — exact (case-preserved) matches are refused; word-order
+    and lowercase variants go to the one-line rule and MERGE (price +
+    alias update)."""
+
+    HEADER = [
+        "Product_Name", "Category", "Size", "Woolworths_Price",
+        "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+        "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+        "Search_Keyword_Aldi", "Aldi_Refresh",
+        "Woolworths_Specials", "Coles_Specials", "Rewards_Points",
+        "Keywords",
+    ]
+
+    def _ws(self, name):
+        return FakeWorksheet([
+            list(self.HEADER),
+            [name, "Cat", "2L", "$3.00", "", "", "", "", "", "", "",
+             "", "", "", "", "old alias"],
+        ])
+
+    def test_exact_name_refused(self):
+        ws = self._ws("Full Cream Milk 2L")
+        res = add_product_row(
+            generic_name="Full Cream Milk 2L",   # byte-identical
+            store="coles", price=2.90, brand="", size="2L",
+            alias="milk", worksheet=ws)
+        self.assertFalse(res["wrote"])
+        self.assertFalse(res["merged"])
+        self.assertIn("already tracked", res["error"])
+        # No price/alias update on a refusal.
+        grid = ws.get_all_values()
+        self.assertEqual(grid[1][4], "")          # Coles price untouched
+        self.assertEqual(grid[1][15], "old alias")
+
+    def test_word_order_variant_merges(self):
+        ws = self._ws("Full Cream Milk 2L")
+        res = add_product_row(
+            generic_name="2L Milk Full Cream",
+            store="coles", price=2.90, brand="", size="2L",
+            alias="milk", worksheet=ws)
+        self.assertTrue(res["merged"])
+        grid = ws.get_all_values()
+        self.assertEqual(grid[1][4], 2.90)        # price updated
+        self.assertIn("old alias", grid[1][15])   # alias appended
+        self.assertIn("milk", grid[1][15])
+
+    def test_lowercase_variant_merges(self):
+        ws = self._ws("Full Cream Milk 2L")
+        res = add_product_row(
+            generic_name="full cream milk 2l",
+            store="coles", price=2.70, brand="", size="2L",
+            alias="milk", worksheet=ws)
+        self.assertTrue(res["merged"])
+        grid = ws.get_all_values()
+        self.assertEqual(grid[1][4], 2.70)
+        self.assertIn("milk", grid[1][15])

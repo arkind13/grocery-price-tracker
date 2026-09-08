@@ -1180,11 +1180,22 @@ def add_product_row(
     # An explicit add for a name that already exists in Col A would
     # append a duplicate row (e.g. milk added while already tracked).
     # Refuse and point at the existing row — update/map handle those.
-    new_norm = KeywordIndex._normalize(generic_name)
+    # FIX-10 (D17): EXACT means EXACT — the comparison is
+    # case-preserved (whitespace-collapsed only). Word-order and
+    # lowercase variants are NOT exact, so they fall through to the
+    # one-line rule below and MERGE (price + alias update) instead of
+    # the dead-end refusal — ONE documented behavior for every
+    # variant form.
+    _ws_norm = re.compile(r"\s+")
+
+    def _exact_norm(s: str) -> str:
+        return _ws_norm.sub(" ", str(s).strip())
+
+    new_norm = _exact_norm(generic_name)
     if new_norm:
         for row_index, row in enumerate(data_rows, start=2):
             existing = row[0].strip() if row else ""
-            if existing and KeywordIndex._normalize(existing) == new_norm:
+            if existing and _exact_norm(existing) == new_norm:
                 return {
                     "wrote": False,
                     "merged": False,
