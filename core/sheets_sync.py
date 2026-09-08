@@ -137,6 +137,11 @@ class SyncReport:
     notfound_written: int = 0         # mapped row absent from the list
     unavailable_items: list = field(default_factory=list)
     notfound_items: list = field(default_factory=list)
+    # R2-15 (D15): rows whose specials cell is still the BARE
+    # "multi-buy" marker (no "2/$X" terms) after the sync — listed once
+    # in the Wednesday summary so the gap is visible instead of
+    # silent; the next payload with terms upgrades them.
+    multibuy_awaiting_terms: list = field(default_factory=list)
 
 
 # Marker prefixes written into D/E when a price is unusable. The date
@@ -391,11 +396,39 @@ def sync_prices(
             # deliberately-NA rows normalize blanks to "no" once. Rows
             # seen in the list keep the fresh value the match loop
             # just wrote.
+            # R2-15 (D15): a BARE legacy "multi-buy" marker (no
+            # "2/$X" terms) is left UNTOUCHED — it stays awaiting deal
+            # terms (the next payload with terms upgrades it via the
+            # match loop) and is reported in multibuy_awaiting_terms.
+            from core.multibuy import (  # noqa: E402 — lazy, once
+                decode_multibuy_cell, is_multibuy_cell,
+            )
             if not seen_now:
                 sc = specials_col.get(store_key)
-                if sc is not None and len(row) > sc and \
-                        str(row[sc]).strip().lower() != "no":
-                    row[sc] = "no"
+                if sc is not None and len(row) > sc:
+                    cell_now = str(row[sc]).strip()
+                    if cell_now.lower() != "no" and not (
+                            is_multibuy_cell(cell_now)
+                            and decode_multibuy_cell(cell_now) is None):
+                        row[sc] = "no"
+
+    # R2-15 (D15): rows whose specials cell is still the BARE
+    # "multi-buy" marker after both passes — no deal terms, so no rate
+    # or tag can ever render. Reported once per sync so the gap is
+    # visible instead of silent (leftovers are LEGACY cells; the
+    # current writers always encode terms).
+    from core.multibuy import decode_multibuy_cell, is_multibuy_cell
+    multibuy_awaiting: list[str] = []
+    for store_key, sc in specials_col.items():
+        for row in rows:
+            if len(row) <= sc:
+                continue
+            cell_now = str(row[sc]).strip()
+            if (cell_now
+                    and is_multibuy_cell(cell_now)
+                    and decode_multibuy_cell(cell_now) is None):
+                multibuy_awaiting.append(
+                    f"{str(row[0]).strip()} ({store_key})")
 
     # Compute final target width
     target_width = max(
@@ -439,6 +472,7 @@ def sync_prices(
             notfound_written=notfound_written,
             unavailable_items=unavailable_items,
             notfound_items=notfound_items,
+            multibuy_awaiting_terms=multibuy_awaiting,
         )
 
     range_name = f"A2:{_col_letter(target_width - 1)}{len(rows) + 1}"
@@ -457,6 +491,7 @@ def sync_prices(
         notfound_written=notfound_written,
         unavailable_items=unavailable_items,
         notfound_items=notfound_items,
+        multibuy_awaiting_terms=multibuy_awaiting,
     )
 
 

@@ -2304,3 +2304,82 @@ class TestGridCeilingGuardR2_11(unittest.TestCase):
         self.assertIn("add rows", res["error"])
         # Nothing was appended.
         self.assertEqual(len(ws.get_all_values()), 381)
+
+
+# ============================================================================
+# R2-15 (D15): legacy BARE "multi-buy" markers — a payload WITH deal
+# terms upgrades the cell to the encoded form (rate applies on the
+# price write); with NO terms the marker stays UNTOUCHED and the row
+# is listed once in the Wednesday summary (multibuy_awaiting_terms).
+# ============================================================================
+
+
+class TestBareMultibuyMarkerR2_15(unittest.TestCase):
+
+    HEADER = [
+        "Product_Name", "Category", "Size", "Woolworths_Price",
+        "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+        "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+        "Search_Keyword_Aldi", "Aldi_Refresh",
+        "Woolworths_Specials", "Coles_Specials", "Rewards_Points",
+        "Keywords",
+    ]
+
+    def _ws(self, specials_cell):
+        return FakeWorksheet([
+            list(self.HEADER),
+            ["Energy Drink 6 Pack", "Drinks", "6x250ml", "", "", "",
+             "", "", "WW Energy Drink 6 Pack", "", "", "",
+             specials_cell, "", "", ""],
+            # A second row matched this run — its presence makes the
+            # store's list "provided", so the D25 not-found pass RUNS
+            # over the (absent) Energy row.
+            ["Milk 2L", "Dairy", "2L", "", "", "", "", "",
+             "WW Milk 2L", "", "", "", "", "", "", ""],
+        ])
+
+    def _milk(self):
+        return ([MatchResult(
+            True, 3, "Milk 2L", "woolworths", "WW Milk 2L",
+            "exact_keyword")],
+            [ProductItem("woolworths", "WW Milk 2L", 3.00)])
+
+    def test_payload_with_terms_upgrades_bare_marker(self):
+        ws = self._ws("multi-buy")     # legacy bare marker
+        results = [MatchResult(
+            True, 2, "Energy Drink 6 Pack", "woolworths",
+            "WW Energy Drink 6 Pack", "exact_keyword")]
+        items = [ProductItem(
+            "woolworths", "WW Energy Drink 6 Pack", 6.00,
+            is_special=True, special_desc="2 for $6.00")]
+        report = sync_prices(results, items, worksheet=ws)
+        grid = ws.get_all_values()
+        # Cell upgraded to the full terms form...
+        self.assertEqual(grid[1][12], "multi-buy 2/$6.00")
+        # ...and the deal RATE landed on the price write.
+        self.assertEqual(float(grid[1][3]), 3.00)
+        # Upgraded rows are not "awaiting terms".
+        self.assertEqual(report.multibuy_awaiting_terms, [])
+
+    def test_no_terms_leaves_marker_and_reports_it(self):
+        ws = self._ws("multi-buy")     # absent from this week's list
+        results, items = self._milk()
+        report = sync_prices(results, items, worksheet=ws)
+        grid = ws.get_all_values()
+        # Marker untouched (was: cleared to "no" by the D25 pass).
+        self.assertEqual(grid[1][12], "multi-buy")
+        # ...and the gap is VISIBLE once per sync.
+        self.assertEqual(report.multibuy_awaiting_terms,
+                         ["Energy Drink 6 Pack (woolworths)"])
+
+    def test_other_stale_vocabulary_still_clears_to_no(self):
+        # Only the BARE multi-buy marker survives; stale "discount"
+        # and stale ENCODED terms still clear for absent rows (D25).
+        for stale in ("discount", "multi-buy 2/$7.00"):
+            with self.subTest(stale=stale):
+                ws = self._ws(stale)
+                results, items = self._milk()
+                report = sync_prices(results, items, worksheet=ws)
+                grid = ws.get_all_values()
+                self.assertEqual(grid[1][12], "no")
+                self.assertEqual(report.multibuy_awaiting_terms, [])
