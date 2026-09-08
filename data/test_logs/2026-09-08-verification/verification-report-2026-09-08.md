@@ -71,7 +71,7 @@ Interpreter: `C:\Users\User.DESKTOP-R2G441H\anaconda3\python.exe`
 - pytest after the round: **1250 passed, 0 failed** (80.99s) — and it immediately re-polluted 4 real state files (unmapped_queue, local_deals_post_log, item_code_registry, search_last_results), live-confirming R13 once more; all restored.
 - Final state (`restore_check.py check`): state files **30/30 identical** to baseline · Products_Master drift **0** · Local_Deals drift **0**. **GATES PASS.**
 - Telegram spot-check (§8.3): NOT RETESTED this round (out of the session's live scope; needs the VPS gateway).
-- Three-way sync: evidence dir + report committed & pushed to GitHub (tracker + parent for test.md); evidence dir scp'd to myvps and checksum-verified — see the round entry in test.md.
+- Three-way sync: tracker `7a8c893..a5bca19`, parent `f8fbf9a..90cbae2` pushed to GitHub; evidence dir scp'd to myvps and **checksum-verified (162/162 files identical)**. Note: the baselines copy of `session_state.json` was withheld from the committed/scp'd evidence (it contains browser cookies).
 
 ## Tally & next-round scope
 
