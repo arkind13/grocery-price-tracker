@@ -1080,6 +1080,25 @@ def _specials_cell(is_special, special_desc: str) -> str:
     return kind
 
 
+# R2-11 (R17): rows of headroom added when the grid must expand — a
+# bulk ingest then runs many adds before the next expansion.
+GRID_EXPAND_HEADROOM = 100
+
+
+def _worksheet_grid_rows(worksheet) -> Optional[int]:
+    """The worksheet's grid row capacity, or None when unknown.
+
+    gspread Worksheet exposes `.rows` (from the fetched grid
+    properties). Test fakes without the attribute read as unknown —
+    the guard is skipped exactly as before R2-11.
+    """
+    try:
+        rows = getattr(worksheet, "rows", None)
+        return int(rows) if rows else None
+    except Exception:  # noqa: BLE001 — property fetch may hit the API
+        return None
+
+
 def add_product_row(
     generic_name: str,
     store: str,
@@ -1270,6 +1289,32 @@ def add_product_row(
             }
 
     new_row_index = len(data_rows) + 2  # 1-based (row 1 = header)
+
+    # --- R2-11 (R17): grid-ceiling guard ---------------------------
+    # Products_Master's grid maxes at its last row; appending past it
+    # raised an opaque APIError [400] "exceeds grid limits" mid-bulk
+    # (t8 run 1 died on add #381 of 387). Expand the grid FIRST (with
+    # headroom so bulk ingests are not one-expansion-per-add); a
+    # failed expansion surfaces as a CLEAR actionable error — never a
+    # raw 400.
+    grid_rows = _worksheet_grid_rows(worksheet)
+    if grid_rows is not None and new_row_index > grid_rows:
+        need = max(new_row_index - grid_rows, GRID_EXPAND_HEADROOM)
+        try:
+            worksheet.add_rows(need)
+        except Exception as exc:  # noqa: BLE001 — report, don't crash
+            return {
+                "wrote": False,
+                "merged": False,
+                "row_index": None,
+                "existing_name": "",
+                "range_written": "",
+                "error": (
+                    f"sheet grid is full ({grid_rows} rows) and the "
+                    f"grid expansion failed: {exc} — add rows to the "
+                    f"sheet manually, then re-run"),
+            }
+
     price_col = PRICE_COL[store_lower]
     kw_col = STORE_KEYWORD_COL.get(store_lower)
     keywords_col = _find_col(header, KEYWORDS_HEADER)

@@ -2222,3 +2222,85 @@ class TestSizeTokenReorderMergeR2_3(unittest.TestCase):
         self.assertTrue(res["wrote"])
         self.assertFalse(res.get("merged", False))
         self.assertEqual(len(ws.get_all_values()), 3)
+
+
+class _GridCappedWorksheet(FakeWorksheet):
+    """Fake with a gspread-style grid capacity (R2-11/R17): `.rows`
+    is the grid limit; add_rows() grows it."""
+
+    def __init__(self, rows_data, grid_rows):
+        super().__init__(rows_data)
+        self.rows = grid_rows
+        self.add_rows_calls = []
+
+    def add_rows(self, n):
+        self.add_rows_calls.append(n)
+        self.rows += n
+
+
+class TestGridCeilingGuardR2_11(unittest.TestCase):
+    """R2-11 (R17): appending at the grid limit expands the grid (with
+    headroom) instead of dying on APIError [400] 'exceeds grid limits'
+    (t8 run 1 crashed on add #381 of 387)."""
+
+    HEADER = [
+        "Product_Name", "Category", "Size", "Woolworths_Price",
+        "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
+        "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+        "Search_Keyword_Aldi", "Aldi_Refresh",
+        "Woolworths_Specials", "Coles_Specials", "Rewards_Points",
+        "Keywords",
+    ]
+
+    def _ws(self, n_data_rows, grid_rows, fail_expand=False):
+        rows = [list(self.HEADER)] + [
+            [f"Bulk Filler Item {i:04d}", "Cat", "1kg", "", "", "", "",
+             "", "", "", "", "", "", "", "", ""]
+            for i in range(n_data_rows)
+        ]
+        ws = _GridCappedWorksheet(rows, grid_rows)
+
+        if fail_expand:
+            def _boom(n):
+                raise RuntimeError("simulated API failure")
+            ws.add_rows = _boom
+        return ws
+
+    def test_append_at_limit_expands_grid_with_headroom(self):
+        # 380 data rows on a 381-row grid: the append targets row 382
+        # — the grid expands FIRST (>= GRID_EXPAND_HEADROOM rows), the
+        # add succeeds, nothing raises.
+        from core.sheets_sync import GRID_EXPAND_HEADROOM
+        ws = self._ws(n_data_rows=380, grid_rows=381)
+        res = add_product_row(
+            generic_name="New Item At The Ceiling 500g",
+            store="coles", price=3.5, brand="", size="500g",
+            worksheet=ws)
+        self.assertTrue(res["wrote"], res)
+        self.assertEqual(ws.add_rows_calls, [GRID_EXPAND_HEADROOM])
+        self.assertEqual(len(ws.get_all_values()), 382)
+
+    def test_headroom_present_never_expands(self):
+        # Grid has room — the guard is a no-op.
+        ws = self._ws(n_data_rows=10, grid_rows=381)
+        res = add_product_row(
+            generic_name="New Item With Room 500g",
+            store="coles", price=3.5, brand="", size="500g",
+            worksheet=ws)
+        self.assertTrue(res["wrote"], res)
+        self.assertEqual(ws.add_rows_calls, [])
+
+    def test_failed_expansion_returns_clear_error(self):
+        # Expansion fails -> a CLEAR actionable error dict, never a
+        # raw APIError escaping mid-bulk.
+        ws = self._ws(n_data_rows=380, grid_rows=381, fail_expand=True)
+        res = add_product_row(
+            generic_name="New Item Blocked Ceiling 500g",
+            store="coles", price=3.5, brand="", size="500g",
+            worksheet=ws)
+        self.assertFalse(res["wrote"])
+        self.assertFalse(res.get("merged", False))
+        self.assertIn("grid is full", res["error"])
+        self.assertIn("add rows", res["error"])
+        # Nothing was appended.
+        self.assertEqual(len(ws.get_all_values()), 381)
