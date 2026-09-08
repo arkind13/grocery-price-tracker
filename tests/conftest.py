@@ -35,6 +35,12 @@ _STATE_ATTRS = [
     ("core.name_matcher", "QUEUE_PATH", "unmapped_queue.json"),
     ("core.local_deals", "POST_LOG_PATH", "local_deals_post_log.json"),
     ("core.item_codes", "REGISTRY_PATH", "item_code_registry.json"),
+    # R3-2 (R19): the R2-4 reason helper reads the breaker state
+    # through this path — without isolation the suite's PASS/FAIL
+    # depended on the user's REAL scrapedo_health.json (a genuine
+    # fail_streak flipped 2 tests red with zero code regressions).
+    ("extractors.coles_extractor", "SCRAPEDO_HEALTH_PATH",
+     "scrapedo_health.json"),
 ]
 
 

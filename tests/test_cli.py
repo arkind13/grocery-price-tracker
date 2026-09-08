@@ -4346,6 +4346,61 @@ class TestStoreUnavailableReasonR2_4(unittest.TestCase):
 
 
 # ============================================================================
+# R3-2 (R19): the suite's PASS/FAIL must not depend on the user's REAL
+# breaker state. R2-4's reason helper reads the health file through
+# extractors.coles_extractor.SCRAPEDO_HEALTH_PATH — with a real
+# fail_streak present, two tests failed (1299 passed / 2 failed) with
+# zero code regressions. The R2-8 conftest session isolation now covers
+# that path too; these tests pin the isolation so it cannot silently
+# regress.
+# ============================================================================
+
+
+class TestHealthFileIsolationR3_2(unittest.TestCase):
+
+    def test_health_path_isolated_from_real_data_dir(self):
+        """During the suite the health path must point at the conftest
+        throwaway dir, never the real data/scrapedo_health.json — the
+        R2-4 reason helper resolves it at CALL time, so this is what
+        keeps a real breaker outage from reddening the suite."""
+        from extractors import coles_extractor as ce
+        real = (Path(__file__).resolve().parent.parent
+                / "data" / "scrapedo_health.json")
+        self.assertNotEqual(
+            Path(ce.SCRAPEDO_HEALTH_PATH).resolve(), real.resolve(),
+            "SCRAPEDO_HEALTH_PATH points at the REAL data dir — "
+            "R3-2 (R19) isolation broken: add it back to the conftest "
+            "_STATE_ATTRS set")
+
+    def test_dirty_real_state_cannot_reach_reason_helper(self):
+        """The R19 repro shape: a breaker state as dirty as a real
+        outage would leave it must NOT surface through the reason
+        helper — the helper reads the isolated (healthy/absent) file,
+        so tests asserting the no-reason wording stay deterministic."""
+        from extractors import coles_extractor as ce
+        from grocery_price_cli import _store_unavailable_reason
+        # Write the dirty state to the REAL data dir — NOT the isolated
+        # path the helper reads (restored in finally).
+        real = (Path(__file__).resolve().parent.parent
+                / "data" / "scrapedo_health.json")
+        backup = real.read_bytes() if real.exists() else None
+        try:
+            real.parent.mkdir(parents=True, exist_ok=True)
+            real.write_text(json.dumps(
+                {"fail_streak": 2, "last_fail_ts": 1.0,
+                 "open_until": 0.0}), encoding="utf-8")
+            self.assertEqual(_store_unavailable_reason("coles"), "")
+        finally:
+            if backup is not None:
+                real.write_bytes(backup)
+            elif real.exists():
+                real.unlink()
+        # Sanity: the helper really is reading an isolated file.
+        self.assertNotEqual(
+            Path(ce.SCRAPEDO_HEALTH_PATH).resolve(), real.resolve())
+
+
+# ============================================================================
 # R2-12 (T1.A03): `specials --store coles` leaked the Woolworths
 # Wednesday report above the Coles sheet view — the store filter now
 # applies to EVERY section of the specials output.
