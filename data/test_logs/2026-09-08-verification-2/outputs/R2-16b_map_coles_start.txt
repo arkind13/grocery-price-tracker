@@ -1,0 +1,19 @@
+$ map coles
+--- rc=0 secs=6.2 ---
+(live work list: 24 of 24 missing-keyword row(s) from the sheet; file kept as the offline record)
+📋 MAP COLES
+━━━━━━━━━━━━━━━━━━━━
+(24 items, resuming at #1)
+✳️ Commands during session: number (pick candidate), add, forget (unmatched) / na (wool/coles), skip/next, stop, done
+
+--- Item 1/24 ---
+
+  Looking up coles: Jumpy's Chicken Multipack
+  ⚠️ ⚠️ Coles unavailable (breaker open until 22:27) — nothing written, item left on the list. Try again later, or reply with the exact product name / keyword.
+
+[a]dd [na] [keyword] [s]kip [stop] [done] > 
+Paused at item #2/24.
+Resume with: map coles
+
+[stderr]
+[coles_extractor] Scrape.do breaker open — skipping Coles calls until cooldown expires

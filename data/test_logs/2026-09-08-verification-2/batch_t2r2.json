@@ -1,0 +1,14 @@
+[
+ {"id":"T2R2.S01","label":"live search broccoli (healthy store)","args":["search","--product","broccoli"]},
+ {"id":"T2R2.S02","label":"live search chobani yogurt 1kg","args":["search","--product","Chobani Greek Yogurt 1kg"]},
+ {"id":"T2R2.S03","label":"live search coca cola 2l","args":["search","--product","coca cola 2l"]},
+ {"id":"T2R2.S04","label":"live search junk nonsense","args":["search","--product","zzxxyy qwerty nonsense product 42"]},
+ {"id":"T2R2.S05","label":"live search unicode emoji","args":["search","--product","café ☕ coffee capsules"]},
+ {"id":"T2R2.S06","label":"live search single letter m","args":["search","--product","m"]},
+ {"id":"T2R2.S07","label":"live search injection-style string","args":["search","--product","'; DROP TABLE products; --"]},
+ {"id":"T2R2.S08","label":"live search gluten free bread","args":["search","--product","gluten free bread"]},
+ {"id":"T2R2.S09","label":"live search tuna in oil","args":["search","--product","tuna in oil"]},
+ {"id":"T2R2.S10","label":"live search red bull sugarfree 4pack","args":["search","--product","Red Bull Sugar Free 4 Pack"]},
+ {"id":"T2R2.S11","label":"live search 200-char string","args":["search","--product","aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa supermarket product"]},
+ {"id":"T2R2.S12","label":"live search empty product","args":["search","--product",""]}
+]

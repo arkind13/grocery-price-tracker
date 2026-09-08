@@ -1,0 +1,7 @@
+$ local-deals --expire-sweep
+--- rc=0 secs=4.1 ---
+[local-deals] expiry sweep: 2 cell(s) removed
+  • Fruitopia Mt Druitt: zzver2 expired canary /ea — 5.55 (till 5 Sep) removed (expired 05 Sep)
+  • Fruitopia Mt Druitt: validity stamp 'valid until Sat 05 Sep' removed (expired)
+
+[stderr]

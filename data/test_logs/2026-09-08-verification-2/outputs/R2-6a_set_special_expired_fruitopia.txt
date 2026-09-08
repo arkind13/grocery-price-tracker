@@ -1,0 +1,5 @@
+$ local-deals --set-special fruitopia zzver2 expired canary 5.55/ea --till 5 September
+--- rc=0 secs=4.5 ---
+Fruitopia Mt Druitt special: zzver2 expired canary /ea = 5.55 (till 5 Sep) [new row]
+
+[stderr]

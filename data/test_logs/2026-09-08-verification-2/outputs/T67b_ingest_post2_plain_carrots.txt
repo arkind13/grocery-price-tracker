@@ -1,0 +1,5 @@
+$ local-deals --ingest FRUT --no-telegram
+--- rc=1 secs=1.6 ---
+[ingest] no file in C:\Users\User.DESKTOP-R2G441H\Documents\AI related\grocery-price-tracker\data\local_deals_inbox\FRUT
+
+[stderr]

@@ -1,0 +1,5 @@
+$ local-deals --set-special merjan zzver2 sweep canary 8.99/kg --till 12 September --note multi buy 2 for $15 and $2x
+--- rc=0 secs=5.5 ---
+Merjan Brothers Quality Meats special: zzver2 sweep canary /kg = 8.99 (till 12 Sep) [new row]
+
+[stderr]

@@ -1,0 +1,23 @@
+$ search --product tuna in oil
+--- rc=0 secs=11.0 ---
+🔍 TUNA IN OIL — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Woolworths Tuna In Oil 95g
+   🟢 Woolworths  $0.90 · 95g
+2. Woolworths Essentials Tuna In Oil 185g
+   🟢 Woolworths  $1.53 · 185g
+3. Woolworths Essentials Tuna In Oil 425g
+   🟢 Woolworths  $2.97 · 425g
+4. JOHN WEST TUNA OLIVE OIL BLEND 95GRAM
+   🔴 Coles       $2.20 · 95g  🏷️ Was $2.90
+5. JOHN WEST TUNA OLIVE OIL BLEND VALUE PACK
+   🔴 Coles       $18.00 · 1.14Kg  🏷️ Everyday
+6. JOHN WEST TEMPTERS TUNA MULTIPACK 4x95G:OLIVE OIL BLEND:.:3…
+   🔴 Coles       $6.80 · 380g  🏷️ Everyday
+
+🏆 Cheapest: Woolworths at $0.90
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Search 'tuna in oil': found 3 products

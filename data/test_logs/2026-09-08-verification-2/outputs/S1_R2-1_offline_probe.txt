@@ -1,0 +1,27 @@
+[coles_extractor] Search 'no sugar dare': found 5 products
+==============================================================================
+P1 — R2-1 (D19): alias-path negation guard
+==============================================================================
+  sugar-auto: find_product('sugar', {'interactive': False}) -> status=KEYWORD_ALIAS row=47 name='Raw Sugar 3Kg' note="Col P token match: 'Raw Sugar 3Kg'"
+[PASS] R2-1: 'sugar' does NOT auto-answer V Zero 250 Ml (row 30)  -- got row 47 'Raw Sugar 3Kg'
+[PASS] R2-1: 'sugar' lands on a RAW SUGAR row (47/90) or candidates  -- row=47 status=KEYWORD_ALIAS
+  zero-sugar-dir: find_product('zero sugar', {'interactive': False}) -> status=KEYWORD_ALIAS row=30 name='V Zero 250 Ml' note="Col P token match: 'V Zero 250 Ml'"
+[PASS] R2-1 directionality: 'zero sugar' STILL matches V Zero (row 30)  -- got row 30 'V Zero 250 Ml'
+  red-bull: find_product('red bull', {'interactive': False}) -> status=KEYWORD_ALIAS row=33 name='Red Bull Sugar Free' note="Col P token match: 'Red Bull Sugar Free'"
+  (info) 'red bull' -> row 33 'Red Bull Sugar Free'
+  no-sugar-dare: find_product('no sugar dare', {'interactive': False}) -> status=LIVE_SEARCH row=None name='Dare No Added Sugar\xa0Double Espresso Iced Coffee 2L' note='live match from store APIs (UOM-gated pair)'
+  (info) 'no sugar dare' -> row None 'Dare No Added Sugar\xa0Double Espresso Iced Coffee 2L'
+  milk: find_product('milk', {'interactive': False}) -> status=KEYWORD_ALIAS row=12 name='Full Cream Milk 3L' note="Col P alias match: 'Full Cream Milk 3L'"
+[PASS] R2-1 spillover: plain 'milk' still auto-resolves (not over-blocked)  -- row=12 'Full Cream Milk 3L'
+  sugar-interactive -> status=KEYWORD_ALIAS cands=[]
+
+==============================================================================
+P2 — R2-3 (D22): order-independent size parse + merge
+==============================================================================
+  split('Evamay Pads With Wings Super 14 pack') = ({'evamay', 'wings', 'pads', 'super', 'with'}, None)
+  split('pack Evamay Pads With Wings Super 14') = ({'evamay', 'wings', 'pads', 'super', 'with'}, None)
+Traceback (most recent call last):
+  File "C:\Users\User.DESKTOP-R2G441H\Documents\AI related\grocery-price-tracker\data\test_logs\2026-09-08-verification-2\s1_offline_probes.py", line 95, in <module>
+    set(b_c[0].split()) == set(b_r[0].split()),
+        ^^^^^^^^^^^^
+AttributeError: 'set' object has no attribute 'split'

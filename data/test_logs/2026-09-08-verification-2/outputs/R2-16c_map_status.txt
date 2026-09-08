@@ -1,0 +1,9 @@
+$ map status
+--- rc=0 secs=7.4 ---
+📊 MAP STATUS
+━━━━━━━━━━━━━━━━━━━━
+unmatched · 2/2 resolved · 0 remaining
+wool · 0/1 resolved · 1 remaining
+coles · 1 handled · 23 remaining (live)
+
+[stderr]

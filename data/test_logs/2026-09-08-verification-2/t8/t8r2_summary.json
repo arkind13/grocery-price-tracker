@@ -1,0 +1,20 @@
+{
+ "mode": "cleanup + remaining battery (R2-11 proven broken separately)",
+ "adds_new": 10,
+ "adds_refused": 0,
+ "phantom": 0,
+ "synth_total": 114,
+ "variant_merged": 10,
+ "variant_notmerged": 6,
+ "d22_exercised": false,
+ "exact_refused": "5/5",
+ "subset_alias": "5/5",
+ "subset_kw": "4/5",
+ "subset_na": "7/7",
+ "gone_resurrect": "4/4",
+ "final_named_rows": 113,
+ "final_drift_cells": 0,
+ "hard_failures": [
+  "subset shortfall: 5/4/7"
+ ]
+}

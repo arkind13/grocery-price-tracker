@@ -1,0 +1,62 @@
+$ specials --store woolworths
+--- rc=0 secs=5.8 ---
+🏷️ WOOLWORTHS SPECIALS
+━━━━━━━━━━━━━━━━━━━━
+1. Half Price Milk
+   $1.90  ·  Was $4.00
+📊 1 specials
+
+ℹ️ Latest Wednesday report (from 2026-09-08); sheet view below.
+
+🏷️ SPECIALS — WOOLWORTHS
+━━━━━━━━━━━━━━━━━━━━
+
+1. Tasty Cheese Crackers · 50 g
+   $1.44  ·  discount
+2. Garbage Bags · 25 Pk
+   $2.03  ·  discount
+3. Banana Kids 5 · 5 Pk
+   $2.71  ·  multi-buy
+4. Salted Cashews · 750 g
+   $12.63  ·  discount
+5. V Watermelon 250Ml · 250 Ml
+   $11.40  ·  multi-buy
+6. Red Bull Sugar Free · 250 Ml
+   $3.04  ·  multi-buy
+7. Jumpy's Chicken Potato Chips 5 pack · 5 Pk
+   $3.80  ·  multi-buy
+8. Jumpy's Chicken Multipack · 5 pack
+   $3.80  ·  multi-buy
+9. Kettle Chilli 165G · 165G
+   $3.42  ·  discount
+10. Eggs Free Rage 12Pc · 700g
+   $5.86  ·  discount
+11. V Watermelon 4*250 · 4*250 Ml
+   $11.40  ·  multi-buy
+12. V Sugarfree 4*250 · 4*250 Ml
+   $11.40  ·  multi-buy
+13. Obela Hommus 3Pk 60g · 3Pk
+   $3.32  ·  discount
+14. Freshen Up Spray · 370mL
+   $5.22  ·  discount
+15. Greek Salad Kit 270g · 270g
+   $5.70  ·  multi-buy
+16. Tamar Valley Dairy Yoghurt Mango & Cream 170g · 170g
+   $1.44  ·  discount
+17. Tegel Take Outs Nashville Style Chicken Burgers 600g · 600g
+   $11.40  ·  discount
+18. White Glo Professional Whitening Toothpaste 115g · 115g
+   $2.85  ·  discount
+19. Thanks To Nature Shaving Cream Cherry Blossom & White Tea 150mL · 150mL
+   $4.75  ·  discount
+20. DermaVeen Daily Nourish Moisturising Lotion 500mL · 500mL
+   $9.69  ·  discount
+21. DermaVeen Extra Hydration Intensive Moisturising Lotion 500mL · 500mL
+   $11.40  ·  discount
+22. Casa Serena 500ml Body Lotion/Moisturiser Hand/Skin Cream Blood Orange & Citrus · 500.0ML
+   $18.10  ·  discount
+
+📊 22 active specials
+
+[stderr]
+[woolworths_extractor] WOOLWORTHS_COOKIE not set in .env

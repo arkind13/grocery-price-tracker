@@ -1,0 +1,7 @@
+$ map unmatched --forget
+--- rc=0 secs=0.4 ---
+✅ Forgotten: ZZVER2 Fake Debt Junk 999g | 1kg [coles] (excluded from future unmatched lists)
+
+All 2 items in 'unmatched' resolved!
+
+[stderr]

@@ -1,0 +1,13 @@
+$ map unmatched --next
+--- rc=0 secs=7.0 ---
+--- Item 3/3 ---
+
+  Looking up: ZZVER2 Fake Debt Junk 999g | 1kg [coles]
+  Which did you mean?
+    1) Brown Onion 1Kg (Home) · 1Kg [score 1]
+    2) Steggles Habanero Wings 1Kg · 1Kg [score 1]
+    3) Farmer Union Greek Yoghurt 1Kg (Farmer Union) · 1Kg [score 1]
+
+✳️ Next: --pick N / --add / --forget / --skip / (stop) — live search runs when you choose an action
+
+[stderr]

@@ -1,0 +1,28 @@
+$ compare --items sugar
+--- rc=0 secs=22.8 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. sugar  🏠 · 3Kg
+   🟢 Woolworths  $4.06 — Raw Sugar 3Kg 3Kg (sheet)
+
+📊 TOTALS
+```
+╔════════════════════════╗
+║ Store        Raw Final ║
+║ Woolworths $4.50 $4.06 ║
+║ Coles          —     — ║
+╚════════════════════════╝
+```
+
+──────────
+🏷️ HOME BRAND EXTRA
+sugar · $4.27 → $4.06
+💰 Home extra: $0.21
+
+🏆 Cheapest: Woolworths
+🏷️ WW discounts: −$0.44 (5% all $0.23 + 🏠 home extra $0.21)
+⚠️ 1 item missing at Coles
+
+[stderr]
+[coles_extractor] Search 'sugar': found 5 products

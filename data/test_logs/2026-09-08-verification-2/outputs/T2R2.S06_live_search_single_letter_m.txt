@@ -1,0 +1,23 @@
+$ search --product m
+--- rc=0 secs=25.5 ---
+🔍 M — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Chupa Chups Sour Belt 1 Metre 55g
+   🟢 Woolworths  $2.66 · 55g
+2. 3M Tartan Silver/Grey Duct Tape (50mmx30m)
+   🟢 Woolworths  $23.70 · ⚠️ unit unavailable
+3. Nilfisk MH 5M-210/1100 FUEL opearted Pressure Washer
+   🟢 Woolworths  $10838.55 · 1EA
+4. M&S MINI SHORTBREAD FINGERS 125G
+   🔴 Coles       $5.00 · 125g
+5. M&S MILK CHOCOLATE HONEYCOMB 120G
+   🔴 Coles       $8.00 · 120g
+6. M&S SWISS CHOCOLATE ASSORTMENT 145G
+   🔴 Coles       $15.00 · 145g
+
+🏆 Cheapest: Woolworths at $2.66
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Search 'm': found 3 products

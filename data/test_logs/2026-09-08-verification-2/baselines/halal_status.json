@@ -1,0 +1,38 @@
+{
+  "zwan zwan luncheon meat halal chicken 850g": {
+    "verdict": "halal",
+    "confidence": 0.9,
+    "evidence": "Zwan Chicken Luncheon Meat 850g is specifically marketed as 'Halal Certified' and 'ready to eat', and the ingredients are listed as suitable for halal consumption, including approved E-numbers. It is sold in Australia as a halal product.",
+    "checked_at": "2026-09-08",
+    "web_searched": true,
+    "brand_line": "Zwan Chicken Luncheon Meat 850g is 'Halal Certified' and sold in Australia. The manufacturer, Zwanenberg Food Group, is based in the Netherlands and states the product is produced there. Key ingredien",
+    "product": "Zwan Luncheon Meat Halal Chicken 850g"
+  },
+  "el amins elamins halal kofta lamb and beef mince 750g": {
+    "verdict": "halal",
+    "confidence": 0.9,
+    "evidence": "El-Amin's brand products, including lamb mince and beef burgers, are consistently certified halal by the Australian National Imams Council (ANIC) or the Supreme Islamic Council for Halal Meats in Australia (SICHMA). The brand explicitly states its adherence to halal processing requirements and uses ",
+    "checked_at": "2026-09-08",
+    "web_searched": true,
+    "brand_line": "El-Amin's, an Australian brand, offers premium quality meats sourced in Australia and processed according to halal requirements. They are certified by the Australian National Imams Council (ANIC) or t",
+    "product": "EL-AMIN'S HALAL KOFTA LAMB AND BEEF MINCE 750G"
+  },
+  "impossible impossible plant based beef mince 340g": {
+    "verdict": "halal",
+    "confidence": 0.9,
+    "evidence": "Official Impossible Foods FAQ and product page confirm Impossible Beef Made From Plants (340g mince) is Halal certified by IFANCA; ingredients (soy protein, sunflower/coconut oil, plant-derived heme, no gelatine, alcohol, or meat) show no haram concerns, and CheckMyHalal lists the Australian product",
+    "checked_at": "2026-09-08",
+    "web_searched": true,
+    "brand_line": "Impossible Foods (Australia) states its Beef Made From Plants is Halal and Kosher certified; Halal certification by the Islamic Food and Nutrition Council of America (IFANCA).",
+    "product": "Impossible Plant Based Beef Mince 340g"
+  },
+  "impossible impossible plant based beef burger 227g": {
+    "verdict": "halal",
+    "confidence": 0.9,
+    "evidence": "Impossible Foods Australia officially states Impossible Beef Made From Plants is Halal certified by IFANCA (Islamic Food and Nutrition Council of America); Australian ingredient list (soy protein, sunflower/coconut oils, soy leghemoglobin) contains no gelatine, alcohol, or animal-derived concerns; t",
+    "checked_at": "2026-09-08",
+    "web_searched": true,
+    "brand_line": "Impossible Foods Australia: Impossible Beef Made From Plants Halal certified by IFANCA and Kosher certified by OU; note Impossible Pork Made From Plants is NOT Halal certified",
+    "product": "Impossible Plant Based Beef Burger 227g"
+  }
+}

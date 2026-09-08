@@ -1,0 +1,29 @@
+ts,item_no,item,op,target,expected,actual,pass
+23:04:41,R2-11,grid shrink,metadata,379->218,content untouched,grid=218,PASS
+23:19:46,A,bulk verify,adds,all,"on-sheet==114, 0 phantom",phantom=0,PASS
+23:19:56,B,Crackers Tasty Cheese,variant(0) merge+revert,woolworths,merged,row2,PASS
+23:20:06,B,garbage bags,variant(1) merge+revert,coles,merged,row3,PASS
+23:20:08,B,Wholemeal Sandwich Bread,variant(2),woolworths,EXPECTED merge,wrote=False merged=False,FAIL
+23:20:18,B,15m Baking Paper,variant(0) merge+revert,coles,merged,row5,PASS
+23:20:27,B,white soft sandwich bread,variant(1) merge+revert,woolworths,merged,row6,PASS
+23:20:30,B,Medium Sandwich bags 30Pk,variant(2),coles,EXPECTED merge,wrote=False merged=False,FAIL
+23:20:32,B,Softner,variant(0),woolworths,EXPECTED merge,wrote=False merged=False,FAIL
+23:20:42,B,sandwich icecream 4pk,variant(1) merge+revert,coles,merged,row9,PASS
+23:20:44,B,Aluminium Foil 30m,variant(2),woolworths,EXPECTED merge,wrote=False merged=False,FAIL
+23:20:54,B,5 Banana Kids,variant(0) merge+revert,coles,merged,row11,PASS
+23:21:04,B,full cream milk 3l,variant(1) merge+revert,woolworths,merged,row12,PASS
+23:21:06,B,Dare No Sugar Dbl Expresso 2L,variant(2),coles,EXPECTED merge,wrote=False merged=False,FAIL
+23:21:16,B,600g Organic Free Range Eggs 12 Pack,variant(0) merge+revert,woolworths,merged,row14,PASS
+23:21:26,B,salted cashews,variant(1) merge+revert,coles,merged,row15,PASS
+23:21:28,B,Battery AAA,variant(2),woolworths,EXPECTED merge,wrote=False merged=False,FAIL
+23:21:38,B,AA Battery,variant(0) merge+revert,coles,merged,row17,PASS
+23:21:41,C,Tasty Cheese Crackers,exact_dup_add,both,refused,wrote=False,PASS
+23:21:43,C,Garbage Bags,exact_dup_add,both,refused,wrote=False,PASS
+23:21:45,C,Wholemeal Sandwich Bread,exact_dup_add,both,refused,wrote=False,PASS
+23:21:48,C,Baking Paper 15m,exact_dup_add,both,refused,wrote=False,PASS
+23:21:50,C,White Soft Sandwich Bread,exact_dup_add,both,refused,wrote=False,PASS
+23:22:44,D,ZZT8R 0015 Maple Syrup 1kg,gone_resurrect,D129,cleared,7.77,PASS
+23:22:51,D,ZZT8R 0040 Maple Syrup 12 Pack,gone_resurrect,E154,cleared,7.77,PASS
+23:22:59,D,ZZT8R 0065 Maple Syrup 4 Pack,gone_resurrect,D179,cleared,7.77,PASS
+23:23:06,D,ZZT8R 0090 Maple Syrup 1kg,gone_resurrect,E204,cleared,7.77,PASS
+23:23:16,E,teardown,delete+drift,all,"0 leftover, 0 drift, named=113",leftover=0 drift=0 named=113,PASS

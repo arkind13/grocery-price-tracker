@@ -1,0 +1,4 @@
+E       AssertionError: 'Coles unavailable right now' not found in '--- Item 1/1 ---\n⚠️ ⚠️ Coles unavailable (1 failed attempt) — nothing written, item left on the list. Try again later, or reply with the exact product name / keyword.\n'
+FAILED tests/test_cli.py::TestAddToListCLI::test_tagged_add_broken_store_never_borrows
+FAILED tests/test_cli.py::TestCLIPartB::test_cli10_coles_unavailable_single_line_ww_shown
+2 failed, 182 passed in 11.59s

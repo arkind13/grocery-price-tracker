@@ -1,0 +1,21 @@
+$ search --product gluten free bread
+--- rc=0 secs=26.0 ---
+🔍 GLUTEN FREE BREAD — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Tip Top Gluten Free The One White Sliced Bread 550g
+   🟢 Woolworths  $7.03 · 550g
+2. Woolworths Free From Gluten Seeded Bread Loaf 450g
+   🟢 Woolworths  $4.96 · 450g
+3. Woolworths Free From Gluten White Bread Loaf 440g
+   🟢 Woolworths  $4.96 · 440g
+4. TOSCANO GLUTEN FREE PIZZA BASE
+   🔴 Coles       $7.65 · 180g
+5. HELGAS GLUTEN FREE WHOLEMEAL 500G
+   🔴 Coles       $7.00 · 500g  🏷️ Was $7.80
+
+🏆 Cheapest: Woolworths at $4.96
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Search 'gluten free bread': found 2 products

@@ -1,0 +1,5 @@
+$ map wool --na
+--- rc=0 secs=3.8 ---
+All 'wool' items resolved — live sheet has 1 missing-keyword row(s), 1 handled this cycle.
+
+[stderr]

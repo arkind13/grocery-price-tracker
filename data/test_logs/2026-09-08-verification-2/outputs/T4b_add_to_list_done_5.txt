@@ -1,0 +1,12 @@
+$ add-to-list done --items 5
+--- rc=0 secs=4.1 ---
+✅ Removed: zzver2 ww kw 250g (Woolworths)
+✅   Woolworths keyword saved (row 115) — matches + price-syncs from next Wednesday.
+✅ Done: 1 item(s) removed, 1 keyword(s) saved.
+4 still pending:
+1. Acme Pasta Penne 500g · 500g (Coles) [ESQ]
+2. Acme Pasta Penne 500g · 500g (Woolworths) [NJL]
+3. WW Yogurt B · 1kg (Woolworths) [DSF]
+4. WW Yogurt A · 1kg (Woolworths) [AVE]
+
+[stderr]

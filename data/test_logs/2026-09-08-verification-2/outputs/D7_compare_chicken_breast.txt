@@ -1,0 +1,31 @@
+$ compare --items chicken breast
+--- rc=0 secs=119.1 ---
+[halal] The Bare Bird Free Range Chicken Breast Fillets 600g: non_halal (confidence 0.70)
+[halal] EL-AMIN'S HALAL CHICKEN BREAST FILLETS LARGE PACK: uncertain (confidence 0.50)
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. chicken breast · ⚠️ unit unavailable
+   ⚠️ No matching product — sizes don't compare.
+      Woolworths: The Bare Bird Free Range Chicken Breast Fillets 600g · 600g
+      Coles:      EL-AMIN'S HALAL CHICKEN BREAST FILLETS LARGE PACK · approx. 1.3kg
+   💬 Reply 'expand' to see more results.
+
+📊 TOTALS
+```
+╔══════════════════════╗
+║ Store      Raw Final ║
+║ Woolworths   —     — ║
+║ Coles        —     — ║
+╚══════════════════════╝
+```
+
+❌ No prices available for any store.
+⚠️ 1 item missing at Woolworths
+⚠️ 1 item missing at Coles
+
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Search 'halal chicken breast': found 3 products
+[coles_extractor] Search 'halal chicken breast': found 3 products

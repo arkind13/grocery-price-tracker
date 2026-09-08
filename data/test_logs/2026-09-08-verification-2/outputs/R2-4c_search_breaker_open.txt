@@ -1,0 +1,18 @@
+$ search --product milk
+--- rc=0 secs=2.1 ---
+🔍 MILK — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Woolworths Full Cream Milk 2L
+   🟢 Woolworths  $3.07 · 2L
+2. Woolworths Full Cream Milk 3L
+   🟢 Woolworths  $4.46 · 3L
+3. Dairy Farmers Full Cream Milk 2L
+   🟢 Woolworths  $4.46 · 2L
+⚠️ Coles not checked (unavailable — breaker open until 22:27)
+
+🏆 Cheapest: Woolworths at $3.07
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Scrape.do breaker open — skipping Coles calls until cooldown expires

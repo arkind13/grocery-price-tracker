@@ -1,0 +1,8 @@
+$ map wool --na
+--- rc=0 secs=7.0 ---
+(live work list: 1 of 1 missing-keyword row(s) from the sheet; file kept as the offline record)
+✅ Marked 'ZZVER2 T4 Mechanism Product 250g' as NA at woolworths (row 115)
+
+All 0 items in 'wool' resolved!
+
+[stderr]

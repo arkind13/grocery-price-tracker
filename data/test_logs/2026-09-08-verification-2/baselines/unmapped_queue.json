@@ -1,0 +1,762 @@
+[
+  {
+    "store": "woolworths",
+    "raw_name": "Anything At All",
+    "normalized_key": "anything at all",
+    "classification": {
+      "brand": "Anything",
+      "size": "",
+      "category": "General",
+      "generic_name": "At All"
+    },
+    "first_seen": "2026-08-22T21:41:11+00:00",
+    "last_seen": "2026-09-08T11:17:16+00:00",
+    "count": 193,
+    "status": "resolved",
+    "price": 0.0
+  },
+  {
+    "store": "aldi",
+    "raw_name": "Totally Unknown Product 999g",
+    "normalized_key": "totally unknown product 999g",
+    "classification": {
+      "brand": "Totally",
+      "size": "999g",
+      "category": "General",
+      "generic_name": "Unknown Product"
+    },
+    "first_seen": "2026-08-22T21:41:11+00:00",
+    "last_seen": "2026-09-08T11:17:16+00:00",
+    "count": 193,
+    "status": "resolved",
+    "price": 0.0
+  },
+  {
+    "store": "coles",
+    "raw_name": "Woolworths Beef Mince 500g",
+    "normalized_key": "woolworths beef mince 500g",
+    "classification": {
+      "brand": "Woolworths",
+      "size": "500g",
+      "category": "Meat",
+      "generic_name": "Beef Mince"
+    },
+    "first_seen": "2026-08-22T21:41:11+00:00",
+    "last_seen": "2026-09-08T11:17:16+00:00",
+    "count": 191,
+    "status": "resolved",
+    "price": 0.0
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Some Random New Product 200g",
+    "normalized_key": "some random new product 200g",
+    "classification": {
+      "brand": "Some",
+      "size": "200g",
+      "category": "General",
+      "generic_name": "Random New Product"
+    },
+    "first_seen": "2026-08-22T21:41:11+00:00",
+    "last_seen": "2026-09-08T11:17:16+00:00",
+    "count": 192,
+    "status": "resolved",
+    "price": 0.0
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Ends 7 Jul.",
+    "normalized_key": "ends 7 jul.",
+    "classification": {
+      "brand": "Ends",
+      "size": "",
+      "category": "General",
+      "generic_name": "7 Jul."
+    },
+    "first_seen": "2026-08-23T00:27:40+00:00",
+    "last_seen": "2026-08-24T06:46:01+00:00",
+    "count": 5,
+    "status": "resolved"
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Add to cart",
+    "normalized_key": "add to cart",
+    "classification": {
+      "brand": "Add",
+      "size": "",
+      "category": "General",
+      "generic_name": "to cart"
+    },
+    "first_seen": "2026-08-23T00:27:40+00:00",
+    "last_seen": "2026-08-24T06:46:01+00:00",
+    "count": 5,
+    "status": "resolved"
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Freezer",
+    "normalized_key": "freezer",
+    "classification": {
+      "brand": "Freezer",
+      "size": "",
+      "category": "General",
+      "generic_name": ""
+    },
+    "first_seen": "2026-08-23T00:27:40+00:00",
+    "last_seen": "2026-08-25T00:37:48+00:00",
+    "count": 14,
+    "status": "resolved"
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Personal Care",
+    "normalized_key": "personal care",
+    "classification": {
+      "brand": "Personal",
+      "size": "",
+      "category": "General",
+      "generic_name": "Care"
+    },
+    "first_seen": "2026-08-23T00:27:40+00:00",
+    "last_seen": "2026-08-24T06:46:01+00:00",
+    "count": 5,
+    "status": "resolved"
+  },
+  {
+    "store": "coles",
+    "raw_name": "Coles Simply White Sandwich Loaf | 650g",
+    "normalized_key": "coles simply white sandwich loaf | 650g",
+    "classification": {
+      "brand": "Coles",
+      "size": "650g",
+      "category": "Bakery",
+      "generic_name": "Simply White Sandwich Loaf |"
+    },
+    "first_seen": "2026-08-24T05:50:48+00:00",
+    "last_seen": "2026-09-07T22:17:18+00:00",
+    "count": 24,
+    "status": "resolved",
+    "price": 2.5
+  },
+  {
+    "store": "coles",
+    "raw_name": "Explore our brands",
+    "normalized_key": "explore our brands",
+    "classification": {
+      "brand": "Explore",
+      "size": "",
+      "category": "General",
+      "generic_name": "our brands"
+    },
+    "first_seen": "2026-08-24T05:50:48+00:00",
+    "last_seen": "2026-08-24T06:46:01+00:00",
+    "count": 4,
+    "status": "resolved"
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "oatly",
+    "normalized_key": "oatly",
+    "classification": {
+      "brand": "Oatly",
+      "size": "",
+      "category": "General",
+      "generic_name": ""
+    },
+    "first_seen": "2026-08-25T04:19:15+00:00",
+    "last_seen": "2026-09-08T11:17:16+00:00",
+    "count": 179,
+    "status": "resolved",
+    "price": 0.0
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "bega",
+    "normalized_key": "bega",
+    "classification": {
+      "brand": "Bega",
+      "size": "",
+      "category": "General",
+      "generic_name": ""
+    },
+    "first_seen": "2026-08-25T04:19:15+00:00",
+    "last_seen": "2026-09-08T11:17:16+00:00",
+    "count": 179,
+    "status": "resolved",
+    "price": 0.0
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "items worth",
+    "normalized_key": "items worth",
+    "classification": {
+      "brand": "items",
+      "size": "",
+      "category": "General",
+      "generic_name": "worth"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-08-26T06:50:11+00:00",
+    "count": 1,
+    "status": "resolved"
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Woolworths Greek Style Fetta 200g",
+    "normalized_key": "woolworths greek style fetta 200g",
+    "classification": {
+      "brand": "Woolworths",
+      "size": "200g",
+      "category": "General",
+      "generic_name": "Greek Style Fetta"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-09-01T23:16:41+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 3.0
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Tamar Valley Dairy Yoghurt Mango & Cream 170g",
+    "normalized_key": "tamar valley dairy yoghurt mango & cream 170g",
+    "classification": {
+      "brand": "Tamar",
+      "size": "170g",
+      "category": "Dairy",
+      "generic_name": "Valley Dairy Yoghurt Mango & Cream"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-09-01T23:16:41+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 1.52
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Farmers Union Greek Style High Protein Yoghurt Pouch Mango 150g",
+    "normalized_key": "farmers union greek style high protein yoghurt pouch mango 150g",
+    "classification": {
+      "brand": "Farmers",
+      "size": "150g",
+      "category": "General",
+      "generic_name": "Union Greek Style High Protein Yoghurt Pouch Mango"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-09-01T23:16:41+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 3.2
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Tamar Valley The Creamery Yoghurt Pouch Mangoes & Cream 150g",
+    "normalized_key": "tamar valley the creamery yoghurt pouch mangoes & cream 150g",
+    "classification": {
+      "brand": "Tamar",
+      "size": "150g",
+      "category": "Dairy",
+      "generic_name": "Valley The Creamery Yoghurt Pouch Mangoes & Cream"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-09-07T22:17:18+00:00",
+    "count": 11,
+    "status": "resolved",
+    "price": 2.25
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Tamar Valley Dairy Yoghurt Mango & Cream 700g",
+    "normalized_key": "tamar valley dairy yoghurt mango & cream 700g",
+    "classification": {
+      "brand": "Tamar",
+      "size": "700g",
+      "category": "Dairy",
+      "generic_name": "Valley Dairy Yoghurt Mango & Cream"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-09-01T23:16:41+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 7.5
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Sanitarium So Good Chocolate Almond Long Life Milk UHT 1L",
+    "normalized_key": "sanitarium so good chocolate almond long life milk uht 1l",
+    "classification": {
+      "brand": "Sanitarium",
+      "size": "1L",
+      "category": "Dairy",
+      "generic_name": "So Good Chocolate Almond Long Life Milk UHT"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-08-26T06:50:11+00:00",
+    "count": 1,
+    "status": "resolved"
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Tegel Take Outs Nashville Style Chicken Burgers 600g",
+    "normalized_key": "tegel take outs nashville style chicken burgers 600g",
+    "classification": {
+      "brand": "Tegel",
+      "size": "600g",
+      "category": "Meat",
+      "generic_name": "Take Outs Nashville Style Chicken Burgers"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-09-01T23:16:42+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 12.0
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Birds Eye Golden Crunch Thin & Crispy Chips 900g",
+    "normalized_key": "birds eye golden crunch thin & crispy chips 900g",
+    "classification": {
+      "brand": "Birds",
+      "size": "900g",
+      "category": "General",
+      "generic_name": "Eye Golden Crunch Thin & Crispy Chips"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-09-01T23:16:42+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 6.0
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Twisted Healthy Treats Rich Chocolate Licks Zero Frozen Dessert Sticks 80mL x 4 pack",
+    "normalized_key": "twisted healthy treats rich chocolate licks zero frozen dessert sticks 80ml x 4 pack",
+    "classification": {
+      "brand": "Twisted",
+      "size": "80mL",
+      "category": "General",
+      "generic_name": "Healthy Treats Rich Chocolate Licks Zero Frozen Dessert Sticks x 4 pack"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-09-01T23:16:42+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 9.5
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "View similar",
+    "normalized_key": "view similar",
+    "classification": {
+      "brand": "View",
+      "size": "",
+      "category": "General",
+      "generic_name": "similar"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-09-07T22:17:18+00:00",
+    "count": 11,
+    "status": "resolved",
+    "price": 0.9
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Woolworths Essentials Raw Sugar 3kg",
+    "normalized_key": "woolworths essentials raw sugar 3kg",
+    "classification": {
+      "brand": "Woolworths",
+      "size": "3kg",
+      "category": "General",
+      "generic_name": "Essentials Raw Sugar"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-09-01T23:16:42+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 4.5
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "V Energy Zero Sugar Drink Blackcurrant & Yuzu 250mL",
+    "normalized_key": "v energy zero sugar drink blackcurrant & yuzu 250ml",
+    "classification": {
+      "brand": "V",
+      "size": "250mL",
+      "category": "General",
+      "generic_name": "Energy Zero Sugar Drink Blackcurrant & Yuzu"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-08-26T06:50:11+00:00",
+    "count": 1,
+    "status": "resolved"
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Glow Lab Coconut & Sandalwood Body Wash 900mL",
+    "normalized_key": "glow lab coconut & sandalwood body wash 900ml",
+    "classification": {
+      "brand": "Glow",
+      "size": "900mL",
+      "category": "General",
+      "generic_name": "Lab Coconut & Sandalwood Body Wash"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-09-01T23:16:42+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 18.0
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "White Glo Professional Whitening Toothpaste 115g",
+    "normalized_key": "white glo professional whitening toothpaste 115g",
+    "classification": {
+      "brand": "White",
+      "size": "115g",
+      "category": "General",
+      "generic_name": "Glo Professional Whitening Toothpaste"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-09-01T23:16:42+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 3.0
+  },
+  {
+    "store": "coles",
+    "raw_name": "Tegel Take Outs Frozen Chicken Tenderloins Nashville Style | 500g",
+    "normalized_key": "tegel take outs frozen chicken tenderloins nashville style | 500g",
+    "classification": {
+      "brand": "Tegel",
+      "size": "500g",
+      "category": "Meat",
+      "generic_name": "Take Outs Frozen Chicken Tenderloins Nashville Style |"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-09-01T23:16:42+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 14.0
+  },
+  {
+    "store": "coles",
+    "raw_name": "V Energy Sugar Free 4x250ml | 1L",
+    "normalized_key": "v energy sugar free 4x250ml | 1l",
+    "classification": {
+      "brand": "V",
+      "size": "250ml",
+      "category": "General",
+      "generic_name": "Energy Sugar Free 4x | 1L"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-09-01T23:16:42+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 7.2
+  },
+  {
+    "store": "coles",
+    "raw_name": "Twisted Healthy Treats Rich Choc Sticks Licks Zero 4 Pack | 320mL",
+    "normalized_key": "twisted healthy treats rich choc sticks licks zero 4 pack | 320ml",
+    "classification": {
+      "brand": "Twisted",
+      "size": "4 Pack",
+      "category": "General",
+      "generic_name": "Healthy Treats Rich Choc Sticks Licks Zero | 320mL"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-09-01T23:16:42+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 8.5
+  },
+  {
+    "store": "coles",
+    "raw_name": "Mr Kipling Chocolate Cake Slices 6 Pack | 155g",
+    "normalized_key": "mr kipling chocolate cake slices 6 pack | 155g",
+    "classification": {
+      "brand": "Mr",
+      "size": "6 Pack",
+      "category": "General",
+      "generic_name": "Kipling Chocolate Cake Slices | 155g"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-09-01T23:16:42+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 6.2
+  },
+  {
+    "store": "coles",
+    "raw_name": "Kettle Chilli Potato Chips | 165g",
+    "normalized_key": "kettle chilli potato chips | 165g",
+    "classification": {
+      "brand": "Kettle",
+      "size": "165g",
+      "category": "Fruit & Veg",
+      "generic_name": "Chilli Potato Chips |"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-09-01T23:16:42+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 3.6
+  },
+  {
+    "store": "coles",
+    "raw_name": "Coles Simply Australian Raw Sugar | 2Kg",
+    "normalized_key": "coles simply australian raw sugar | 2kg",
+    "classification": {
+      "brand": "Coles",
+      "size": "2Kg",
+      "category": "General",
+      "generic_name": "Simply Australian Raw Sugar |"
+    },
+    "first_seen": "2026-08-26T06:50:11+00:00",
+    "last_seen": "2026-09-01T23:16:42+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 3.0
+  },
+  {
+    "store": "coles",
+    "raw_name": "Red Rock Deli Chips Spicy Chilli Sriracha | 165g",
+    "normalized_key": "red rock deli chips spicy chilli sriracha | 165g",
+    "classification": {
+      "brand": "Red",
+      "size": "165g",
+      "category": "General",
+      "generic_name": "Rock Deli Chips Spicy Chilli Sriracha |"
+    },
+    "first_seen": "2026-08-26T06:50:12+00:00",
+    "last_seen": "2026-09-01T23:16:42+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 6.0
+  },
+  {
+    "store": "coles",
+    "raw_name": "V Energy Zero Sugar Original | 250mL",
+    "normalized_key": "v energy zero sugar original | 250ml",
+    "classification": {
+      "brand": "V",
+      "size": "250mL",
+      "category": "General",
+      "generic_name": "Energy Zero Sugar Original |"
+    },
+    "first_seen": "2026-08-26T06:50:12+00:00",
+    "last_seen": "2026-09-01T23:16:42+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 2.65
+  },
+  {
+    "store": "coles",
+    "raw_name": "Bounty Coconut Chocolate Bar | 50g",
+    "normalized_key": "bounty coconut chocolate bar | 50g",
+    "classification": {
+      "brand": "Bounty",
+      "size": "50g",
+      "category": "General",
+      "generic_name": "Coconut Chocolate Bar |"
+    },
+    "first_seen": "2026-08-26T06:50:12+00:00",
+    "last_seen": "2026-09-01T23:16:42+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 3.0
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Woolworths Little Gem Lettuce Green 2 pack",
+    "normalized_key": "woolworths little gem lettuce green 2 pack",
+    "classification": {
+      "brand": "Woolworths",
+      "size": "2 pack",
+      "category": "Fruit & Veg",
+      "generic_name": "Little Gem Lettuce Green"
+    },
+    "first_seen": "2026-09-01T20:51:56+00:00",
+    "last_seen": "2026-09-01T23:16:41+00:00",
+    "count": 9,
+    "status": "resolved",
+    "price": 4.9
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Full+ On The Go Meal Replacement Chocolate 480mL",
+    "normalized_key": "full+ on the go meal replacement chocolate 480ml",
+    "classification": {
+      "brand": "Full+",
+      "size": "480mL",
+      "category": "General",
+      "generic_name": "On The Go Meal Replacement Chocolate"
+    },
+    "first_seen": "2026-09-01T20:51:56+00:00",
+    "last_seen": "2026-09-01T23:16:41+00:00",
+    "count": 9,
+    "status": "resolved",
+    "price": 5.95
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Dairy Farmers Thick & Creamy Mango & Passionfruit Yoghurt 150g",
+    "normalized_key": "dairy farmers thick & creamy mango & passionfruit yoghurt 150g",
+    "classification": {
+      "brand": "Dairy",
+      "size": "150g",
+      "category": "Dairy",
+      "generic_name": "Farmers Thick & Creamy Mango & Passionfruit Yoghurt"
+    },
+    "first_seen": "2026-09-01T20:51:56+00:00",
+    "last_seen": "2026-09-07T22:17:18+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 3.3
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Sanitarium So Good Chocolate Almond Long Life Milk 1L",
+    "normalized_key": "sanitarium so good chocolate almond long life milk 1l",
+    "classification": {
+      "brand": "Sanitarium",
+      "size": "1L",
+      "category": "Dairy",
+      "generic_name": "So Good Chocolate Almond Long Life Milk"
+    },
+    "first_seen": "2026-09-01T20:51:56+00:00",
+    "last_seen": "2026-09-01T23:16:41+00:00",
+    "count": 9,
+    "status": "resolved",
+    "price": 3.5
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "1 item(s) in cart",
+    "normalized_key": "1 item(s) in cart",
+    "classification": {
+      "brand": "1",
+      "size": "",
+      "category": "General",
+      "generic_name": "item(s) in cart"
+    },
+    "first_seen": "2026-09-01T20:51:56+00:00",
+    "last_seen": "2026-09-07T22:17:18+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 3.2
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Bounty Coconut Milk Chocolate Bar 50g",
+    "normalized_key": "bounty coconut milk chocolate bar 50g",
+    "classification": {
+      "brand": "Bounty",
+      "size": "50g",
+      "category": "Dairy",
+      "generic_name": "Coconut Milk Chocolate Bar"
+    },
+    "first_seen": "2026-09-01T20:51:56+00:00",
+    "last_seen": "2026-09-01T23:16:42+00:00",
+    "count": 9,
+    "status": "resolved",
+    "price": 1.5
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Woolworths Original Pancake Mixer 350g",
+    "normalized_key": "woolworths original pancake mixer 350g",
+    "classification": {
+      "brand": "Woolworths",
+      "size": "350g",
+      "category": "General",
+      "generic_name": "Original Pancake Mixer"
+    },
+    "first_seen": "2026-09-01T20:51:56+00:00",
+    "last_seen": "2026-09-07T22:17:18+00:00",
+    "count": 10,
+    "status": "resolved",
+    "price": 1.85
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Thanks To Nature Shaving Cream Cherry Blossom & White Tea 150mL",
+    "normalized_key": "thanks to nature shaving cream cherry blossom & white tea 150ml",
+    "classification": {
+      "brand": "Thanks",
+      "size": "150mL",
+      "category": "Dairy",
+      "generic_name": "To Nature Shaving Cream Cherry Blossom & White Tea"
+    },
+    "first_seen": "2026-09-01T20:51:56+00:00",
+    "last_seen": "2026-09-01T23:16:42+00:00",
+    "count": 9,
+    "status": "resolved",
+    "price": 5.0
+  },
+  {
+    "store": "woolworths",
+    "raw_name": "Yumi's Herb Falafel 200g",
+    "normalized_key": "yumi's herb falafel 200g",
+    "classification": {
+      "brand": "Yumi's",
+      "size": "200g",
+      "category": "General",
+      "generic_name": "Herb Falafel"
+    },
+    "first_seen": "2026-09-01T22:55:12+00:00",
+    "last_seen": "2026-09-01T23:16:41+00:00",
+    "count": 3,
+    "status": "resolved",
+    "price": 5.2
+  },
+  {
+    "store": "coles",
+    "raw_name": "Carman's Fruit Straps Apple & Blueberry | 70g",
+    "normalized_key": "carman's fruit straps apple & blueberry | 70g",
+    "classification": {
+      "brand": "Carman's",
+      "size": "70g",
+      "category": "Fruit & Veg",
+      "generic_name": "Fruit Straps Apple & Blueberry |"
+    },
+    "first_seen": "2026-09-01T22:55:13+00:00",
+    "last_seen": "2026-09-01T23:16:42+00:00",
+    "count": 3,
+    "status": "resolved",
+    "price": 5.4
+  },
+  {
+    "store": "coles",
+    "raw_name": "Byron Bay Chilli Co. Smoky Chipotle Hot Sauce | 150mL",
+    "normalized_key": "byron bay chilli co. smoky chipotle hot sauce | 150ml",
+    "classification": {
+      "brand": "Byron",
+      "size": "150mL",
+      "category": "General",
+      "generic_name": "Bay Chilli Co. Smoky Chipotle Hot Sauce |"
+    },
+    "price": 4.5,
+    "first_seen": "2026-09-07T22:17:18+00:00",
+    "last_seen": "2026-09-07T22:17:18+00:00",
+    "count": 1,
+    "status": "pending"
+  },
+  {
+    "store": "coles",
+    "raw_name": "Yallamundi Farm Organic Free Range Eggs 12 Pack | 700g",
+    "normalized_key": "yallamundi farm organic free range eggs 12 pack | 700g",
+    "classification": {
+      "brand": "Yallamundi",
+      "size": "12 Pack",
+      "category": "General",
+      "generic_name": "Farm Organic Free Range Eggs | 700g"
+    },
+    "price": 14.3,
+    "first_seen": "2026-09-07T22:17:18+00:00",
+    "last_seen": "2026-09-07T22:17:18+00:00",
+    "count": 1,
+    "status": "pending"
+  }
+]

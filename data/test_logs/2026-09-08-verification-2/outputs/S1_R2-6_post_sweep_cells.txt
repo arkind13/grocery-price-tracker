@@ -1,0 +1,4 @@
+E2 = 'valid until Sat 12 Sep' | G2 = None
+E104 (Merjan Lamb Curry live) = '27.99 (till 11 Sep)'
+row 105: [('A', 'zzver2 sweep canary /kg'), ('E', '8.99 (till 12 Sep)'), ('G', None), ('J', '[MER] multi buy 2 for $15 and $2x')]
+row 135: [('A', 'zzver2 expired canary /ea'), ('E', None), ('G', None), ('J', None)]

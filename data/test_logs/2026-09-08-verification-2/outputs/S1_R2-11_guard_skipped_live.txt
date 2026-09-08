@@ -1,0 +1,3 @@
+has getattr(ws, "rows"): <<ABSENT>>
+ws.row_count: 218
+_worksheet_grid_rows(ws) -> None

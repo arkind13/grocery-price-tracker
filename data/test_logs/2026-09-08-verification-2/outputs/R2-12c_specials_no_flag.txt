@@ -1,0 +1,69 @@
+$ specials
+--- rc=0 secs=5.9 ---
+🏷️ WOOLWORTHS SPECIALS
+━━━━━━━━━━━━━━━━━━━━
+1. Half Price Milk
+   $1.90  ·  Was $4.00
+📊 1 specials
+
+ℹ️ Latest Wednesday report (from 2026-09-08); sheet view below.
+
+🏷️ SPECIALS — ALL STORES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Tasty Cheese Crackers · 50 g
+   $1.44  ·  discount
+2. Garbage Bags · 25 Pk
+   $2.03  ·  discount
+3. Banana Kids 5 · 5 Pk
+   $2.71  ·  multi-buy
+4. Salted Cashews · 750 g
+   $12.63  ·  discount
+5. Tomato · Each
+   $0.64  ·  discount
+6. Bounty Chocolate · 50g
+   $3.00  ·  multi-buy
+7. Capsicum Green each · 220g
+   $1.30  ·  discount
+8. Sunbites Sour 60g · 60g
+   $2.70  ·  multi-buy
+9. Nutella Breadsticks · 48g
+   $2.00  ·  discount
+10. V Watermelon 250Ml · 250 Ml
+   $11.40  ·  multi-buy
+11. V Watermelon 250Ml · 250 Ml
+   $7.20  ·  discount
+12. Red Rock Chilli Sriracha · 165g
+   $6.00  ·  multi-buy
+13. Red Bull Sugar Free · 250 Ml
+   $3.04  ·  multi-buy
+14. Red Bull Sugar Free · 250 Ml
+   $3.20  ·  multi-buy
+15. Woolworths Fresh Herb Coriander Bunch each · Bunch
+   $3.30  ·  multi-buy
+16. Eclipse Intense Mint · 40g
+   $3.50  ·  discount
+17. Up&Go Chocolate Protein 500Ml · 500Ml
+   $4.50  ·  discount
+18. Daily Juice Orange Pulp 500ml · 500ml
+   $2.95  ·  discount
+19. Jumpy's Chicken Potato Chips 5 pack · 5 Pk
+   $3.80  ·  multi-buy
+20. Jumpy's Chicken Potato Chips 5 pack · 5 Pk
+   $4.00  ·  multi-buy
+21. Jumpy's Chicken Multipack · 5 pack
+   $3.80  ·  multi-buy
+22. Jumpy's Chicken Multipack · 5 pack
+   $4.00  ·  discount
+23. Kettle Chilli 165G · 165G
+   $3.42  ·  discount
+24. Sunbites Sour Cream Mulipack · 22g
+   $6.00  ·  multi-buy
+25. Eggs Free Rage 12Pc · 700g
+   $5.86  ·  discount
+… +26 more specials
+
+📊 51 active specials
+
+[stderr]
+[woolworths_extractor] WOOLWORTHS_COOKIE not set in .env

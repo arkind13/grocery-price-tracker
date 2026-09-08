@@ -1,0 +1,22 @@
+$ compare --items Lindt Hot Choc Flakes Tin 210g
+--- rc=0 secs=19.5 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. Lindt Hot Choc Flakes Tin 210g · 210g
+   🔴 Coles       $14.00 — Lindt Hot Choc Flakes Tin 210g 210g (sheet)
+
+📊 TOTALS
+```
+╔══════════════════════════╗
+║ Store         Raw  Final ║
+║ Woolworths      —      — ║
+║ Coles      $14.00 $14.00 ║
+╚══════════════════════════╝
+```
+
+🏆 Cheapest: Coles
+⚠️ 1 item missing at Woolworths
+
+[stderr]
+[coles_extractor] Search 'Lindt Hot Choc Flakes Tin 210g': found 2 products

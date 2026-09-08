@@ -1,0 +1,5 @@
+$ compare --items 
+--- rc=2 secs=1.0 ---
+
+[stderr]
+Error: provide --items "item1, item2"

@@ -1,0 +1,33 @@
+{
+  "windows": {},
+  "stores": {
+    "dunya": {
+      "last_post_ref": "1074839858241759",
+      "last_creation": 1788399273,
+      "last_checked_window": "2026-09-06:10",
+      "last_cutoff": "2026-09-06T10:53:40+10:00",
+      "last_notified_ref": "1074839858241759"
+    },
+    "merjan": {
+      "last_post_ref": "122187751676942477",
+      "last_creation": 1788517249,
+      "last_checked_window": "2026-09-06:10",
+      "last_cutoff": "2026-09-06T10:53:40+10:00",
+      "last_notified_ref": "122187751676942477"
+    },
+    "fruitopia": {
+      "last_post_ref": "974521905656870",
+      "last_creation": 1788505584,
+      "last_checked_window": "2026-09-06:10",
+      "last_cutoff": "2026-09-06T10:53:40+10:00",
+      "last_notified_ref": "974521905656870",
+      "notified": {}
+    },
+    "abusalim": {
+      "last_post_ref": "122110070493417808",
+      "last_creation": 1787617874,
+      "last_checked_window": "2026-09-06:10",
+      "last_cutoff": "2026-09-06T10:53:40+10:00"
+    }
+  }
+}

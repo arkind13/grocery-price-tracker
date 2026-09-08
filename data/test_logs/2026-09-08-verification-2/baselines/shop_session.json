@@ -1,0 +1,20 @@
+{
+  "run_id": "2026-09-07T12:34:17+00:00",
+  "items": [
+    {
+      "raw": "beef mince",
+      "resolved_name": "",
+      "row_index": null,
+      "user_name": "",
+      "store": "",
+      "question_id": 1,
+      "options": [],
+      "live_done": false,
+      "auto_add": null,
+      "subcategory": "",
+      "note": "",
+      "stage": "ask_live"
+    }
+  ],
+  "next_qid": 2
+}

@@ -1,0 +1,11 @@
+$ search --product '; DROP TABLE products; --
+--- rc=0 secs=189.3 ---
+🔍 '; DROP TABLE PRODUCTS; -- — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+⚠️ Coles not checked (unavailable — 1 failed attempt)
+❌ No results found
+
+[stderr]
+[woolworths_extractor] noauth search HTTP 403 — retrying once
+[woolworths_extractor] noauth search unavailable (HTTP 403)

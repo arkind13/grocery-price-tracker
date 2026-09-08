@@ -1,0 +1,13 @@
+$ local-deals --ingest FRUT --no-telegram
+--- rc=0 secs=9.3 ---
+[ingest] FRUT: processing 3 file(s)
+[ingest] zzver2_post3_expired.txt: deals ended Sun 06 Sep — nothing written
+[ingest] zzver2_post2.txt: 1 items (text; valid until Mon 14 Sep)
+   - Carrots — $2.20/ea
+[ingest] zzver2_post1.txt: 3 items (text; valid until Mon 14 Sep)
+   - Celery — $1.50/ea (2 for $2.99)
+   - Carrots — $2.00/ea (2 for $4.00)
+   - 5kg Bag Washed Potatoes — $2.99/ea
+[ingest] Local_Deals tab updated (134 rows incl. headers)
+
+[stderr]

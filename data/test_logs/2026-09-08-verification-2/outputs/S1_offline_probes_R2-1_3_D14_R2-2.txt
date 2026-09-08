@@ -1,0 +1,44 @@
+[coles_extractor] Search 'sugar': found 5 products
+==============================================================================
+P1 — R2-1 (D19): alias-path negation guard
+==============================================================================
+  sugar-auto: find_product('sugar', {'interactive': False}) -> status=KEYWORD_ALIAS row=47 name='Raw Sugar 3Kg' note="Col P token match: 'Raw Sugar 3Kg'"
+[PASS] R2-1: 'sugar' does NOT auto-answer V Zero 250 Ml (row 30)  -- got row 47 'Raw Sugar 3Kg'
+[PASS] R2-1: 'sugar' lands on a RAW SUGAR row (47/90) or candidates  -- row=47 status=KEYWORD_ALIAS
+  zero-sugar-dir: find_product('zero sugar', {'interactive': False}) -> status=KEYWORD_ALIAS row=30 name='V Zero 250 Ml' note="Col P token match: 'V Zero 250 Ml'"
+[PASS] R2-1 directionality: 'zero sugar' STILL matches V Zero (row 30)  -- got row 30 'V Zero 250 Ml'
+  red-bull: find_product('red bull', {'interactive': False}) -> status=KEYWORD_ALIAS row=33 name='Red Bull Sugar Free' note="Col P token match: 'Red Bull Sugar Free'"
+  (info) 'red bull' -> row 33 'Red Bull Sugar Free'
+  milk: find_product('milk', {'interactive': False}) -> status=KEYWORD_ALIAS row=12 name='Full Cream Milk 3L' note="Col P alias match: 'Full Cream Milk 3L'"
+[PASS] R2-1 spillover: plain 'milk' still auto-resolves (not over-blocked)  -- row=12 'Full Cream Milk 3L'
+  sugar-interactive -> status=KEYWORD_ALIAS cands=[]
+
+==============================================================================
+P2 — R2-3 (D22): order-independent size parse + merge
+==============================================================================
+  split('Evamay Pads With Wings Super 14 pack') = ({'with', 'evamay', 'wings', 'pads', 'super'}, None)
+  split('pack Evamay Pads With Wings Super 14') = ({'evamay', 'with', 'super', 'wings', 'pads'}, None)
+[PASS] R2-3: reordered variant yields the SAME body tokens as canonical  -- ['evamay', 'pads', 'super', 'wings', 'with'] vs ['evamay', 'pads', 'super', 'wings', 'with']
+[PASS] R2-3: both parse the same size  -- None vs None
+  is_same_product(canon, reorder) = True
+[PASS] R2-3: matcher now treats the reorder as the SAME product
+
+==============================================================================
+P3 — D14 watch: user-retracted DISTINCT pairs must not merge
+==============================================================================
+  is_same_product('Organic Free Range Eggs 12 Pack 600g', 'Eggs Free Rage 12Pc') = False
+[PASS] D14: matcher keeps Organic… pair DISTINCT
+  is_same_product('Sunbites Sour 60g', 'Sunbites Sour Cream Mulipack') = False
+[PASS] D14: matcher keeps Sunbites… pair DISTINCT
+  is_same_product('Sunbites Sour Cream Mulipack', 'Sunbites Grain Waves Sour Cream & Chives 22g x 8 pack') = False
+[PASS] D14: matcher keeps Sunbites… pair DISTINCT
+  is_same_product('V Watermelon 250Ml', 'V Watermelon 4*250') = False
+[PASS] D14: matcher keeps V… pair DISTINCT
+
+==============================================================================
+P4 — R2-2 (D20): Lindt different-product verdict
+==============================================================================
+  is_same_product(Lindt Hot Choc Flakes Tin 210g, Lindt Lindor Assorted ... 235g) = False
+[PASS] R2-2: matcher says the Lindor gift box is a DIFFERENT product
+
+SUMMARY: 12/12 checks passed

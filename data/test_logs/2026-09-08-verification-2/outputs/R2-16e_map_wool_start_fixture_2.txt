@@ -1,0 +1,23 @@
+$ map wool
+--- rc=0 secs=4.3 ---
+(live work list: 1 of 1 missing-keyword row(s) from the sheet; file kept as the offline record)
+📋 MAP WOOL
+━━━━━━━━━━━━━━━━━━━━
+(1 items, resuming at #1)
+✳️ Commands during session: number (pick candidate), add, forget (unmatched) / na (wool/coles), skip/next, stop, done
+
+--- Item 1/1 ---
+
+  Looking up woolworths: ZZVER2 T4 Mechanism Product 250g
+  Woolworths results:
+    1) Al'Fez Turkish Style Tahini Sauce 250g $5.22
+    2) Woolworths Snapz Original Crackers 250g $1.62
+    3) Ritz Breakz Classic Crackers 250g $2.38 [Was $3.80]
+    4) Vo5 Styling Gel Tub Mega Hold 250g $5.70
+    5) Al'Fez Lebanese Style Garlic Toum Sauce 250g $5.22
+
+[a]dd [s]kip [stop] [done] > 
+Paused at item #2/1.
+Resume with: map wool
+
+[stderr]
