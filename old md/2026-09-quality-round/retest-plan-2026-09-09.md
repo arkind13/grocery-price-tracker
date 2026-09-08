@@ -97,8 +97,18 @@ are in MY test code — fix these in the copies before re-running):
    gap on EVERY ws call, and bulk-verify (one get_all_values per chunk)
    instead of per-item `ws.get`.
 3. **Float compare:** "10.0" vs sheet-normalized "10" — compare numerically.
-4. **gspread delete_rows is 0-based half-open:** delete rows a..b (1-based
-   inclusive) = `ws.delete_rows(a - 1, b)`. This bit twice.
+4. **gspread delete_rows semantics (CORRECTED R2-9/R16, 2026-09-09 —
+   the old guidance below was WRONG and cost a real row):** installed
+   gspread 6.2.1's `delete_rows(start_index, end_index=None)` is
+   **1-based INCLUSIVE-INCLUSIVE** — delete rows a..b (1-based) =
+   `ws.delete_rows(a, b)`; a single row is `ws.delete_rows(a)` or
+   `ws.delete_rows(a, a)` (both verified live on 2026-09-08, including
+   the incident post-mortem: the old formula `ws.delete_rows(a - 1, b)`
+   deleted row a-1 too — the real Lindt row 114 went with test row
+   115 and had to be restored from baseline).
+   ~~"0-based half-open: delete rows a..b = `ws.delete_rows(a - 1, b)`"~~
+   — do NOT use; keep the calibrated inclusive form + a contiguity
+   assert in every teardown driver.
 Then: run the battery (113 real + 387 synthetic, subsets, rule battery,
 teardown, full-grid drift check). EXPECT: created-rows == written-count
 (FIX-9), 0 phantom rows, drift 0, and per-defect behaviors consistent
