@@ -4401,5 +4401,78 @@ class TestSpecialsStoreFilterR2_12(unittest.TestCase):
         self.assertIn("Latest Wednesday report", out)
 
 
+# ============================================================================
+# R2-13 (R3): the map-unmatched session's DISPLAY pass never hits the
+# store APIs — junk debt lines cost 0 credits / ~0s until the user
+# picks an action; --forget/--skip never search at all.
+# ============================================================================
+
+
+class TestUnmatchedLazyLiveR2_13(unittest.TestCase):
+
+    @patch("extractors.coles_extractor.fetch_coles_search_status")
+    @patch("extractors.woolworths_extractor."
+           "fetch_woolworths_search_noauth")
+    @patch("core.sheets_client.connect_worksheet")
+    @patch("grocery_price_cli._load_env")
+    def test_next_on_junk_never_calls_stores(
+            self, mock_env, mock_ws, mock_ww, mock_coles):
+        """--next renders the deferral line + prompt; the store APIs
+        are never called (breaker-forced-open safe: nothing to fail)."""
+        from grocery_price_cli import _cmd_map_noninteractive
+        mock_ws.return_value = FakeWorksheet([_make_header()])
+        with tempfile.TemporaryDirectory() as tmpdir:
+            code, out = self._capture(
+                _cmd_map_noninteractive,
+                argparse.Namespace(next=True, pick=None, add=False,
+                                   skip=False, na=False, forget=False,
+                                   keyword=None, unit=None,
+                                   subcategory=""),
+                "unmatched",
+                ["Zz Totally Junk Debt Line 999g [coles]"],
+                0, {}, Path(tmpdir) / "progress.json", Path(tmpdir))
+        self.assertEqual(code, 0)
+        mock_ww.assert_not_called()
+        mock_coles.assert_not_called()
+        self.assertIn("No sheet match", out)
+        self.assertIn("live search runs when you", out)
+        self.assertIn("live search runs when you choose an action",
+                      out)   # the action prompt says it too
+
+    @patch("extractors.coles_extractor.fetch_coles_search_status")
+    @patch("extractors.woolworths_extractor."
+           "fetch_woolworths_search_noauth")
+    @patch("core.sheets_client.connect_worksheet")
+    @patch("grocery_price_cli._load_env")
+    def test_skip_never_calls_stores(
+            self, mock_env, mock_ws, mock_ww, mock_coles):
+        """--skip advances without any store call (0 credits)."""
+        from grocery_price_cli import _cmd_map_noninteractive
+        mock_ws.return_value = FakeWorksheet([_make_header()])
+        with tempfile.TemporaryDirectory() as tmpdir:
+            code, out = self._capture(
+                _cmd_map_noninteractive,
+                argparse.Namespace(next=False, pick=None, add=False,
+                                   skip=True, na=False, forget=False,
+                                   keyword=None, unit=None,
+                                   subcategory=""),
+                "unmatched",
+                ["Zz Junk Skip Line 500g [coles]", "Next Item 1L"],
+                0, {}, Path(tmpdir) / "progress.json", Path(tmpdir))
+        self.assertEqual(code, 0)
+        mock_ww.assert_not_called()
+        mock_coles.assert_not_called()
+
+    def _capture(self, fn, *args, **kwargs):
+        old_stdout = sys.stdout
+        try:
+            sys.stdout = io.StringIO()
+            result = fn(*args, **kwargs)
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+        return result, output
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -787,7 +787,8 @@ class LookupEngine:
                      interactive: bool = True,
                      store_scope: str | None = None,
                      _halal_chain: bool = False,
-                     allow_auto_add: bool = True) -> LookupResult:
+                     allow_auto_add: bool = True,
+                     sheet_only: bool = False) -> LookupResult:
         """Run the lookup chain Steps 1 -> 2 -> 3 -> 5 -> 6 for one query.
 
         Args:
@@ -811,6 +812,12 @@ class LookupEngine:
                 written). Read-only surfaces (compare, recipe) pass
                 False; the default keeps the D-H2 auto-add for the
                 explicit flows (shop, search --add-item, map --add).
+            sheet_only: R2-13 (R3) — run Steps 1-3 (sheet/alias/
+                candidates) and STOP: no Step-5 live search, no halal
+                chain, no live fill. The map-unmatched --next display
+                uses this so junk debt lines never burn store credits
+                before the user picks an action; the chosen action
+                re-resolves WITH live search.
 
         Returns:
             LookupResult with the terminal status.
@@ -844,7 +851,8 @@ class LookupEngine:
                                for s in exact["prices"]},
                 note=f"exact match: '{exact['generic_name']}'",
             )
-            return self._finish_sheet_result(sheet_res, query, interactive)
+            return self._finish_sheet_result(
+                sheet_res, query, interactive or sheet_only)
 
         # --- PART-2 halal intercept (§12.4): generic raw-meat terms
         # resolve halal-scoped. Step 1 exact matches are UNSCOPED —
@@ -874,7 +882,8 @@ class LookupEngine:
                                for s in alias["prices"]},
                 note=f"Col P alias match: '{alias['generic_name']}'",
             )
-            return self._finish_sheet_result(sheet_res, query, interactive)
+            return self._finish_sheet_result(
+                sheet_res, query, interactive or sheet_only)
 
         # Step 2b: token match in Col P
         token_match = idx.find_alias_token(query)
@@ -896,7 +905,8 @@ class LookupEngine:
                                for s in token_match["prices"]},
                 note=f"Col P token match: '{token_match['generic_name']}'",
             )
-            return self._finish_sheet_result(sheet_res, query, interactive)
+            return self._finish_sheet_result(
+                sheet_res, query, interactive or sheet_only)
 
         # Step 3: partial candidates in Col A
         candidates = idx.find_candidates(query)
@@ -960,7 +970,17 @@ class LookupEngine:
                          f"'{top.generic_name}'",
                 )
                 return self._finish_sheet_result(
-                    sheet_res, query, interactive)
+                    sheet_res, query, interactive or sheet_only)
+
+        # R2-13 (R3): sheet-only pass ends here — no store calls, no
+        # halal chain. The chosen action re-resolves WITH live search.
+        if sheet_only:
+            return LookupResult(
+                query=query,
+                status=LookupStatus.NOT_FOUND,
+                note="sheet-only pass: no sheet match — live search "
+                     "runs when you choose an action (--add / --pick)",
+            )
 
         # Step 5: live search — PART-2: raw-meat queries run the
         # halal fallback chain (sheet -> live+LLM-verify -> butchery);

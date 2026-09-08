@@ -773,5 +773,64 @@ class TestAliasNegationGuardR2_1(unittest.TestCase):
         self.assertEqual(result.generic_name, "Coca Cola")
 
 
+# ============================================================================
+# R2-13 (R3): sheet_only pass — the map-unmatched --next display never
+# hits the store APIs (junk debt lines used to burn ~46s of Coles
+# credits before the user could --forget). Live search runs only when
+# the chosen action needs it.
+# ============================================================================
+
+
+class TestSheetOnlyPassR2_13(unittest.TestCase):
+
+    def setUp(self):
+        self.ws = _make_worksheet_with_header()
+        self.engine = LookupEngine(worksheet=self.ws)
+
+    def _live_sentinels(self):
+        """Patches that FAIL the test if any store API is touched."""
+        def _forbidden(*a, **kw):
+            raise AssertionError(
+                "live store API called during a sheet_only pass")
+
+        return patch(
+            "extractors.woolworths_extractor."
+            "fetch_woolworths_search_noauth",
+            side_effect=_forbidden), patch(
+            "extractors.coles_extractor.fetch_coles_search_status",
+            side_effect=_forbidden)
+
+    def test_junk_query_defers_live_search(self):
+        with self._live_sentinels()[0], self._live_sentinels()[1]:
+            result = self.engine.find_product(
+                "Zz Totally Junk Debt Line 999g", interactive=True,
+                sheet_only=True)
+        self.assertEqual(result.status, LookupStatus.NOT_FOUND)
+        self.assertIn("sheet-only pass", result.note)
+        self.assertIn("live search runs", result.note)
+
+    def test_sheet_hit_and_candidates_still_resolve(self):
+        with self._live_sentinels()[0], self._live_sentinels()[1]:
+            exact = self.engine.find_product(
+                "Oat Milk", interactive=True, sheet_only=True)
+            self.assertEqual(exact.status, LookupStatus.EXACT_SHEET)
+            # "cream" is a partial (no alias carries it alone) — the
+            # candidate list still renders for the user to pick from.
+            cands = self.engine.find_product(
+                "cream", interactive=True, sheet_only=True)
+            self.assertEqual(cands.status, LookupStatus.CANDIDATES)
+
+    def test_sheet_only_never_live_fills_missing_stores(self):
+        # Avocado has only a Woolworths price on the sheet — the
+        # sheet-only pass must NOT live-fill Coles (the pure sheet
+        # answer comes back, Coles stays unpriced).
+        with self._live_sentinels()[0], self._live_sentinels()[1]:
+            result = self.engine.find_product(
+                "Avocado", interactive=False, sheet_only=True)
+        self.assertEqual(result.status, LookupStatus.EXACT_SHEET)
+        self.assertIn("woolworths", result.prices)
+        self.assertNotIn("coles", result.prices)
+
+
 if __name__ == "__main__":
     unittest.main()
