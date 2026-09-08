@@ -1,5 +1,13 @@
 # DEFECT LOG — 2026-09-08 comprehensive live test round
 
+> **STATUS 2026-09-09:** fixes are now SPECIFIED in
+> `grocery-price-tracker/fix-spec-2026-09-09.md` (FIX-1…FIX-10, priority
+> ordered — FIX-1/FIX-2 are P0, must land before the next Wednesday run).
+> Re-verification plan: `grocery-price-tracker/retest-plan-2026-09-09.md`.
+> User corrections applied: D14 RETRACTED (the flagged pairs are separate
+> products); D11 extended — expired prices must clear their comments too;
+> D5/D7 family extended with the user's sugar-vs-"V Sugarfree" case.
+
 Evidence: `outputs/` (one file per command), `commands_log.csv` (every CLI
 command with rc + timing), `t8_ops_log.csv` + `t8_items_manifest.csv`
 (the 500-item battery), `baselines/` (pre-test state).
@@ -44,11 +52,15 @@ P2 = loophole or misleading output · P3 = cosmetic / robustness.
   instead of merging into row 118.
 
 ### D5. `compare` silently prices a nonsense query from a one-word partial match
-- `compare --items "xyzzy plugh quantum banana 999"` returned a full
-  price battle from sheet row "Banana Kids 5" (matched via the single
-  word "banana"), counted it in totals, declared savings. Disclosed
-  only in the small provenance line. Expected: found-block / no silent
-  totals for nonsense queries.
+- `compare --items "xyzzy plugh quantum banana 999"` matched the sheet row
+  "Banana Kids 5" (matched via the single word "banana") and presented it
+  as the junk item's price. The partial-match chain is too loose — a query
+  sharing ZERO meaningful words (or one generic word) must not be priced
+  silently. Same family, user-reported 2026-09-08: a **sugar** query
+  answered with the **V Sugarfree / Red Bull Sugar Free** drink rows
+  (substring crossing — "sugar" ⊂ "sugarfree"; the boundary guard exists
+  in the subcategory classifier but NOT in lookup candidate scoring).
+- → FIX-6/FIX-7 in the spec.
 
 ### D6. UOM 20% size gate bypassed on a sheet+live pair (60g vs 110g)
 - Row "Sunbites Sour 60g" (WW GONE → WW side live) was paired with the
@@ -92,6 +104,9 @@ P2 = loophole or misleading output · P3 = cosmetic / robustness.
   expired post, itself double-divided per D1) after two newer posts
   re-priced the item without any promo. "Newest post wins" applies to
   the price cell but not to the comments segment.
+- **USER REQUIREMENT (2026-09-09):** when a special price is removed or
+  expires, its comment must be removed with it — comments are never
+  allowed to outlive their prices. → FIX-4 in the spec.
 
 ### D12. Orphaned row-2 validity stamp
 - Fruitopia row 2 said "valid until Sat 12 Sep" while ZERO Fruitopia
@@ -107,18 +122,13 @@ P2 = loophole or misleading output · P3 = cosmetic / robustness.
   Breaker then open 10 min. data/scrapedo_health.json showed
   fail_streak 3 at 08:15.
 
-### D14. Pre-existing duplicate product rows on the master sheet (one-line rule never applied to legacy data)
-- Row 14 "Organic Free Range Eggs 12 Pack 600g" (10.6/10.8) vs row 56
-  "Eggs Free Rage 12Pc" (6.50/5.50) — same product (word-order), two
-  rows, conflicting prices.
-- Row 53 "Sunbites Sour Cream Mulipack" (22g unit!) vs row 66 "Sunbites
-  Grain Waves … 22g x 8 pack" (176g) — same product per the pack-vs-
-  weight rule, two rows.
-- Row 28 "V Watermelon 250Ml" ($12.00 = 4-pack price, unit says single
-  250mL) vs row 68 "V Watermelon 4*250" ($12.00) — duplicate + unit/price
-  mismatch.
-- Also data anomaly: rows 14/56 carry Brand `Home` (organic free-range
-  eggs are not Woolworths home brand) → wrong 🏠 extra-discount display.
+### D14. ~~Pre-existing duplicate product rows on the master sheet~~ — RETRACTED by the user (2026-09-09)
+- The user checked the flagged pairs (Organic Free Range Eggs / "Eggs Free
+  Rage", the two Sunbites multipacks, the two V Watermelon rows) — they
+  are SEPARATE products, not duplicates. Do NOT merge them; do not let any
+  future matcher auto-merge them either (they survive as known-distinct).
+- Remaining footnote only: confirm the `Home` brand flag on row 14 is
+  intentional (it drives the home-brand display discount). No code change.
 
 ### D15. Multi-buy M/N vocabulary never upgraded on the sheet
 - Every multi-buy row (11, 19, 21, 28, 31, 33, 34, 42, 44, 53, 67, 68,
