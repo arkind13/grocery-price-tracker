@@ -1,0 +1,5 @@
+[
+ {"id": "R2-1",  "label": "compare sugar",             "args": ["compare", "--items", "sugar"],                "timeout": 300},
+ {"id": "D6",    "label": "compare sunbites sour 60g", "args": ["compare", "--items", "Sunbites Sour 60g"],    "timeout": 300},
+ {"id": "R2-7",  "label": "compare halal chicken mince","args": ["compare", "--items", "halal chicken mince"], "timeout": 300}
+]

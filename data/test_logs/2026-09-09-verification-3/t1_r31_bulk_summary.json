@@ -1,0 +1,17 @@
+{
+  "adds_attempted": 25,
+  "adds_written": 25,
+  "raw_api_errors": 0,
+  "elapsed_secs": 140.5,
+  "grid_before": 380,
+  "grid_after": 355,
+  "named_before": 113,
+  "named_after": 113,
+  "leftover_probe_rows": 0,
+  "teardown": {
+    "deleted": 25,
+    "contiguous": true,
+    "range": "115-139"
+  },
+  "pass": false
+}

@@ -1,0 +1,30 @@
+{
+  "add": {
+    "wrote": true,
+    "row_index": 115,
+    "error": ""
+  },
+  "set": {
+    "found": true,
+    "row_index": 115,
+    "wrote": true,
+    "range_written": "A115:I115",
+    "error": ""
+  },
+  "read_backs": [
+    "zzv3b3 probe kw"
+  ],
+  "read_back_ok": true,
+  "teardown": {
+    "deleted_range": "115-115",
+    "contiguous": true
+  },
+  "final": {
+    "grid": 380,
+    "grid_before": 380,
+    "named": 113,
+    "leftovers": 0,
+    "sheet_drift": "NONE"
+  },
+  "pass": true
+}

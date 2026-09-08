@@ -1,0 +1,8 @@
+collecting ... collected 4 items
+
+tests/test_cli.py::TestAddToListCLI::test_tagged_add_broken_store_never_borrows PASSED [ 25%]
+tests/test_cli.py::TestCLIPartB::test_cli10_coles_unavailable_single_line_ww_shown PASSED [ 50%]
+tests/test_cli.py::TestHealthFileIsolationR3_2::test_dirty_real_state_cannot_reach_reason_helper PASSED [ 75%]
+tests/test_cli.py::TestHealthFileIsolationR3_2::test_health_path_isolated_from_real_data_dir PASSED [100%]
+
+============================== 4 passed in 1.34s ==============================

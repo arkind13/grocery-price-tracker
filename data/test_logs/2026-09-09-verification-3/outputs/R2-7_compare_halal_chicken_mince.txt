@@ -1,0 +1,31 @@
+$ compare --items halal chicken mince
+--- rc=0 secs=72.9 ---
+[halal] EL-AMIN'S HALAL CHICKEN THIGH CUTLETS: halal (confidence 0.00)
+[halal] EL-AMIN'S HALAL CHICKEN PORTIONS FAMILY PACK: halal (confidence 0.90)
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. halal chicken mince · ⚠️ unit unavailable
+   ⚠️ No matching product — sizes don't compare.
+      Woolworths: Zwan Luncheon Meat Halal Chicken 850g · 850g
+      Coles:      EL-AMIN'S HALAL CHICKEN THIGH CUTLETS · approx. 1.2Kg
+   💬 Reply 'expand' to see more results.
+
+📊 TOTALS
+```
+╔══════════════════════╗
+║ Store      Raw Final ║
+║ Woolworths   —     — ║
+║ Coles        —     — ║
+╚══════════════════════╝
+```
+
+❌ No prices available for any store.
+⚠️ 1 item missing at Woolworths
+⚠️ 1 item missing at Coles
+
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Search 'halal chicken mince': found 5 products
+[coles_extractor] Search 'halal chicken mince': found 5 products

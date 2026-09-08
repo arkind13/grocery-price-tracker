@@ -1,0 +1,1 @@
+session_state.json WITHHELD from the committed/scp'd evidence (browser cookies) — same policy as verification-2.

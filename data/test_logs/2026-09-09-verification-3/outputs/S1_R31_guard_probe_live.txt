@@ -1,0 +1,4 @@
+gspread Worksheet.row_count (real) : 380
+_worksheet_grid_rows(connect_worksheet()) : 380
+legacy .rows attribute             : ABSENT
+VERDICT: PASS — real row count returned (guard engages)

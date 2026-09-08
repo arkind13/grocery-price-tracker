@@ -1,0 +1,1217 @@
+[
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-06T13:08:09+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-06T13:08:35+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T06:52:17+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T06:54:07+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T07:21:14+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T07:21:14+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T07:24:04+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T07:24:04+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-07T07:24:05+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T07:24:05+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T07:30:28+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T07:30:28+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-07T07:30:28+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T07:30:28+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T07:38:23+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T07:38:23+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-07T07:38:23+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T07:38:23+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T07:39:43+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T07:39:43+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-07T07:39:43+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T07:39:43+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T07:40:58+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T07:40:58+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-07T07:40:58+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T07:40:58+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T07:44:01+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T07:44:01+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-07T07:44:02+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T07:44:02+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T08:15:42+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T08:15:42+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-07T08:15:42+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T08:15:42+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T20:20:19+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T20:20:19+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-07T20:20:19+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T20:20:19+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T20:23:38+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T20:23:38+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-07T20:23:38+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T20:23:38+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T22:11:13+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T22:11:14+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-07T22:11:14+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T22:11:14+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T22:49:36+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T22:49:36+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-07T22:49:36+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T22:49:36+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T23:00:30+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T23:00:30+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-07T23:00:30+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T23:00:30+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T23:25:56+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T23:25:56+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-07T23:25:56+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T23:25:56+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T23:41:26+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T23:41:26+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-07T23:41:26+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-07T23:41:26+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T07:27:50+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T07:27:50+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T07:27:50+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T07:27:50+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T07:28:54+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T07:28:54+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T07:28:54+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T07:28:54+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T07:39:35+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T07:39:35+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T07:39:35+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T07:39:35+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T07:55:31+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T07:55:31+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T07:55:31+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T07:55:31+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "\ud83c\udf89\ud83d\udc9a \ud835\uddd9\ud835\udde5\ud835\udde8\ud835\udddc\ud835\udde7\ud835\udde2\ud835\udde3\ud835\udddc\ud835\uddd4 \ud835\udde0\ud835\udde7 \ud835\uddd7\ud835\udde5\ud835\udde8.txt",
+    "valid_until": "2026-09-06",
+    "ingested_at": "2026-09-08T08:36:44+10:00",
+    "items": 24,
+    "snippet": "\ud83c\udf89\ud83d\udc9a \ud835\uddd9\ud835\udde5\ud835\udde8\ud835\udddc\ud835\udde7\ud835\udde2\ud835\udde3\ud835\udddc\ud835\uddd4 \ud835\udde0\ud835\udde7 \ud835\uddd7\ud835\udde5\ud835\udde8\ud835\udddc\ud835\udde7\ud835\udde7 \ud835\udddc\ud835\udde6 \ud835\udde7\ud835\udde8\ud835\udde5\ud835\udde1\ud835\udddc\ud835\udde1\ud835\uddda \ud835\udfef! \ud83d\udc9a\ud83c\udf89",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T11:06:00+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T11:06:00+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T11:06:01+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T11:06:01+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T11:53:03+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T11:53:03+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T11:53:03+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T11:53:03+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:06:11+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:06:11+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T12:06:11+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:06:11+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:07:36+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:07:36+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T12:07:36+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:07:36+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:13:39+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:13:39+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T12:13:39+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:13:39+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T12:13:39+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:40:31+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:40:31+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T12:40:31+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:40:31+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T12:40:31+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:42:24+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:42:24+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T12:42:24+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:42:24+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T12:42:24+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:46:59+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:46:59+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T12:46:59+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:46:59+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T12:46:59+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:52:26+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:52:26+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T12:52:26+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T12:52:26+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T12:52:26+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T20:18:02+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T20:18:02+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T20:18:02+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T20:18:02+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T20:18:02+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T20:22:32+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T20:22:32+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T20:22:32+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T20:22:32+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T20:22:32+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T20:27:05+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T20:27:05+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "new_post.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T20:27:05+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRU0709260907",
+    "file": "old_post.txt",
+    "valid_until": "2026-09-12",
+    "ingested_at": "2026-09-08T20:27:05+10:00",
+    "items": 1,
+    "snippet": "Valid until 12 September",
+    "archived": "processed"
+  },
+  {
+    "code": "FRUT",
+    "file": "board.txt",
+    "valid_until": "2026-09-19",
+    "ingested_at": "2026-09-08T20:27:05+10:00",
+    "items": 1,
+    "snippet": "Valid until 19 September",
+    "archived": "processed"
+  }
+]

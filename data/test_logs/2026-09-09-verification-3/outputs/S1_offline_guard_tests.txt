@@ -1,0 +1,12 @@
+============================= test session starts =============================
+collecting ... collected 125 items / 118 deselected / 7 selected
+
+tests/test_sheets_sync.py::TestGridCeilingGuardR2_11::test_append_at_limit_expands_grid_with_headroom PASSED [ 14%]
+tests/test_sheets_sync.py::TestGridCeilingGuardR2_11::test_failed_expansion_returns_clear_error PASSED [ 28%]
+tests/test_sheets_sync.py::TestGridCeilingGuardR2_11::test_headroom_present_never_expands PASSED [ 42%]
+tests/test_sheets_sync.py::TestGridCeilingGuardR3_1::test_append_at_limit_expands_grid_no_raw_400 PASSED [ 57%]
+tests/test_sheets_sync.py::TestGridCeilingGuardR3_1::test_failed_expansion_returns_clear_error PASSED [ 71%]
+tests/test_sheets_sync.py::TestGridCeilingGuardR3_1::test_fake_mirrors_real_gspread_surface PASSED [ 85%]
+tests/test_sheets_sync.py::TestGridCeilingGuardR3_1::test_headroom_present_never_expands PASSED [100%]
+
+====================== 7 passed, 118 deselected in 1.13s ======================

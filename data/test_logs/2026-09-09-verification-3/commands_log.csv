@@ -1,0 +1,5 @@
+id,ts,label,cmd,rc,secs,output_file,headline
+R3-3,07:32:46,"map unmatched add breaker open","map unmatched --add",1,4.4,R3-3_map_unmatched_add_breaker_open.txt,"--- Item 1/2 ---"
+R2-1,07:34:00,"compare sugar","compare --items sugar",0,46.5,R2-1_compare_sugar.txt,"🛒 BASKET COMPARISON"
+D6,07:34:19,"compare sunbites sour 60g","compare --items Sunbites Sour 60g",0,18.2,D6_compare_sunbites_sour_60g.txt,"🛒 BASKET COMPARISON"
+R2-7,07:35:32,"compare halal chicken mince","compare --items halal chicken mince",0,72.9,R2-7_compare_halal_chicken_mince.txt,"[halal] EL-AMIN'S HALAL CHICKEN THIGH CUTLETS: halal (confidence 0.00)"

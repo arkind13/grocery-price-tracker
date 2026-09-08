@@ -1,0 +1,16 @@
+{
+  "saved_at": "2026-09-08T10:51:47+00:00",
+  "product": "milk",
+  "results": [
+    {
+      "name": "WW Milk 2L",
+      "store": "woolworths",
+      "price": 3.5,
+      "brand": "",
+      "size": "",
+      "category": "",
+      "is_special": false,
+      "special_desc": ""
+    }
+  ]
+}
