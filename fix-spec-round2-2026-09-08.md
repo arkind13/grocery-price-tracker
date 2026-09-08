@@ -165,3 +165,73 @@ mid-run. Both acceptable; expanding silently is friendlier for bulk
 ingests.
 **Accept:** offline test with a maxed fake grid → clean expansion or the
 clear error; no raw APIError escapes.
+
+---
+
+## ROUND-2 EXTENSION (added 2026-09-09, user request): the 8 Round-A deferrals
+
+The first fixer listed 8 findings as out of scope. Coverage now: two were
+already folded in (D13-R → R2-4, D18 → R2-7). The remaining fixable six
+become R2-12…R2-16 below. One item (D10, the local↔VPS to-do queue
+divergence) is deliberately NOT a code fix: the queues converge by design
+at Wednesday Step 0 — it stays documented. The negligible quota note
+(read-back adds one read per add) needs no action.
+
+### R2-12 (R2-observation, P3): `specials --store coles` leaks the Woolworths section
+**Evidence:** outputs/T1.A03 — the WW specials report prints above the
+Coles sheet view even with `--store coles`.
+**Fix:** apply the store filter to every section of the specials output
+(the saved Wednesday report section included).
+**Accept:** `--store coles` shows only Coles content; `--store
+woolworths` only Woolworths; no store flag = both as today. Regression
+test on the renderer.
+
+### R2-13 (R3, P2): `map unmatched --next` live-searches junk before the user can `--forget`
+**Impact:** every junk debt line burns Coles credits + ~46s before the
+user even answers (outputs/T4.F01: 46.1s for obvious paste junk).
+**Fix:** make the live search LAZY in the unmatched session: `--next`
+shows the sheet recommendations + the debt line WITHOUT hitting the
+stores; live search runs only when the chosen action needs it
+(`--add`, or `--pick` when the debt carries no price). Interactive
+prompt updated to say "live search runs when you choose an action".
+Aldi-tagged lines already skip live search — keep that.
+**Accept:** with the breaker forced open, `--next` still renders
+recommendations and `--forget`/`--skip` cost ~0s and 0 credits; `--add`
+on a healthy store works exactly as R2-4 specifies. Regression tests on
+the session flow with a fake store client.
+
+### R2-14 (R8, P3): empty `compare --items ""` returns rc=0 with an empty basket
+**Fix:** usage error rc=2 with "provide --items" (mirroring `search
+--product ""` which already errors cleanly).
+**Accept:** rc=2, no basket header printed. Regression test.
+
+### R2-15 (D15, P2): bare legacy `multi-buy` markers are never upgraded to terms
+**Evidence:** every multi-buy row on the sheet (14 rows) still carries
+the bare `multi-buy` marker with no "2/$X" terms, so no deal-rate or
+🏷️ note can ever render (verification T1.V09).
+**Fix:** when a sync/specials pass sees a keyword-matched row whose
+specials cell is the BARE `multi-buy` marker AND the store payload
+carries deal terms for it, write the full terms form (`multi-buy 2/$6.00`
+— `encode_multibuy_cell` already exists in core/multibuy.py). When no
+terms are known, leave the bare marker but list the row once in the
+Wednesday summary under "multi-buy rows awaiting deal terms" so the gap
+is visible instead of silent.
+**Accept:** offline test: row with bare marker + payload with terms →
+cell upgraded, deal rate applies on the next price write; no terms →
+summary line, marker untouched. Existing specials-vocabulary tests stay
+green.
+
+### R2-16 (D9, P2): map sessions resolve a stale snapshot while `lists` reports live
+**Evidence:** verification T4.X01 — `map coles --next` walks an 8-item
+Sep-4 file while live `lists` reports 24; the other 16 can never be
+resolved via map until a Wednesday rebuild.
+**Fix:** when a `map wool|coles` session starts, REBUILD the work list
+from the live sheet state (rows whose opposite-store keyword is missing,
+same rule `lists` uses) instead of trusting the .txt file — or merge
+file + live and de-duplicate, preserving session progress by item
+identity, not line number. Wednesday continues to write the files as
+the offline record.
+**Accept:** start a map coles session → its item count equals the live
+`lists` count; resolving an item removes it from BOTH the session and
+the file; a second session start shows the reduced set. Regression test
+with a stale fixture file + a sheet that has more missing-keyword rows.

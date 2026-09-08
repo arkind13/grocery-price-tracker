@@ -9,10 +9,12 @@ Verification is a separate session — do not attempt it.
 
 ## Read first (in this order)
 1. `grocery-price-tracker/fix-spec-round2-2026-09-08.md` — your COMPLETE
-   work order: R2-1…R2-11. Nothing else is in scope. Note its HARD RULES
-   section — especially: no undocumented behavior changes, and every
-   update to an existing test must be named and justified in your
-   report.
+   work order: R2-1…R2-16 (the 11 verification findings + the 5
+   Round-A-deferral fixes added on 2026-09-09; D10 and the quota note are
+   deliberately excluded and documented in the spec). Nothing else is in
+   scope. Note its HARD RULES section — especially: no undocumented
+   behavior changes, and every update to an existing test must be named
+   and justified in your report.
 2. `grocery-price-tracker/data/test_logs/2026-09-08-verification/verification-report-2026-09-08.md`
    — the evidence behind each item (outputs/ references, proven root
    causes). Read the item's evidence before coding.
@@ -20,7 +22,8 @@ Verification is a separate session — do not attempt it.
    — current defect baseline (D1–D22, R13–R17).
 
 ## Scope rules
-- Fix R2-1…R2-11 only, in spec order (P1s first: R2-1, R2-2, R2-3).
+- Fix R2-1…R2-16 only, in this order: P1s first (R2-1, R2-2, R2-3),
+  then R2-4…R2-11, then the extension items R2-12…R2-16.
   The still-open no-FIX-ID items (D9, D12-scenario, D13, D15, R1–R8
   except where folded into R2-4) are awaiting user triage — DO NOT fix
   them. If you notice something new, record it under "Deferred
