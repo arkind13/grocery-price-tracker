@@ -1,0 +1,123 @@
+$ compare --items Kettle Chilli 165G, Sunbites Sour Cream Mulipack, Mr Kipling Choc 6 Pk, Chocolate Hazelnut Spread, Eggs Free Rage 12Pc, Farmer Union Greek Yoghurt 1Kg, Blueberries, Mccain Jalepeno, Sunny Queen Free Range 12 Pk, Twisted Chocolate Icecream, Radiant Advanced Ultra Powder+, Strawberries, Raspberries Punnet 125g, Extra Spearmint Chewing Multipack, Sunbites Grain Waves Sour Cream & Chives 22g x 8 pack, Smith Cheese & Onion Multipack 8, V Watermelon 4*250, V Sugarfree 4*250, David Beckham Instinct, Greek Salad Kit 400g, Tegel Nashville Tenders 500g, Obela Hommus 3Pk 60g, Freshen Up Spray, Greek Salad Kit 270g, Steggles Korean Tenders 600g --mode sheet
+--- rc=0 secs=4.0 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. Kettle Chilli 165G · ⚠️ unit unavailable
+   🟢 Woolworths  $3.42
+   🔴 Coles       $3.60
+
+2. Sunbites Sour Cream Mulipack · ⚠️ unit unavailable
+   🟢 Woolworths  $3.80
+   🔴 Coles       $6.00
+
+3. Mr Kipling Choc 6 Pk · ⚠️ unit unavailable
+   🟢 Woolworths  $2.85
+   🔴 Coles       $6.20
+
+4. Chocolate Hazelnut Spread  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $5.82
+
+5. Eggs Free Rage 12Pc  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $5.86
+   🔴 Coles       $5.50
+
+6. Farmer Union Greek Yoghurt 1Kg · ⚠️ unit unavailable
+   🟢 Woolworths  $7.12
+   🔴 Coles       $7.50
+
+7. Blueberries  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $3.61
+   🔴 Coles       $4.30
+
+8. Mccain Jalepeno · ⚠️ unit unavailable
+   🟢 Woolworths  $5.70
+   🔴 Coles       $7.50
+
+9. Sunny Queen Free Range 12 Pk · ⚠️ unit unavailable
+   🟢 Woolworths  $6.65
+   🔴 Coles       $8.80
+
+10. Twisted Chocolate Icecream · ⚠️ unit unavailable
+   🟢 Woolworths  $9.03
+   🔴 Coles       $8.50
+
+11. Radiant Advanced Ultra Powder+ · ⚠️ unit unavailable
+   🟢 Woolworths  $20.90
+
+12. Strawberries  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $1.80
+   🔴 Coles       $3.00
+
+13. Raspberries Punnet 125g  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $3.61
+   🔴 Coles       $3.90
+
+14. Extra Spearmint Chewing Multipack · ⚠️ unit unavailable
+   🟢 Woolworths  $5.22
+   🔴 Coles       $5.50
+
+15. Sunbites Grain Waves Sour Cream & Chives 22g x 8 pack · ⚠️ unit unavailable
+   🟢 Woolworths  $3.80
+   🔴 Coles       $6.00
+
+16. Smith Cheese & Onion Multipack 8 · ⚠️ unit unavailable
+   🟢 Woolworths  $3.80
+   🔴 Coles       $6.00
+
+17. V Watermelon 4*250 · ⚠️ unit unavailable
+   🟢 Woolworths  $11.40
+   🔴 Coles       $7.20
+
+18. V Sugarfree 4*250 · ⚠️ unit unavailable
+   🟢 Woolworths  $11.40
+   🔴 Coles       $7.20
+
+19. David Beckham Instinct · ⚠️ unit unavailable
+   🟢 Woolworths  $4.27
+   🔴 Coles       $9.00
+
+20. Greek Salad Kit 400g · ⚠️ unit unavailable
+   🟢 Woolworths  $9.40
+
+21. Tegel Nashville Tenders 500g · ⚠️ unit unavailable
+   🟢 Woolworths  $13.30
+   🔴 Coles       $14.00
+
+22. Obela Hommus 3Pk 60g · ⚠️ unit unavailable
+   🟢 Woolworths  $3.32
+
+23. Freshen Up Spray · ⚠️ unit unavailable
+   🟢 Woolworths  $5.22
+   🔴 Coles       $6.50
+
+24. Greek Salad Kit 270g · ⚠️ unit unavailable
+   🟢 Woolworths  $5.70
+   🔴 Coles       $8.80
+
+25. Steggles Korean Tenders 600g · ⚠️ unit unavailable
+   🟢 Woolworths  $11.40
+
+📊 TOTALS
+```
+╔════════════════════════════╗
+║ Store          Raw   Final ║
+║ Woolworths $178.45 $168.40 ║
+║ Coles      $135.00 $135.00 ║
+╚════════════════════════════╝
+```
+
+──────────
+🏷️ HOME BRAND EXTRA
+Chocolate Hazelnut Spread · $6.13 → $5.82
+Eggs Free Rage 12Pc · $6.17 → $5.86
+Blueberries · $3.80 → $3.61
+Strawberries · $1.90 → $1.80
+Raspberries Punnet 125g · $3.80 → $3.61
+💰 Home extra: $1.10
+
+🏆 Cheapest: Coles — you save $33.40 (vs Woolworths)
+🏷️ WW discounts: −$10.05 (5% all $8.95 + 🏠 home extra $1.10)
+⚠️ 5 items missing at Coles
+
+[stderr]

@@ -1,0 +1,31 @@
+$ local-deals --ingest FRUT --no-telegram
+--- rc=0 secs=9.4 ---
+[ingest] FRUT: processing 1 file(s)
+[ingest] 🎉💚 𝗙𝗥𝗨𝗜𝗧𝗢𝗣𝗜𝗔 𝗠𝗧 𝗗𝗥𝗨.txt: 24 items (text; valid until Sun 06 Sep)
+   - Cos Lettuce — $0.99/ea
+   - Jap Pumpkin — $0.99/kg
+   - Silverbeet — $0.99/ea
+   - Sweet Corn — $0.88/ea
+   - Artichoke — $0.99/ea
+   - Beetroot Bunch — $0.99/ea
+   - Telegraph Cucumber — $0.99/ea
+   - Lebanese Bread — $0.99/ea
+   - Chokos — $1.99/kg
+   - Celery — $1.50/ea (2 for $2.99)
+   - Carrots 1kg Bag — $1.50/ea (2 for $2.99)
+   - Large Parsley Bunch — $2.99/ea
+   - Washed Potatoes 5kg Bag — $2.99/ea
+   - Brown Onions 5kg Bag — $2.99/ea
+   - Eggplant — $2.99/kg
+   - Cauliflower — $1.99/ea
+   - Tomatoes — $2.99/kg
+   - Yellow Capsicum — $2.99/kg
+   - Lebanese Zucchini — $3.99/kg
+   - Lebanese Cucumber 2kg Bag — $2.99/ea
+   - Packham Pears — $2.99/kg
+   - Pink Lady Apples — $2.99/kg
+   - Strawberries — $1.80/ea
+   - R2E2 Mangoes — $6.99/kg
+[ingest] Local_Deals tab updated (133 rows incl. headers)
+
+[stderr]

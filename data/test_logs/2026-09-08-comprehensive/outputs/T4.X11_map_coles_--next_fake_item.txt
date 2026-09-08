@@ -1,0 +1,17 @@
+$ map coles --next
+--- rc=0 secs=56.5 ---
+--- Item 8/8 ---
+
+  Looking up coles: ZZTEST fake missing product 999g
+  (matched on simplified query: 'ZZTEST fake missing product')
+  Coles results:
+    1) COLES FZ GREEN MIXED VEGETABLES 1KG $6.00 [Everyday]
+    2) CONTINENTAL SENSATIONS SOUP HARVEST PUMPKIN & SOUR CREAM 2S 70G $1.90 [Was $3.80]
+    3) JOHN WEST TUNA ZESTY VINAIGRETTE 95 GRAM $2.20 [Was $2.90]
+    4) HARVEST SNAPS SCOOPERS 90G:SOUR CREAM & CHIV:.:90 GRAM $5.00 [Special]
+    5) REUSABLE MESH PRODUCE BAG $1.50
+
+✳️ Next: --add / --na / --keyword NAME / --skip / (stop)
+
+[stderr]
+[coles_extractor] Search 'ZZTEST fake missing product': found 5 products

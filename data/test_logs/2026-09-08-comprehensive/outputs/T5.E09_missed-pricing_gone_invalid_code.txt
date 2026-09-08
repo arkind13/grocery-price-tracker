@@ -1,0 +1,5 @@
+$ missed-pricing gone --items QQQ
+--- rc=1 secs=4.6 ---
+
+[stderr]
+Error: unknown code 'QQQ' — current codes: ABC, ABD, ABE, ABF

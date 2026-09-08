@@ -1,0 +1,23 @@
+$ search --product coca cola 2l
+--- rc=0 secs=23.0 ---
+🔍 COCA COLA 2L — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Coca-Cola Diet Soft Drink Bottle 2L
+   🟢 Woolworths  $3.80 · 2L
+2. Coca-Cola Classic  Soft Drink Bottle 2L
+   🟢 Woolworths  $3.80 · 2L
+3. Coca-Cola Zero Sugar Soft Drink Bottle 2L
+   🟢 Woolworths  $3.80 · 2L
+4. CCA SOFT DRINK:COKE:.:2 LITRE
+   🔴 Coles       $4.00 · 2L  🏷️ Everyday
+5. CCA 10 PACK:DIET COKE:.:3.75 LITRE
+   🔴 Coles       $23.00 · 3.75L  🏷️ Special
+6. CCA 10 PACK:COKE NO SUGAR:.:3.75 LITRE
+   🔴 Coles       $23.00 · 3.75L  🏷️ Special
+
+🏆 Cheapest: Woolworths at $3.80
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Search 'coca cola 2l': found 3 products

@@ -1,0 +1,14 @@
+$ backfill-sizes --dry-run
+--- rc=0 secs=4.4 ---
+📋 BACKFILL SIZES (COL C)
+━━━━━━━━━━━━━━━━━━━━
+
+Rows examined · 113
+Planned writes · 0
+Skipped (Col C already set) · 113
+Left blank (no parseable size) · 0
+
+
+⚠️ [DRY RUN] no sheet write
+
+[stderr]

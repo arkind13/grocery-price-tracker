@@ -1,0 +1,5 @@
+$ optimize --items milk, bread
+--- rc=2 secs=3.8 ---
+
+[stderr]
+Smart Basket needs at least 5 items (got 2) — for smaller lists run: compare --items "..."

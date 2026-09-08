@@ -1,0 +1,5 @@
+$ map unmatched --next
+--- rc=0 secs=0.4 ---
+All 2 items in unmatched already resolved.
+
+[stderr]

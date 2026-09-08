@@ -1,0 +1,23 @@
+$ search --product 12345
+--- rc=0 secs=11.1 ---
+🔍 12345 — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Strawberries Punnet 250g
+   🟢 Woolworths  $1.90 · 250g
+2. Cavendish Bananas each
+   🟢 Woolworths  $0.79 · each
+3. Gourmet Tomato each
+   🟢 Woolworths  $0.51 · each
+4. MUSASHI HIGH PROTEIN P45 BAR LEMON CHEESECAKE 90G
+   🔴 Coles       $6.90 · 90g
+5. MUSASHI HIGH PROTEIN P45 BAR COOKIES AND CREAM 90 GRAM
+   🔴 Coles       $6.90 · 90g
+6. MUSASHI HIGH PROTEIN P45 BAR DARK CHOC SALTED CARAMEL 90 GR…
+   🔴 Coles       $6.90 · 90g
+
+🏆 Cheapest: Woolworths at $0.51
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Search '12345': found 3 products

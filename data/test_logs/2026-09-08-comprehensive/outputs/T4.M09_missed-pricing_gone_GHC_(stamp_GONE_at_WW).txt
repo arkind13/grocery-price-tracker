@@ -1,0 +1,5 @@
+$ missed-pricing gone --items GHC
+--- rc=1 secs=3.7 ---
+
+[stderr]
+Error: unknown code 'GHC' — current codes: ABC, ABD, ABE, ABF, ABG

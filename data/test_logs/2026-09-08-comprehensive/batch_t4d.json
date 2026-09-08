@@ -1,0 +1,7 @@
+[
+ {"id":"T4.X01","label":"map coles --next on real+fake entries","args":["map","coles","--next"]},
+ {"id":"T4.X02","label":"map coles --skip (advance past real item)","args":["map","coles","--skip"]},
+ {"id":"T4.X03","label":"map coles --next (fake item view)","args":["map","coles","--next"]},
+ {"id":"T4.X04","label":"map coles --na on fake item (error path)","args":["map","coles","--na"]},
+ {"id":"T4.X05","label":"map coles --next after na","args":["map","coles","--next"]}
+]

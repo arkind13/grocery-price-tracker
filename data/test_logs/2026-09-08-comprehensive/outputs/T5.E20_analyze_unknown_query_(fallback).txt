@@ -1,0 +1,9 @@
+$ analyze --query wombats
+--- rc=2 secs=0.3 ---
+
+[stderr]
+usage: grocery_price_cli.py analyze [-h]
+                                    --query {savings,home-brands,only-at,basket-savings,categories,specials,rewards}
+                                    [--store {woolworths,coles}]
+                                    [--limit LIMIT] [--category CATEGORY]
+grocery_price_cli.py analyze: error: argument --query: invalid choice: 'wombats' (choose from savings, home-brands, only-at, basket-savings, categories, specials, rewards)

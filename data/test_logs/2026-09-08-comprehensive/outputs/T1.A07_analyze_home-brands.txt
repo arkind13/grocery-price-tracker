@@ -1,0 +1,25 @@
+$ analyze --query home-brands
+--- rc=0 secs=4.0 ---
+📊 WOOLWORTHS HOME BRANDS
+━━━━━━━━━━━━━━━━━━━━
+Total · 39
+
+──────────
+📊 BY CATEGORY
+```
+Category      Count
+Uncategorised 12   
+Vegetables    8    
+Dairy         5    
+Kitchen       4    
+Bakery        2    
+Snacks        2    
+Laundry       1    
+Ice Cream     1    
+Chips         1    
+Health        1    
+Pantry        1    
+Chocolate     1    
+```
+
+[stderr]

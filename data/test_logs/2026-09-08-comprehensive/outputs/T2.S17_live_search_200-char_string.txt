@@ -1,0 +1,11 @@
+$ search --product aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa supermarket product
+--- rc=0 secs=49.1 ---
+🔍 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA SUPERMARKET PRODUCT — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+⚠️ Coles not checked (unavailable)
+❌ No results found
+
+[stderr]
+[woolworths_extractor] noauth search HTTP 400 — retrying once
+[woolworths_extractor] noauth search unavailable (HTTP 400)

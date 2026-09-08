@@ -1,0 +1,15 @@
+$ backfill-home-brands --dry-run
+--- rc=0 secs=4.2 ---
+📋 BACKFILL HOME BRANDS (COL G)
+━━━━━━━━━━━━━━━━━━━━
+
+Rows examined · 113
+Planned writes · 0
+Skipped (Col G already 'Home') · 39
+Skipped (non-matching Col G present) · 57
+Skipped (blank product name) · 0
+
+
+⚠️ [DRY RUN] no sheet write
+
+[stderr]

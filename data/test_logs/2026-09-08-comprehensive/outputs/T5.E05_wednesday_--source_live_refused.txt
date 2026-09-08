@@ -1,0 +1,6 @@
+$ wednesday --source live --dry-run
+--- rc=1 secs=0.4 ---
+
+[stderr]
+Error: 'wednesday --source live' is RETIRED (2026-09-02). The store-bot war was lost — see lostbattle.md in the project root for the full record.
+Use the docx flow instead: run 'wednesday', add the queued items to the store websites during the pause, paste the updated lists into Woolworths.docx / Coles.docx, then type done.

@@ -1,0 +1,5 @@
+$ todo done --items DAR,ZZZ
+--- rc=1 secs=0.4 ---
+
+[stderr]
+Error: unknown code 'ZZZ' — current codes: ESQ, BWL, NJL, DSF, AVE, DAR

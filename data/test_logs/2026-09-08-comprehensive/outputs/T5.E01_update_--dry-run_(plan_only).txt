@@ -1,0 +1,5 @@
+$ update --product Full Cream Milk 3L --store coles --price 9.99 --dry-run
+--- rc=0 secs=4.5 ---
+[DRY RUN] Updated coles price for 'Full Cream Milk 3L' (row 12): 5.15 → 9.99 (range )
+
+[stderr]

@@ -1,0 +1,170 @@
+[
+ {
+  "id": "T1.A01",
+  "label": "specials all",
+  "args": [
+   "specials"
+  ]
+ },
+ {
+  "id": "T1.A02",
+  "label": "specials woolworths",
+  "args": [
+   "specials",
+   "--store",
+   "woolworths"
+  ]
+ },
+ {
+  "id": "T1.A03",
+  "label": "specials coles",
+  "args": [
+   "specials",
+   "--store",
+   "coles"
+  ]
+ },
+ {
+  "id": "T1.A04",
+  "label": "rewards",
+  "args": [
+   "rewards"
+  ]
+ },
+ {
+  "id": "T1.A05",
+  "label": "subcategories",
+  "args": [
+   "subcategories"
+  ]
+ },
+ {
+  "id": "T1.A06",
+  "label": "analyze savings",
+  "args": [
+   "analyze",
+   "--query",
+   "savings"
+  ]
+ },
+ {
+  "id": "T1.A07",
+  "label": "analyze home-brands",
+  "args": [
+   "analyze",
+   "--query",
+   "home-brands"
+  ]
+ },
+ {
+  "id": "T1.A08",
+  "label": "analyze categories",
+  "args": [
+   "analyze",
+   "--query",
+   "categories"
+  ]
+ },
+ {
+  "id": "T1.A09",
+  "label": "recipe French toast",
+  "args": [
+   "recipe",
+   "--name",
+   "French toast",
+   "--ingredients",
+   "bread, eggs, milk, sugar"
+  ]
+ },
+ {
+  "id": "T1.A10",
+  "label": "optimize sheet-priced 6 items",
+  "args": [
+   "optimize",
+   "--items",
+   "Jumpy's Chicken Potato Chips 5 pack, Cheese Puff Pastry, Jumpy's Chicken Multipack, Hillview Cheese Slice, Wonder White Bread, Raw Sugar 3Kg"
+  ]
+ },
+ {
+  "id": "T1.A11",
+  "label": "optimize refuse <5 items",
+  "args": [
+   "optimize",
+   "--items",
+   "milk, bread"
+  ]
+ },
+ {
+  "id": "T1.A12",
+  "label": "optimize --min-saving 50 (force split view)",
+  "args": [
+   "optimize",
+   "--items",
+   "Kettle Chilli 165G, Sunbites Sour Cream Mulipack, Mr Kipling Choc 6 Pk, Chocolate Hazelnut Spread, Eggs Free Rage 12Pc",
+   "--min-saving",
+   "50"
+  ]
+ },
+ {
+  "id": "T1.A13",
+  "label": "optimize --confirm none (no writes)",
+  "args": [
+   "optimize",
+   "--items",
+   "Radiant Advanced Ultra Powder+, Strawberries, Raspberries Punnet 125g, Extra Spearmint Chewing Multipack, Sunbites Grain Waves Sour Cream & Chives 22g x 8 pack",
+   "--confirm",
+   "none"
+  ]
+ },
+ {
+  "id": "T1.A14",
+  "label": "lists",
+  "args": [
+   "lists"
+  ]
+ },
+ {
+  "id": "T1.A15",
+  "label": "lists --full",
+  "args": [
+   "lists",
+   "--full"
+  ]
+ },
+ {
+  "id": "T1.A16",
+  "label": "no-price",
+  "args": [
+   "no-price"
+  ]
+ },
+ {
+  "id": "T1.A17",
+  "label": "missed-pricing show",
+  "args": [
+   "missed-pricing"
+  ]
+ },
+ {
+  "id": "T1.A18",
+  "label": "unmapped",
+  "args": [
+   "unmapped"
+  ]
+ },
+ {
+  "id": "T1.A19",
+  "label": "todo show",
+  "args": [
+   "todo",
+   "show"
+  ]
+ },
+ {
+  "id": "T1.A20",
+  "label": "searched-items retired notice",
+  "args": [
+   "searched-items"
+  ]
+ }
+]

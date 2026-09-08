@@ -1,0 +1,138 @@
+$ compare --items Tasty Cheese Crackers, Garbage Bags, Wholemeal Sandwich Bread, Baking Paper 15m, White Soft Sandwich Bread, Medium Sandwich bags 30Pk, Softner, Sandwich Icecream 4Pk, Aluminium Foil 30m, Banana Kids 5, Full Cream Milk 3L, Dare No Sugar Dbl Expresso 2L, Organic Free Range Eggs 12 Pack 600g, Salted Cashews, Battery AAA, Battery AA, Tomato, Bounty Chocolate, Capsicum Green each, Sunbites Sour 60g, Corn Chips, Evamay Pads With Wings Super 14 pack, Nutella Breadsticks, Mount Franklin Water 600Ml, Hot Hands Hand Warmers Pair each --mode sheet
+--- rc=0 secs=3.8 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. Tasty Cheese Crackers  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $1.44
+   🔴 Coles       $2.00
+
+2. Garbage Bags  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $2.03
+   🔴 Coles       $2.25
+
+3. Wholemeal Sandwich Bread  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $2.53
+   🔴 Coles       $2.80
+
+4. Baking Paper 15m  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $2.43
+   🔴 Coles       $1.80
+
+5. White Soft Sandwich Bread  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $2.53
+   🔴 Coles       $2.80
+
+6. Medium Sandwich bags 30Pk  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $2.94
+   🔴 Coles       $2.80
+
+7. Softner  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $2.71
+   🔴 Coles       $3.00
+
+8. Sandwich Icecream 4Pk  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $3.43
+   🔴 Coles       $3.80
+
+9. Aluminium Foil 30m  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $4.06
+
+10. Banana Kids 5  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $2.71
+   🔴 Coles       $4.90
+
+11. Full Cream Milk 3L  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $4.43
+   🔴 Coles       $5.15
+
+12. Dare No Sugar Dbl Expresso 2L · ⚠️ unit unavailable
+   🟢 Woolworths  $7.31
+   🔴 Coles       $7.70
+
+13. Organic Free Range Eggs 12 Pack 600g  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $9.57
+   🔴 Coles       $10.80
+
+14. Salted Cashews  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $12.63
+   🔴 Coles       $16.00
+
+15. Battery AAA · ⚠️ unit unavailable
+   🟢 Woolworths  $21.85
+   🔴 Coles       $23.00
+
+16. Battery AA · ⚠️ unit unavailable
+   🟢 Woolworths  $21.85
+   🔴 Coles       $19.20
+
+17. Tomato · ⚠️ unit unavailable
+   🟢 Woolworths  $0.51
+   🔴 Coles       $0.64
+
+18. Bounty Chocolate · ⚠️ unit unavailable
+   🟢 Woolworths  $1.42
+   🔴 Coles       $3.00
+
+19. Capsicum Green each  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $1.34
+   🔴 Coles       $1.30
+
+20. Sunbites Sour 60g · ⚠️ unit unavailable
+   🔴 Coles       $2.70
+
+21. Corn Chips  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $1.99
+   🔴 Coles       $2.20
+
+22. Evamay Pads With Wings Super 14 pack  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $1.99
+   🔴 Coles       $2.20
+
+23. Nutella Breadsticks · ⚠️ unit unavailable
+   🟢 Woolworths  $2.66
+   🔴 Coles       $2.00
+
+24. Mount Franklin Water 600Ml · ⚠️ unit unavailable
+   🟢 Woolworths  $2.42
+   🔴 Coles       $2.55
+
+25. Hot Hands Hand Warmers Pair each · ⚠️ unit unavailable
+   🟢 Woolworths  $2.38
+   🔴 Coles       $2.50
+
+📊 TOTALS
+```
+╔════════════════════════════╗
+║ Store          Raw   Final ║
+║ Woolworths $128.67 $119.16 ║
+║ Coles      $127.09 $127.09 ║
+╚════════════════════════════╝
+```
+
+──────────
+🏷️ HOME BRAND EXTRA
+Tasty Cheese Crackers · $1.52 → $1.44
+Garbage Bags · $2.14 → $2.03
+Wholemeal Sandwich Bread · $2.66 → $2.53
+Baking Paper 15m · $2.56 → $2.43
+White Soft Sandwich Bread · $2.66 → $2.53
+Medium Sandwich bags 30Pk · $3.09 → $2.94
+Softner · $2.85 → $2.71
+Sandwich Icecream 4Pk · $3.61 → $3.43
+Aluminium Foil 30m · $4.27 → $4.06
+Banana Kids 5 · $2.85 → $2.71
+Full Cream Milk 3L · $4.66 → $4.43
+Organic Free Range Eggs 12 Pack 600g · $10.07 → $9.57
+Salted Cashews · $13.30 → $12.63
+Capsicum Green each · $1.41 → $1.34
+Corn Chips · $2.09 → $1.99
+Evamay Pads With Wings Super 14 pack · $2.09 → $1.99
+💰 Home extra: $3.07
+
+🏆 Cheapest: Woolworths — you save $7.93 (vs Coles)
+🏷️ WW discounts: −$9.51 (5% all $6.44 + 🏠 home extra $3.07)
+⚠️ 1 item missing at Woolworths
+⚠️ 1 item missing at Coles
+
+[stderr]

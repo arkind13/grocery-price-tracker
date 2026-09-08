@@ -1,0 +1,14 @@
+$ map coles --skip
+--- rc=0 secs=26.7 ---
+✅ Skipped: Royal Gala Apple 1 Kg
+
+--- Item 4/8 ---
+
+  Looking up coles: the Juice Brothers Tropical
+  Coles results:
+    1) THE JUICE BROTHERS TROPICAL JUICE 1L $5.00
+
+✳️ Next: --add / --na / --keyword NAME / --skip / (stop)
+
+[stderr]
+[coles_extractor] Search 'the Juice Brothers Tropical': found 1 products

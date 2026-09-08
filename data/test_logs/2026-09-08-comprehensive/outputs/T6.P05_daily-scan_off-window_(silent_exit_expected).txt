@@ -1,0 +1,4 @@
+$ local-deals --daily-scan
+--- rc=0 secs=1.2 ---
+
+[stderr]

@@ -1,0 +1,13 @@
+$ todo done --items DAR
+--- rc=0 secs=4.4 ---
+✅ Removed: ZZTEST Woolworths Keyword 250g (Woolworths)
+✅   Woolworths keyword saved (row 115) — matches + price-syncs from next Wednesday.
+✅ Done: 1 item(s) removed, 1 keyword(s) saved.
+5 still pending:
+1. Acme Pasta Penne 500g · 500g (Coles) [ESQ]
+2. ZZTEST Coles Keyword 250g · ⚠️ unit unavailable (Coles) [BWL]
+3. Acme Pasta Penne 500g · 500g (Woolworths) [NJL]
+4. WW Yogurt B · 1kg (Woolworths) [DSF]
+5. WW Yogurt A · 1kg (Woolworths) [AVE]
+
+[stderr]

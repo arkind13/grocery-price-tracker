@@ -1,0 +1,10 @@
+[
+ {"id":"T4.U01","label":"map status","args":["map","status"]},
+ {"id":"T4.U02","label":"map unmatched --next (item 1 view)","args":["map","unmatched","--next"]},
+ {"id":"T4.U03","label":"map unmatched --skip (advance)","args":["map","unmatched","--skip"]},
+ {"id":"T4.U04","label":"map unmatched --next (item 2 view)","args":["map","unmatched","--next"]},
+ {"id":"T4.U05","label":"map unmatched --add Byron Bay (new row + todo)","args":["map","unmatched","--add"]},
+ {"id":"T4.U06","label":"map status after add","args":["map","status"]},
+ {"id":"T4.U07","label":"todo show (new entry expected)","args":["todo","show"]},
+ {"id":"T4.U08","label":"map unmatched --next (remaining)","args":["map","unmatched","--next"]}
+]

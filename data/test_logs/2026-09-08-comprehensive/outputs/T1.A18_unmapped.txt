@@ -1,0 +1,5 @@
+$ unmapped
+--- rc=0 secs=0.4 ---
+No items waiting for a store keyword.
+
+[stderr]

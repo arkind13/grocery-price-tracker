@@ -1,0 +1,13 @@
+$ map unmatched --add
+--- rc=0 secs=8.8 ---
+--- Item 2/2 ---
+✅ Added 'Yallamundi Farm 12 Organic Jumbo Free Range Eggs 800g' to sheet (row 115, woolworths $15.70)
+✅ Alias 'Yallamundi Farm Organic Free Range Eggs 12 Pack | 700g' saved to Col P.
+Queued on the TO-DO list: 'Yallamundi Farm 12 Organic Jumbo Free Range Eggs 800g' · 800g (Woolworths) [SBM]
+💬 Reply 'todo gone SBM' if this isn't the right product.
+💬 'todo show' any time to review the queue.
+
+All 2 items in 'unmatched' resolved!
+
+[stderr]
+[coles_extractor] Scrape.do breaker open — skipping Coles calls until cooldown expires

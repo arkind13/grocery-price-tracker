@@ -1,0 +1,15 @@
+$ local-deals --post-log FRU0809260930
+--- rc=0 secs=1.2 ---
+[post-log] FRU0809260930: 81 post(s) on record
+   board.txt | ingested 2026-09-08T07:39:35+10:00 | valid until 2026-09-12 | 1 items
+   new_post.txt | ingested 2026-09-08T07:39:35+10:00 | valid until 2026-09-19 | 1 items
+   old_post.txt | ingested 2026-09-08T07:39:35+10:00 | valid until 2026-09-12 | 1 items
+   board.txt | ingested 2026-09-08T07:55:31+10:00 | valid until 2026-09-12 | 1 items
+   board.txt | ingested 2026-09-08T07:55:31+10:00 | valid until 2026-09-12 | 1 items
+   new_post.txt | ingested 2026-09-08T07:55:31+10:00 | valid until 2026-09-19 | 1 items
+   old_post.txt | ingested 2026-09-08T07:55:31+10:00 | valid until 2026-09-12 | 1 items
+   🎉💚 𝗙𝗥𝗨𝗜𝗧𝗢𝗣𝗜𝗔 𝗠𝗧 𝗗𝗥𝗨.txt | ingested 2026-09-08T08:36:44+10:00 | valid until 2026-09-06 | 24 items
+   post1.txt | ingested 2026-09-08T08:38:16+10:00 | valid until 2026-09-20 | 4 items
+   post2.txt | ingested 2026-09-08T08:39:11+10:00 | valid until 2026-09-22 | 1 items
+
+[stderr]

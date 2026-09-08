@@ -1,0 +1,21 @@
+$ search --product Lindt Hot Choc Flakes Milk Tin 210g
+--- rc=0 secs=46.6 ---
+🔍 LINDT HOT CHOC FLAKES MILK TIN 210G — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Lindt Lindor Milk Cornet 160g
+   🟢 Woolworths  $17.10 · 160g
+2. Dairy Farmers Thick & Creamy Yoghurt Choc Flakes 140g
+   🟢 Woolworths  $3.13 · 140g
+3. Dairy Farmers Thick & Creamy Yoghurt Choc Flakes 550g
+   🟢 Woolworths  $4.99 · 550g  🏷️ Was $6.60
+4. LINDT HOT CHOC FLAKE MILK TIN 210G
+   🔴 Coles       $14.00 · 210g  🏷️ Everyday
+5. LINDT HOT CHOC FLAKES DARK TIN 210GM
+   🔴 Coles       $14.00 · 210g  🏷️ Everyday
+
+🏆 Cheapest: Woolworths at $3.13
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Search 'Lindt Hot Choc Flakes Milk Tin 210g': found 2 products

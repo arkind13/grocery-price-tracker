@@ -1,0 +1,12 @@
+[
+ {"id":"T1.A11","label":"optimize refuse <5 items","args":["optimize","--items","milk, bread"]},
+ {"id":"T1.A12","label":"optimize --min-saving 50 (force split view)","args":["optimize","--items","Banana Kids 5, Bounty Chocolate, Wonder White Bread, Hillview Cheese Slice, Jumpy's Chicken Multipack","--min-saving","50"]},
+ {"id":"T1.A13","label":"optimize --confirm none (no writes)","args":["optimize","--items","Greek Salad Kit 270g, Smith Cheese & Onion Multipack 8, V Watermelon 4*250, Red Bull Sugar Free, Jumpy's Chicken Potato Chips 5 pack","--confirm","none"]},
+ {"id":"T1.A14","label":"lists","args":["lists"]},
+ {"id":"T1.A15","label":"lists --full","args":["lists","--full"]},
+ {"id":"T1.A16","label":"no-price","args":["no-price"]},
+ {"id":"T1.A17","label":"missed-pricing show","args":["missed-pricing"]},
+ {"id":"T1.A18","label":"unmapped","args":["unmapped"]},
+ {"id":"T1.A19","label":"todo show","args":["todo","show"]},
+ {"id":"T1.A20","label":"searched-items retired notice","args":["searched-items"]}
+]

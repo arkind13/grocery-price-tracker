@@ -1,0 +1,9 @@
+$ map bananas --next
+--- rc=2 secs=0.3 ---
+
+[stderr]
+usage: grocery_price_cli.py map [-h] [--next] [--pick N] [--add] [--skip]
+                                [--na] [--forget] [--keyword STORE_NAME]
+                                [--unit UNIT] [--subcategory TEXT]
+                                {unmatched,wool,coles,status}
+grocery_price_cli.py map: error: argument list_name: invalid choice: 'bananas' (choose from unmatched, wool, coles, status)

@@ -1,0 +1,15 @@
+$ map coles --next
+--- rc=0 secs=22.5 ---
+--- Item 1/9 ---
+
+  Looking up coles: Up&Go Chocolate Protein 500Ml
+  Coles results:
+    1) SANITARIUM UP & GO PROTEIN ENERGIZE CHOC 500ML $4.50 [Bonuscollectable]
+    2) SANITARIUM UP&GO PROTEIN ENERGIZE CHOCOLATE 12X250ML $19.50 [Everyday]
+    3) SANITARIUM UP&GO ENERGIZE CHOC 6X250ML $14.00 [Bonuscollectable]
+    4) SANITARIUM UP&GO ENERGIZE 3 X 250ML:CHOC ICE:.:750 ML $7.60 [Bonuscollectable]
+
+✳️ Next: --add / --na / --keyword NAME / --skip / (stop)
+
+[stderr]
+[coles_extractor] Search 'Up&Go Chocolate Protein 500Ml': found 4 products

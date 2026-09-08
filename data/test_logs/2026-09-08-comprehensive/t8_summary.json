@@ -1,0 +1,21 @@
+{
+ "items_total": 500,
+ "real_items": 113,
+ "synth_items": 387,
+ "runs": "v1 crashed (write 429, revert incomplete, restored); v2 adds+updates+phase1 complete (read 429 crash in subsets); v3 subsets+rule battery complete",
+ "ops_logged": 1399,
+ "distinct_items_touched": 506,
+ "fail_ops": 23,
+ "fail_breakdown": {
+  "verify_price_write": 2,
+  "add_row": 3,
+  "variant_add": 18
+ },
+ "notes": [
+  "2 verify_price_write FAILs are harness string-compare artifacts (10.0 vs 10) - values equal",
+  "3 add_row FAILs = 'already tracked' refusals (D16); sheet ended with 3 MORE rows than successful adds (phantom rows, D16b)",
+  "18 variant FAILs: 17 exact-guard refusals of reordered/lowercase names (D17 - refused instead of merge), 1 anomalous wrote=True into the since-deleted block",
+  "v3 subset bulk verify: alias 25/25, keyword 24/24, NA 30/33 (R10)",
+  "v1 additionally: 226 ops all PASS before its revert crash"
+ ]
+}

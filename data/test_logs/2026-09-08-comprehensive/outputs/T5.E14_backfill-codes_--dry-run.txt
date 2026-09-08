@@ -1,0 +1,13 @@
+$ backfill-codes --dry-run
+--- rc=0 secs=4.9 ---
+🏷️ BACKFILL ITEM-CODES (COL R)
+━━━━━━━━━━━━━━━━━━━━
+
+Planned · 0
+Written · 0
+Skipped (code already set) · 113
+Failed · 0
+
+⚠️ [DRY RUN] no sheet write
+
+[stderr]

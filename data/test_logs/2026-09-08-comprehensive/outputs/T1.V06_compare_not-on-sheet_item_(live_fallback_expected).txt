@@ -1,0 +1,22 @@
+$ compare --items Duracell AAA batteries 8 pack
+--- rc=0 secs=4.2 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. Duracell AAA batteries 8 pack · 10 Pk
+   🟢 Woolworths  $21.85 — Battery AAA 10 Pk (sheet)
+   🔴 Coles       $23.00 — Battery AAA 10 Pk (sheet)
+
+📊 TOTALS
+```
+╔══════════════════════════╗
+║ Store         Raw  Final ║
+║ Woolworths $23.00 $21.85 ║
+║ Coles      $23.00 $23.00 ║
+╚══════════════════════════╝
+```
+
+🏆 Cheapest: Woolworths — you save $1.15 (vs Coles)
+🏷️ WW discounts: −$1.15 (5% all $1.15)
+
+[stderr]

@@ -1,0 +1,5 @@
+$ prefer --code QQQ
+--- rc=1 secs=4.4 ---
+
+[stderr]
+Error: no row holds item-code QQQ

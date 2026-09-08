@@ -1,0 +1,41 @@
+$ search --product pasta sauce --expand
+--- rc=0 secs=39.0 ---
+🔍 PASTA SAUCE — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Mutti Sugo Semplice Pasta Sauce Parmesan 400g
+   🟢 Woolworths  $4.56 · 400g
+2. Woolworths Essentials Chunky Pasta Sauce 700g
+   🟢 Woolworths  $2.48 · 700g
+3. Macro Organic Pasta Sauce Chunky Bolognese 500g
+   🟢 Woolworths  $2.26 · 500g
+4. Dolmio Classic Tomato With Basil Pasta Sauce 500g
+   🟢 Woolworths  $2.38 · 500g
+5. Woolworths Essentials Traditional Pasta Sauce 700g
+   🟢 Woolworths  $2.07 · 700g
+6. Macro Organic Pasta Sauce Chunky Tomato Garlic Basil 500g
+   🟢 Woolworths  $2.26 · 500g
+7. Leggo's Bolognese Chunky Tomato Garlic & Herbs Pasta Sauce …
+   🟢 Woolworths  $3.13 · 500g
+8. Raguletto Red Wine Bolognese Pasta Sauce With Tomato & Garl…
+   🟢 Woolworths  $2.56 · 500g
+9. LEGGOS BOLOGNESE PASTA SAUCE JAR 550G
+   🔴 Coles       $4.60 · 550g
+10. DOLMIO EXTRA PASTA SAUCE BOLOGNESE 500G
+   🔴 Coles       $2.75 · 500g  🏷️ Was $4.60
+11. LEGGOS BOLOGNESE RED WINE PASTA SAUCE JAR 550G
+   🔴 Coles       $4.60 · 550g
+12. LEGGOS TOMATO ROASTED GARLIC PASTA SAUCE JAR 550G
+   🔴 Coles       $4.60 · 550g
+13. LATINA FRESH CREAMY SUN-DRIED TOMATO PASTA SAUCE 425G
+   🔴 Coles       $5.20 · 425g  🏷️ Was $7.50
+14. VAL VERDE COOKING SAUCE PASSATA
+   🔴 Coles       $2.80 · 700mL  🏷️ Was $3.50
+15. LEGGOS PASTA BAKE:SUNDRIED TOMATO GARL:.:500 GRAM
+   🔴 Coles       $4.30 · 500g  🏷️ Everyday
+
+🏆 Cheapest: Woolworths at $2.07
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Search 'pasta sauce': found 7 products

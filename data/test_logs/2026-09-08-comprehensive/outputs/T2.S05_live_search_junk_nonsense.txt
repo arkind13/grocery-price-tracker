@@ -1,0 +1,15 @@
+$ search --product zzxxyy qwerty nonsense product 42
+--- rc=0 secs=16.9 ---
+🔍 ZZXXYY QWERTY NONSENSE PRODUCT 42 — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Carefree Barely There Unscented Liners 42 pack
+   🟢 Woolworths  $5.22 · 42 pack
+2. QUEEN COLOURFUL LETTERS AND NUMBERS 50G
+   🔴 Coles       $5.00 · 50g
+
+🏆 Cheapest: Coles at $5.00
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Search 'zzxxyy qwerty nonsense product 42': found 1 products

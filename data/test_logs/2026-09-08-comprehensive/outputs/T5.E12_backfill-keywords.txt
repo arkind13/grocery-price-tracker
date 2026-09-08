@@ -1,0 +1,17 @@
+$ backfill-keywords --dry-run
+--- rc=0 secs=4.2 ---
+📋 BACKFILL KEYWORDS (COL P)
+━━━━━━━━━━━━━━━━━━━━
+
+Rows examined · 113
+Planned writes · 3
+Skipped (Col P already set) · 110
+Skipped (blank name/alias) · 0
+
+112. Mozzarella Cheese Sticks 235g 10 Pack · — → mozzarella cheese sticks
+113. Olive Oil Spread 500g · — → olive oil spread
+114. Lindt Hot Choc Flakes Tin 210g · — → lindt hot choc flakes
+
+⚠️ [DRY RUN] no sheet write
+
+[stderr]

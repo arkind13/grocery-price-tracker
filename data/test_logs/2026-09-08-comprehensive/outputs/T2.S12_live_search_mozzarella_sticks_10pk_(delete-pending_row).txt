@@ -1,0 +1,19 @@
+$ search --product Mozzarella Cheese Sticks 235g 10 Pack
+--- rc=0 secs=33.2 ---
+🔍 MOZZARELLA CHEESE STICKS 235G 10 PACK — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Keith's Foods Mozzarella Cheese Sticks 235g
+   🟢 Woolworths  $7.12 · 235g
+2. La Casa Mozzarella String Cheese Sticks 160g
+   🟢 Woolworths  $6.65 · 160g
+3. Woolworths Mozzarella Sticks 300g
+   🟢 Woolworths  $5.23 · 300g
+4. LA CASA DEL FORMAGGIO MOZZARELLA STRING CHEESE STICKS 8PK 1…
+   🔴 Coles       $6.00 · 160g  🏷️ Was $7.00
+
+🏆 Cheapest: Woolworths at $5.23
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Search 'Mozzarella Cheese Sticks 235g 10 Pack': found 1 products

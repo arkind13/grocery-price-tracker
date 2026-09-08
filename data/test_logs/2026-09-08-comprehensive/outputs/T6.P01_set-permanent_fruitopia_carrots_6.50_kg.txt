@@ -1,0 +1,5 @@
+$ local-deals --set-permanent fruitopia carrots 6.50/kg
+--- rc=0 secs=4.9 ---
+Fruitopia Mt Druitt perm: carrots /kg = 6.5 [new row]
+
+[stderr]

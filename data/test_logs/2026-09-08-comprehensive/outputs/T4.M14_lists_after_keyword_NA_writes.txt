@@ -1,0 +1,16 @@
+$ lists
+--- rc=0 secs=3.5 ---
+📊 THE 7 LISTS — LIVE COUNTS
+━━━━━━━━━━━━━━━━━━━━
+
+1. Unmatched — 2
+2. Woolworths missing — 0
+3. Coles missing — 23 (1 also in missed pricing)
+4. To-do (website adds) — 4
+5. Forgotten/ignored — 34
+6. Missed pricing — 6 (4 fixable · 2 delete-pending)
+7. Sub-category reviews — 1
+
+⚠️ 🗂️ Sub-category reviews — 1 row(s) need your call ('needs review' marker); names in 'lists --full' or the weekly post.
+
+[stderr]

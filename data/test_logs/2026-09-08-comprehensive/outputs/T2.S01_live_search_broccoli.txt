@@ -1,0 +1,23 @@
+$ search --product broccoli
+--- rc=0 secs=9.5 ---
+🔍 BROCCOLI — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Fresh Broccoli each
+   🟢 Woolworths  $1.85 · each
+2. Woolworths Frozen Australian Broccoli Florets 500g
+   🟢 Woolworths  $3.61 · 500g
+3. Woolworths Broccolini Bunch each
+   🟢 Woolworths  $2.07 · each
+4. BROCCOLI:BABY:.:1BUNCH
+   🔴 Coles       $2.00 · 1 Bunch  🏷️ Special
+5. BROCCOLI:MEDIUM:.:PER KG
+   🔴 Coles       $1.70 · approx. 340g  🏷️ Special
+6. CAULIFLOWER:MEDIUM:.:1 EACH
+   🔴 Coles       $2.90 · 1 Each  🏷️ Special
+
+🏆 Cheapest: Coles at $1.70
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Search 'broccoli': found 3 products

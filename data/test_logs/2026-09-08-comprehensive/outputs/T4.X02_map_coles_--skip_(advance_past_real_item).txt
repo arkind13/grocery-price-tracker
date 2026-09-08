@@ -1,0 +1,14 @@
+$ map coles --skip
+--- rc=0 secs=41.0 ---
+✅ Skipped: Up&Go Chocolate Protein 500Ml
+
+--- Item 2/9 ---
+
+  Looking up coles: Jumpy's Chicken Multipack
+  Coles results:
+    1) JUMPYS MULTIPACKS 5 PACK:CHICKEN:.:90 GRAM $4.00 [Special]
+
+✳️ Next: --add / --na / --keyword NAME / --skip / (stop)
+
+[stderr]
+[coles_extractor] Search 'Jumpy's Chicken Multipack': found 1 products

@@ -1,0 +1,114 @@
+[
+ {
+  "id": "T1.V01",
+  "label": "compare single item (sheet)",
+  "args": [
+   "compare",
+   "--items",
+   "Tasty Cheese Crackers"
+  ]
+ },
+ {
+  "id": "T1.V02",
+  "label": "compare multi 6 items auto mode",
+  "args": [
+   "compare",
+   "--items",
+   "Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g, Red Bull Sugar Free, Woolworths Fresh Herb Coriander Bunch each, Loacker Chocolate, Mount Franklin Sparkling Lime 450Ml, Eclipse Intense Mint"
+  ]
+ },
+ {
+  "id": "T1.V03",
+  "label": "compare --no-team-discount (raw prices)",
+  "args": [
+   "compare",
+   "--items",
+   "Tasty Cheese Crackers",
+   "--no-team-discount"
+  ]
+ },
+ {
+  "id": "T1.V04",
+  "label": "compare --extra-discount 10",
+  "args": [
+   "compare",
+   "--items",
+   "Tasty Cheese Crackers",
+   "--extra-discount",
+   "10"
+  ]
+ },
+ {
+  "id": "T1.V05",
+  "label": "compare --team-discount explicit",
+  "args": [
+   "compare",
+   "--items",
+   "Tasty Cheese Crackers",
+   "--team-discount"
+  ]
+ },
+ {
+  "id": "T1.V06",
+  "label": "compare not-on-sheet item (live fallback expected)",
+  "args": [
+   "compare",
+   "--items",
+   "Duracell AAA batteries 8 pack"
+  ]
+ },
+ {
+  "id": "T1.V07",
+  "label": "compare junk/nonsense item",
+  "args": [
+   "compare",
+   "--items",
+   "xyzzy plugh quantum banana 999"
+  ]
+ },
+ {
+  "id": "T1.V08",
+  "label": "compare empty items",
+  "args": [
+   "compare",
+   "--items",
+   ""
+  ]
+ },
+ {
+  "id": "T1.V09",
+  "label": "compare multi-buy priced sheet item",
+  "args": [
+   "compare",
+   "--items",
+   "Banana Kids 5, Bounty Chocolate, Sunbites Sour 60g"
+  ]
+ },
+ {
+  "id": "T1.V10",
+  "label": "compare halal meat query",
+  "args": [
+   "compare",
+   "--items",
+   "chicken breast"
+  ]
+ },
+ {
+  "id": "T1.V11",
+  "label": "compare misspelled known item",
+  "args": [
+   "compare",
+   "--items",
+   "milkk"
+  ]
+ },
+ {
+  "id": "T1.V12",
+  "label": "compare items with quotes/commas stress",
+  "args": [
+   "compare",
+   "--items",
+   "O'Brien \"premium\" milk, egg"
+  ]
+ }
+]

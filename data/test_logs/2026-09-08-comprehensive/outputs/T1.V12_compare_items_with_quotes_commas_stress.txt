@@ -1,0 +1,32 @@
+$ compare --items O'Brien "premium" milk, egg
+--- rc=0 secs=3.9 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. O'Brien "premium" milk  🏠 · 3L
+   🟢 Woolworths  $4.43 — Full Cream Milk 3L 3L (sheet)
+   🔴 Coles       $5.15 — Full Cream Milk 3L 3L (sheet)
+
+2. egg  🏠 · 12 Eggs
+   🟢 Woolworths  $9.57 — Organic Free Range Eggs 12 Pack 600g 12 Eggs (sheet)
+   🔴 Coles       $10.80 — Organic Free Range Eggs 12 Pack 600g 12 Eggs (sheet)
+
+📊 TOTALS
+```
+╔══════════════════════════╗
+║ Store         Raw  Final ║
+║ Woolworths $15.50 $14.00 ║
+║ Coles      $15.95 $15.95 ║
+╚══════════════════════════╝
+```
+
+──────────
+🏷️ HOME BRAND EXTRA
+O'Brien "premium" milk · $4.66 → $4.43
+egg · $10.07 → $9.57
+💰 Home extra: $0.73
+
+🏆 Cheapest: Woolworths — you save $1.95 (vs Coles)
+🏷️ WW discounts: −$1.50 (5% all $0.77 + 🏠 home extra $0.73)
+
+[stderr]

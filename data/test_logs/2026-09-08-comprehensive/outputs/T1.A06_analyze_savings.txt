@@ -1,0 +1,18 @@
+$ analyze --query savings
+--- rc=0 secs=4.0 ---
+📊 TOP 5 WOOLWORTHS SAVINGS VS COLES
+━━━━━━━━━━━━━━━━━━━━
+Prices · pre-discount
+
+1. David Beckham Instinct
+    · Personal Care · $4.50 vs $9.00 · save $4.50
+2. Hillview Cheese Slice
+   Home · Dairy · $3.80 vs $7.50 · save $3.70
+3. Up&Go Strawberry 3*250ml
+    · Drinks · $3.50 vs $7.00 · save $3.50
+4. Mr Kipling Choc 6 Pk
+   Mr Kipling · Chocolate · $3.00 vs $6.20 · save $3.20
+5. Greek Salad Kit 270g
+    · Vegetables · $6.00 vs $8.80 · save $2.80
+
+[stderr]

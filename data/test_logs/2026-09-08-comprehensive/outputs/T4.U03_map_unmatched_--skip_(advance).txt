@@ -1,0 +1,17 @@
+$ map unmatched --skip
+--- rc=0 secs=3.8 ---
+✅ Skipped: Byron Bay Chilli Co. Smoky Chipotle Hot Sauce | 150mL
+
+--- Item 2/2 ---
+
+  Looking up: Yallamundi Farm Organic Free Range Eggs 12 Pack | 700g [coles]
+  Which did you mean?
+    1) Organic Free Range Eggs 12 Pack 600g (Home) · 12 Eggs [score 4]
+    2) Eggs Free Rage 12Pc (Home) · 700g [score 2]
+    3) Sunny Queen Free Range 12 Pk (Sunny Queen) · 12 Pk [score 2]
+    4) Red Bull Sugar Free (Red Bull) · 250 Ml [score 1]
+    5) Bio Cheese Dairy Free Cheddar Slices 200g (Bio) · 200g [score 1]
+
+✳️ Next: --pick N / --add / --forget / --skip / (stop)
+
+[stderr]

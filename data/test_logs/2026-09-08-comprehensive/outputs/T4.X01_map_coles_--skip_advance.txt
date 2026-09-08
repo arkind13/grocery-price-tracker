@@ -1,0 +1,16 @@
+$ map coles --skip
+--- rc=0 secs=11.3 ---
+✅ Skipped: Raw Sugar 3Kg
+
+--- Item 3/8 ---
+
+  Looking up coles: Royal Gala Apple 1 Kg
+  Coles results:
+    1) ROYAL GALA APPLES 1KG:ROYAL GALA:.:1 KG $7.90
+    2) APPLE ROYAL GALA:MED:.:PER KG $1.34
+    3) COLES ORGANIC APPLE:GALA:.:1 KG $7.50 [Special]
+
+✳️ Next: --add / --na / --keyword NAME / --skip / (stop)
+
+[stderr]
+[coles_extractor] Search 'Royal Gala Apple 1 Kg': found 3 products

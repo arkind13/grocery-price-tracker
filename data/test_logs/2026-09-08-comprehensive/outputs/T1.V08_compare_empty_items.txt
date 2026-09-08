@@ -1,0 +1,7 @@
+$ compare --items 
+--- rc=0 secs=1.5 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+No items provided.
+
+[stderr]

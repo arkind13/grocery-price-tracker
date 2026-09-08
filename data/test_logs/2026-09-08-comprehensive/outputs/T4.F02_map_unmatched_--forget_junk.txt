@@ -1,0 +1,7 @@
+$ map unmatched --forget
+--- rc=0 secs=0.3 ---
+✅ Forgotten: ZZTEST junk paste item 999g [coles] (excluded from future unmatched lists)
+
+All 2 items in 'unmatched' resolved!
+
+[stderr]

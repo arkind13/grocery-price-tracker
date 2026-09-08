@@ -1,0 +1,51 @@
+$ compare --items Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g, Red Bull Sugar Free, Woolworths Fresh Herb Coriander Bunch each, Loacker Chocolate, Mount Franklin Sparkling Lime 450Ml, Eclipse Intense Mint
+--- rc=0 secs=69.8 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g · 150g
+   🟢 Woolworths  $3.13 — Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g 150g (live)
+   🔴 Coles       $3.30 — Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g 150 gm (sheet)
+
+2. Red Bull Sugar Free · 250 Ml
+   🟢 Woolworths  $3.04 — Red Bull Sugar Free 250 Ml (sheet)
+   🔴 Coles       $3.20 — Red Bull Sugar Free 250 Ml (sheet)
+
+3. Woolworths Fresh Herb Coriander Bunch each  🏠 · Bunch
+   🟢 Woolworths  $2.97 — Woolworths Fresh Herb Coriander Bunch each Bunch (sheet)
+   🔴 Coles       $3.30 — Woolworths Fresh Herb Coriander Bunch each Bunch (sheet)
+
+4. Loacker Chocolate · 125g
+   🟢 Woolworths  $3.13 — Loacker Quadratini Chocolate 125g 125g (live)
+   🔴 Coles       $3.30 — Loacker Chocolate 125g (sheet)
+
+5. Mount Franklin Sparkling Lime 450Ml · 450Ml
+   🟢 Woolworths  $3.37 — Mount Franklin Sparkling Lime 450Ml 450Ml (sheet)
+   🔴 Coles       $3.55 — MOUNT FRANKLIN LIGHTLY SPARKLING WATER:LIME:.:450 ML 450mL (live)
+
+6. Eclipse Intense Mint · 40g
+   🟢 Woolworths  $3.32 — Eclipse Intense Mint 40g (sheet)
+   🔴 Coles       $3.50 — Eclipse Intense Mint 40g (sheet)
+
+📊 TOTALS
+```
+╔══════════════════════════╗
+║ Store         Raw  Final ║
+║ Woolworths $20.15 $18.96 ║
+║ Coles      $20.15 $20.15 ║
+╚══════════════════════════╝
+```
+
+──────────
+🏷️ HOME BRAND EXTRA
+Woolworths Fresh Herb Coriander Bunch each · $3.13 → $2.97
+💰 Home extra: $0.16
+
+🏆 Cheapest: Woolworths — you save $1.19 (vs Coles)
+🏷️ WW discounts: −$1.19 (5% all $1.03 + 🏠 home extra $0.16)
+
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Search 'Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g': found 1 products
+[coles_extractor] Search 'Mount Franklin Sparkling Lime 450Ml': found 4 products

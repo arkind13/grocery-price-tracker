@@ -1,0 +1,5 @@
+$ map coles --na
+--- rc=1 secs=4.8 ---
+
+[stderr]
+Could not find 'ZZTEST fake missing product 999g' in sheet: product not found

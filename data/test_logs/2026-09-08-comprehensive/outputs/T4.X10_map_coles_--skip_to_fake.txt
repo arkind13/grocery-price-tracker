@@ -1,0 +1,18 @@
+$ map coles --skip
+--- rc=0 secs=27.0 ---
+✅ Skipped: Yumi's Herb Falafel 200g
+
+--- Item 8/8 ---
+
+  Looking up coles: ZZTEST fake missing product 999g
+  Coles results:
+    1) BIOZET ATTACK POWDER PLUS ELIMINATOR 2KG $28.00
+    2) AIR WICK ODOUR NEUTRALISING SPRAY FRESH DEW & JASMINE 236 ML $6.00 [Everyday]
+    3) BIOZET ATTACK POWER LAUNDRY CAPSULES + ELIMINATOR 8 IN 1 CLEAN 30PK $26.00
+    4) BIOZET ATTACK LIQUID PLUS ELIMINATOR 2 LITRE $28.00
+    5) BIOZET ATTACK PLUS STAIN POWER 2L $28.00
+
+✳️ Next: --add / --na / --keyword NAME / --skip / (stop)
+
+[stderr]
+[coles_extractor] Search 'ZZTEST fake missing product 999g': found 5 products

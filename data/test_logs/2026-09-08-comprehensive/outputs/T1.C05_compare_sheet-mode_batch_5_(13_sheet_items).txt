@@ -1,0 +1,68 @@
+$ compare --items Woolworths Pasta Spirals 500g, Yucateco XXXTRA Hot Habanero Sauce 120mL, Mount Franklin Lightly Sparkling Water Lime Bottle 1.25L, Woolworths Coat & Cook Seasoning Mix Southern Fried Chicken 50g, DermaVeen Daily Nourish Moisturising Lotion 500mL, DermaVeen Extra Hydration Intensive Moisturising Lotion 500mL, DERMAVEEN EXTRA HYDRATION INTENSIVE MOISTURISING LOTION COLLOIDAL OATMEAL, Casa Serena 500ml Body Lotion/Moisturiser Hand/Skin Cream Blood Orange & Citrus, CETAPHIL MOISTURISING LOTION 473ML, AVEENO DAILY MOISTURISING BODY LOTION, Mozzarella Cheese Sticks 235g 10 Pack, Olive Oil Spread 500g, Lindt Hot Choc Flakes Tin 210g --mode sheet
+--- rc=0 secs=4.2 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. Woolworths Pasta Spirals 500g  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $0.90
+
+2. Yucateco XXXTRA Hot Habanero Sauce 120mL · ⚠️ unit unavailable
+   🟢 Woolworths  $4.75
+   🔴 Coles       $5.50
+
+3. Mount Franklin Lightly Sparkling Water Lime Bottle 1.25L · ⚠️ unit unavailable
+   🟢 Woolworths  $1.90
+   🔴 Coles       $2.00
+
+4. Woolworths Coat & Cook Seasoning Mix Southern Fried Chicken…  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $1.62
+
+5. DermaVeen Daily Nourish Moisturising Lotion 500mL · ⚠️ unit unavailable
+   🟢 Woolworths  $9.69
+
+6. DermaVeen Extra Hydration Intensive Moisturising Lotion 500… · ⚠️ unit unavailable
+   🟢 Woolworths  $11.40
+
+7. DERMAVEEN EXTRA HYDRATION INTENSIVE MOISTURISING LOTION COL… · ⚠️ unit unavailable
+   🔴 Coles       $12.00
+
+8. Casa Serena 500ml Body Lotion/Moisturiser Hand/Skin Cream B… · ⚠️ unit unavailable
+   🟢 Woolworths  $18.10
+
+9. CETAPHIL MOISTURISING LOTION 473ML · ⚠️ unit unavailable
+   🔴 Coles       $17.50
+
+10. AVEENO DAILY MOISTURISING BODY LOTION · ⚠️ unit unavailable
+   🔴 Coles       $24.00
+
+11. Mozzarella Cheese Sticks 235g 10 Pack · ⚠️ unit unavailable
+
+12. Olive Oil Spread 500g  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $3.15
+   🔴 Coles       $3.50
+
+13. Lindt Hot Choc Flakes Tin 210g · ⚠️ unit unavailable
+   🔴 Coles       $14.00
+
+📊 TOTALS
+```
+╔══════════════════════════╗
+║ Store         Raw  Final ║
+║ Woolworths $54.55 $51.51 ║
+║ Coles      $78.50 $78.50 ║
+╚══════════════════════════╝
+```
+
+──────────
+🏷️ HOME BRAND EXTRA
+Woolworths Pasta Spirals 500g · $0.95 → $0.90
+Woolworths Coat & Cook Seasoning Mix Southern Fried Chicken 50g · $1.71 → $1.62
+Olive Oil Spread 500g · $3.32 → $3.15
+💰 Home extra: $0.31
+
+🏆 Cheapest: Woolworths — you save $26.99 (vs Coles)
+🏷️ WW discounts: −$3.04 (5% all $2.73 + 🏠 home extra $0.31)
+⚠️ 5 items missing at Woolworths
+⚠️ 6 items missing at Coles
+
+[stderr]

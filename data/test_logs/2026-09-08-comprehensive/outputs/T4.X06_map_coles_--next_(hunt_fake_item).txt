@@ -1,0 +1,16 @@
+$ map coles --next
+--- rc=0 secs=8.5 ---
+--- Item 2/8 ---
+
+  Looking up coles: Raw Sugar 3Kg
+  Coles results:
+    1) CSR RAW SUGAR 2KG $4.50 [Everyday]
+    2) CSR RAW SUGAR 1KG $2.50 [Was $2.90]
+    3) CSR SUGAR RAW 500G $2.00 [Everyday]
+    4) COLES SIMPLY AUSTRALIAN RAW SUGAR 1KG $1.80 [Everyday]
+    5) COLES SIMPLY AUSTRALIAN RAW SUGAR 2KG $3.00 [Everyday]
+
+✳️ Next: --add / --na / --keyword NAME / --skip / (stop)
+
+[stderr]
+[coles_extractor] Search 'Raw Sugar 3Kg': found 5 products

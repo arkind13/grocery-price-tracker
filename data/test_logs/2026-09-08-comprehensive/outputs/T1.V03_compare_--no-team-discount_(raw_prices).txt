@@ -1,0 +1,21 @@
+$ compare --items Tasty Cheese Crackers --no-team-discount
+--- rc=0 secs=3.8 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. Tasty Cheese Crackers  🏠 · 50 g
+   🟢 Woolworths  $1.60 — Tasty Cheese Crackers 50 g (sheet)
+   🔴 Coles       $2.00 — Tasty Cheese Crackers 50 g (sheet)
+
+📊 TOTALS
+```
+╔════════════════════════╗
+║ Store        Raw Final ║
+║ Woolworths $1.60 $1.60 ║
+║ Coles      $2.00 $2.00 ║
+╚════════════════════════╝
+```
+
+🏆 Cheapest: Woolworths — you save $0.40 (vs Coles)
+
+[stderr]

@@ -1,0 +1,43 @@
+$ recipe --name French toast --ingredients bread, eggs, milk, sugar
+--- rc=0 secs=4.0 ---
+🧾 RECIPE — FRENCH TOAST
+━━━━━━━━━━━━━━━━━━━━
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. bread  🏠 · 500 g
+   🟢 Woolworths  $2.53 — Wholemeal Sandwich Bread 500 g (sheet)
+   🔴 Coles       $2.80 — Wholemeal Sandwich Bread 500 g (sheet)
+
+2. eggs  🏠 · 12 Eggs
+   🟢 Woolworths  $9.57 — Organic Free Range Eggs 12 Pack 600g 12 Eggs (sheet)
+   🔴 Coles       $10.80 — Organic Free Range Eggs 12 Pack 600g 12 Eggs (sheet)
+
+3. milk  🏠 · 3L
+   🟢 Woolworths  $4.43 — Full Cream Milk 3L 3L (sheet)
+   🔴 Coles       $5.15 — Full Cream Milk 3L 3L (sheet)
+
+4. sugar · 250 Ml
+   🟢 Woolworths  $2.52 — V Zero 250 Ml 250 Ml (sheet)
+   🔴 Coles       $2.65 — V Zero 250 Ml 250 Ml (sheet)
+
+📊 TOTALS
+```
+╔══════════════════════════╗
+║ Store         Raw  Final ║
+║ Woolworths $20.95 $19.05 ║
+║ Coles      $21.40 $21.40 ║
+╚══════════════════════════╝
+```
+
+──────────
+🏷️ HOME BRAND EXTRA
+bread · $2.66 → $2.53
+eggs · $10.07 → $9.57
+milk · $4.66 → $4.43
+💰 Home extra: $0.86
+
+🏆 Cheapest: Woolworths — you save $2.35 (vs Coles)
+🏷️ WW discounts: −$1.90 (5% all $1.04 + 🏠 home extra $0.86)
+
+[stderr]

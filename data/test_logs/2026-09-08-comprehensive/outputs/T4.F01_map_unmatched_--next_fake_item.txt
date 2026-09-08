@@ -1,0 +1,17 @@
+$ map unmatched --next
+--- rc=0 secs=46.1 ---
+--- Item 3/3 ---
+
+  Looking up: ZZTEST junk paste item 999g [coles]
+  Live search found: Gourmet Garden Paste Ginger 80g
+  Prices: coles: $7.90, woolworths: $3.99
+    woolworths: Gourmet Garden Paste Ginger 80g $3.99
+    coles: QUEEN 99% SUGAR FREE ALCOHOL FREE VANILLA PASTE 70G $7.90 [New]
+    woolworths: Tukas Tomato Paste Jar 700g $5.89
+    woolworths: Urbane Mess Defining Paste 85g $8.55
+    woolworths: Ayam Nasi Goreng Paste 185g $3.80
+
+✳️ Next: --pick N / --add / --forget / --skip / (stop)
+
+[stderr]
+[coles_extractor] Search 'ZZTEST junk paste item 999g': found 5 products

@@ -1,0 +1,7 @@
+$ local-deals --expire-sweep
+--- rc=0 secs=4.4 ---
+[local-deals] expiry sweep: 2 cell(s) removed
+  • Merjan Brothers Quality Meats: validity stamp 'valid until Sat 05 Sep' removed (expired)
+  • Merjan Brothers Quality Meats: Beef Mince /kg — 8.99 (till 5 Sep) removed (expired 05 Sep)
+
+[stderr]

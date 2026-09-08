@@ -1,0 +1,5 @@
+$ local-deals --friday-gate
+--- rc=0 secs=0.3 ---
+ℹ️ The Friday local-deals run is RETIRED (2026-09-07) — the daily FB lists supersede it. Use --daily-scan and --ingest CODE.
+
+[stderr]

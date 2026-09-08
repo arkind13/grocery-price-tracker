@@ -1,0 +1,5 @@
+$ update --product ZZT8 Nonexistent Widget --store coles --price 9.99
+--- rc=1 secs=4.4 ---
+
+[stderr]
+Error: product not found

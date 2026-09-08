@@ -1,0 +1,30 @@
+$ local-deals --expire-sweep
+--- rc=0 secs=4.3 ---
+[local-deals] expiry sweep: 25 cell(s) removed
+  • Fruitopia Mt Druitt: validity stamp 'valid until Sun 06 Sep' removed (expired)
+  • Fruitopia Mt Druitt: Cos Lettuce /ea — 0.99 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Jap Pumpkin /kg — 0.99 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Silverbeet /ea — 0.99 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Sweet Corn /ea — 0.88 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Artichoke /ea — 0.99 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Beetroot Bunch /ea — 0.99 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Telegraph Cucumber /ea — 0.99 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Lebanese Bread /ea — 0.99 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Chokos /kg — 1.99 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Celery /ea — 0.75 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Carrots 1kg Bag /ea — 0.75 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Large Parsley Bunch /ea — 2.99 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Washed Potatoes 5kg Bag /ea — 2.99 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Brown Onions 5kg Bag /ea — 2.99 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Eggplant /kg — 2.99 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Cauliflower /ea — 1.99 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Tomatoes /kg — 2.99 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Yellow Capsicum /kg — 2.99 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Lebanese Zucchini /kg — 3.99 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Lebanese Cucumber 2kg Bag /ea — 2.99 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Packham Pears /kg — 2.99 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Pink Lady Apples /kg — 2.99 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: Strawberries /ea — 1.8 (till 6 Sep) removed (expired 06 Sep)
+  • Fruitopia Mt Druitt: R2E2 Mangoes /kg — 6.99 (till 6 Sep) removed (expired 06 Sep)
+
+[stderr]

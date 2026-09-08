@@ -1,0 +1,12 @@
+$ todo gone --items BWL
+--- rc=0 secs=4.9 ---
+✅ Removed: ZZTEST Coles Keyword 250g (Coles)
+✅   Coles price cell marked GONE (row 115) — keyword untouched; never captured again unless a real price returns.
+✅ Gone: 1 item(s) removed, 1 price cell(s) marked GONE (keywords untouched).
+4 still pending:
+1. Acme Pasta Penne 500g · 500g (Coles) [ESQ]
+2. Acme Pasta Penne 500g · 500g (Woolworths) [NJL]
+3. WW Yogurt B · 1kg (Woolworths) [DSF]
+4. WW Yogurt A · 1kg (Woolworths) [AVE]
+
+[stderr]

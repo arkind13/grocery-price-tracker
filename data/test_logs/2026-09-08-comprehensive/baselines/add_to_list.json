@@ -1,0 +1,34 @@
+[
+  {
+    "store": "woolworths",
+    "keyword": "Acme Pasta Penne 500g",
+    "generic_name": "Acme Pasta Penne 500g",
+    "size": "500g",
+    "code": "NJL",
+    "added_at": "2026-09-03T23:06:55.205964+00:00"
+  },
+  {
+    "store": "coles",
+    "keyword": "Acme Pasta Penne 500g",
+    "generic_name": "Acme Pasta Penne 500g",
+    "size": "500g",
+    "code": "ESQ",
+    "added_at": "2026-09-03T23:06:55.233284+00:00"
+  },
+  {
+    "store": "woolworths",
+    "keyword": "WW Yogurt B",
+    "generic_name": "WW Yogurt B",
+    "size": "1kg",
+    "code": "DSF",
+    "added_at": "2026-09-03T23:06:57.067223+00:00"
+  },
+  {
+    "store": "woolworths",
+    "keyword": "WW Yogurt A",
+    "generic_name": "WW Yogurt A",
+    "size": "1kg",
+    "code": "AVE",
+    "added_at": "2026-09-03T23:06:57.189984+00:00"
+  }
+]

@@ -1,0 +1,5 @@
+$ todo gone
+--- rc=1 secs=0.2 ---
+
+[stderr]
+Error: 'todo gone' requires --items (numbers and/or codes, e.g. --items "1,HUY").

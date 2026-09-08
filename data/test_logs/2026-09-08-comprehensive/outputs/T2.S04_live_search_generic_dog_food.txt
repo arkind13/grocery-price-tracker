@@ -1,0 +1,21 @@
+$ search --product dog food
+--- rc=0 secs=23.4 ---
+🔍 DOG FOOD — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Baxter's Wet Dog Food Casserole Chicken Rice & Veg 1.2kg
+   🟢 Woolworths  $2.71 · 1.2kg
+2. My Dog Adult Classic Loaf Tender Chicken Wet Food Tray 100g
+   🟢 Woolworths  $0.85 · 100g  🏷️ Was $1.80
+3. Ultimates Indulge Beef Casserole With Vegetables Wet Dog Fo…
+   🟢 Woolworths  $1.38 · 400g  🏷️ Was $2.90
+4. SUPERCOAT SMARTBLEND PUPPY DRY DOG FOOD 2.6KG
+   🔴 Coles       $18.00 · 2.6kg  🏷️ Bonuscollectable
+5. BOW WOW DOG TREAT PIG EAR 20G
+   🔴 Coles       $3.70 · 1 each
+
+🏆 Cheapest: Woolworths at $0.85
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Search 'dog food': found 2 products

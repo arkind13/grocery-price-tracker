@@ -1,0 +1,5 @@
+$ topics-check
+--- rc=0 secs=16.6 ---
+No topic messages visible. Send '@ClawArkindBot id' in each topic, then re-run.
+
+[stderr]

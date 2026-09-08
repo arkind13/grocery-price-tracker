@@ -1,0 +1,14 @@
+$ backfill-subcategories --dry-run
+--- rc=0 secs=3.7 ---
+🗂️ BACKFILL SUB-CATEGORIES (COL Q)
+━━━━━━━━━━━━━━━━━━━━
+
+Rows examined · 113
+Planned writes · 0
+Filled (confident) · 0
+needs review · 0
+Skipped (Col Q already set) · 113
+
+⚠️ [DRY RUN] no sheet write
+
+[stderr]

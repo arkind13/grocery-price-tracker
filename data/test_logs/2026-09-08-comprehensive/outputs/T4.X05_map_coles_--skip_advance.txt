@@ -1,0 +1,18 @@
+$ map coles --skip
+--- rc=0 secs=12.6 ---
+✅ Skipped: Greek Salad Kit 270g
+
+--- Item 7/8 ---
+
+  Looking up coles: Yumi's Herb Falafel 200g
+  Coles results:
+    1) YUMIS GREEN FALAFEL 200G $6.50
+    2) YUMIS HASH BROWN 260G $6.75 [Was $7.50]
+    3) YUMIS FALAFEL BALLS:PLAIN:.:225 GRAM $6.50
+    4) YUMIS SESAME FALAFEL BALLS $6.50
+    5) YUMIS SPICED LENTIL KOFTAS 225G $6.50
+
+✳️ Next: --add / --na / --keyword NAME / --skip / (stop)
+
+[stderr]
+[coles_extractor] Search 'Yumi's Herb Falafel 200g': found 5 products

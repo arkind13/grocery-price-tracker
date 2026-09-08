@@ -1,0 +1,28 @@
+$ compare --items milkk
+--- rc=0 secs=13.9 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. milkk · ⚠️ unit unavailable
+   ⚠️ No matching product — sizes don't compare.
+      Woolworths: Ouma Condensed Milk Rusks 500g · 500g
+      Coles:      PURA FULL CREAM MILK 2L · 2L
+   💬 Reply 'expand' to see more results.
+
+📊 TOTALS
+```
+╔══════════════════════╗
+║ Store      Raw Final ║
+║ Woolworths   —     — ║
+║ Coles        —     — ║
+╚══════════════════════╝
+```
+
+❌ No prices available for any store.
+⚠️ 1 item missing at Woolworths
+⚠️ 1 item missing at Coles
+
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Search 'milkk': found 4 products

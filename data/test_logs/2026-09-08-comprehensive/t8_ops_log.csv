@@ -1,0 +1,1400 @@
+ts,item_no,item,op,target,expected,actual,pass
+09:07:24,1,Tasty Cheese Crackers,exact_index_lookup,row2,found,hit=yes,PASS
+09:07:24,1,Tasty Cheese Crackers,update_price:woolworths,row2,wrote 3.26,wrote=True err=,PASS
+09:07:25,1,Tasty Cheese Crackers,verify_price_write,D2,3.26,3.26,PASS
+09:07:26,1,Tasty Cheese Crackers,revert_price,D2,$1.60,written,PASS
+09:07:26,2,Garbage Bags,exact_index_lookup,row3,found,hit=yes,PASS
+09:07:28,2,Garbage Bags,update_price:coles,row3,wrote 14.13,wrote=True err=,PASS
+09:07:28,2,Garbage Bags,verify_price_write,E3,14.13,14.13,PASS
+09:07:29,2,Garbage Bags,revert_price,E3,2.25,written,PASS
+09:07:29,3,Wholemeal Sandwich Bread,exact_index_lookup,row4,found,hit=yes,PASS
+09:07:31,3,Wholemeal Sandwich Bread,update_price:woolworths,row4,wrote 10.49,wrote=True err=,PASS
+09:07:31,3,Wholemeal Sandwich Bread,verify_price_write,D4,10.49,10.49,PASS
+09:07:33,3,Wholemeal Sandwich Bread,revert_price,D4,$2.80,written,PASS
+09:07:33,4,Baking Paper 15m,exact_index_lookup,row5,found,hit=yes,PASS
+09:07:34,4,Baking Paper 15m,update_price:coles,row5,wrote 1.05,wrote=True err=,PASS
+09:07:35,4,Baking Paper 15m,verify_price_write,E5,1.05,1.05,PASS
+09:07:36,4,Baking Paper 15m,revert_price,E5,$1.80,written,PASS
+09:07:36,5,White Soft Sandwich Bread,exact_index_lookup,row6,found,hit=yes,PASS
+09:07:38,5,White Soft Sandwich Bread,update_price:woolworths,row6,wrote 22.69,wrote=True err=,PASS
+09:07:38,5,White Soft Sandwich Bread,verify_price_write,D6,22.69,22.69,PASS
+09:07:39,5,White Soft Sandwich Bread,revert_price,D6,$2.80,written,PASS
+09:07:39,6,Medium Sandwich bags 30Pk,exact_index_lookup,row7,found,hit=yes,PASS
+09:07:41,6,Medium Sandwich bags 30Pk,update_price:coles,row7,wrote 39.6,wrote=True err=,PASS
+09:07:41,6,Medium Sandwich bags 30Pk,verify_price_write,E7,39.6,39.6,PASS
+09:07:43,6,Medium Sandwich bags 30Pk,revert_price,E7,2.8,written,PASS
+09:07:43,7,Softner,exact_index_lookup,row8,found,hit=yes,PASS
+09:07:45,7,Softner,update_price:woolworths,row8,wrote 23.66,wrote=True err=,PASS
+09:07:45,7,Softner,verify_price_write,D8,23.66,23.66,PASS
+09:07:46,7,Softner,revert_price,D8,$3.00,written,PASS
+09:07:46,8,Sandwich Icecream 4Pk,exact_index_lookup,row9,found,hit=yes,PASS
+09:07:48,8,Sandwich Icecream 4Pk,update_price:coles,row9,wrote 8.28,wrote=True err=,PASS
+09:07:48,8,Sandwich Icecream 4Pk,verify_price_write,E9,8.28,8.28,PASS
+09:07:49,8,Sandwich Icecream 4Pk,revert_price,E9,3.8,written,PASS
+09:07:49,9,Aluminium Foil 30m,exact_index_lookup,row10,found,hit=yes,PASS
+09:07:51,9,Aluminium Foil 30m,update_price:woolworths,row10,wrote 8.26,wrote=True err=,PASS
+09:07:52,9,Aluminium Foil 30m,verify_price_write,D10,8.26,8.26,PASS
+09:07:53,9,Aluminium Foil 30m,revert_price,D10,$4.50,written,PASS
+09:07:53,10,Banana Kids 5,exact_index_lookup,row11,found,hit=yes,PASS
+09:07:55,10,Banana Kids 5,update_price:coles,row11,wrote 30.53,wrote=True err=,PASS
+09:07:55,10,Banana Kids 5,verify_price_write,E11,30.53,30.53,PASS
+09:07:56,10,Banana Kids 5,revert_price,E11,4.9,written,PASS
+09:07:56,11,Full Cream Milk 3L,exact_index_lookup,row12,found,hit=yes,PASS
+09:07:58,11,Full Cream Milk 3L,update_price:woolworths,row12,wrote 10.14,wrote=True err=,PASS
+09:07:58,11,Full Cream Milk 3L,verify_price_write,D12,10.14,10.14,PASS
+09:08:00,11,Full Cream Milk 3L,revert_price,D12,$4.90,written,PASS
+09:08:00,12,Dare No Sugar Dbl Expresso 2L,exact_index_lookup,row13,found,hit=yes,PASS
+09:08:01,12,Dare No Sugar Dbl Expresso 2L,update_price:coles,row13,wrote 35.63,wrote=True err=,PASS
+09:08:02,12,Dare No Sugar Dbl Expresso 2L,verify_price_write,E13,35.63,35.63,PASS
+09:08:03,12,Dare No Sugar Dbl Expresso 2L,revert_price,E13,7.7,written,PASS
+09:08:03,13,Organic Free Range Eggs 12 Pack 600g,exact_index_lookup,row14,found,hit=yes,PASS
+09:08:05,13,Organic Free Range Eggs 12 Pack 600g,update_price:woolworths,row14,wrote 25.27,wrote=True err=,PASS
+09:08:05,13,Organic Free Range Eggs 12 Pack 600g,verify_price_write,D14,25.27,25.27,PASS
+09:08:06,13,Organic Free Range Eggs 12 Pack 600g,revert_price,D14,10.6,written,PASS
+09:08:06,14,Salted Cashews,exact_index_lookup,row15,found,hit=yes,PASS
+09:08:08,14,Salted Cashews,update_price:coles,row15,wrote 16.03,wrote=True err=,PASS
+09:08:08,14,Salted Cashews,verify_price_write,E15,16.03,16.03,PASS
+09:08:10,14,Salted Cashews,revert_price,E15,16,written,PASS
+09:08:10,15,Battery AAA,exact_index_lookup,row16,found,hit=yes,PASS
+09:08:12,15,Battery AAA,update_price:woolworths,row16,wrote 36.01,wrote=True err=,PASS
+09:08:12,15,Battery AAA,verify_price_write,D16,36.01,36.01,PASS
+09:08:13,15,Battery AAA,revert_price,D16,$23.00,written,PASS
+09:08:13,16,Battery AA,exact_index_lookup,row17,found,hit=yes,PASS
+09:08:15,16,Battery AA,update_price:coles,row17,wrote 8.67,wrote=True err=,PASS
+09:08:15,16,Battery AA,verify_price_write,E17,8.67,8.67,PASS
+09:08:16,16,Battery AA,revert_price,E17,$19.20,written,PASS
+09:08:16,17,Tomato,exact_index_lookup,row18,found,hit=yes,PASS
+09:08:18,17,Tomato,update_price:woolworths,row18,wrote 24.5,wrote=True err=,PASS
+09:08:19,17,Tomato,verify_price_write,D18,24.5,24.5,PASS
+09:08:20,17,Tomato,revert_price,D18,0.54,written,PASS
+09:08:20,18,Bounty Chocolate,exact_index_lookup,row19,found,hit=yes,PASS
+09:08:22,18,Bounty Chocolate,update_price:coles,row19,wrote 17.23,wrote=True err=,PASS
+09:08:22,18,Bounty Chocolate,verify_price_write,E19,17.23,17.23,PASS
+09:08:23,18,Bounty Chocolate,revert_price,E19,3,written,PASS
+09:08:23,19,Capsicum Green each,exact_index_lookup,row20,found,hit=yes,PASS
+09:08:25,19,Capsicum Green each,update_price:woolworths,row20,wrote 10.0,wrote=True err=,PASS
+09:08:25,19,Capsicum Green each,verify_price_write,D20,10.0,10,FAIL
+09:08:27,19,Capsicum Green each,revert_price,D20,1.48,written,PASS
+09:08:27,20,Sunbites Sour 60g,exact_index_lookup,row21,found,hit=yes,PASS
+09:08:29,20,Sunbites Sour 60g,update_price:coles,row21,wrote 35.4,wrote=True err=,PASS
+09:08:29,20,Sunbites Sour 60g,verify_price_write,E21,35.4,35.4,PASS
+09:08:30,20,Sunbites Sour 60g,revert_price,E21,2.7,written,PASS
+09:08:30,21,Corn Chips,exact_index_lookup,row22,found,hit=yes,PASS
+09:08:32,21,Corn Chips,update_price:woolworths,row22,wrote 4.8,wrote=True err=,PASS
+09:08:32,21,Corn Chips,verify_price_write,D22,4.8,4.8,PASS
+09:08:33,21,Corn Chips,revert_price,D22,$2.20,written,PASS
+09:08:33,22,Evamay Pads With Wings Super 14 pack,exact_index_lookup,row23,found,hit=yes,PASS
+09:08:35,22,Evamay Pads With Wings Super 14 pack,update_price:coles,row23,wrote 19.7,wrote=True err=,PASS
+09:08:36,22,Evamay Pads With Wings Super 14 pack,verify_price_write,E23,19.7,19.7,PASS
+09:08:37,22,Evamay Pads With Wings Super 14 pack,revert_price,E23,2.2,written,PASS
+09:08:37,23,Nutella Breadsticks,exact_index_lookup,row24,found,hit=yes,PASS
+09:08:39,23,Nutella Breadsticks,update_price:woolworths,row24,wrote 33.74,wrote=True err=,PASS
+09:08:39,23,Nutella Breadsticks,verify_price_write,D24,33.74,33.74,PASS
+09:08:40,23,Nutella Breadsticks,revert_price,D24,$2.80,written,PASS
+09:08:40,24,Mount Franklin Water 600Ml,exact_index_lookup,row25,found,hit=yes,PASS
+09:08:42,24,Mount Franklin Water 600Ml,update_price:coles,row25,wrote 16.29,wrote=True err=,PASS
+09:08:42,24,Mount Franklin Water 600Ml,verify_price_write,E25,16.29,16.29,PASS
+09:08:44,24,Mount Franklin Water 600Ml,revert_price,E25,2.55,written,PASS
+09:08:44,25,Hot Hands Hand Warmers Pair each,exact_index_lookup,row26,found,hit=yes,PASS
+09:08:45,25,Hot Hands Hand Warmers Pair each,update_price:woolworths,row26,wrote 19.31,wrote=True err=,PASS
+09:08:46,25,Hot Hands Hand Warmers Pair each,verify_price_write,D26,19.31,19.31,PASS
+09:08:47,25,Hot Hands Hand Warmers Pair each,revert_price,D26,2.5,written,PASS
+09:08:47,26,Spring Onion Bunch each,exact_index_lookup,row27,found,hit=yes,PASS
+09:08:49,26,Spring Onion Bunch each,update_price:coles,row27,wrote 12.56,wrote=True err=,PASS
+09:08:49,26,Spring Onion Bunch each,verify_price_write,E27,12.56,12.56,PASS
+09:08:50,26,Spring Onion Bunch each,revert_price,E27,3,written,PASS
+09:08:50,27,V Watermelon 250Ml,exact_index_lookup,row28,found,hit=yes,PASS
+09:08:52,27,V Watermelon 250Ml,update_price:woolworths,row28,wrote 3.15,wrote=True err=,PASS
+09:08:53,27,V Watermelon 250Ml,verify_price_write,D28,3.15,3.15,PASS
+09:08:54,27,V Watermelon 250Ml,revert_price,D28,12.00,written,PASS
+09:08:54,28,V Blackcurrent 250Ml,exact_index_lookup,row29,found,hit=yes,PASS
+09:08:56,28,V Blackcurrent 250Ml,update_price:coles,row29,wrote 1.19,wrote=True err=,PASS
+09:08:56,28,V Blackcurrent 250Ml,verify_price_write,E29,1.19,1.19,PASS
+09:08:57,28,V Blackcurrent 250Ml,revert_price,E29,GONE,written,PASS
+09:08:57,29,V Zero 250 Ml,exact_index_lookup,row30,found,hit=yes,PASS
+09:08:59,29,V Zero 250 Ml,update_price:woolworths,row30,wrote 35.0,wrote=True err=,PASS
+09:08:59,29,V Zero 250 Ml,verify_price_write,D30,35.0,35,FAIL
+09:09:01,29,V Zero 250 Ml,revert_price,D30,2.65,written,PASS
+09:09:01,30,Red Rock Chilli Sriracha,exact_index_lookup,row31,found,hit=yes,PASS
+09:09:03,30,Red Rock Chilli Sriracha,update_price:coles,row31,wrote 11.78,wrote=True err=,PASS
+09:09:03,30,Red Rock Chilli Sriracha,verify_price_write,E31,11.78,11.78,PASS
+09:09:04,30,Red Rock Chilli Sriracha,revert_price,E31,6,written,PASS
+09:09:04,31,Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g,exact_index_lookup,row32,found,hit=yes,PASS
+09:09:06,31,Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g,update_price:woolworths,row32,wrote 38.41,wrote=True err=,PASS
+09:09:06,31,Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g,verify_price_write,D32,38.41,38.41,PASS
+09:09:07,31,Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g,revert_price,D32,N/A 2026-09-02,written,PASS
+09:09:07,32,Red Bull Sugar Free,exact_index_lookup,row33,found,hit=yes,PASS
+09:09:09,32,Red Bull Sugar Free,update_price:coles,row33,wrote 17.05,wrote=True err=,PASS
+09:09:10,32,Red Bull Sugar Free,verify_price_write,E33,17.05,17.05,PASS
+09:09:11,32,Red Bull Sugar Free,revert_price,E33,3.2,written,PASS
+09:09:11,33,Woolworths Fresh Herb Coriander Bunch each,exact_index_lookup,row34,found,hit=yes,PASS
+09:09:13,33,Woolworths Fresh Herb Coriander Bunch each,update_price:woolworths,row34,wrote 35.91,wrote=True err=,PASS
+09:09:13,33,Woolworths Fresh Herb Coriander Bunch each,verify_price_write,D34,35.91,35.91,PASS
+09:09:14,33,Woolworths Fresh Herb Coriander Bunch each,revert_price,D34,3.30,written,PASS
+09:09:14,34,Loacker Chocolate,exact_index_lookup,row35,found,hit=yes,PASS
+09:09:16,34,Loacker Chocolate,update_price:coles,row35,wrote 5.21,wrote=True err=,PASS
+09:09:16,34,Loacker Chocolate,verify_price_write,E35,5.21,5.21,PASS
+09:09:18,34,Loacker Chocolate,revert_price,E35,3.3,written,PASS
+09:09:18,35,Mount Franklin Sparkling Lime 450Ml,exact_index_lookup,row36,found,hit=yes,PASS
+09:09:20,35,Mount Franklin Sparkling Lime 450Ml,update_price:woolworths,row36,wrote 9.81,wrote=True err=,PASS
+09:09:20,35,Mount Franklin Sparkling Lime 450Ml,verify_price_write,D36,9.81,9.81,PASS
+09:09:21,35,Mount Franklin Sparkling Lime 450Ml,revert_price,D36,$3.55,written,PASS
+09:09:21,36,Eclipse Intense Mint,exact_index_lookup,row37,found,hit=yes,PASS
+09:09:23,36,Eclipse Intense Mint,update_price:coles,row37,wrote 10.39,wrote=True err=,PASS
+09:09:23,36,Eclipse Intense Mint,verify_price_write,E37,10.39,10.39,PASS
+09:09:25,36,Eclipse Intense Mint,revert_price,E37,3.5,written,PASS
+09:09:25,37,So Chocolate Almond 1L,exact_index_lookup,row38,found,hit=yes,PASS
+09:09:26,37,So Chocolate Almond 1L,update_price:woolworths,row38,wrote 24.7,wrote=True err=,PASS
+09:09:27,37,So Chocolate Almond 1L,verify_price_write,D38,24.7,24.7,PASS
+09:09:28,37,So Chocolate Almond 1L,revert_price,D38,3.5,written,PASS
+09:09:28,38,Brown Onion 1Kg,exact_index_lookup,row39,found,hit=yes,PASS
+09:09:30,38,Brown Onion 1Kg,update_price:coles,row39,wrote 10.76,wrote=True err=,PASS
+09:09:30,38,Brown Onion 1Kg,verify_price_write,E39,10.76,10.76,PASS
+09:09:31,38,Brown Onion 1Kg,revert_price,E39,3.6,written,PASS
+09:09:31,39,Up&Go Chocolate Protein 500Ml,exact_index_lookup,row40,found,hit=yes,PASS
+09:09:33,39,Up&Go Chocolate Protein 500Ml,update_price:woolworths,row40,wrote 5.17,wrote=True err=,PASS
+09:09:34,39,Up&Go Chocolate Protein 500Ml,verify_price_write,D40,5.17,5.17,PASS
+09:09:35,39,Up&Go Chocolate Protein 500Ml,revert_price,D40,3.6,written,PASS
+09:09:35,40,Daily Juice Orange Pulp 500ml,exact_index_lookup,row41,found,hit=yes,PASS
+09:09:37,40,Daily Juice Orange Pulp 500ml,update_price:coles,row41,wrote 34.86,wrote=True err=,PASS
+09:09:37,40,Daily Juice Orange Pulp 500ml,verify_price_write,E41,34.86,34.86,PASS
+09:09:38,40,Daily Juice Orange Pulp 500ml,revert_price,E41,2.95,written,PASS
+09:09:38,41,Jumpy's Chicken Potato Chips 5 pack,exact_index_lookup,row42,found,hit=yes,PASS
+09:09:40,41,Jumpy's Chicken Potato Chips 5 pack,update_price:woolworths,row42,wrote 21.48,wrote=True err=,PASS
+09:09:40,41,Jumpy's Chicken Potato Chips 5 pack,verify_price_write,D42,21.48,21.48,PASS
+09:09:42,41,Jumpy's Chicken Potato Chips 5 pack,revert_price,D42,4.00,written,PASS
+09:09:42,42,Cheese Puff Pastry,exact_index_lookup,row43,found,hit=yes,PASS
+09:09:43,42,Cheese Puff Pastry,update_price:coles,row43,wrote 11.27,wrote=True err=,PASS
+09:09:44,42,Cheese Puff Pastry,verify_price_write,E43,11.27,11.27,PASS
+09:09:45,42,Cheese Puff Pastry,revert_price,E43,2.5,written,PASS
+09:09:45,43,Jumpy's Chicken Multipack,exact_index_lookup,row44,found,hit=yes,PASS
+09:09:47,43,Jumpy's Chicken Multipack,update_price:woolworths,row44,wrote 8.17,wrote=True err=,PASS
+09:09:47,43,Jumpy's Chicken Multipack,verify_price_write,D44,8.17,8.17,PASS
+09:09:48,43,Jumpy's Chicken Multipack,revert_price,D44,4,written,PASS
+09:09:48,44,Hillview Cheese Slice,exact_index_lookup,row45,found,hit=yes,PASS
+09:09:50,44,Hillview Cheese Slice,update_price:coles,row45,wrote 6.25,wrote=True err=,PASS
+09:09:50,44,Hillview Cheese Slice,verify_price_write,E45,6.25,6.25,PASS
+09:09:52,44,Hillview Cheese Slice,revert_price,E45,7.50,written,PASS
+09:09:52,45,Wonder White Bread,exact_index_lookup,row46,found,hit=yes,PASS
+09:09:54,45,Wonder White Bread,update_price:woolworths,row46,wrote 13.9,wrote=True err=,PASS
+09:09:54,45,Wonder White Bread,verify_price_write,D46,13.9,13.9,PASS
+09:09:55,45,Wonder White Bread,revert_price,D46,$4.60,written,PASS
+09:09:55,46,Raw Sugar 3Kg,exact_index_lookup,row47,found,hit=yes,PASS
+09:09:57,46,Raw Sugar 3Kg,update_price:coles,row47,wrote 39.65,wrote=True err=,PASS
+09:09:57,46,Raw Sugar 3Kg,verify_price_write,E47,39.65,39.65,PASS
+09:09:58,46,Raw Sugar 3Kg,revert_price,E47,GONE,written,PASS
+09:09:58,47,Up&Go Strawberry 3*250ml,exact_index_lookup,row48,found,hit=yes,PASS
+09:10:00,47,Up&Go Strawberry 3*250ml,update_price:woolworths,row48,wrote 18.22,wrote=True err=,PASS
+09:10:01,47,Up&Go Strawberry 3*250ml,verify_price_write,D48,18.22,18.22,PASS
+09:10:02,47,Up&Go Strawberry 3*250ml,revert_price,D48,$3.50,written,PASS
+09:10:02,48,Royal Gala Apple 1 Kg,exact_index_lookup,row49,found,hit=yes,PASS
+09:10:04,48,Royal Gala Apple 1 Kg,update_price:coles,row49,wrote 11.24,wrote=True err=,PASS
+09:10:04,48,Royal Gala Apple 1 Kg,verify_price_write,E49,11.24,11.24,PASS
+09:10:05,48,Royal Gala Apple 1 Kg,revert_price,E49,7.9,written,PASS
+09:10:05,49,the Juice Brothers Tropical,exact_index_lookup,row50,found,hit=yes,PASS
+09:10:07,49,the Juice Brothers Tropical,update_price:woolworths,row50,wrote 18.89,wrote=True err=,PASS
+09:10:07,49,the Juice Brothers Tropical,verify_price_write,D50,18.89,18.89,PASS
+09:10:09,49,the Juice Brothers Tropical,revert_price,D50,4.5,written,PASS
+09:10:09,50,Weet Bix Kids,exact_index_lookup,row51,found,hit=yes,PASS
+09:10:11,50,Weet Bix Kids,update_price:coles,row51,wrote 28.33,wrote=True err=,PASS
+09:10:11,50,Weet Bix Kids,verify_price_write,E51,28.33,28.33,PASS
+09:10:12,50,Weet Bix Kids,revert_price,E51,5,written,PASS
+09:10:12,51,Kettle Chilli 165G,exact_index_lookup,row52,found,hit=yes,PASS
+09:10:14,51,Kettle Chilli 165G,update_price:woolworths,row52,wrote 3.37,wrote=True err=,PASS
+09:10:14,51,Kettle Chilli 165G,verify_price_write,D52,3.37,3.37,PASS
+09:10:15,51,Kettle Chilli 165G,revert_price,D52,3.6,written,PASS
+09:10:15,52,Sunbites Sour Cream Mulipack,exact_index_lookup,row53,found,hit=yes,PASS
+09:10:17,52,Sunbites Sour Cream Mulipack,update_price:coles,row53,wrote 25.27,wrote=True err=,PASS
+09:10:18,52,Sunbites Sour Cream Mulipack,verify_price_write,E53,25.27,25.27,PASS
+09:10:19,52,Sunbites Sour Cream Mulipack,revert_price,E53,6,written,PASS
+09:10:19,53,Mr Kipling Choc 6 Pk,exact_index_lookup,row54,found,hit=yes,PASS
+09:10:21,53,Mr Kipling Choc 6 Pk,update_price:woolworths,row54,wrote 18.07,wrote=True err=,PASS
+09:10:21,53,Mr Kipling Choc 6 Pk,verify_price_write,D54,18.07,18.07,PASS
+09:10:22,53,Mr Kipling Choc 6 Pk,revert_price,D54,3,written,PASS
+09:10:22,54,Chocolate Hazelnut Spread,exact_index_lookup,row55,found,hit=yes,PASS
+09:10:24,54,Chocolate Hazelnut Spread,update_price:coles,row55,wrote 40.16,wrote=True err=,PASS
+09:10:24,54,Chocolate Hazelnut Spread,verify_price_write,E55,40.16,40.16,PASS
+09:10:26,54,Chocolate Hazelnut Spread,revert_price,E55,GONE,written,PASS
+09:10:26,55,Eggs Free Rage 12Pc,exact_index_lookup,row56,found,hit=yes,PASS
+09:10:27,55,Eggs Free Rage 12Pc,update_price:woolworths,row56,wrote 2.04,wrote=True err=,PASS
+09:10:28,55,Eggs Free Rage 12Pc,verify_price_write,D56,2.04,2.04,PASS
+09:10:29,55,Eggs Free Rage 12Pc,revert_price,D56,$6.50,written,PASS
+09:10:29,56,Farmer Union Greek Yoghurt 1Kg,exact_index_lookup,row57,found,hit=yes,PASS
+09:10:31,56,Farmer Union Greek Yoghurt 1Kg,update_price:coles,row57,wrote 35.01,wrote=True err=,PASS
+09:10:31,56,Farmer Union Greek Yoghurt 1Kg,verify_price_write,E57,35.01,35.01,PASS
+09:10:32,56,Farmer Union Greek Yoghurt 1Kg,revert_price,E57,7.5,written,PASS
+09:10:32,57,Blueberries,exact_index_lookup,row58,found,hit=yes,PASS
+09:10:34,57,Blueberries,update_price:woolworths,row58,wrote 2.47,wrote=True err=,PASS
+09:10:35,57,Blueberries,verify_price_write,D58,2.47,2.47,PASS
+09:10:36,57,Blueberries,revert_price,D58,4.00,written,PASS
+09:10:36,58,Mccain Jalepeno,exact_index_lookup,row59,found,hit=yes,PASS
+09:10:38,58,Mccain Jalepeno,update_price:coles,row59,wrote 18.59,wrote=True err=,PASS
+09:10:38,58,Mccain Jalepeno,verify_price_write,E59,18.59,18.59,PASS
+09:10:39,58,Mccain Jalepeno,revert_price,E59,7.5,written,PASS
+09:10:39,59,Sunny Queen Free Range 12 Pk,exact_index_lookup,row60,found,hit=yes,PASS
+09:10:41,59,Sunny Queen Free Range 12 Pk,update_price:woolworths,row60,wrote 13.32,wrote=True err=,PASS
+09:10:41,59,Sunny Queen Free Range 12 Pk,verify_price_write,D60,13.32,13.32,PASS
+09:10:43,59,Sunny Queen Free Range 12 Pk,revert_price,D60,$7.00,written,PASS
+09:10:43,60,Twisted Chocolate Icecream,exact_index_lookup,row61,found,hit=yes,PASS
+09:10:44,60,Twisted Chocolate Icecream,update_price:coles,row61,wrote 22.52,wrote=True err=,PASS
+09:10:45,60,Twisted Chocolate Icecream,verify_price_write,E61,22.52,22.52,PASS
+09:10:46,60,Twisted Chocolate Icecream,revert_price,E61,8.5,written,PASS
+09:10:46,61,Radiant Advanced Ultra Powder+,exact_index_lookup,row62,found,hit=yes,PASS
+09:10:48,61,Radiant Advanced Ultra Powder+,update_price:woolworths,row62,wrote 10.78,wrote=True err=,PASS
+09:10:48,61,Radiant Advanced Ultra Powder+,verify_price_write,D62,10.78,10.78,PASS
+09:10:49,61,Radiant Advanced Ultra Powder+,revert_price,D62,22,written,PASS
+09:10:49,62,Strawberries,exact_index_lookup,row63,found,hit=yes,PASS
+09:10:51,62,Strawberries,update_price:coles,row63,wrote 22.67,wrote=True err=,PASS
+09:10:51,62,Strawberries,verify_price_write,E63,22.67,22.67,PASS
+09:10:53,62,Strawberries,revert_price,E63,3,written,PASS
+09:10:53,63,Raspberries Punnet 125g,exact_index_lookup,row64,found,hit=yes,PASS
+09:10:55,63,Raspberries Punnet 125g,update_price:woolworths,row64,wrote 6.08,wrote=True err=,PASS
+09:10:55,63,Raspberries Punnet 125g,verify_price_write,D64,6.08,6.08,PASS
+09:10:57,63,Raspberries Punnet 125g,revert_price,D64,4.00,written,PASS
+09:10:57,64,Extra Spearmint Chewing Multipack,exact_index_lookup,row65,found,hit=yes,PASS
+09:10:58,64,Extra Spearmint Chewing Multipack,update_price:coles,row65,wrote 22.67,wrote=True err=,PASS
+09:10:59,64,Extra Spearmint Chewing Multipack,verify_price_write,E65,22.67,22.67,PASS
+09:11:00,64,Extra Spearmint Chewing Multipack,revert_price,E65,5.5,written,PASS
+09:11:00,65,Sunbites Grain Waves Sour Cream & Chives 22g x 8 pack,exact_index_lookup,row66,found,hit=yes,PASS
+09:11:02,65,Sunbites Grain Waves Sour Cream & Chives 22g x 8 pack,update_price:woolworths,row53,wrote 27.72,wrote=True err=,PASS
+09:11:02,65,Sunbites Grain Waves Sour Cream & Chives 22g x 8 pack,verify_price_write,D53,27.72,27.72,PASS
+09:11:03,65,Sunbites Grain Waves Sour Cream & Chives 22g x 8 pack,revert_price,D53,4.00,written,PASS
+09:11:03,66,Smith Cheese & Onion Multipack 8,exact_index_lookup,row67,found,hit=yes,PASS
+09:11:05,66,Smith Cheese & Onion Multipack 8,update_price:coles,row67,wrote 39.04,wrote=True err=,PASS
+09:11:05,66,Smith Cheese & Onion Multipack 8,verify_price_write,E67,39.04,39.04,PASS
+09:11:07,66,Smith Cheese & Onion Multipack 8,revert_price,E67,6,written,PASS
+09:11:07,67,V Watermelon 4*250,exact_index_lookup,row68,found,hit=yes,PASS
+09:11:09,67,V Watermelon 4*250,update_price:woolworths,row68,wrote 37.39,wrote=True err=,PASS
+09:11:09,67,V Watermelon 4*250,verify_price_write,D68,37.39,37.39,PASS
+09:11:10,67,V Watermelon 4*250,revert_price,D68,$12.00,written,PASS
+09:11:10,68,V Sugarfree 4*250,exact_index_lookup,row69,found,hit=yes,PASS
+09:11:12,68,V Sugarfree 4*250,update_price:coles,row69,wrote 13.01,wrote=True err=,PASS
+09:11:12,68,V Sugarfree 4*250,verify_price_write,E69,13.01,13.01,PASS
+09:11:14,68,V Sugarfree 4*250,revert_price,E69,7.2,written,PASS
+09:11:14,69,David Beckham Instinct,exact_index_lookup,row70,found,hit=yes,PASS
+09:11:15,69,David Beckham Instinct,update_price:woolworths,row70,wrote 3.57,wrote=True err=,PASS
+09:11:16,69,David Beckham Instinct,verify_price_write,D70,3.57,3.57,PASS
+09:11:17,69,David Beckham Instinct,revert_price,D70,4.5,written,PASS
+09:11:17,70,Greek Salad Kit 400g,exact_index_lookup,row71,found,hit=yes,PASS
+09:11:19,70,Greek Salad Kit 400g,update_price:coles,row71,wrote 33.18,wrote=True err=,PASS
+09:11:19,70,Greek Salad Kit 400g,verify_price_write,E71,33.18,33.18,PASS
+09:11:20,70,Greek Salad Kit 400g,revert_price,E71,GONE,written,PASS
+09:11:20,71,Tegel Nashville Tenders 500g,exact_index_lookup,row72,found,hit=yes,PASS
+09:11:22,71,Tegel Nashville Tenders 500g,update_price:woolworths,row72,wrote 4.88,wrote=True err=,PASS
+09:11:22,71,Tegel Nashville Tenders 500g,verify_price_write,D72,4.88,4.88,PASS
+09:11:24,71,Tegel Nashville Tenders 500g,revert_price,D72,14,written,PASS
+09:11:24,72,Obela Hommus 3Pk 60g,exact_index_lookup,row73,found,hit=yes,PASS
+09:11:26,72,Obela Hommus 3Pk 60g,update_price:coles,row73,wrote 6.71,wrote=True err=,PASS
+09:11:26,72,Obela Hommus 3Pk 60g,verify_price_write,E73,6.71,6.71,PASS
+09:11:27,72,Obela Hommus 3Pk 60g,revert_price,E73,GONE,written,PASS
+09:11:27,73,Freshen Up Spray,exact_index_lookup,row74,found,hit=yes,PASS
+09:11:29,73,Freshen Up Spray,update_price:woolworths,row74,wrote 29.45,wrote=True err=,PASS
+09:11:29,73,Freshen Up Spray,verify_price_write,D74,29.45,29.45,PASS
+09:11:30,73,Freshen Up Spray,revert_price,D74,5.5,written,PASS
+09:11:30,74,Greek Salad Kit 270g,exact_index_lookup,row75,found,hit=yes,PASS
+09:11:32,74,Greek Salad Kit 270g,update_price:coles,row75,wrote 5.47,wrote=True err=,PASS
+09:11:33,74,Greek Salad Kit 270g,verify_price_write,E75,5.47,5.47,PASS
+09:11:34,74,Greek Salad Kit 270g,revert_price,E75,8.8,written,PASS
+09:11:34,75,Steggles Korean Tenders 600g,exact_index_lookup,row76,found,hit=yes,PASS
+09:11:36,75,Steggles Korean Tenders 600g,update_price:woolworths,row76,wrote 17.25,wrote=True err=,PASS
+09:11:36,75,Steggles Korean Tenders 600g,verify_price_write,D76,17.25,17.25,PASS
+09:11:37,75,Steggles Korean Tenders 600g,revert_price,D76,12,written,PASS
+09:11:37,76,Steggles Habanero Wings 1Kg,exact_index_lookup,row77,found,hit=yes,PASS
+09:11:39,76,Steggles Habanero Wings 1Kg,update_price:coles,row77,wrote 39.1,wrote=True err=,PASS
+09:11:39,76,Steggles Habanero Wings 1Kg,verify_price_write,E77,39.1,39.1,PASS
+09:11:41,76,Steggles Habanero Wings 1Kg,revert_price,E77,11,written,PASS
+09:11:41,77,Woolworths Beef Mince 500g,exact_index_lookup,row78,found,hit=yes,PASS
+09:11:42,77,Woolworths Beef Mince 500g,update_price:woolworths,row78,wrote 11.17,wrote=True err=,PASS
+09:11:43,77,Woolworths Beef Mince 500g,verify_price_write,D78,11.17,11.17,PASS
+09:11:44,77,Woolworths Beef Mince 500g,revert_price,D78,15,written,PASS
+09:11:44,78,Yumi's Herb Falafel 200g,exact_index_lookup,row79,found,hit=yes,PASS
+09:11:46,78,Yumi's Herb Falafel 200g,update_price:coles,row79,wrote 10.28,wrote=True err=,PASS
+09:11:46,78,Yumi's Herb Falafel 200g,verify_price_write,E79,10.28,10.28,PASS
+09:11:47,78,Yumi's Herb Falafel 200g,revert_price,E79,,written,PASS
+09:11:47,79,Carman's Apple & Blueberry Fruit Straps 5 pack,exact_index_lookup,row80,found,hit=yes,PASS
+09:11:49,79,Carman's Apple & Blueberry Fruit Straps 5 pack,update_price:woolworths,row80,wrote 16.37,wrote=True err=,PASS
+09:11:49,79,Carman's Apple & Blueberry Fruit Straps 5 pack,verify_price_write,D80,16.37,16.37,PASS
+09:11:51,79,Carman's Apple & Blueberry Fruit Straps 5 pack,revert_price,D80,6,written,PASS
+09:11:51,80,Woolworths Greek Style Fetta 200g,exact_index_lookup,row81,found,hit=yes,PASS
+09:11:53,80,Woolworths Greek Style Fetta 200g,update_price:coles,row81,wrote 34.2,wrote=True err=,PASS
+09:11:53,80,Woolworths Greek Style Fetta 200g,verify_price_write,E81,34.2,34.2,PASS
+09:11:54,80,Woolworths Greek Style Fetta 200g,revert_price,E81,,written,PASS
+09:11:54,81,Tamar Valley Dairy Yoghurt Mango & Cream 170g,exact_index_lookup,row82,found,hit=yes,PASS
+09:11:56,81,Tamar Valley Dairy Yoghurt Mango & Cream 170g,update_price:woolworths,row82,wrote 7.11,wrote=True err=,PASS
+09:11:56,81,Tamar Valley Dairy Yoghurt Mango & Cream 170g,verify_price_write,D82,7.11,7.11,PASS
+09:11:57,81,Tamar Valley Dairy Yoghurt Mango & Cream 170g,revert_price,D82,$1.52,written,PASS
+09:11:58,82,Farmers Union Greek Style High Protein Yoghurt Pouch Mango 1,exact_index_lookup,row83,found,hit=yes,PASS
+09:11:59,82,Farmers Union Greek Style High Protein Yoghurt Pouch Mango 1,update_price:coles,row83,wrote 32.07,wrote=True err=,PASS
+09:12:00,82,Farmers Union Greek Style High Protein Yoghurt Pouch Mango 1,verify_price_write,E83,32.07,32.07,PASS
+09:12:01,82,Farmers Union Greek Style High Protein Yoghurt Pouch Mango 1,revert_price,E83,,written,PASS
+09:12:01,83,Tamar Valley Dairy Yoghurt Mango & Cream 700g,exact_index_lookup,row84,found,hit=yes,PASS
+09:12:03,83,Tamar Valley Dairy Yoghurt Mango & Cream 700g,update_price:woolworths,row84,wrote 19.15,wrote=True err=,PASS
+09:12:03,83,Tamar Valley Dairy Yoghurt Mango & Cream 700g,verify_price_write,D84,19.15,19.15,PASS
+09:12:04,83,Tamar Valley Dairy Yoghurt Mango & Cream 700g,revert_price,D84,$7.50,written,PASS
+09:12:04,84,Tegel Take Outs Nashville Style Chicken Burgers 600g,exact_index_lookup,row85,found,hit=yes,PASS
+09:12:06,84,Tegel Take Outs Nashville Style Chicken Burgers 600g,update_price:coles,row85,wrote 20.85,wrote=True err=,PASS
+09:12:06,84,Tegel Take Outs Nashville Style Chicken Burgers 600g,verify_price_write,E85,20.85,20.85,PASS
+09:12:08,84,Tegel Take Outs Nashville Style Chicken Burgers 600g,revert_price,E85,,written,PASS
+09:12:08,85,Birds Eye Golden Crunch Thin & Crispy Chips 900g,exact_index_lookup,row86,found,hit=yes,PASS
+09:12:09,85,Birds Eye Golden Crunch Thin & Crispy Chips 900g,update_price:woolworths,row86,wrote 17.46,wrote=True err=,PASS
+09:12:10,85,Birds Eye Golden Crunch Thin & Crispy Chips 900g,verify_price_write,D86,17.46,17.46,PASS
+09:12:11,85,Birds Eye Golden Crunch Thin & Crispy Chips 900g,revert_price,D86,$6.00,written,PASS
+09:12:11,86,V Energy Zero Sugar Drink Blackcurrant & Yuzu 250mL,exact_index_lookup,row87,found,hit=yes,PASS
+09:12:13,86,V Energy Zero Sugar Drink Blackcurrant & Yuzu 250mL,update_price:coles,row87,wrote 17.39,wrote=True err=,PASS
+09:12:13,86,V Energy Zero Sugar Drink Blackcurrant & Yuzu 250mL,verify_price_write,E87,17.39,17.39,PASS
+09:12:14,86,V Energy Zero Sugar Drink Blackcurrant & Yuzu 250mL,revert_price,E87,,written,PASS
+09:12:14,87,Glow Lab Coconut & Sandalwood Body Wash 900mL,exact_index_lookup,row88,found,hit=yes,PASS
+09:12:16,87,Glow Lab Coconut & Sandalwood Body Wash 900mL,update_price:woolworths,row88,wrote 11.48,wrote=True err=,PASS
+09:12:17,87,Glow Lab Coconut & Sandalwood Body Wash 900mL,verify_price_write,D88,11.48,11.48,PASS
+09:12:18,87,Glow Lab Coconut & Sandalwood Body Wash 900mL,revert_price,D88,$18.00,written,PASS
+09:12:18,88,White Glo Professional Whitening Toothpaste 115g,exact_index_lookup,row89,found,hit=yes,PASS
+09:12:20,88,White Glo Professional Whitening Toothpaste 115g,update_price:coles,row89,wrote 18.94,wrote=True err=,PASS
+09:12:20,88,White Glo Professional Whitening Toothpaste 115g,verify_price_write,E89,18.94,18.94,PASS
+09:12:21,88,White Glo Professional Whitening Toothpaste 115g,revert_price,E89,,written,PASS
+09:12:21,89,RAW SUGAR 2KG,exact_index_lookup,row90,found,hit=yes,PASS
+09:12:23,89,RAW SUGAR 2KG,update_price:woolworths,row90,wrote 18.25,wrote=True err=,PASS
+09:12:23,89,RAW SUGAR 2KG,verify_price_write,D90,18.25,18.25,PASS
+09:12:24,89,RAW SUGAR 2KG,revert_price,D90,$3.00,written,PASS
+09:12:24,90,Woolworths Little Gem Lettuce Green 2 pack,exact_index_lookup,row91,found,hit=yes,PASS
+09:12:26,90,Woolworths Little Gem Lettuce Green 2 pack,update_price:coles,row91,wrote 7.83,wrote=True err=,PASS
+09:12:27,90,Woolworths Little Gem Lettuce Green 2 pack,verify_price_write,E91,7.83,7.83,PASS
+09:12:28,90,Woolworths Little Gem Lettuce Green 2 pack,revert_price,E91,,written,PASS
+09:12:28,91,Full+ On The Go Meal Replacement Chocolate 480mL,exact_index_lookup,row92,found,hit=yes,PASS
+09:12:30,91,Full+ On The Go Meal Replacement Chocolate 480mL,update_price:woolworths,row92,wrote 1.98,wrote=True err=,PASS
+09:12:30,91,Full+ On The Go Meal Replacement Chocolate 480mL,verify_price_write,D92,1.98,1.98,PASS
+09:12:31,91,Full+ On The Go Meal Replacement Chocolate 480mL,revert_price,D92,$5.95,written,PASS
+09:12:31,92,DAIRY FARMERS THICK & CREAMY MANGO & PASSIONFRUIT YOGHURT,exact_index_lookup,row93,found,hit=yes,PASS
+09:12:33,92,DAIRY FARMERS THICK & CREAMY MANGO & PASSIONFRUIT YOGHURT,update_price:coles,row93,wrote 24.9,wrote=True err=,PASS
+09:12:33,92,DAIRY FARMERS THICK & CREAMY MANGO & PASSIONFRUIT YOGHURT,verify_price_write,E93,24.9,24.9,PASS
+09:12:35,92,DAIRY FARMERS THICK & CREAMY MANGO & PASSIONFRUIT YOGHURT,revert_price,E93,,written,PASS
+09:12:35,93,Green's Original Pancake Shake 375g,exact_index_lookup,row94,found,hit=yes,PASS
+09:12:37,93,Green's Original Pancake Shake 375g,update_price:woolworths,row94,wrote 9.43,wrote=True err=,PASS
+09:12:37,93,Green's Original Pancake Shake 375g,verify_price_write,D94,9.43,9.43,PASS
+09:12:38,93,Green's Original Pancake Shake 375g,revert_price,D94,1.9,written,PASS
+09:12:38,94,Thanks To Nature Shaving Cream Cherry Blossom & White Tea 15,exact_index_lookup,row95,found,hit=yes,PASS
+09:12:40,94,Thanks To Nature Shaving Cream Cherry Blossom & White Tea 15,update_price:coles,row95,wrote 27.46,wrote=True err=,PASS
+09:12:40,94,Thanks To Nature Shaving Cream Cherry Blossom & White Tea 15,verify_price_write,E95,27.46,27.46,PASS
+09:12:42,94,Thanks To Nature Shaving Cream Cherry Blossom & White Tea 15,revert_price,E95,,written,PASS
+09:12:42,95,Woolworths Tasty Shredded Cheese 500g,exact_index_lookup,row96,found,hit=yes,PASS
+09:12:43,95,Woolworths Tasty Shredded Cheese 500g,update_price:woolworths,row96,wrote 28.45,wrote=True err=,PASS
+09:12:44,95,Woolworths Tasty Shredded Cheese 500g,verify_price_write,D96,28.45,28.45,PASS
+09:12:45,95,Woolworths Tasty Shredded Cheese 500g,revert_price,D96,$8.30,written,PASS
+09:12:45,96,Woolworths Mozzarella Shredded Cheese 500g,exact_index_lookup,row97,found,hit=yes,PASS
+09:12:47,96,Woolworths Mozzarella Shredded Cheese 500g,update_price:coles,row97,wrote 40.35,wrote=True err=,PASS
+09:12:47,96,Woolworths Mozzarella Shredded Cheese 500g,verify_price_write,E97,40.35,40.35,PASS
+09:12:48,96,Woolworths Mozzarella Shredded Cheese 500g,revert_price,E97,,written,PASS
+09:12:48,97,Woolworths Light Tasty Shredded Cheese 500g,exact_index_lookup,row98,found,hit=yes,PASS
+09:12:50,97,Woolworths Light Tasty Shredded Cheese 500g,update_price:woolworths,row98,wrote 4.71,wrote=True err=,PASS
+09:12:51,97,Woolworths Light Tasty Shredded Cheese 500g,verify_price_write,D98,4.71,4.71,PASS
+09:12:52,97,Woolworths Light Tasty Shredded Cheese 500g,revert_price,D98,$8.30,written,PASS
+09:12:52,98,LIDDELLS LACTOSE FREE SHREDDED CHEESE 250G,exact_index_lookup,row99,found,hit=yes,PASS
+09:12:54,98,LIDDELLS LACTOSE FREE SHREDDED CHEESE 250G,update_price:coles,row99,wrote 30.27,wrote=True err=,PASS
+09:12:54,98,LIDDELLS LACTOSE FREE SHREDDED CHEESE 250G,verify_price_write,E99,30.27,30.27,PASS
+09:12:55,98,LIDDELLS LACTOSE FREE SHREDDED CHEESE 250G,revert_price,E99,,written,PASS
+09:12:55,99,Bio Cheese Dairy Free Cheddar Slices 200g,exact_index_lookup,row100,found,hit=yes,PASS
+09:12:57,99,Bio Cheese Dairy Free Cheddar Slices 200g,update_price:woolworths,row100,wrote 17.38,wrote=True err=,PASS
+09:12:57,99,Bio Cheese Dairy Free Cheddar Slices 200g,verify_price_write,D100,17.38,17.38,PASS
+09:12:59,99,Bio Cheese Dairy Free Cheddar Slices 200g,revert_price,D100,$9.00,written,PASS
+09:12:59,100,Woolworths Microwave Basmati Rice 250g,exact_index_lookup,row101,found,hit=yes,PASS
+09:13:00,100,Woolworths Microwave Basmati Rice 250g,update_price:coles,row101,wrote 27.03,wrote=True err=,PASS
+09:13:01,100,Woolworths Microwave Basmati Rice 250g,verify_price_write,E101,27.03,27.03,PASS
+09:13:02,100,Woolworths Microwave Basmati Rice 250g,revert_price,E101,,written,PASS
+09:13:02,101,Woolworths Pasta Spirals 500g,exact_index_lookup,row102,found,hit=yes,PASS
+09:13:04,101,Woolworths Pasta Spirals 500g,update_price:woolworths,row102,wrote 33.5,wrote=True err=,PASS
+09:13:04,101,Woolworths Pasta Spirals 500g,verify_price_write,D102,33.5,33.5,PASS
+09:13:05,101,Woolworths Pasta Spirals 500g,revert_price,D102,$1.00,written,PASS
+09:13:05,102,Yucateco XXXTRA Hot Habanero Sauce 120mL,exact_index_lookup,row103,found,hit=yes,PASS
+09:13:07,102,Yucateco XXXTRA Hot Habanero Sauce 120mL,update_price:coles,row103,wrote 32.76,wrote=True err=,PASS
+09:13:07,102,Yucateco XXXTRA Hot Habanero Sauce 120mL,verify_price_write,E103,32.76,32.76,PASS
+09:13:09,102,Yucateco XXXTRA Hot Habanero Sauce 120mL,revert_price,E103,5.50,written,PASS
+09:13:09,103,Mount Franklin Lightly Sparkling Water Lime Bottle 1.25L,exact_index_lookup,row104,found,hit=yes,PASS
+09:13:10,103,Mount Franklin Lightly Sparkling Water Lime Bottle 1.25L,update_price:woolworths,row104,wrote 17.24,wrote=True err=,PASS
+09:13:11,103,Mount Franklin Lightly Sparkling Water Lime Bottle 1.25L,verify_price_write,D104,17.24,17.24,PASS
+09:13:12,103,Mount Franklin Lightly Sparkling Water Lime Bottle 1.25L,revert_price,D104,$2.00,written,PASS
+09:13:12,104,Woolworths Coat & Cook Seasoning Mix Southern Fried Chicken ,exact_index_lookup,row105,found,hit=yes,PASS
+09:13:14,104,Woolworths Coat & Cook Seasoning Mix Southern Fried Chicken ,update_price:coles,row105,wrote 37.71,wrote=True err=,PASS
+09:13:14,104,Woolworths Coat & Cook Seasoning Mix Southern Fried Chicken ,verify_price_write,E105,37.71,37.71,PASS
+09:13:15,104,Woolworths Coat & Cook Seasoning Mix Southern Fried Chicken ,revert_price,E105,,written,PASS
+09:13:15,105,DermaVeen Daily Nourish Moisturising Lotion 500mL,exact_index_lookup,row106,found,hit=yes,PASS
+09:13:18,105,DermaVeen Daily Nourish Moisturising Lotion 500mL,update_price:woolworths,row106,wrote 36.67,wrote=True err=,PASS
+09:13:18,105,DermaVeen Daily Nourish Moisturising Lotion 500mL,verify_price_write,D106,36.67,36.67,PASS
+09:13:19,105,DermaVeen Daily Nourish Moisturising Lotion 500mL,revert_price,D106,10.2,written,PASS
+09:13:19,106,DermaVeen Extra Hydration Intensive Moisturising Lotion 500m,exact_index_lookup,row107,found,hit=yes,PASS
+09:13:21,106,DermaVeen Extra Hydration Intensive Moisturising Lotion 500m,update_price:coles,row107,wrote 4.95,wrote=True err=,PASS
+09:13:21,106,DermaVeen Extra Hydration Intensive Moisturising Lotion 500m,verify_price_write,E107,4.95,4.95,PASS
+09:13:23,106,DermaVeen Extra Hydration Intensive Moisturising Lotion 500m,revert_price,E107,,written,PASS
+09:13:23,107,DERMAVEEN EXTRA HYDRATION INTENSIVE MOISTURISING LOTION COLL,exact_index_lookup,row108,found,hit=yes,PASS
+09:13:25,107,DERMAVEEN EXTRA HYDRATION INTENSIVE MOISTURISING LOTION COLL,update_price:woolworths,row108,wrote 38.65,wrote=True err=,PASS
+09:13:25,107,DERMAVEEN EXTRA HYDRATION INTENSIVE MOISTURISING LOTION COLL,verify_price_write,D108,38.65,38.65,PASS
+09:13:26,107,DERMAVEEN EXTRA HYDRATION INTENSIVE MOISTURISING LOTION COLL,revert_price,D108,,written,PASS
+09:13:26,108,Casa Serena 500ml Body Lotion/Moisturiser Hand/Skin Cream Bl,exact_index_lookup,row109,found,hit=yes,PASS
+09:13:28,108,Casa Serena 500ml Body Lotion/Moisturiser Hand/Skin Cream Bl,update_price:coles,row109,wrote 13.84,wrote=True err=,PASS
+09:13:28,108,Casa Serena 500ml Body Lotion/Moisturiser Hand/Skin Cream Bl,verify_price_write,E109,13.84,13.84,PASS
+09:13:30,108,Casa Serena 500ml Body Lotion/Moisturiser Hand/Skin Cream Bl,revert_price,E109,,written,PASS
+09:13:30,109,CETAPHIL MOISTURISING LOTION 473ML,exact_index_lookup,row110,found,hit=yes,PASS
+09:13:32,109,CETAPHIL MOISTURISING LOTION 473ML,update_price:woolworths,row110,wrote 17.11,wrote=True err=,PASS
+09:13:32,109,CETAPHIL MOISTURISING LOTION 473ML,verify_price_write,D110,17.11,17.11,PASS
+09:13:33,109,CETAPHIL MOISTURISING LOTION 473ML,revert_price,D110,,written,PASS
+09:13:33,110,AVEENO DAILY MOISTURISING BODY LOTION,exact_index_lookup,row111,found,hit=yes,PASS
+09:13:35,110,AVEENO DAILY MOISTURISING BODY LOTION,update_price:coles,row111,wrote 38.47,wrote=True err=,PASS
+09:13:35,110,AVEENO DAILY MOISTURISING BODY LOTION,verify_price_write,E111,38.47,38.47,PASS
+09:13:36,110,AVEENO DAILY MOISTURISING BODY LOTION,revert_price,E111,$24.00,written,PASS
+09:13:36,111,Mozzarella Cheese Sticks 235g 10 Pack,exact_index_lookup,row112,found,hit=yes,PASS
+09:13:38,111,Mozzarella Cheese Sticks 235g 10 Pack,update_price:woolworths,row112,wrote 27.92,wrote=True err=,PASS
+09:13:39,111,Mozzarella Cheese Sticks 235g 10 Pack,verify_price_write,D112,27.92,27.92,PASS
+09:13:40,111,Mozzarella Cheese Sticks 235g 10 Pack,revert_price,D112,,written,PASS
+09:13:40,112,Olive Oil Spread 500g,exact_index_lookup,row113,found,hit=yes,PASS
+09:13:42,112,Olive Oil Spread 500g,update_price:coles,row113,wrote 32.05,wrote=True err=,PASS
+09:13:42,112,Olive Oil Spread 500g,verify_price_write,E113,32.05,32.05,PASS
+09:13:43,112,Olive Oil Spread 500g,revert_price,E113,3.5,written,PASS
+09:13:43,113,Lindt Hot Choc Flakes Tin 210g,exact_index_lookup,row114,found,hit=yes,PASS
+09:13:45,113,Lindt Hot Choc Flakes Tin 210g,update_price:woolworths,row114,wrote 11.98,wrote=True err=,PASS
+09:13:45,113,Lindt Hot Choc Flakes Tin 210g,verify_price_write,D114,11.98,11.98,PASS
+09:13:47,113,Lindt Hot Choc Flakes Tin 210g,revert_price,D114,,written,PASS
+09:13:49,114,ZZT8 0001 Rice Crackers 250g,add_row,woolworths,new row,wrote=True row=115 merged=None err=,PASS
+09:13:51,115,ZZT8 0002 Dish Soap 250g,add_row,coles,new row,wrote=True row=116 merged=None err=,PASS
+09:13:54,116,ZZT8 0003 Almond Milk 250g,add_row,woolworths,new row,wrote=True row=117 merged=None err=,PASS
+09:13:57,117,ZZT8 0004 Turmeric Powder 250g,add_row,coles,new row,wrote=True row=118 merged=None err=,PASS
+09:13:59,118,ZZT8 0005 Green Tea 250g,add_row,woolworths,new row,wrote=True row=119 merged=None err=,PASS
+09:14:02,119,ZZT8 0006 Pasta Sauce 250g,add_row,coles,new row,wrote=True row=120 merged=None err=,PASS
+09:14:04,120,ZZT8 0007 Rye Bread 500g,add_row,woolworths,new row,wrote=True row=121 merged=None err=,PASS
+09:14:07,121,ZZT8 0008 Olive Oil 500g,add_row,coles,new row,wrote=True row=122 merged=None err=,PASS
+09:14:09,122,ZZT8 0009 Chickpeas 500g,add_row,woolworths,new row,wrote=True row=123 merged=None err=,PASS
+09:14:12,123,ZZT8 0010 Basmati Rice 500g,add_row,coles,new row,wrote=True row=124 merged=None err=,PASS
+09:14:14,124,ZZT8 0011 Salty Crackers 500g,add_row,woolworths,new row,wrote=True row=125 merged=None err=,PASS
+09:14:16,125,ZZT8 0012 Coconut Yoghurt 500g,add_row,coles,new row,wrote=True row=126 merged=None err=,PASS
+09:14:19,126,ZZT8 0013 Butter Beans 500g,add_row,woolworths,new row,wrote=True row=127 merged=None err=,PASS
+09:14:22,127,ZZT8 0014 Tomato Paste 1kg,add_row,coles,new row,wrote=True row=128 merged=None err=,PASS
+09:14:24,128,ZZT8 0015 Maple Syrup 1kg,add_row,woolworths,new row,wrote=True row=129 merged=None err=,PASS
+09:14:27,129,ZZT8 0016 Peanut Butter 1kg,add_row,coles,new row,wrote=True row=130 merged=None err=,PASS
+09:14:29,130,ZZT8 0017 Corn Flakes 1kg,add_row,woolworths,new row,wrote=True row=131 merged=None err=,PASS
+09:14:32,131,ZZT8 0018 Paper Towel 1kg,add_row,coles,new row,wrote=True row=132 merged=None err=,PASS
+09:14:35,132,ZZT8 0019 Dish Sponges 1kg,add_row,woolworths,new row,wrote=True row=133 merged=None err=,PASS
+09:14:37,133,ZZT8 0020 Vanilla Ice Cream 1kg,add_row,coles,new row,wrote=True row=134 merged=None err=,PASS
+09:14:39,134,ZZT8 0021 Salted Cashews 2L,add_row,woolworths,new row,wrote=True row=135 merged=None err=,PASS
+09:14:42,135,ZZT8 0022 Muesli Bars 2L,add_row,coles,new row,wrote=True row=136 merged=None err=,PASS
+09:14:44,136,ZZT8 0023 Long Life Milk 2L,add_row,woolworths,new row,wrote=True row=137 merged=None err=,PASS
+09:14:47,137,ZZT8 0024 Black Coffee 2L,add_row,coles,new row,wrote=True row=138 merged=None err=,PASS
+09:14:49,138,ZZT8 0025 Sparkling Water 2L,add_row,woolworths,new row,wrote=True row=139 merged=None err=,PASS
+09:14:52,139,ZZT8 0026 Rice Crackers 2L,add_row,coles,new row,wrote=True row=140 merged=None err=,PASS
+09:14:54,140,ZZT8 0027 Dish Soap 2L,add_row,woolworths,new row,wrote=True row=141 merged=None err=,PASS
+09:14:57,141,ZZT8 0028 Almond Milk 750mL,add_row,coles,new row,wrote=True row=142 merged=None err=,PASS
+09:14:59,142,ZZT8 0029 Turmeric Powder 750mL,add_row,woolworths,new row,wrote=True row=143 merged=None err=,PASS
+09:15:02,143,ZZT8 0030 Green Tea 750mL,add_row,coles,new row,wrote=True row=144 merged=None err=,PASS
+09:15:04,144,ZZT8 0031 Pasta Sauce 750mL,add_row,woolworths,new row,wrote=True row=145 merged=None err=,PASS
+09:15:07,145,ZZT8 0032 Rye Bread 750mL,add_row,coles,new row,wrote=True row=146 merged=None err=,PASS
+09:15:09,146,ZZT8 0033 Olive Oil 750mL,add_row,woolworths,new row,wrote=True row=147 merged=None err=,PASS
+09:15:12,147,ZZT8 0034 Chickpeas 750mL,add_row,coles,new row,wrote=True row=148 merged=None err=,PASS
+09:15:14,148,ZZT8 0035 Basmati Rice 12 Pack,add_row,woolworths,new row,wrote=True row=149 merged=None err=,PASS
+09:15:16,149,ZZT8 0036 Salty Crackers 12 Pack,add_row,coles,new row,wrote=True row=150 merged=None err=,PASS
+09:17:19,150,ZZT8 0037 Coconut Yoghurt 12 Pack,add_row,woolworths,new row,wrote=True row=151 merged=None err=,PASS
+09:17:22,151,ZZT8 0038 Butter Beans 12 Pack,add_row,coles,new row,wrote=True row=152 merged=None err=,PASS
+09:17:24,152,ZZT8 0039 Tomato Paste 12 Pack,add_row,woolworths,new row,wrote=True row=153 merged=None err=,PASS
+09:17:27,153,ZZT8 0040 Maple Syrup 12 Pack,add_row,coles,new row,wrote=True row=154 merged=None err=,PASS
+09:17:29,154,ZZT8 0041 Peanut Butter 12 Pack,add_row,woolworths,new row,wrote=True row=155 merged=None err=,PASS
+09:17:31,155,ZZT8 0042 Corn Flakes 5 Pack,add_row,coles,new row,wrote=True row=156 merged=None err=,PASS
+09:17:34,156,ZZT8 0043 Paper Towel 5 Pack,add_row,woolworths,new row,wrote=True row=157 merged=None err=,PASS
+09:17:36,157,ZZT8 0044 Dish Sponges 5 Pack,add_row,coles,new row,wrote=True row=158 merged=None err=,PASS
+09:17:39,158,ZZT8 0045 Vanilla Ice Cream 5 Pack,add_row,woolworths,new row,wrote=True row=159 merged=None err=,PASS
+09:17:41,159,ZZT8 0046 Salted Cashews 5 Pack,add_row,coles,new row,wrote=True row=160 merged=None err=,PASS
+09:17:44,160,ZZT8 0047 Muesli Bars 5 Pack,add_row,woolworths,new row,wrote=True row=161 merged=None err=,PASS
+09:17:46,161,ZZT8 0048 Long Life Milk 5 Pack,add_row,coles,new row,wrote=True row=162 merged=None err=,PASS
+09:17:49,162,ZZT8 0049 Black Coffee 300g,add_row,woolworths,new row,wrote=True row=163 merged=None err=,PASS
+09:17:51,163,ZZT8 0050 Sparkling Water 300g,add_row,coles,new row,wrote=True row=164 merged=None err=,PASS
+09:17:54,164,ZZT8 0051 Rice Crackers 300g,add_row,woolworths,new row,wrote=True row=165 merged=None err=,PASS
+09:17:56,165,ZZT8 0052 Dish Soap 300g,add_row,coles,new row,wrote=True row=166 merged=None err=,PASS
+09:17:58,166,ZZT8 0053 Almond Milk 300g,add_row,woolworths,new row,wrote=True row=167 merged=None err=,PASS
+09:18:01,167,ZZT8 0054 Turmeric Powder 300g,add_row,coles,new row,wrote=True row=168 merged=None err=,PASS
+09:18:04,168,ZZT8 0055 Green Tea 300g,add_row,woolworths,new row,wrote=True row=169 merged=None err=,PASS
+09:18:06,169,ZZT8 0056 Pasta Sauce 150g,add_row,coles,new row,wrote=True row=170 merged=None err=,PASS
+09:18:08,170,ZZT8 0057 Rye Bread 150g,add_row,woolworths,new row,wrote=True row=171 merged=None err=,PASS
+09:18:11,171,ZZT8 0058 Olive Oil 150g,add_row,coles,new row,wrote=True row=172 merged=None err=,PASS
+09:18:13,172,ZZT8 0059 Chickpeas 150g,add_row,woolworths,new row,wrote=True row=173 merged=None err=,PASS
+09:20:16,173,ZZT8 0060 Basmati Rice 150g,add_row,coles,new row,wrote=False row=174 merged=False err=already tracked (row 174: 'ZZT8 0,FAIL
+09:20:19,174,ZZT8 0061 Salty Crackers 150g,add_row,woolworths,new row,wrote=True row=175 merged=None err=,PASS
+09:20:21,175,ZZT8 0062 Coconut Yoghurt 150g,add_row,coles,new row,wrote=True row=176 merged=None err=,PASS
+09:20:24,176,ZZT8 0063 Butter Beans 4 Pack,add_row,woolworths,new row,wrote=True row=177 merged=None err=,PASS
+09:20:26,177,ZZT8 0064 Tomato Paste 4 Pack,add_row,coles,new row,wrote=True row=178 merged=None err=,PASS
+09:20:29,178,ZZT8 0065 Maple Syrup 4 Pack,add_row,woolworths,new row,wrote=True row=179 merged=None err=,PASS
+09:21:11,179,ZZT8 0066 Peanut Butter 4 Pack,add_row,coles,new row,wrote=False row=180 merged=False err=already tracked (row 180: 'ZZT8 0,FAIL
+09:21:14,180,ZZT8 0067 Corn Flakes 4 Pack,add_row,woolworths,new row,wrote=True row=181 merged=None err=,PASS
+09:21:17,181,ZZT8 0068 Paper Towel 4 Pack,add_row,coles,new row,wrote=True row=182 merged=None err=,PASS
+09:21:19,182,ZZT8 0069 Dish Sponges 4 Pack,add_row,woolworths,new row,wrote=True row=183 merged=None err=,PASS
+09:21:22,183,ZZT8 0070 Vanilla Ice Cream 250g,add_row,coles,new row,wrote=True row=184 merged=None err=,PASS
+09:21:24,184,ZZT8 0071 Salted Cashews 250g,add_row,woolworths,new row,wrote=True row=185 merged=None err=,PASS
+09:21:27,185,ZZT8 0072 Muesli Bars 250g,add_row,coles,new row,wrote=True row=186 merged=None err=,PASS
+09:21:29,186,ZZT8 0073 Long Life Milk 250g,add_row,woolworths,new row,wrote=True row=187 merged=None err=,PASS
+09:21:32,187,ZZT8 0074 Black Coffee 250g,add_row,coles,new row,wrote=True row=188 merged=None err=,PASS
+09:21:34,188,ZZT8 0075 Sparkling Water 250g,add_row,woolworths,new row,wrote=True row=189 merged=None err=,PASS
+09:21:37,189,ZZT8 0076 Rice Crackers 250g,add_row,coles,new row,wrote=True row=190 merged=None err=,PASS
+09:21:39,190,ZZT8 0077 Dish Soap 500g,add_row,woolworths,new row,wrote=True row=191 merged=None err=,PASS
+09:21:41,191,ZZT8 0078 Almond Milk 500g,add_row,coles,new row,wrote=True row=192 merged=None err=,PASS
+09:21:44,192,ZZT8 0079 Turmeric Powder 500g,add_row,woolworths,new row,wrote=True row=193 merged=None err=,PASS
+09:21:46,193,ZZT8 0080 Green Tea 500g,add_row,coles,new row,wrote=True row=194 merged=None err=,PASS
+09:21:49,194,ZZT8 0081 Pasta Sauce 500g,add_row,woolworths,new row,wrote=True row=195 merged=None err=,PASS
+09:21:51,195,ZZT8 0082 Rye Bread 500g,add_row,coles,new row,wrote=True row=196 merged=None err=,PASS
+09:21:54,196,ZZT8 0083 Olive Oil 500g,add_row,woolworths,new row,wrote=True row=197 merged=None err=,PASS
+09:21:56,197,ZZT8 0084 Chickpeas 1kg,add_row,coles,new row,wrote=True row=198 merged=None err=,PASS
+09:21:59,198,ZZT8 0085 Basmati Rice 1kg,add_row,woolworths,new row,wrote=True row=199 merged=None err=,PASS
+09:22:01,199,ZZT8 0086 Salty Crackers 1kg,add_row,coles,new row,wrote=True row=200 merged=None err=,PASS
+09:22:03,200,ZZT8 0087 Coconut Yoghurt 1kg,add_row,woolworths,new row,wrote=True row=201 merged=None err=,PASS
+09:22:06,201,ZZT8 0088 Butter Beans 1kg,add_row,coles,new row,wrote=True row=202 merged=None err=,PASS
+09:22:08,202,ZZT8 0089 Tomato Paste 1kg,add_row,woolworths,new row,wrote=True row=203 merged=None err=,PASS
+09:22:11,203,ZZT8 0090 Maple Syrup 1kg,add_row,coles,new row,wrote=True row=204 merged=None err=,PASS
+09:22:13,204,ZZT8 0091 Peanut Butter 2L,add_row,woolworths,new row,wrote=True row=205 merged=None err=,PASS
+09:24:16,205,ZZT8 0092 Corn Flakes 2L,add_row,coles,new row,wrote=False row=206 merged=False err=already tracked (row 206: 'ZZT8 0,FAIL
+09:24:19,206,ZZT8 0093 Paper Towel 2L,add_row,woolworths,new row,wrote=True row=207 merged=None err=,PASS
+09:24:21,207,ZZT8 0094 Dish Sponges 2L,add_row,coles,new row,wrote=True row=208 merged=None err=,PASS
+09:24:24,208,ZZT8 0095 Vanilla Ice Cream 2L,add_row,woolworths,new row,wrote=True row=209 merged=None err=,PASS
+09:24:26,209,ZZT8 0096 Salted Cashews 2L,add_row,coles,new row,wrote=True row=210 merged=None err=,PASS
+09:24:29,210,ZZT8 0097 Muesli Bars 2L,add_row,woolworths,new row,wrote=True row=211 merged=None err=,PASS
+09:24:31,211,ZZT8 0098 Long Life Milk 750mL,add_row,coles,new row,wrote=True row=212 merged=None err=,PASS
+09:24:33,212,ZZT8 0099 Black Coffee 750mL,add_row,woolworths,new row,wrote=True row=213 merged=None err=,PASS
+09:24:36,213,ZZT8 0100 Sparkling Water 750mL,add_row,coles,new row,wrote=True row=214 merged=None err=,PASS
+09:24:38,214,ZZT8 0101 Rice Crackers 750mL,add_row,woolworths,new row,wrote=True row=215 merged=None err=,PASS
+09:24:41,215,ZZT8 0102 Dish Soap 750mL,add_row,coles,new row,wrote=True row=216 merged=None err=,PASS
+09:24:43,216,ZZT8 0103 Almond Milk 750mL,add_row,woolworths,new row,wrote=True row=217 merged=None err=,PASS
+09:24:46,217,ZZT8 0104 Turmeric Powder 750mL,add_row,coles,new row,wrote=True row=218 merged=None err=,PASS
+09:24:48,218,ZZT8 0105 Green Tea 12 Pack,add_row,woolworths,new row,wrote=True row=219 merged=None err=,PASS
+09:24:50,219,ZZT8 0106 Pasta Sauce 12 Pack,add_row,coles,new row,wrote=True row=220 merged=None err=,PASS
+09:24:53,220,ZZT8 0107 Rye Bread 12 Pack,add_row,woolworths,new row,wrote=True row=221 merged=None err=,PASS
+09:24:55,221,ZZT8 0108 Olive Oil 12 Pack,add_row,coles,new row,wrote=True row=222 merged=None err=,PASS
+09:24:58,222,ZZT8 0109 Chickpeas 12 Pack,add_row,woolworths,new row,wrote=True row=223 merged=None err=,PASS
+09:25:00,223,ZZT8 0110 Basmati Rice 12 Pack,add_row,coles,new row,wrote=True row=224 merged=None err=,PASS
+09:25:03,224,ZZT8 0111 Salty Crackers 12 Pack,add_row,woolworths,new row,wrote=True row=225 merged=None err=,PASS
+09:25:05,225,ZZT8 0112 Coconut Yoghurt 5 Pack,add_row,coles,new row,wrote=True row=226 merged=None err=,PASS
+09:25:08,226,ZZT8 0113 Butter Beans 5 Pack,add_row,woolworths,new row,wrote=True row=227 merged=None err=,PASS
+09:25:10,227,ZZT8 0114 Tomato Paste 5 Pack,add_row,coles,new row,wrote=True row=228 merged=None err=,PASS
+09:25:12,228,ZZT8 0115 Maple Syrup 5 Pack,add_row,woolworths,new row,wrote=True row=229 merged=None err=,PASS
+09:25:15,229,ZZT8 0116 Peanut Butter 5 Pack,add_row,coles,new row,wrote=True row=230 merged=None err=,PASS
+09:27:18,230,ZZT8 0117 Corn Flakes 5 Pack,add_row,woolworths,new row,wrote=True row=231 merged=None err=,PASS
+09:27:21,231,ZZT8 0118 Paper Towel 5 Pack,add_row,coles,new row,wrote=True row=232 merged=None err=,PASS
+09:27:23,232,ZZT8 0119 Dish Sponges 300g,add_row,woolworths,new row,wrote=True row=233 merged=None err=,PASS
+09:27:25,233,ZZT8 0120 Vanilla Ice Cream 300g,add_row,coles,new row,wrote=True row=234 merged=None err=,PASS
+09:27:28,234,ZZT8 0121 Salted Cashews 300g,add_row,woolworths,new row,wrote=True row=235 merged=None err=,PASS
+09:27:30,235,ZZT8 0122 Muesli Bars 300g,add_row,coles,new row,wrote=True row=236 merged=None err=,PASS
+09:27:33,236,ZZT8 0123 Long Life Milk 300g,add_row,woolworths,new row,wrote=True row=237 merged=None err=,PASS
+09:27:35,237,ZZT8 0124 Black Coffee 300g,add_row,coles,new row,wrote=True row=238 merged=None err=,PASS
+09:27:38,238,ZZT8 0125 Sparkling Water 300g,add_row,woolworths,new row,wrote=True row=239 merged=None err=,PASS
+09:27:40,239,ZZT8 0126 Rice Crackers 150g,add_row,coles,new row,wrote=True row=240 merged=None err=,PASS
+09:27:42,240,ZZT8 0127 Dish Soap 150g,add_row,woolworths,new row,wrote=True row=241 merged=None err=,PASS
+09:27:45,241,ZZT8 0128 Almond Milk 150g,add_row,coles,new row,wrote=True row=242 merged=None err=,PASS
+09:27:47,242,ZZT8 0129 Turmeric Powder 150g,add_row,woolworths,new row,wrote=True row=243 merged=None err=,PASS
+09:27:50,243,ZZT8 0130 Green Tea 150g,add_row,coles,new row,wrote=True row=244 merged=None err=,PASS
+09:27:52,244,ZZT8 0131 Pasta Sauce 150g,add_row,woolworths,new row,wrote=True row=245 merged=None err=,PASS
+09:27:55,245,ZZT8 0132 Rye Bread 150g,add_row,coles,new row,wrote=True row=246 merged=None err=,PASS
+09:27:57,246,ZZT8 0133 Olive Oil 4 Pack,add_row,woolworths,new row,wrote=True row=247 merged=None err=,PASS
+09:27:59,247,ZZT8 0134 Chickpeas 4 Pack,add_row,coles,new row,wrote=True row=248 merged=None err=,PASS
+09:28:02,248,ZZT8 0135 Basmati Rice 4 Pack,add_row,woolworths,new row,wrote=True row=249 merged=None err=,PASS
+09:28:04,249,ZZT8 0136 Salty Crackers 4 Pack,add_row,coles,new row,wrote=True row=250 merged=None err=,PASS
+09:28:07,250,ZZT8 0137 Coconut Yoghurt 4 Pack,add_row,woolworths,new row,wrote=True row=251 merged=None err=,PASS
+09:28:09,251,ZZT8 0138 Butter Beans 4 Pack,add_row,coles,new row,wrote=True row=252 merged=None err=,PASS
+09:28:12,252,ZZT8 0139 Tomato Paste 4 Pack,add_row,woolworths,new row,wrote=True row=253 merged=None err=,PASS
+09:28:14,253,ZZT8 0140 Maple Syrup 250g,add_row,coles,new row,wrote=True row=254 merged=None err=,PASS
+09:30:17,254,ZZT8 0141 Peanut Butter 250g,add_row,woolworths,new row,wrote=True row=255 merged=None err=,PASS
+09:30:20,255,ZZT8 0142 Corn Flakes 250g,add_row,coles,new row,wrote=True row=256 merged=None err=,PASS
+09:30:22,256,ZZT8 0143 Paper Towel 250g,add_row,woolworths,new row,wrote=True row=257 merged=None err=,PASS
+09:30:25,257,ZZT8 0144 Dish Sponges 250g,add_row,coles,new row,wrote=True row=258 merged=None err=,PASS
+09:30:27,258,ZZT8 0145 Vanilla Ice Cream 250g,add_row,woolworths,new row,wrote=True row=259 merged=None err=,PASS
+09:30:30,259,ZZT8 0146 Salted Cashews 250g,add_row,coles,new row,wrote=True row=260 merged=None err=,PASS
+09:30:32,260,ZZT8 0147 Muesli Bars 500g,add_row,woolworths,new row,wrote=True row=261 merged=None err=,PASS
+09:30:35,261,ZZT8 0148 Long Life Milk 500g,add_row,coles,new row,wrote=True row=262 merged=None err=,PASS
+09:30:37,262,ZZT8 0149 Black Coffee 500g,add_row,woolworths,new row,wrote=True row=263 merged=None err=,PASS
+09:30:40,263,ZZT8 0150 Sparkling Water 500g,add_row,coles,new row,wrote=True row=264 merged=None err=,PASS
+09:30:42,264,ZZT8 0151 Rice Crackers 500g,add_row,woolworths,new row,wrote=True row=265 merged=None err=,PASS
+09:30:45,265,ZZT8 0152 Dish Soap 500g,add_row,coles,new row,wrote=True row=266 merged=None err=,PASS
+09:30:47,266,ZZT8 0153 Almond Milk 500g,add_row,woolworths,new row,wrote=True row=267 merged=None err=,PASS
+09:30:49,267,ZZT8 0154 Turmeric Powder 1kg,add_row,coles,new row,wrote=True row=268 merged=None err=,PASS
+09:30:52,268,ZZT8 0155 Green Tea 1kg,add_row,woolworths,new row,wrote=True row=269 merged=None err=,PASS
+09:30:54,269,ZZT8 0156 Pasta Sauce 1kg,add_row,coles,new row,wrote=True row=270 merged=None err=,PASS
+09:30:57,270,ZZT8 0157 Rye Bread 1kg,add_row,woolworths,new row,wrote=True row=271 merged=None err=,PASS
+09:30:59,271,ZZT8 0158 Olive Oil 1kg,add_row,coles,new row,wrote=True row=272 merged=None err=,PASS
+09:31:02,272,ZZT8 0159 Chickpeas 1kg,add_row,woolworths,new row,wrote=True row=273 merged=None err=,PASS
+09:31:04,273,ZZT8 0160 Basmati Rice 1kg,add_row,coles,new row,wrote=True row=274 merged=None err=,PASS
+09:31:07,274,ZZT8 0161 Salty Crackers 2L,add_row,woolworths,new row,wrote=True row=275 merged=None err=,PASS
+09:31:09,275,ZZT8 0162 Coconut Yoghurt 2L,add_row,coles,new row,wrote=True row=276 merged=None err=,PASS
+09:31:12,276,ZZT8 0163 Butter Beans 2L,add_row,woolworths,new row,wrote=True row=277 merged=None err=,PASS
+09:31:14,277,ZZT8 0164 Tomato Paste 2L,add_row,coles,new row,wrote=True row=278 merged=None err=,PASS
+09:31:16,278,ZZT8 0165 Maple Syrup 2L,add_row,woolworths,new row,wrote=True row=279 merged=None err=,PASS
+09:35:20,279,ZZT8 0166 Peanut Butter 2L,add_row,coles,new row,wrote=True row=280 merged=None err=,PASS
+09:35:22,280,ZZT8 0167 Corn Flakes 2L,add_row,woolworths,new row,wrote=True row=281 merged=None err=,PASS
+09:35:25,281,ZZT8 0168 Paper Towel 750mL,add_row,coles,new row,wrote=True row=282 merged=None err=,PASS
+09:35:27,282,ZZT8 0169 Dish Sponges 750mL,add_row,woolworths,new row,wrote=True row=283 merged=None err=,PASS
+09:35:30,283,ZZT8 0170 Vanilla Ice Cream 750mL,add_row,coles,new row,wrote=True row=284 merged=None err=,PASS
+09:35:32,284,ZZT8 0171 Salted Cashews 750mL,add_row,woolworths,new row,wrote=True row=285 merged=None err=,PASS
+09:35:34,285,ZZT8 0172 Muesli Bars 750mL,add_row,coles,new row,wrote=True row=286 merged=None err=,PASS
+09:35:37,286,ZZT8 0173 Long Life Milk 750mL,add_row,woolworths,new row,wrote=True row=287 merged=None err=,PASS
+09:35:39,287,ZZT8 0174 Black Coffee 750mL,add_row,coles,new row,wrote=True row=288 merged=None err=,PASS
+09:35:42,288,ZZT8 0175 Sparkling Water 12 Pack,add_row,woolworths,new row,wrote=True row=289 merged=None err=,PASS
+09:35:44,289,ZZT8 0176 Rice Crackers 12 Pack,add_row,coles,new row,wrote=True row=290 merged=None err=,PASS
+09:35:47,290,ZZT8 0177 Dish Soap 12 Pack,add_row,woolworths,new row,wrote=True row=291 merged=None err=,PASS
+09:35:49,291,ZZT8 0178 Almond Milk 12 Pack,add_row,coles,new row,wrote=True row=292 merged=None err=,PASS
+09:35:52,292,ZZT8 0179 Turmeric Powder 12 Pack,add_row,woolworths,new row,wrote=True row=293 merged=None err=,PASS
+09:35:54,293,ZZT8 0180 Green Tea 12 Pack,add_row,coles,new row,wrote=True row=294 merged=None err=,PASS
+09:35:57,294,ZZT8 0181 Pasta Sauce 12 Pack,add_row,woolworths,new row,wrote=True row=295 merged=None err=,PASS
+09:35:59,295,ZZT8 0182 Rye Bread 5 Pack,add_row,coles,new row,wrote=True row=296 merged=None err=,PASS
+09:36:01,296,ZZT8 0183 Olive Oil 5 Pack,add_row,woolworths,new row,wrote=True row=297 merged=None err=,PASS
+09:36:04,297,ZZT8 0184 Chickpeas 5 Pack,add_row,coles,new row,wrote=True row=298 merged=None err=,PASS
+09:36:06,298,ZZT8 0185 Basmati Rice 5 Pack,add_row,woolworths,new row,wrote=True row=299 merged=None err=,PASS
+09:36:09,299,ZZT8 0186 Salty Crackers 5 Pack,add_row,coles,new row,wrote=True row=300 merged=None err=,PASS
+09:36:11,300,ZZT8 0187 Coconut Yoghurt 5 Pack,add_row,woolworths,new row,wrote=True row=301 merged=None err=,PASS
+09:36:14,301,ZZT8 0188 Butter Beans 5 Pack,add_row,coles,new row,wrote=True row=302 merged=None err=,PASS
+09:38:16,302,ZZT8 0189 Tomato Paste 300g,add_row,woolworths,new row,wrote=True row=303 merged=None err=,PASS
+09:38:19,303,ZZT8 0190 Maple Syrup 300g,add_row,coles,new row,wrote=True row=304 merged=None err=,PASS
+09:38:21,304,ZZT8 0191 Peanut Butter 300g,add_row,woolworths,new row,wrote=True row=305 merged=None err=,PASS
+09:38:24,305,ZZT8 0192 Corn Flakes 300g,add_row,coles,new row,wrote=True row=306 merged=None err=,PASS
+09:38:26,306,ZZT8 0193 Paper Towel 300g,add_row,woolworths,new row,wrote=True row=307 merged=None err=,PASS
+09:38:29,307,ZZT8 0194 Dish Sponges 300g,add_row,coles,new row,wrote=True row=308 merged=None err=,PASS
+09:38:31,308,ZZT8 0195 Vanilla Ice Cream 300g,add_row,woolworths,new row,wrote=True row=309 merged=None err=,PASS
+09:38:33,309,ZZT8 0196 Salted Cashews 150g,add_row,coles,new row,wrote=True row=310 merged=None err=,PASS
+09:38:36,310,ZZT8 0197 Muesli Bars 150g,add_row,woolworths,new row,wrote=True row=311 merged=None err=,PASS
+09:38:38,311,ZZT8 0198 Long Life Milk 150g,add_row,coles,new row,wrote=True row=312 merged=None err=,PASS
+09:38:41,312,ZZT8 0199 Black Coffee 150g,add_row,woolworths,new row,wrote=True row=313 merged=None err=,PASS
+09:38:43,313,ZZT8 0200 Sparkling Water 150g,add_row,coles,new row,wrote=True row=314 merged=None err=,PASS
+09:38:46,314,ZZT8 0201 Rice Crackers 150g,add_row,woolworths,new row,wrote=True row=315 merged=None err=,PASS
+09:38:48,315,ZZT8 0202 Dish Soap 150g,add_row,coles,new row,wrote=True row=316 merged=None err=,PASS
+09:38:51,316,ZZT8 0203 Almond Milk 4 Pack,add_row,woolworths,new row,wrote=True row=317 merged=None err=,PASS
+09:38:53,317,ZZT8 0204 Turmeric Powder 4 Pack,add_row,coles,new row,wrote=True row=318 merged=None err=,PASS
+09:38:56,318,ZZT8 0205 Green Tea 4 Pack,add_row,woolworths,new row,wrote=True row=319 merged=None err=,PASS
+09:38:58,319,ZZT8 0206 Pasta Sauce 4 Pack,add_row,coles,new row,wrote=True row=320 merged=None err=,PASS
+09:39:00,320,ZZT8 0207 Rye Bread 4 Pack,add_row,woolworths,new row,wrote=True row=321 merged=None err=,PASS
+09:39:03,321,ZZT8 0208 Olive Oil 4 Pack,add_row,coles,new row,wrote=True row=322 merged=None err=,PASS
+09:39:05,322,ZZT8 0209 Chickpeas 4 Pack,add_row,woolworths,new row,wrote=True row=323 merged=None err=,PASS
+09:39:08,323,ZZT8 0210 Basmati Rice 250g,add_row,coles,new row,wrote=True row=324 merged=None err=,PASS
+09:39:10,324,ZZT8 0211 Salty Crackers 250g,add_row,woolworths,new row,wrote=True row=325 merged=None err=,PASS
+09:39:13,325,ZZT8 0212 Coconut Yoghurt 250g,add_row,coles,new row,wrote=True row=326 merged=None err=,PASS
+09:41:16,326,ZZT8 0213 Butter Beans 250g,add_row,woolworths,new row,wrote=True row=327 merged=None err=,PASS
+09:41:18,327,ZZT8 0214 Tomato Paste 250g,add_row,coles,new row,wrote=True row=328 merged=None err=,PASS
+09:41:21,328,ZZT8 0215 Maple Syrup 250g,add_row,woolworths,new row,wrote=True row=329 merged=None err=,PASS
+09:41:24,329,ZZT8 0216 Peanut Butter 250g,add_row,coles,new row,wrote=True row=330 merged=None err=,PASS
+09:41:27,330,ZZT8 0217 Corn Flakes 500g,add_row,woolworths,new row,wrote=True row=331 merged=None err=,PASS
+09:41:29,331,ZZT8 0218 Paper Towel 500g,add_row,coles,new row,wrote=True row=332 merged=None err=,PASS
+09:41:31,332,ZZT8 0219 Dish Sponges 500g,add_row,woolworths,new row,wrote=True row=333 merged=None err=,PASS
+09:41:34,333,ZZT8 0220 Vanilla Ice Cream 500g,add_row,coles,new row,wrote=True row=334 merged=None err=,PASS
+09:41:37,334,ZZT8 0221 Salted Cashews 500g,add_row,woolworths,new row,wrote=True row=335 merged=None err=,PASS
+09:41:39,335,ZZT8 0222 Muesli Bars 500g,add_row,coles,new row,wrote=True row=336 merged=None err=,PASS
+09:41:41,336,ZZT8 0223 Long Life Milk 500g,add_row,woolworths,new row,wrote=True row=337 merged=None err=,PASS
+09:41:44,337,ZZT8 0224 Black Coffee 1kg,add_row,coles,new row,wrote=True row=338 merged=None err=,PASS
+09:41:46,338,ZZT8 0225 Sparkling Water 1kg,add_row,woolworths,new row,wrote=True row=339 merged=None err=,PASS
+09:41:49,339,ZZT8 0226 Rice Crackers 1kg,add_row,coles,new row,wrote=True row=340 merged=None err=,PASS
+09:41:51,340,ZZT8 0227 Dish Soap 1kg,add_row,woolworths,new row,wrote=True row=341 merged=None err=,PASS
+09:41:54,341,ZZT8 0228 Almond Milk 1kg,add_row,coles,new row,wrote=True row=342 merged=None err=,PASS
+09:41:56,342,ZZT8 0229 Turmeric Powder 1kg,add_row,woolworths,new row,wrote=True row=343 merged=None err=,PASS
+09:41:59,343,ZZT8 0230 Green Tea 1kg,add_row,coles,new row,wrote=True row=344 merged=None err=,PASS
+09:42:01,344,ZZT8 0231 Pasta Sauce 2L,add_row,woolworths,new row,wrote=True row=345 merged=None err=,PASS
+09:42:03,345,ZZT8 0232 Rye Bread 2L,add_row,coles,new row,wrote=True row=346 merged=None err=,PASS
+09:42:06,346,ZZT8 0233 Olive Oil 2L,add_row,woolworths,new row,wrote=True row=347 merged=None err=,PASS
+09:42:08,347,ZZT8 0234 Chickpeas 2L,add_row,coles,new row,wrote=True row=348 merged=None err=,PASS
+09:42:11,348,ZZT8 0235 Basmati Rice 2L,add_row,woolworths,new row,wrote=True row=349 merged=None err=,PASS
+09:42:13,349,ZZT8 0236 Salty Crackers 2L,add_row,coles,new row,wrote=True row=350 merged=None err=,PASS
+09:42:16,350,ZZT8 0237 Coconut Yoghurt 2L,add_row,woolworths,new row,wrote=True row=351 merged=None err=,PASS
+09:44:19,351,ZZT8 0238 Butter Beans 750mL,add_row,coles,new row,wrote=True row=352 merged=None err=,PASS
+09:44:21,352,ZZT8 0239 Tomato Paste 750mL,add_row,woolworths,new row,wrote=True row=353 merged=None err=,PASS
+09:44:24,353,ZZT8 0240 Maple Syrup 750mL,add_row,coles,new row,wrote=True row=354 merged=None err=,PASS
+09:44:26,354,ZZT8 0241 Peanut Butter 750mL,add_row,woolworths,new row,wrote=True row=355 merged=None err=,PASS
+09:44:29,355,ZZT8 0242 Corn Flakes 750mL,add_row,coles,new row,wrote=True row=356 merged=None err=,PASS
+09:44:31,356,ZZT8 0243 Paper Towel 750mL,add_row,woolworths,new row,wrote=True row=357 merged=None err=,PASS
+09:44:34,357,ZZT8 0244 Dish Sponges 750mL,add_row,coles,new row,wrote=True row=358 merged=None err=,PASS
+09:44:36,358,ZZT8 0245 Vanilla Ice Cream 12 Pack,add_row,woolworths,new row,wrote=True row=359 merged=None err=,PASS
+09:44:39,359,ZZT8 0246 Salted Cashews 12 Pack,add_row,coles,new row,wrote=True row=360 merged=None err=,PASS
+09:44:41,360,ZZT8 0247 Muesli Bars 12 Pack,add_row,woolworths,new row,wrote=True row=361 merged=None err=,PASS
+09:44:43,361,ZZT8 0248 Long Life Milk 12 Pack,add_row,coles,new row,wrote=True row=362 merged=None err=,PASS
+09:44:46,362,ZZT8 0249 Black Coffee 12 Pack,add_row,woolworths,new row,wrote=True row=363 merged=None err=,PASS
+09:44:48,363,ZZT8 0250 Sparkling Water 12 Pack,add_row,coles,new row,wrote=True row=364 merged=None err=,PASS
+09:44:51,364,ZZT8 0251 Rice Crackers 12 Pack,add_row,woolworths,new row,wrote=True row=365 merged=None err=,PASS
+09:44:53,365,ZZT8 0252 Dish Soap 5 Pack,add_row,coles,new row,wrote=True row=366 merged=None err=,PASS
+09:44:56,366,ZZT8 0253 Almond Milk 5 Pack,add_row,woolworths,new row,wrote=True row=367 merged=None err=,PASS
+09:44:58,367,ZZT8 0254 Turmeric Powder 5 Pack,add_row,coles,new row,wrote=True row=368 merged=None err=,PASS
+09:45:01,368,ZZT8 0255 Green Tea 5 Pack,add_row,woolworths,new row,wrote=True row=369 merged=None err=,PASS
+09:45:03,369,ZZT8 0256 Pasta Sauce 5 Pack,add_row,coles,new row,wrote=True row=370 merged=None err=,PASS
+09:45:05,370,ZZT8 0257 Rye Bread 5 Pack,add_row,woolworths,new row,wrote=True row=371 merged=None err=,PASS
+09:45:08,371,ZZT8 0258 Olive Oil 5 Pack,add_row,coles,new row,wrote=True row=372 merged=None err=,PASS
+09:45:10,372,ZZT8 0259 Chickpeas 300g,add_row,woolworths,new row,wrote=True row=373 merged=None err=,PASS
+09:45:13,373,ZZT8 0260 Basmati Rice 300g,add_row,coles,new row,wrote=True row=374 merged=None err=,PASS
+09:45:15,374,ZZT8 0261 Salty Crackers 300g,add_row,woolworths,new row,wrote=True row=375 merged=None err=,PASS
+09:47:19,375,ZZT8 0262 Coconut Yoghurt 300g,add_row,coles,new row,wrote=True row=376 merged=None err=,PASS
+09:47:21,376,ZZT8 0263 Butter Beans 300g,add_row,woolworths,new row,wrote=True row=377 merged=None err=,PASS
+09:47:24,377,ZZT8 0264 Tomato Paste 300g,add_row,coles,new row,wrote=True row=378 merged=None err=,PASS
+09:47:26,378,ZZT8 0265 Maple Syrup 300g,add_row,woolworths,new row,wrote=True row=379 merged=None err=,PASS
+09:47:29,379,ZZT8 0266 Peanut Butter 150g,add_row,coles,new row,wrote=True row=380 merged=None err=,PASS
+09:47:31,380,ZZT8 0267 Corn Flakes 150g,add_row,woolworths,new row,wrote=True row=381 merged=None err=,PASS
+09:47:34,381,ZZT8 0268 Paper Towel 150g,add_row,coles,new row,wrote=True row=382 merged=None err=,PASS
+09:47:36,382,ZZT8 0269 Dish Sponges 150g,add_row,woolworths,new row,wrote=True row=383 merged=None err=,PASS
+09:47:39,383,ZZT8 0270 Vanilla Ice Cream 150g,add_row,coles,new row,wrote=True row=384 merged=None err=,PASS
+09:47:41,384,ZZT8 0271 Salted Cashews 150g,add_row,woolworths,new row,wrote=True row=385 merged=None err=,PASS
+09:47:44,385,ZZT8 0272 Muesli Bars 150g,add_row,coles,new row,wrote=True row=386 merged=None err=,PASS
+09:47:46,386,ZZT8 0273 Long Life Milk 4 Pack,add_row,woolworths,new row,wrote=True row=387 merged=None err=,PASS
+09:47:48,387,ZZT8 0274 Black Coffee 4 Pack,add_row,coles,new row,wrote=True row=388 merged=None err=,PASS
+09:47:51,388,ZZT8 0275 Sparkling Water 4 Pack,add_row,woolworths,new row,wrote=True row=389 merged=None err=,PASS
+09:47:53,389,ZZT8 0276 Rice Crackers 4 Pack,add_row,coles,new row,wrote=True row=390 merged=None err=,PASS
+09:47:56,390,ZZT8 0277 Dish Soap 4 Pack,add_row,woolworths,new row,wrote=True row=391 merged=None err=,PASS
+09:47:58,391,ZZT8 0278 Almond Milk 4 Pack,add_row,coles,new row,wrote=True row=392 merged=None err=,PASS
+09:48:01,392,ZZT8 0279 Turmeric Powder 4 Pack,add_row,woolworths,new row,wrote=True row=393 merged=None err=,PASS
+09:48:44,393,ZZT8 0280 Green Tea 250g,add_row,coles,new row,wrote=True row=394 merged=None err=,PASS
+09:48:46,394,ZZT8 0281 Pasta Sauce 250g,add_row,woolworths,new row,wrote=True row=395 merged=None err=,PASS
+09:48:49,395,ZZT8 0282 Rye Bread 250g,add_row,coles,new row,wrote=True row=396 merged=None err=,PASS
+09:48:51,396,ZZT8 0283 Olive Oil 250g,add_row,woolworths,new row,wrote=True row=397 merged=None err=,PASS
+09:48:54,397,ZZT8 0284 Chickpeas 250g,add_row,coles,new row,wrote=True row=398 merged=None err=,PASS
+09:48:56,398,ZZT8 0285 Basmati Rice 250g,add_row,woolworths,new row,wrote=True row=399 merged=None err=,PASS
+09:48:59,399,ZZT8 0286 Salty Crackers 250g,add_row,coles,new row,wrote=True row=400 merged=None err=,PASS
+09:49:01,400,ZZT8 0287 Coconut Yoghurt 500g,add_row,woolworths,new row,wrote=True row=401 merged=None err=,PASS
+09:49:04,401,ZZT8 0288 Butter Beans 500g,add_row,coles,new row,wrote=True row=402 merged=None err=,PASS
+09:49:06,402,ZZT8 0289 Tomato Paste 500g,add_row,woolworths,new row,wrote=True row=403 merged=None err=,PASS
+09:49:09,403,ZZT8 0290 Maple Syrup 500g,add_row,coles,new row,wrote=True row=404 merged=None err=,PASS
+09:49:11,404,ZZT8 0291 Peanut Butter 500g,add_row,woolworths,new row,wrote=True row=405 merged=None err=,PASS
+09:49:14,405,ZZT8 0292 Corn Flakes 500g,add_row,coles,new row,wrote=True row=406 merged=None err=,PASS
+09:49:16,406,ZZT8 0293 Paper Towel 500g,add_row,woolworths,new row,wrote=True row=407 merged=None err=,PASS
+09:49:19,407,ZZT8 0294 Dish Sponges 1kg,add_row,coles,new row,wrote=True row=408 merged=None err=,PASS
+09:49:21,408,ZZT8 0295 Vanilla Ice Cream 1kg,add_row,woolworths,new row,wrote=True row=409 merged=None err=,PASS
+09:49:24,409,ZZT8 0296 Salted Cashews 1kg,add_row,coles,new row,wrote=True row=410 merged=None err=,PASS
+09:49:26,410,ZZT8 0297 Muesli Bars 1kg,add_row,woolworths,new row,wrote=True row=411 merged=None err=,PASS
+09:49:29,411,ZZT8 0298 Long Life Milk 1kg,add_row,coles,new row,wrote=True row=412 merged=None err=,PASS
+09:49:31,412,ZZT8 0299 Black Coffee 1kg,add_row,woolworths,new row,wrote=True row=413 merged=None err=,PASS
+09:49:34,413,ZZT8 0300 Sparkling Water 1kg,add_row,coles,new row,wrote=True row=414 merged=None err=,PASS
+09:49:36,414,ZZT8 0301 Rice Crackers 2L,add_row,woolworths,new row,wrote=True row=415 merged=None err=,PASS
+09:49:39,415,ZZT8 0302 Dish Soap 2L,add_row,coles,new row,wrote=True row=416 merged=None err=,PASS
+09:49:41,416,ZZT8 0303 Almond Milk 2L,add_row,woolworths,new row,wrote=True row=417 merged=None err=,PASS
+09:49:44,417,ZZT8 0304 Turmeric Powder 2L,add_row,coles,new row,wrote=True row=418 merged=None err=,PASS
+09:49:46,418,ZZT8 0305 Green Tea 2L,add_row,woolworths,new row,wrote=True row=419 merged=None err=,PASS
+09:49:49,419,ZZT8 0306 Pasta Sauce 2L,add_row,coles,new row,wrote=True row=420 merged=None err=,PASS
+09:49:51,420,ZZT8 0307 Rye Bread 2L,add_row,woolworths,new row,wrote=True row=421 merged=None err=,PASS
+09:49:54,421,ZZT8 0308 Olive Oil 750mL,add_row,coles,new row,wrote=True row=422 merged=None err=,PASS
+09:49:56,422,ZZT8 0309 Chickpeas 750mL,add_row,woolworths,new row,wrote=True row=423 merged=None err=,PASS
+09:49:59,423,ZZT8 0310 Basmati Rice 750mL,add_row,coles,new row,wrote=True row=424 merged=None err=,PASS
+09:50:01,424,ZZT8 0311 Salty Crackers 750mL,add_row,woolworths,new row,wrote=True row=425 merged=None err=,PASS
+09:50:04,425,ZZT8 0312 Coconut Yoghurt 750mL,add_row,coles,new row,wrote=True row=426 merged=None err=,PASS
+09:50:06,426,ZZT8 0313 Butter Beans 750mL,add_row,woolworths,new row,wrote=True row=427 merged=None err=,PASS
+09:50:09,427,ZZT8 0314 Tomato Paste 750mL,add_row,coles,new row,wrote=True row=428 merged=None err=,PASS
+09:50:11,428,ZZT8 0315 Maple Syrup 12 Pack,add_row,woolworths,new row,wrote=True row=429 merged=None err=,PASS
+09:50:14,429,ZZT8 0316 Peanut Butter 12 Pack,add_row,coles,new row,wrote=True row=430 merged=None err=,PASS
+09:52:17,430,ZZT8 0317 Corn Flakes 12 Pack,add_row,woolworths,new row,wrote=True row=431 merged=None err=,PASS
+09:52:20,431,ZZT8 0318 Paper Towel 12 Pack,add_row,coles,new row,wrote=True row=432 merged=None err=,PASS
+09:52:22,432,ZZT8 0319 Dish Sponges 12 Pack,add_row,woolworths,new row,wrote=True row=433 merged=None err=,PASS
+09:52:25,433,ZZT8 0320 Vanilla Ice Cream 12 Pack,add_row,coles,new row,wrote=True row=434 merged=None err=,PASS
+09:52:27,434,ZZT8 0321 Salted Cashews 12 Pack,add_row,woolworths,new row,wrote=True row=435 merged=None err=,PASS
+09:52:30,435,ZZT8 0322 Muesli Bars 5 Pack,add_row,coles,new row,wrote=True row=436 merged=None err=,PASS
+09:52:33,436,ZZT8 0323 Long Life Milk 5 Pack,add_row,woolworths,new row,wrote=True row=437 merged=None err=,PASS
+09:52:35,437,ZZT8 0324 Black Coffee 5 Pack,add_row,coles,new row,wrote=True row=438 merged=None err=,PASS
+09:52:38,438,ZZT8 0325 Sparkling Water 5 Pack,add_row,woolworths,new row,wrote=True row=439 merged=None err=,PASS
+09:52:40,439,ZZT8 0326 Rice Crackers 5 Pack,add_row,coles,new row,wrote=True row=440 merged=None err=,PASS
+09:52:43,440,ZZT8 0327 Dish Soap 5 Pack,add_row,woolworths,new row,wrote=True row=441 merged=None err=,PASS
+09:52:45,441,ZZT8 0328 Almond Milk 5 Pack,add_row,coles,new row,wrote=True row=442 merged=None err=,PASS
+09:52:48,442,ZZT8 0329 Turmeric Powder 300g,add_row,woolworths,new row,wrote=True row=443 merged=None err=,PASS
+09:52:50,443,ZZT8 0330 Green Tea 300g,add_row,coles,new row,wrote=True row=444 merged=None err=,PASS
+09:52:53,444,ZZT8 0331 Pasta Sauce 300g,add_row,woolworths,new row,wrote=True row=445 merged=None err=,PASS
+09:52:55,445,ZZT8 0332 Rye Bread 300g,add_row,coles,new row,wrote=True row=446 merged=None err=,PASS
+09:52:58,446,ZZT8 0333 Olive Oil 300g,add_row,woolworths,new row,wrote=True row=447 merged=None err=,PASS
+09:53:01,447,ZZT8 0334 Chickpeas 300g,add_row,coles,new row,wrote=True row=448 merged=None err=,PASS
+09:53:03,448,ZZT8 0335 Basmati Rice 300g,add_row,woolworths,new row,wrote=True row=449 merged=None err=,PASS
+09:53:06,449,ZZT8 0336 Salty Crackers 150g,add_row,coles,new row,wrote=True row=450 merged=None err=,PASS
+09:53:08,450,ZZT8 0337 Coconut Yoghurt 150g,add_row,woolworths,new row,wrote=True row=451 merged=None err=,PASS
+09:53:11,451,ZZT8 0338 Butter Beans 150g,add_row,coles,new row,wrote=True row=452 merged=None err=,PASS
+09:53:13,452,ZZT8 0339 Tomato Paste 150g,add_row,woolworths,new row,wrote=True row=453 merged=None err=,PASS
+09:53:16,453,ZZT8 0340 Maple Syrup 150g,add_row,coles,new row,wrote=True row=454 merged=None err=,PASS
+09:53:18,454,ZZT8 0341 Peanut Butter 150g,add_row,woolworths,new row,wrote=True row=455 merged=None err=,PASS
+09:55:21,455,ZZT8 0342 Corn Flakes 150g,add_row,coles,new row,wrote=True row=456 merged=None err=,PASS
+09:55:24,456,ZZT8 0343 Paper Towel 4 Pack,add_row,woolworths,new row,wrote=True row=457 merged=None err=,PASS
+09:55:26,457,ZZT8 0344 Dish Sponges 4 Pack,add_row,coles,new row,wrote=True row=458 merged=None err=,PASS
+09:55:29,458,ZZT8 0345 Vanilla Ice Cream 4 Pack,add_row,woolworths,new row,wrote=True row=459 merged=None err=,PASS
+09:56:12,459,ZZT8 0346 Salted Cashews 4 Pack,add_row,coles,new row,wrote=True row=460 merged=None err=,PASS
+09:56:14,460,ZZT8 0347 Muesli Bars 4 Pack,add_row,woolworths,new row,wrote=True row=461 merged=None err=,PASS
+09:56:17,461,ZZT8 0348 Long Life Milk 4 Pack,add_row,coles,new row,wrote=True row=462 merged=None err=,PASS
+09:56:19,462,ZZT8 0349 Black Coffee 4 Pack,add_row,woolworths,new row,wrote=True row=463 merged=None err=,PASS
+09:56:22,463,ZZT8 0350 Sparkling Water 250g,add_row,coles,new row,wrote=True row=464 merged=None err=,PASS
+09:56:24,464,ZZT8 0351 Rice Crackers 250g,add_row,woolworths,new row,wrote=True row=465 merged=None err=,PASS
+09:56:29,465,ZZT8 0352 Dish Soap 250g,add_row,coles,new row,wrote=True row=466 merged=None err=,PASS
+09:56:31,466,ZZT8 0353 Almond Milk 250g,add_row,woolworths,new row,wrote=True row=467 merged=None err=,PASS
+09:56:34,467,ZZT8 0354 Turmeric Powder 250g,add_row,coles,new row,wrote=True row=468 merged=None err=,PASS
+09:56:36,468,ZZT8 0355 Green Tea 250g,add_row,woolworths,new row,wrote=True row=469 merged=None err=,PASS
+09:56:39,469,ZZT8 0356 Pasta Sauce 250g,add_row,coles,new row,wrote=True row=470 merged=None err=,PASS
+09:56:41,470,ZZT8 0357 Rye Bread 500g,add_row,woolworths,new row,wrote=True row=471 merged=None err=,PASS
+09:56:44,471,ZZT8 0358 Olive Oil 500g,add_row,coles,new row,wrote=True row=472 merged=None err=,PASS
+09:56:46,472,ZZT8 0359 Chickpeas 500g,add_row,woolworths,new row,wrote=True row=473 merged=None err=,PASS
+09:56:49,473,ZZT8 0360 Basmati Rice 500g,add_row,coles,new row,wrote=True row=474 merged=None err=,PASS
+09:56:52,474,ZZT8 0361 Salty Crackers 500g,add_row,woolworths,new row,wrote=True row=475 merged=None err=,PASS
+09:56:54,475,ZZT8 0362 Coconut Yoghurt 500g,add_row,coles,new row,wrote=True row=476 merged=None err=,PASS
+09:56:57,476,ZZT8 0363 Butter Beans 500g,add_row,woolworths,new row,wrote=True row=477 merged=None err=,PASS
+09:56:59,477,ZZT8 0364 Tomato Paste 1kg,add_row,coles,new row,wrote=True row=478 merged=None err=,PASS
+09:57:02,478,ZZT8 0365 Maple Syrup 1kg,add_row,woolworths,new row,wrote=True row=479 merged=None err=,PASS
+09:57:04,479,ZZT8 0366 Peanut Butter 1kg,add_row,coles,new row,wrote=True row=480 merged=None err=,PASS
+09:57:06,480,ZZT8 0367 Corn Flakes 1kg,add_row,woolworths,new row,wrote=True row=481 merged=None err=,PASS
+09:57:09,481,ZZT8 0368 Paper Towel 1kg,add_row,coles,new row,wrote=True row=482 merged=None err=,PASS
+09:57:11,482,ZZT8 0369 Dish Sponges 1kg,add_row,woolworths,new row,wrote=True row=483 merged=None err=,PASS
+09:57:14,483,ZZT8 0370 Vanilla Ice Cream 1kg,add_row,coles,new row,wrote=True row=484 merged=None err=,PASS
+09:57:17,484,ZZT8 0371 Salted Cashews 2L,add_row,woolworths,new row,wrote=True row=485 merged=None err=,PASS
+09:57:20,485,ZZT8 0372 Muesli Bars 2L,add_row,coles,new row,wrote=True row=486 merged=None err=,PASS
+10:01:23,486,ZZT8 0373 Long Life Milk 2L,add_row,woolworths,new row,wrote=True row=487 merged=None err=,PASS
+10:01:26,487,ZZT8 0374 Black Coffee 2L,add_row,coles,new row,wrote=True row=488 merged=None err=,PASS
+10:01:28,488,ZZT8 0375 Sparkling Water 2L,add_row,woolworths,new row,wrote=True row=489 merged=None err=,PASS
+10:01:31,489,ZZT8 0376 Rice Crackers 2L,add_row,coles,new row,wrote=True row=490 merged=None err=,PASS
+10:01:33,490,ZZT8 0377 Dish Soap 2L,add_row,woolworths,new row,wrote=True row=491 merged=None err=,PASS
+10:01:36,491,ZZT8 0378 Almond Milk 750mL,add_row,coles,new row,wrote=True row=492 merged=None err=,PASS
+10:01:39,492,ZZT8 0379 Turmeric Powder 750mL,add_row,woolworths,new row,wrote=True row=493 merged=None err=,PASS
+10:01:41,493,ZZT8 0380 Green Tea 750mL,add_row,coles,new row,wrote=True row=494 merged=None err=,PASS
+10:01:44,494,ZZT8 0381 Pasta Sauce 750mL,add_row,woolworths,new row,wrote=True row=495 merged=None err=,PASS
+10:01:46,495,ZZT8 0382 Rye Bread 750mL,add_row,coles,new row,wrote=True row=496 merged=None err=,PASS
+10:01:49,496,ZZT8 0383 Olive Oil 750mL,add_row,woolworths,new row,wrote=True row=497 merged=None err=,PASS
+10:01:51,497,ZZT8 0384 Chickpeas 750mL,add_row,coles,new row,wrote=True row=498 merged=None err=,PASS
+10:01:54,498,ZZT8 0385 Basmati Rice 12 Pack,add_row,woolworths,new row,wrote=True row=499 merged=None err=,PASS
+10:01:56,499,ZZT8 0386 Salty Crackers 12 Pack,add_row,coles,new row,wrote=True row=500 merged=None err=,PASS
+10:01:59,500,ZZT8 0387 Coconut Yoghurt 12 Pack,add_row,woolworths,new row,wrote=True row=501 merged=None err=,PASS
+10:02:01,114,ZZT8 0001 Rice Crackers 250g,update_price:coles,row115,wrote 2.25,wrote=True err=,PASS
+10:02:03,115,ZZT8 0002 Dish Soap 250g,update_price:woolworths,row116,wrote 3.25,wrote=True err=,PASS
+10:02:04,116,ZZT8 0003 Almond Milk 250g,update_price:coles,row117,wrote 4.25,wrote=True err=,PASS
+10:02:06,117,ZZT8 0004 Turmeric Powder 250g,update_price:woolworths,row118,wrote 5.25,wrote=True err=,PASS
+10:02:08,118,ZZT8 0005 Green Tea 250g,update_price:coles,row119,wrote 6.25,wrote=True err=,PASS
+10:02:10,119,ZZT8 0006 Pasta Sauce 250g,update_price:woolworths,row120,wrote 7.25,wrote=True err=,PASS
+10:02:12,120,ZZT8 0007 Rye Bread 500g,update_price:coles,row121,wrote 8.25,wrote=True err=,PASS
+10:02:14,121,ZZT8 0008 Olive Oil 500g,update_price:woolworths,row122,wrote 9.25,wrote=True err=,PASS
+10:02:16,122,ZZT8 0009 Chickpeas 500g,update_price:coles,row123,wrote 10.25,wrote=True err=,PASS
+10:02:17,123,ZZT8 0010 Basmati Rice 500g,update_price:woolworths,row124,wrote 11.25,wrote=True err=,PASS
+10:02:19,124,ZZT8 0011 Salty Crackers 500g,update_price:coles,row125,wrote 12.25,wrote=True err=,PASS
+10:02:21,125,ZZT8 0012 Coconut Yoghurt 500g,update_price:woolworths,row126,wrote 13.25,wrote=True err=,PASS
+10:02:23,126,ZZT8 0013 Butter Beans 500g,update_price:coles,row127,wrote 14.25,wrote=True err=,PASS
+10:02:25,127,ZZT8 0014 Tomato Paste 1kg,update_price:woolworths,row128,wrote 15.25,wrote=True err=,PASS
+10:02:27,128,ZZT8 0015 Maple Syrup 1kg,update_price:coles,row129,wrote 16.25,wrote=True err=,PASS
+10:02:28,129,ZZT8 0016 Peanut Butter 1kg,update_price:woolworths,row130,wrote 17.25,wrote=True err=,PASS
+10:02:30,130,ZZT8 0017 Corn Flakes 1kg,update_price:coles,row131,wrote 18.25,wrote=True err=,PASS
+10:02:32,131,ZZT8 0018 Paper Towel 1kg,update_price:woolworths,row132,wrote 19.25,wrote=True err=,PASS
+10:02:34,132,ZZT8 0019 Dish Sponges 1kg,update_price:coles,row133,wrote 20.25,wrote=True err=,PASS
+10:02:36,133,ZZT8 0020 Vanilla Ice Cream 1kg,update_price:woolworths,row134,wrote 21.25,wrote=True err=,PASS
+10:02:38,134,ZZT8 0021 Salted Cashews 2L,update_price:coles,row135,wrote 22.25,wrote=True err=,PASS
+10:02:40,135,ZZT8 0022 Muesli Bars 2L,update_price:woolworths,row136,wrote 23.25,wrote=True err=,PASS
+10:02:42,136,ZZT8 0023 Long Life Milk 2L,update_price:coles,row137,wrote 24.25,wrote=True err=,PASS
+10:02:44,137,ZZT8 0024 Black Coffee 2L,update_price:woolworths,row138,wrote 25.25,wrote=True err=,PASS
+10:02:45,138,ZZT8 0025 Sparkling Water 2L,update_price:coles,row139,wrote 26.25,wrote=True err=,PASS
+10:02:47,139,ZZT8 0026 Rice Crackers 2L,update_price:woolworths,row140,wrote 27.25,wrote=True err=,PASS
+10:02:49,140,ZZT8 0027 Dish Soap 2L,update_price:coles,row141,wrote 28.25,wrote=True err=,PASS
+10:02:51,141,ZZT8 0028 Almond Milk 750mL,update_price:woolworths,row142,wrote 29.25,wrote=True err=,PASS
+10:02:53,142,ZZT8 0029 Turmeric Powder 750mL,update_price:coles,row143,wrote 30.25,wrote=True err=,PASS
+10:02:55,143,ZZT8 0030 Green Tea 750mL,update_price:woolworths,row144,wrote 31.25,wrote=True err=,PASS
+10:02:57,144,ZZT8 0031 Pasta Sauce 750mL,update_price:coles,row145,wrote 2.25,wrote=True err=,PASS
+10:02:58,145,ZZT8 0032 Rye Bread 750mL,update_price:woolworths,row146,wrote 3.25,wrote=True err=,PASS
+10:03:00,146,ZZT8 0033 Olive Oil 750mL,update_price:coles,row147,wrote 4.25,wrote=True err=,PASS
+10:03:02,147,ZZT8 0034 Chickpeas 750mL,update_price:woolworths,row148,wrote 5.25,wrote=True err=,PASS
+10:03:04,148,ZZT8 0035 Basmati Rice 12 Pack,update_price:coles,row149,wrote 6.25,wrote=True err=,PASS
+10:03:06,149,ZZT8 0036 Salty Crackers 12 Pack,update_price:woolworths,row150,wrote 7.25,wrote=True err=,PASS
+10:03:08,150,ZZT8 0037 Coconut Yoghurt 12 Pack,update_price:coles,row151,wrote 8.25,wrote=True err=,PASS
+10:03:10,151,ZZT8 0038 Butter Beans 12 Pack,update_price:woolworths,row152,wrote 9.25,wrote=True err=,PASS
+10:03:12,152,ZZT8 0039 Tomato Paste 12 Pack,update_price:coles,row153,wrote 10.25,wrote=True err=,PASS
+10:03:13,153,ZZT8 0040 Maple Syrup 12 Pack,update_price:woolworths,row154,wrote 11.25,wrote=True err=,PASS
+10:03:15,154,ZZT8 0041 Peanut Butter 12 Pack,update_price:coles,row155,wrote 12.25,wrote=True err=,PASS
+10:03:17,155,ZZT8 0042 Corn Flakes 5 Pack,update_price:woolworths,row156,wrote 13.25,wrote=True err=,PASS
+10:03:19,156,ZZT8 0043 Paper Towel 5 Pack,update_price:coles,row157,wrote 14.25,wrote=True err=,PASS
+10:03:21,157,ZZT8 0044 Dish Sponges 5 Pack,update_price:woolworths,row158,wrote 15.25,wrote=True err=,PASS
+10:03:23,158,ZZT8 0045 Vanilla Ice Cream 5 Pack,update_price:coles,row159,wrote 16.25,wrote=True err=,PASS
+10:03:25,159,ZZT8 0046 Salted Cashews 5 Pack,update_price:woolworths,row160,wrote 17.25,wrote=True err=,PASS
+10:03:26,160,ZZT8 0047 Muesli Bars 5 Pack,update_price:coles,row161,wrote 18.25,wrote=True err=,PASS
+10:03:28,161,ZZT8 0048 Long Life Milk 5 Pack,update_price:woolworths,row162,wrote 19.25,wrote=True err=,PASS
+10:03:30,162,ZZT8 0049 Black Coffee 300g,update_price:coles,row163,wrote 20.25,wrote=True err=,PASS
+10:03:32,163,ZZT8 0050 Sparkling Water 300g,update_price:woolworths,row164,wrote 21.25,wrote=True err=,PASS
+10:03:34,164,ZZT8 0051 Rice Crackers 300g,update_price:coles,row165,wrote 22.25,wrote=True err=,PASS
+10:03:36,165,ZZT8 0052 Dish Soap 300g,update_price:woolworths,row166,wrote 23.25,wrote=True err=,PASS
+10:03:39,166,ZZT8 0053 Almond Milk 300g,update_price:coles,row167,wrote 24.25,wrote=True err=,PASS
+10:03:40,167,ZZT8 0054 Turmeric Powder 300g,update_price:woolworths,row168,wrote 25.25,wrote=True err=,PASS
+10:03:42,168,ZZT8 0055 Green Tea 300g,update_price:coles,row169,wrote 26.25,wrote=True err=,PASS
+10:03:44,169,ZZT8 0056 Pasta Sauce 150g,update_price:woolworths,row170,wrote 27.25,wrote=True err=,PASS
+10:03:46,170,ZZT8 0057 Rye Bread 150g,update_price:coles,row171,wrote 28.25,wrote=True err=,PASS
+10:03:48,171,ZZT8 0058 Olive Oil 150g,update_price:woolworths,row172,wrote 29.25,wrote=True err=,PASS
+10:03:50,172,ZZT8 0059 Chickpeas 150g,update_price:coles,row173,wrote 30.25,wrote=True err=,PASS
+10:03:52,173,ZZT8 0061 Salty Crackers 150g,update_price:woolworths,row175,wrote 31.25,wrote=True err=,PASS
+10:03:53,174,ZZT8 0062 Coconut Yoghurt 150g,update_price:coles,row176,wrote 2.25,wrote=True err=,PASS
+10:03:55,175,ZZT8 0063 Butter Beans 4 Pack,update_price:woolworths,row177,wrote 3.25,wrote=True err=,PASS
+10:03:57,176,ZZT8 0064 Tomato Paste 4 Pack,update_price:coles,row178,wrote 4.25,wrote=True err=,PASS
+10:03:59,177,ZZT8 0065 Maple Syrup 4 Pack,update_price:woolworths,row179,wrote 5.25,wrote=True err=,PASS
+10:04:01,178,ZZT8 0067 Corn Flakes 4 Pack,update_price:coles,row181,wrote 6.25,wrote=True err=,PASS
+10:04:03,179,ZZT8 0068 Paper Towel 4 Pack,update_price:woolworths,row182,wrote 7.25,wrote=True err=,PASS
+10:04:05,180,ZZT8 0069 Dish Sponges 4 Pack,update_price:coles,row183,wrote 8.25,wrote=True err=,PASS
+10:04:06,181,ZZT8 0070 Vanilla Ice Cream 250g,update_price:woolworths,row184,wrote 9.25,wrote=True err=,PASS
+10:04:08,182,ZZT8 0071 Salted Cashews 250g,update_price:coles,row185,wrote 10.25,wrote=True err=,PASS
+10:04:10,183,ZZT8 0072 Muesli Bars 250g,update_price:woolworths,row186,wrote 11.25,wrote=True err=,PASS
+10:04:12,184,ZZT8 0073 Long Life Milk 250g,update_price:coles,row187,wrote 12.25,wrote=True err=,PASS
+10:04:14,185,ZZT8 0074 Black Coffee 250g,update_price:woolworths,row188,wrote 13.25,wrote=True err=,PASS
+10:04:16,186,ZZT8 0075 Sparkling Water 250g,update_price:coles,row189,wrote 14.25,wrote=True err=,PASS
+10:04:18,187,ZZT8 0076 Rice Crackers 250g,update_price:woolworths,row190,wrote 15.25,wrote=True err=,PASS
+10:04:19,188,ZZT8 0077 Dish Soap 500g,update_price:coles,row191,wrote 16.25,wrote=True err=,PASS
+10:04:21,189,ZZT8 0078 Almond Milk 500g,update_price:woolworths,row192,wrote 17.25,wrote=True err=,PASS
+10:04:23,190,ZZT8 0079 Turmeric Powder 500g,update_price:coles,row193,wrote 18.25,wrote=True err=,PASS
+10:04:25,191,ZZT8 0080 Green Tea 500g,update_price:woolworths,row194,wrote 19.25,wrote=True err=,PASS
+10:04:27,192,ZZT8 0081 Pasta Sauce 500g,update_price:coles,row195,wrote 20.25,wrote=True err=,PASS
+10:04:29,193,ZZT8 0082 Rye Bread 500g,update_price:woolworths,row196,wrote 21.25,wrote=True err=,PASS
+10:04:31,194,ZZT8 0083 Olive Oil 500g,update_price:coles,row197,wrote 22.25,wrote=True err=,PASS
+10:04:32,195,ZZT8 0084 Chickpeas 1kg,update_price:woolworths,row198,wrote 23.25,wrote=True err=,PASS
+10:04:34,196,ZZT8 0085 Basmati Rice 1kg,update_price:coles,row199,wrote 24.25,wrote=True err=,PASS
+10:04:36,197,ZZT8 0086 Salty Crackers 1kg,update_price:woolworths,row200,wrote 25.25,wrote=True err=,PASS
+10:04:38,198,ZZT8 0087 Coconut Yoghurt 1kg,update_price:coles,row201,wrote 26.25,wrote=True err=,PASS
+10:04:40,199,ZZT8 0088 Butter Beans 1kg,update_price:woolworths,row202,wrote 27.25,wrote=True err=,PASS
+10:04:42,200,ZZT8 0089 Tomato Paste 1kg,update_price:coles,row203,wrote 28.25,wrote=True err=,PASS
+10:04:44,201,ZZT8 0090 Maple Syrup 1kg,update_price:woolworths,row204,wrote 29.25,wrote=True err=,PASS
+10:04:46,202,ZZT8 0091 Peanut Butter 2L,update_price:coles,row205,wrote 30.25,wrote=True err=,PASS
+10:04:48,203,ZZT8 0093 Paper Towel 2L,update_price:woolworths,row207,wrote 31.25,wrote=True err=,PASS
+10:04:49,204,ZZT8 0094 Dish Sponges 2L,update_price:coles,row208,wrote 2.25,wrote=True err=,PASS
+10:04:51,205,ZZT8 0095 Vanilla Ice Cream 2L,update_price:woolworths,row209,wrote 3.25,wrote=True err=,PASS
+10:04:53,206,ZZT8 0096 Salted Cashews 2L,update_price:coles,row210,wrote 4.25,wrote=True err=,PASS
+10:04:55,207,ZZT8 0097 Muesli Bars 2L,update_price:woolworths,row211,wrote 5.25,wrote=True err=,PASS
+10:04:57,208,ZZT8 0098 Long Life Milk 750mL,update_price:coles,row212,wrote 6.25,wrote=True err=,PASS
+10:04:59,209,ZZT8 0099 Black Coffee 750mL,update_price:woolworths,row213,wrote 7.25,wrote=True err=,PASS
+10:05:01,210,ZZT8 0100 Sparkling Water 750mL,update_price:coles,row214,wrote 8.25,wrote=True err=,PASS
+10:05:02,211,ZZT8 0101 Rice Crackers 750mL,update_price:woolworths,row215,wrote 9.25,wrote=True err=,PASS
+10:05:04,212,ZZT8 0102 Dish Soap 750mL,update_price:coles,row216,wrote 10.25,wrote=True err=,PASS
+10:05:06,213,ZZT8 0103 Almond Milk 750mL,update_price:woolworths,row217,wrote 11.25,wrote=True err=,PASS
+10:05:08,214,ZZT8 0104 Turmeric Powder 750mL,update_price:coles,row218,wrote 12.25,wrote=True err=,PASS
+10:05:10,215,ZZT8 0105 Green Tea 12 Pack,update_price:woolworths,row219,wrote 13.25,wrote=True err=,PASS
+10:05:12,216,ZZT8 0106 Pasta Sauce 12 Pack,update_price:coles,row220,wrote 14.25,wrote=True err=,PASS
+10:05:14,217,ZZT8 0107 Rye Bread 12 Pack,update_price:woolworths,row221,wrote 15.25,wrote=True err=,PASS
+10:05:15,218,ZZT8 0108 Olive Oil 12 Pack,update_price:coles,row222,wrote 16.25,wrote=True err=,PASS
+10:05:17,219,ZZT8 0109 Chickpeas 12 Pack,update_price:woolworths,row223,wrote 17.25,wrote=True err=,PASS
+10:05:19,220,ZZT8 0110 Basmati Rice 12 Pack,update_price:coles,row224,wrote 18.25,wrote=True err=,PASS
+10:05:21,221,ZZT8 0111 Salty Crackers 12 Pack,update_price:woolworths,row225,wrote 19.25,wrote=True err=,PASS
+10:05:23,222,ZZT8 0112 Coconut Yoghurt 5 Pack,update_price:coles,row226,wrote 20.25,wrote=True err=,PASS
+10:05:26,223,ZZT8 0113 Butter Beans 5 Pack,update_price:woolworths,row227,wrote 21.25,wrote=True err=,PASS
+10:05:27,224,ZZT8 0114 Tomato Paste 5 Pack,update_price:coles,row228,wrote 22.25,wrote=True err=,PASS
+10:05:29,225,ZZT8 0115 Maple Syrup 5 Pack,update_price:woolworths,row229,wrote 23.25,wrote=True err=,PASS
+10:05:31,226,ZZT8 0116 Peanut Butter 5 Pack,update_price:coles,row230,wrote 24.25,wrote=True err=,PASS
+10:05:33,227,ZZT8 0117 Corn Flakes 5 Pack,update_price:woolworths,row231,wrote 25.25,wrote=True err=,PASS
+10:05:35,228,ZZT8 0118 Paper Towel 5 Pack,update_price:coles,row232,wrote 26.25,wrote=True err=,PASS
+10:05:37,229,ZZT8 0119 Dish Sponges 300g,update_price:woolworths,row233,wrote 27.25,wrote=True err=,PASS
+10:05:39,230,ZZT8 0120 Vanilla Ice Cream 300g,update_price:coles,row234,wrote 28.25,wrote=True err=,PASS
+10:05:40,231,ZZT8 0121 Salted Cashews 300g,update_price:woolworths,row235,wrote 29.25,wrote=True err=,PASS
+10:05:42,232,ZZT8 0122 Muesli Bars 300g,update_price:coles,row236,wrote 30.25,wrote=True err=,PASS
+10:05:44,233,ZZT8 0123 Long Life Milk 300g,update_price:woolworths,row237,wrote 31.25,wrote=True err=,PASS
+10:05:46,234,ZZT8 0124 Black Coffee 300g,update_price:coles,row238,wrote 2.25,wrote=True err=,PASS
+10:05:48,235,ZZT8 0125 Sparkling Water 300g,update_price:woolworths,row239,wrote 3.25,wrote=True err=,PASS
+10:05:50,236,ZZT8 0126 Rice Crackers 150g,update_price:coles,row240,wrote 4.25,wrote=True err=,PASS
+10:05:52,237,ZZT8 0127 Dish Soap 150g,update_price:woolworths,row241,wrote 5.25,wrote=True err=,PASS
+10:05:53,238,ZZT8 0128 Almond Milk 150g,update_price:coles,row242,wrote 6.25,wrote=True err=,PASS
+10:05:55,239,ZZT8 0129 Turmeric Powder 150g,update_price:woolworths,row243,wrote 7.25,wrote=True err=,PASS
+10:05:57,240,ZZT8 0130 Green Tea 150g,update_price:coles,row244,wrote 8.25,wrote=True err=,PASS
+10:05:59,241,ZZT8 0131 Pasta Sauce 150g,update_price:woolworths,row245,wrote 9.25,wrote=True err=,PASS
+10:06:01,242,ZZT8 0132 Rye Bread 150g,update_price:coles,row246,wrote 10.25,wrote=True err=,PASS
+10:06:03,243,ZZT8 0133 Olive Oil 4 Pack,update_price:woolworths,row247,wrote 11.25,wrote=True err=,PASS
+10:06:05,244,ZZT8 0134 Chickpeas 4 Pack,update_price:coles,row248,wrote 12.25,wrote=True err=,PASS
+10:06:07,245,ZZT8 0135 Basmati Rice 4 Pack,update_price:woolworths,row249,wrote 13.25,wrote=True err=,PASS
+10:06:08,246,ZZT8 0136 Salty Crackers 4 Pack,update_price:coles,row250,wrote 14.25,wrote=True err=,PASS
+10:06:10,247,ZZT8 0137 Coconut Yoghurt 4 Pack,update_price:woolworths,row251,wrote 15.25,wrote=True err=,PASS
+10:06:12,248,ZZT8 0138 Butter Beans 4 Pack,update_price:coles,row252,wrote 16.25,wrote=True err=,PASS
+10:06:14,249,ZZT8 0139 Tomato Paste 4 Pack,update_price:woolworths,row253,wrote 17.25,wrote=True err=,PASS
+10:06:16,250,ZZT8 0140 Maple Syrup 250g,update_price:coles,row254,wrote 18.25,wrote=True err=,PASS
+10:06:18,251,ZZT8 0141 Peanut Butter 250g,update_price:woolworths,row255,wrote 19.25,wrote=True err=,PASS
+10:06:20,252,ZZT8 0142 Corn Flakes 250g,update_price:coles,row256,wrote 20.25,wrote=True err=,PASS
+10:06:21,253,ZZT8 0143 Paper Towel 250g,update_price:woolworths,row257,wrote 21.25,wrote=True err=,PASS
+10:06:23,254,ZZT8 0144 Dish Sponges 250g,update_price:coles,row258,wrote 22.25,wrote=True err=,PASS
+10:06:25,255,ZZT8 0145 Vanilla Ice Cream 250g,update_price:woolworths,row259,wrote 23.25,wrote=True err=,PASS
+10:06:27,256,ZZT8 0146 Salted Cashews 250g,update_price:coles,row260,wrote 24.25,wrote=True err=,PASS
+10:06:29,257,ZZT8 0147 Muesli Bars 500g,update_price:woolworths,row261,wrote 25.25,wrote=True err=,PASS
+10:06:31,258,ZZT8 0148 Long Life Milk 500g,update_price:coles,row262,wrote 26.25,wrote=True err=,PASS
+10:06:33,259,ZZT8 0149 Black Coffee 500g,update_price:woolworths,row263,wrote 27.25,wrote=True err=,PASS
+10:06:35,260,ZZT8 0150 Sparkling Water 500g,update_price:coles,row264,wrote 28.25,wrote=True err=,PASS
+10:06:36,261,ZZT8 0151 Rice Crackers 500g,update_price:woolworths,row265,wrote 29.25,wrote=True err=,PASS
+10:06:38,262,ZZT8 0152 Dish Soap 500g,update_price:coles,row266,wrote 30.25,wrote=True err=,PASS
+10:06:40,263,ZZT8 0153 Almond Milk 500g,update_price:woolworths,row267,wrote 31.25,wrote=True err=,PASS
+10:06:42,264,ZZT8 0154 Turmeric Powder 1kg,update_price:coles,row268,wrote 2.25,wrote=True err=,PASS
+10:06:44,265,ZZT8 0155 Green Tea 1kg,update_price:woolworths,row269,wrote 3.25,wrote=True err=,PASS
+10:06:46,266,ZZT8 0156 Pasta Sauce 1kg,update_price:coles,row270,wrote 4.25,wrote=True err=,PASS
+10:06:48,267,ZZT8 0157 Rye Bread 1kg,update_price:woolworths,row271,wrote 5.25,wrote=True err=,PASS
+10:06:49,268,ZZT8 0158 Olive Oil 1kg,update_price:coles,row272,wrote 6.25,wrote=True err=,PASS
+10:06:51,269,ZZT8 0159 Chickpeas 1kg,update_price:woolworths,row273,wrote 7.25,wrote=True err=,PASS
+10:06:53,270,ZZT8 0160 Basmati Rice 1kg,update_price:coles,row274,wrote 8.25,wrote=True err=,PASS
+10:06:55,271,ZZT8 0161 Salty Crackers 2L,update_price:woolworths,row275,wrote 9.25,wrote=True err=,PASS
+10:06:57,272,ZZT8 0162 Coconut Yoghurt 2L,update_price:coles,row276,wrote 10.25,wrote=True err=,PASS
+10:06:59,273,ZZT8 0163 Butter Beans 2L,update_price:woolworths,row277,wrote 11.25,wrote=True err=,PASS
+10:07:01,274,ZZT8 0164 Tomato Paste 2L,update_price:coles,row278,wrote 12.25,wrote=True err=,PASS
+10:07:02,275,ZZT8 0165 Maple Syrup 2L,update_price:woolworths,row279,wrote 13.25,wrote=True err=,PASS
+10:07:04,276,ZZT8 0166 Peanut Butter 2L,update_price:coles,row280,wrote 14.25,wrote=True err=,PASS
+10:07:06,277,ZZT8 0167 Corn Flakes 2L,update_price:woolworths,row281,wrote 15.25,wrote=True err=,PASS
+10:07:08,278,ZZT8 0168 Paper Towel 750mL,update_price:coles,row282,wrote 16.25,wrote=True err=,PASS
+10:07:10,279,ZZT8 0169 Dish Sponges 750mL,update_price:woolworths,row283,wrote 17.25,wrote=True err=,PASS
+10:07:12,280,ZZT8 0170 Vanilla Ice Cream 750mL,update_price:coles,row284,wrote 18.25,wrote=True err=,PASS
+10:07:14,281,ZZT8 0171 Salted Cashews 750mL,update_price:woolworths,row285,wrote 19.25,wrote=True err=,PASS
+10:07:15,282,ZZT8 0172 Muesli Bars 750mL,update_price:coles,row286,wrote 20.25,wrote=True err=,PASS
+10:07:17,283,ZZT8 0173 Long Life Milk 750mL,update_price:woolworths,row287,wrote 21.25,wrote=True err=,PASS
+10:07:19,284,ZZT8 0174 Black Coffee 750mL,update_price:coles,row288,wrote 22.25,wrote=True err=,PASS
+10:07:21,285,ZZT8 0175 Sparkling Water 12 Pack,update_price:woolworths,row289,wrote 23.25,wrote=True err=,PASS
+10:07:24,286,ZZT8 0176 Rice Crackers 12 Pack,update_price:coles,row290,wrote 24.25,wrote=True err=,PASS
+10:07:26,287,ZZT8 0177 Dish Soap 12 Pack,update_price:woolworths,row291,wrote 25.25,wrote=True err=,PASS
+10:07:28,288,ZZT8 0178 Almond Milk 12 Pack,update_price:coles,row292,wrote 26.25,wrote=True err=,PASS
+10:07:30,289,ZZT8 0179 Turmeric Powder 12 Pack,update_price:woolworths,row293,wrote 27.25,wrote=True err=,PASS
+10:07:32,290,ZZT8 0180 Green Tea 12 Pack,update_price:coles,row294,wrote 28.25,wrote=True err=,PASS
+10:07:34,291,ZZT8 0181 Pasta Sauce 12 Pack,update_price:woolworths,row295,wrote 29.25,wrote=True err=,PASS
+10:07:36,292,ZZT8 0182 Rye Bread 5 Pack,update_price:coles,row296,wrote 30.25,wrote=True err=,PASS
+10:07:38,293,ZZT8 0183 Olive Oil 5 Pack,update_price:woolworths,row297,wrote 31.25,wrote=True err=,PASS
+10:07:40,294,ZZT8 0184 Chickpeas 5 Pack,update_price:coles,row298,wrote 2.25,wrote=True err=,PASS
+10:07:42,295,ZZT8 0185 Basmati Rice 5 Pack,update_price:woolworths,row299,wrote 3.25,wrote=True err=,PASS
+10:07:44,296,ZZT8 0186 Salty Crackers 5 Pack,update_price:coles,row300,wrote 4.25,wrote=True err=,PASS
+10:07:46,297,ZZT8 0187 Coconut Yoghurt 5 Pack,update_price:woolworths,row301,wrote 5.25,wrote=True err=,PASS
+10:07:47,298,ZZT8 0188 Butter Beans 5 Pack,update_price:coles,row302,wrote 6.25,wrote=True err=,PASS
+10:07:49,299,ZZT8 0189 Tomato Paste 300g,update_price:woolworths,row303,wrote 7.25,wrote=True err=,PASS
+10:07:51,300,ZZT8 0190 Maple Syrup 300g,update_price:coles,row304,wrote 8.25,wrote=True err=,PASS
+10:07:53,301,ZZT8 0191 Peanut Butter 300g,update_price:woolworths,row305,wrote 9.25,wrote=True err=,PASS
+10:07:55,302,ZZT8 0192 Corn Flakes 300g,update_price:coles,row306,wrote 10.25,wrote=True err=,PASS
+10:07:57,303,ZZT8 0193 Paper Towel 300g,update_price:woolworths,row307,wrote 11.25,wrote=True err=,PASS
+10:07:59,304,ZZT8 0194 Dish Sponges 300g,update_price:coles,row308,wrote 12.25,wrote=True err=,PASS
+10:08:01,305,ZZT8 0195 Vanilla Ice Cream 300g,update_price:woolworths,row309,wrote 13.25,wrote=True err=,PASS
+10:08:03,306,ZZT8 0196 Salted Cashews 150g,update_price:coles,row310,wrote 14.25,wrote=True err=,PASS
+10:08:05,307,ZZT8 0197 Muesli Bars 150g,update_price:woolworths,row311,wrote 15.25,wrote=True err=,PASS
+10:08:06,308,ZZT8 0198 Long Life Milk 150g,update_price:coles,row312,wrote 16.25,wrote=True err=,PASS
+10:08:08,309,ZZT8 0199 Black Coffee 150g,update_price:woolworths,row313,wrote 17.25,wrote=True err=,PASS
+10:08:10,310,ZZT8 0200 Sparkling Water 150g,update_price:coles,row314,wrote 18.25,wrote=True err=,PASS
+10:08:12,311,ZZT8 0201 Rice Crackers 150g,update_price:woolworths,row315,wrote 19.25,wrote=True err=,PASS
+10:08:14,312,ZZT8 0202 Dish Soap 150g,update_price:coles,row316,wrote 20.25,wrote=True err=,PASS
+10:08:16,313,ZZT8 0203 Almond Milk 4 Pack,update_price:woolworths,row317,wrote 21.25,wrote=True err=,PASS
+10:08:18,314,ZZT8 0204 Turmeric Powder 4 Pack,update_price:coles,row318,wrote 22.25,wrote=True err=,PASS
+10:08:20,315,ZZT8 0205 Green Tea 4 Pack,update_price:woolworths,row319,wrote 23.25,wrote=True err=,PASS
+10:08:22,316,ZZT8 0206 Pasta Sauce 4 Pack,update_price:coles,row320,wrote 24.25,wrote=True err=,PASS
+10:08:23,317,ZZT8 0207 Rye Bread 4 Pack,update_price:woolworths,row321,wrote 25.25,wrote=True err=,PASS
+10:08:25,318,ZZT8 0208 Olive Oil 4 Pack,update_price:coles,row322,wrote 26.25,wrote=True err=,PASS
+10:08:27,319,ZZT8 0209 Chickpeas 4 Pack,update_price:woolworths,row323,wrote 27.25,wrote=True err=,PASS
+10:08:29,320,ZZT8 0210 Basmati Rice 250g,update_price:coles,row324,wrote 28.25,wrote=True err=,PASS
+10:08:31,321,ZZT8 0211 Salty Crackers 250g,update_price:woolworths,row325,wrote 29.25,wrote=True err=,PASS
+10:08:34,322,ZZT8 0212 Coconut Yoghurt 250g,update_price:coles,row326,wrote 30.25,wrote=True err=,PASS
+10:08:36,323,ZZT8 0213 Butter Beans 250g,update_price:woolworths,row327,wrote 31.25,wrote=True err=,PASS
+10:08:38,324,ZZT8 0214 Tomato Paste 250g,update_price:coles,row328,wrote 2.25,wrote=True err=,PASS
+10:08:40,325,ZZT8 0215 Maple Syrup 250g,update_price:woolworths,row329,wrote 3.25,wrote=True err=,PASS
+10:08:41,326,ZZT8 0216 Peanut Butter 250g,update_price:coles,row330,wrote 4.25,wrote=True err=,PASS
+10:08:43,327,ZZT8 0217 Corn Flakes 500g,update_price:woolworths,row331,wrote 5.25,wrote=True err=,PASS
+10:08:45,328,ZZT8 0218 Paper Towel 500g,update_price:coles,row332,wrote 6.25,wrote=True err=,PASS
+10:08:47,329,ZZT8 0219 Dish Sponges 500g,update_price:woolworths,row333,wrote 7.25,wrote=True err=,PASS
+10:08:49,330,ZZT8 0220 Vanilla Ice Cream 500g,update_price:coles,row334,wrote 8.25,wrote=True err=,PASS
+10:08:51,331,ZZT8 0221 Salted Cashews 500g,update_price:woolworths,row335,wrote 9.25,wrote=True err=,PASS
+10:08:53,332,ZZT8 0222 Muesli Bars 500g,update_price:coles,row336,wrote 10.25,wrote=True err=,PASS
+10:08:55,333,ZZT8 0223 Long Life Milk 500g,update_price:woolworths,row337,wrote 11.25,wrote=True err=,PASS
+10:08:56,334,ZZT8 0224 Black Coffee 1kg,update_price:coles,row338,wrote 12.25,wrote=True err=,PASS
+10:08:58,335,ZZT8 0225 Sparkling Water 1kg,update_price:woolworths,row339,wrote 13.25,wrote=True err=,PASS
+10:09:00,336,ZZT8 0226 Rice Crackers 1kg,update_price:coles,row340,wrote 14.25,wrote=True err=,PASS
+10:09:02,337,ZZT8 0227 Dish Soap 1kg,update_price:woolworths,row341,wrote 15.25,wrote=True err=,PASS
+10:09:04,338,ZZT8 0228 Almond Milk 1kg,update_price:coles,row342,wrote 16.25,wrote=True err=,PASS
+10:09:06,339,ZZT8 0229 Turmeric Powder 1kg,update_price:woolworths,row343,wrote 17.25,wrote=True err=,PASS
+10:09:08,340,ZZT8 0230 Green Tea 1kg,update_price:coles,row344,wrote 18.25,wrote=True err=,PASS
+10:09:10,341,ZZT8 0231 Pasta Sauce 2L,update_price:woolworths,row345,wrote 19.25,wrote=True err=,PASS
+10:09:11,342,ZZT8 0232 Rye Bread 2L,update_price:coles,row346,wrote 20.25,wrote=True err=,PASS
+10:09:13,343,ZZT8 0233 Olive Oil 2L,update_price:woolworths,row347,wrote 21.25,wrote=True err=,PASS
+10:09:15,344,ZZT8 0234 Chickpeas 2L,update_price:coles,row348,wrote 22.25,wrote=True err=,PASS
+10:09:17,345,ZZT8 0235 Basmati Rice 2L,update_price:woolworths,row349,wrote 23.25,wrote=True err=,PASS
+10:09:19,346,ZZT8 0236 Salty Crackers 2L,update_price:coles,row350,wrote 24.25,wrote=True err=,PASS
+10:09:21,347,ZZT8 0237 Coconut Yoghurt 2L,update_price:woolworths,row351,wrote 25.25,wrote=True err=,PASS
+10:09:23,348,ZZT8 0238 Butter Beans 750mL,update_price:coles,row352,wrote 26.25,wrote=True err=,PASS
+10:09:24,349,ZZT8 0239 Tomato Paste 750mL,update_price:woolworths,row353,wrote 27.25,wrote=True err=,PASS
+10:09:26,350,ZZT8 0240 Maple Syrup 750mL,update_price:coles,row354,wrote 28.25,wrote=True err=,PASS
+10:09:28,351,ZZT8 0241 Peanut Butter 750mL,update_price:woolworths,row355,wrote 29.25,wrote=True err=,PASS
+10:09:30,352,ZZT8 0242 Corn Flakes 750mL,update_price:coles,row356,wrote 30.25,wrote=True err=,PASS
+10:09:32,353,ZZT8 0243 Paper Towel 750mL,update_price:woolworths,row357,wrote 31.25,wrote=True err=,PASS
+10:09:34,354,ZZT8 0244 Dish Sponges 750mL,update_price:coles,row358,wrote 2.25,wrote=True err=,PASS
+10:09:36,355,ZZT8 0245 Vanilla Ice Cream 12 Pack,update_price:woolworths,row359,wrote 3.25,wrote=True err=,PASS
+10:09:38,356,ZZT8 0246 Salted Cashews 12 Pack,update_price:coles,row360,wrote 4.25,wrote=True err=,PASS
+10:09:39,357,ZZT8 0247 Muesli Bars 12 Pack,update_price:woolworths,row361,wrote 5.25,wrote=True err=,PASS
+10:09:41,358,ZZT8 0248 Long Life Milk 12 Pack,update_price:coles,row362,wrote 6.25,wrote=True err=,PASS
+10:09:43,359,ZZT8 0249 Black Coffee 12 Pack,update_price:woolworths,row363,wrote 7.25,wrote=True err=,PASS
+10:09:45,360,ZZT8 0250 Sparkling Water 12 Pack,update_price:coles,row364,wrote 8.25,wrote=True err=,PASS
+10:09:47,361,ZZT8 0251 Rice Crackers 12 Pack,update_price:woolworths,row365,wrote 9.25,wrote=True err=,PASS
+10:09:49,362,ZZT8 0252 Dish Soap 5 Pack,update_price:coles,row366,wrote 10.25,wrote=True err=,PASS
+10:09:51,363,ZZT8 0253 Almond Milk 5 Pack,update_price:woolworths,row367,wrote 11.25,wrote=True err=,PASS
+10:09:53,364,ZZT8 0254 Turmeric Powder 5 Pack,update_price:coles,row368,wrote 12.25,wrote=True err=,PASS
+10:09:55,365,ZZT8 0255 Green Tea 5 Pack,update_price:woolworths,row369,wrote 13.25,wrote=True err=,PASS
+10:09:56,366,ZZT8 0256 Pasta Sauce 5 Pack,update_price:coles,row370,wrote 14.25,wrote=True err=,PASS
+10:09:58,367,ZZT8 0257 Rye Bread 5 Pack,update_price:woolworths,row371,wrote 15.25,wrote=True err=,PASS
+10:10:00,368,ZZT8 0258 Olive Oil 5 Pack,update_price:coles,row372,wrote 16.25,wrote=True err=,PASS
+10:10:02,369,ZZT8 0259 Chickpeas 300g,update_price:woolworths,row373,wrote 17.25,wrote=True err=,PASS
+10:10:04,370,ZZT8 0260 Basmati Rice 300g,update_price:coles,row374,wrote 18.25,wrote=True err=,PASS
+10:10:06,371,ZZT8 0261 Salty Crackers 300g,update_price:woolworths,row375,wrote 19.25,wrote=True err=,PASS
+10:10:07,372,ZZT8 0262 Coconut Yoghurt 300g,update_price:coles,row376,wrote 20.25,wrote=True err=,PASS
+10:10:09,373,ZZT8 0263 Butter Beans 300g,update_price:woolworths,row377,wrote 21.25,wrote=True err=,PASS
+10:10:11,374,ZZT8 0264 Tomato Paste 300g,update_price:coles,row378,wrote 22.25,wrote=True err=,PASS
+10:10:13,375,ZZT8 0265 Maple Syrup 300g,update_price:woolworths,row379,wrote 23.25,wrote=True err=,PASS
+10:10:15,376,ZZT8 0266 Peanut Butter 150g,update_price:coles,row380,wrote 24.25,wrote=True err=,PASS
+10:10:17,377,ZZT8 0267 Corn Flakes 150g,update_price:woolworths,row381,wrote 25.25,wrote=True err=,PASS
+10:10:19,378,ZZT8 0268 Paper Towel 150g,update_price:coles,row382,wrote 26.25,wrote=True err=,PASS
+10:10:21,379,ZZT8 0269 Dish Sponges 150g,update_price:woolworths,row383,wrote 27.25,wrote=True err=,PASS
+10:10:22,380,ZZT8 0270 Vanilla Ice Cream 150g,update_price:coles,row384,wrote 28.25,wrote=True err=,PASS
+10:10:24,381,ZZT8 0271 Salted Cashews 150g,update_price:woolworths,row385,wrote 29.25,wrote=True err=,PASS
+10:10:26,382,ZZT8 0272 Muesli Bars 150g,update_price:coles,row386,wrote 30.25,wrote=True err=,PASS
+10:10:28,383,ZZT8 0273 Long Life Milk 4 Pack,update_price:woolworths,row387,wrote 31.25,wrote=True err=,PASS
+10:10:30,384,ZZT8 0274 Black Coffee 4 Pack,update_price:coles,row388,wrote 2.25,wrote=True err=,PASS
+10:10:32,385,ZZT8 0275 Sparkling Water 4 Pack,update_price:woolworths,row389,wrote 3.25,wrote=True err=,PASS
+10:10:34,386,ZZT8 0276 Rice Crackers 4 Pack,update_price:coles,row390,wrote 4.25,wrote=True err=,PASS
+10:10:35,387,ZZT8 0277 Dish Soap 4 Pack,update_price:woolworths,row391,wrote 5.25,wrote=True err=,PASS
+10:10:37,388,ZZT8 0278 Almond Milk 4 Pack,update_price:coles,row392,wrote 6.25,wrote=True err=,PASS
+10:10:39,389,ZZT8 0279 Turmeric Powder 4 Pack,update_price:woolworths,row393,wrote 7.25,wrote=True err=,PASS
+10:10:41,390,ZZT8 0280 Green Tea 250g,update_price:coles,row394,wrote 8.25,wrote=True err=,PASS
+10:10:43,391,ZZT8 0281 Pasta Sauce 250g,update_price:woolworths,row395,wrote 9.25,wrote=True err=,PASS
+10:10:45,392,ZZT8 0282 Rye Bread 250g,update_price:coles,row396,wrote 10.25,wrote=True err=,PASS
+10:10:46,393,ZZT8 0283 Olive Oil 250g,update_price:woolworths,row397,wrote 11.25,wrote=True err=,PASS
+10:10:48,394,ZZT8 0284 Chickpeas 250g,update_price:coles,row398,wrote 12.25,wrote=True err=,PASS
+10:10:50,395,ZZT8 0285 Basmati Rice 250g,update_price:woolworths,row399,wrote 13.25,wrote=True err=,PASS
+10:10:52,396,ZZT8 0286 Salty Crackers 250g,update_price:coles,row400,wrote 14.25,wrote=True err=,PASS
+10:10:54,397,ZZT8 0287 Coconut Yoghurt 500g,update_price:woolworths,row401,wrote 15.25,wrote=True err=,PASS
+10:10:56,398,ZZT8 0288 Butter Beans 500g,update_price:coles,row402,wrote 16.25,wrote=True err=,PASS
+10:10:58,399,ZZT8 0289 Tomato Paste 500g,update_price:woolworths,row403,wrote 17.25,wrote=True err=,PASS
+10:10:59,400,ZZT8 0290 Maple Syrup 500g,update_price:coles,row404,wrote 18.25,wrote=True err=,PASS
+10:11:01,401,ZZT8 0291 Peanut Butter 500g,update_price:woolworths,row405,wrote 19.25,wrote=True err=,PASS
+10:11:03,402,ZZT8 0292 Corn Flakes 500g,update_price:coles,row406,wrote 20.25,wrote=True err=,PASS
+10:11:05,403,ZZT8 0293 Paper Towel 500g,update_price:woolworths,row407,wrote 21.25,wrote=True err=,PASS
+10:11:07,404,ZZT8 0294 Dish Sponges 1kg,update_price:coles,row408,wrote 22.25,wrote=True err=,PASS
+10:11:09,405,ZZT8 0295 Vanilla Ice Cream 1kg,update_price:woolworths,row409,wrote 23.25,wrote=True err=,PASS
+10:11:11,406,ZZT8 0296 Salted Cashews 1kg,update_price:coles,row410,wrote 24.25,wrote=True err=,PASS
+10:11:12,407,ZZT8 0297 Muesli Bars 1kg,update_price:woolworths,row411,wrote 25.25,wrote=True err=,PASS
+10:11:14,408,ZZT8 0298 Long Life Milk 1kg,update_price:coles,row412,wrote 26.25,wrote=True err=,PASS
+10:11:16,409,ZZT8 0299 Black Coffee 1kg,update_price:woolworths,row413,wrote 27.25,wrote=True err=,PASS
+10:11:18,410,ZZT8 0300 Sparkling Water 1kg,update_price:coles,row414,wrote 28.25,wrote=True err=,PASS
+10:11:20,411,ZZT8 0301 Rice Crackers 2L,update_price:woolworths,row415,wrote 29.25,wrote=True err=,PASS
+10:11:22,412,ZZT8 0302 Dish Soap 2L,update_price:coles,row416,wrote 30.25,wrote=True err=,PASS
+10:11:24,413,ZZT8 0303 Almond Milk 2L,update_price:woolworths,row417,wrote 31.25,wrote=True err=,PASS
+10:11:25,414,ZZT8 0304 Turmeric Powder 2L,update_price:coles,row418,wrote 2.25,wrote=True err=,PASS
+10:11:27,415,ZZT8 0305 Green Tea 2L,update_price:woolworths,row419,wrote 3.25,wrote=True err=,PASS
+10:11:29,416,ZZT8 0306 Pasta Sauce 2L,update_price:coles,row420,wrote 4.25,wrote=True err=,PASS
+10:11:31,417,ZZT8 0307 Rye Bread 2L,update_price:woolworths,row421,wrote 5.25,wrote=True err=,PASS
+10:11:33,418,ZZT8 0308 Olive Oil 750mL,update_price:coles,row422,wrote 6.25,wrote=True err=,PASS
+10:11:35,419,ZZT8 0309 Chickpeas 750mL,update_price:woolworths,row423,wrote 7.25,wrote=True err=,PASS
+10:11:37,420,ZZT8 0310 Basmati Rice 750mL,update_price:coles,row424,wrote 8.25,wrote=True err=,PASS
+10:11:39,421,ZZT8 0311 Salty Crackers 750mL,update_price:woolworths,row425,wrote 9.25,wrote=True err=,PASS
+10:11:40,422,ZZT8 0312 Coconut Yoghurt 750mL,update_price:coles,row426,wrote 10.25,wrote=True err=,PASS
+10:11:42,423,ZZT8 0313 Butter Beans 750mL,update_price:woolworths,row427,wrote 11.25,wrote=True err=,PASS
+10:11:44,424,ZZT8 0314 Tomato Paste 750mL,update_price:coles,row428,wrote 12.25,wrote=True err=,PASS
+10:11:46,425,ZZT8 0315 Maple Syrup 12 Pack,update_price:woolworths,row429,wrote 13.25,wrote=True err=,PASS
+10:11:48,426,ZZT8 0316 Peanut Butter 12 Pack,update_price:coles,row430,wrote 14.25,wrote=True err=,PASS
+10:11:50,427,ZZT8 0317 Corn Flakes 12 Pack,update_price:woolworths,row431,wrote 15.25,wrote=True err=,PASS
+10:11:52,428,ZZT8 0318 Paper Towel 12 Pack,update_price:coles,row432,wrote 16.25,wrote=True err=,PASS
+10:11:53,429,ZZT8 0319 Dish Sponges 12 Pack,update_price:woolworths,row433,wrote 17.25,wrote=True err=,PASS
+10:11:55,430,ZZT8 0320 Vanilla Ice Cream 12 Pack,update_price:coles,row434,wrote 18.25,wrote=True err=,PASS
+10:11:57,431,ZZT8 0321 Salted Cashews 12 Pack,update_price:woolworths,row435,wrote 19.25,wrote=True err=,PASS
+10:11:59,432,ZZT8 0322 Muesli Bars 5 Pack,update_price:coles,row436,wrote 20.25,wrote=True err=,PASS
+10:12:01,433,ZZT8 0323 Long Life Milk 5 Pack,update_price:woolworths,row437,wrote 21.25,wrote=True err=,PASS
+10:12:03,434,ZZT8 0324 Black Coffee 5 Pack,update_price:coles,row438,wrote 22.25,wrote=True err=,PASS
+10:12:05,435,ZZT8 0325 Sparkling Water 5 Pack,update_price:woolworths,row439,wrote 23.25,wrote=True err=,PASS
+10:12:07,436,ZZT8 0326 Rice Crackers 5 Pack,update_price:coles,row440,wrote 24.25,wrote=True err=,PASS
+10:12:08,437,ZZT8 0327 Dish Soap 5 Pack,update_price:woolworths,row441,wrote 25.25,wrote=True err=,PASS
+10:12:10,438,ZZT8 0328 Almond Milk 5 Pack,update_price:coles,row442,wrote 26.25,wrote=True err=,PASS
+10:12:12,439,ZZT8 0329 Turmeric Powder 300g,update_price:woolworths,row443,wrote 27.25,wrote=True err=,PASS
+10:12:14,440,ZZT8 0330 Green Tea 300g,update_price:coles,row444,wrote 28.25,wrote=True err=,PASS
+10:12:16,441,ZZT8 0331 Pasta Sauce 300g,update_price:woolworths,row445,wrote 29.25,wrote=True err=,PASS
+10:12:18,442,ZZT8 0332 Rye Bread 300g,update_price:coles,row446,wrote 30.25,wrote=True err=,PASS
+10:12:20,443,ZZT8 0333 Olive Oil 300g,update_price:woolworths,row447,wrote 31.25,wrote=True err=,PASS
+10:12:21,444,ZZT8 0334 Chickpeas 300g,update_price:coles,row448,wrote 2.25,wrote=True err=,PASS
+10:12:23,445,ZZT8 0335 Basmati Rice 300g,update_price:woolworths,row449,wrote 3.25,wrote=True err=,PASS
+10:12:25,446,ZZT8 0336 Salty Crackers 150g,update_price:coles,row450,wrote 4.25,wrote=True err=,PASS
+10:12:27,447,ZZT8 0337 Coconut Yoghurt 150g,update_price:woolworths,row451,wrote 5.25,wrote=True err=,PASS
+10:12:29,448,ZZT8 0338 Butter Beans 150g,update_price:coles,row452,wrote 6.25,wrote=True err=,PASS
+10:12:31,449,ZZT8 0339 Tomato Paste 150g,update_price:woolworths,row453,wrote 7.25,wrote=True err=,PASS
+10:12:32,450,ZZT8 0340 Maple Syrup 150g,update_price:coles,row454,wrote 8.25,wrote=True err=,PASS
+10:12:34,451,ZZT8 0341 Peanut Butter 150g,update_price:woolworths,row455,wrote 9.25,wrote=True err=,PASS
+10:12:36,452,ZZT8 0342 Corn Flakes 150g,update_price:coles,row456,wrote 10.25,wrote=True err=,PASS
+10:12:38,453,ZZT8 0343 Paper Towel 4 Pack,update_price:woolworths,row457,wrote 11.25,wrote=True err=,PASS
+10:12:40,454,ZZT8 0344 Dish Sponges 4 Pack,update_price:coles,row458,wrote 12.25,wrote=True err=,PASS
+10:12:42,455,ZZT8 0345 Vanilla Ice Cream 4 Pack,update_price:woolworths,row459,wrote 13.25,wrote=True err=,PASS
+10:12:44,456,ZZT8 0346 Salted Cashews 4 Pack,update_price:coles,row460,wrote 14.25,wrote=True err=,PASS
+10:12:45,457,ZZT8 0347 Muesli Bars 4 Pack,update_price:woolworths,row461,wrote 15.25,wrote=True err=,PASS
+10:12:47,458,ZZT8 0348 Long Life Milk 4 Pack,update_price:coles,row462,wrote 16.25,wrote=True err=,PASS
+10:12:49,459,ZZT8 0349 Black Coffee 4 Pack,update_price:woolworths,row463,wrote 17.25,wrote=True err=,PASS
+10:12:51,460,ZZT8 0350 Sparkling Water 250g,update_price:coles,row464,wrote 18.25,wrote=True err=,PASS
+10:12:53,461,ZZT8 0351 Rice Crackers 250g,update_price:woolworths,row465,wrote 19.25,wrote=True err=,PASS
+10:12:55,462,ZZT8 0352 Dish Soap 250g,update_price:coles,row466,wrote 20.25,wrote=True err=,PASS
+10:12:57,463,ZZT8 0353 Almond Milk 250g,update_price:woolworths,row467,wrote 21.25,wrote=True err=,PASS
+10:12:58,464,ZZT8 0354 Turmeric Powder 250g,update_price:coles,row468,wrote 22.25,wrote=True err=,PASS
+10:13:00,465,ZZT8 0355 Green Tea 250g,update_price:woolworths,row469,wrote 23.25,wrote=True err=,PASS
+10:13:02,466,ZZT8 0356 Pasta Sauce 250g,update_price:coles,row470,wrote 24.25,wrote=True err=,PASS
+10:13:04,467,ZZT8 0357 Rye Bread 500g,update_price:woolworths,row471,wrote 25.25,wrote=True err=,PASS
+10:13:06,468,ZZT8 0358 Olive Oil 500g,update_price:coles,row472,wrote 26.25,wrote=True err=,PASS
+10:13:08,469,ZZT8 0359 Chickpeas 500g,update_price:woolworths,row473,wrote 27.25,wrote=True err=,PASS
+10:13:10,470,ZZT8 0360 Basmati Rice 500g,update_price:coles,row474,wrote 28.25,wrote=True err=,PASS
+10:13:11,471,ZZT8 0361 Salty Crackers 500g,update_price:woolworths,row475,wrote 29.25,wrote=True err=,PASS
+10:13:13,472,ZZT8 0362 Coconut Yoghurt 500g,update_price:coles,row476,wrote 30.25,wrote=True err=,PASS
+10:13:15,473,ZZT8 0363 Butter Beans 500g,update_price:woolworths,row477,wrote 31.25,wrote=True err=,PASS
+10:13:17,474,ZZT8 0364 Tomato Paste 1kg,update_price:coles,row478,wrote 2.25,wrote=True err=,PASS
+10:13:19,475,ZZT8 0365 Maple Syrup 1kg,update_price:woolworths,row479,wrote 3.25,wrote=True err=,PASS
+10:13:21,476,ZZT8 0366 Peanut Butter 1kg,update_price:coles,row480,wrote 4.25,wrote=True err=,PASS
+10:13:23,477,ZZT8 0367 Corn Flakes 1kg,update_price:woolworths,row481,wrote 5.25,wrote=True err=,PASS
+10:13:24,478,ZZT8 0368 Paper Towel 1kg,update_price:coles,row482,wrote 6.25,wrote=True err=,PASS
+10:13:26,479,ZZT8 0369 Dish Sponges 1kg,update_price:woolworths,row483,wrote 7.25,wrote=True err=,PASS
+10:13:28,480,ZZT8 0370 Vanilla Ice Cream 1kg,update_price:coles,row484,wrote 8.25,wrote=True err=,PASS
+10:13:30,481,ZZT8 0371 Salted Cashews 2L,update_price:woolworths,row485,wrote 9.25,wrote=True err=,PASS
+10:13:32,482,ZZT8 0372 Muesli Bars 2L,update_price:coles,row486,wrote 10.25,wrote=True err=,PASS
+10:13:34,483,ZZT8 0373 Long Life Milk 2L,update_price:woolworths,row487,wrote 11.25,wrote=True err=,PASS
+10:13:36,484,ZZT8 0374 Black Coffee 2L,update_price:coles,row488,wrote 12.25,wrote=True err=,PASS
+10:13:38,485,ZZT8 0375 Sparkling Water 2L,update_price:woolworths,row489,wrote 13.25,wrote=True err=,PASS
+10:13:40,486,ZZT8 0376 Rice Crackers 2L,update_price:coles,row490,wrote 14.25,wrote=True err=,PASS
+10:13:42,487,ZZT8 0377 Dish Soap 2L,update_price:woolworths,row491,wrote 15.25,wrote=True err=,PASS
+10:13:44,488,ZZT8 0378 Almond Milk 750mL,update_price:coles,row492,wrote 16.25,wrote=True err=,PASS
+10:13:45,489,ZZT8 0379 Turmeric Powder 750mL,update_price:woolworths,row493,wrote 17.25,wrote=True err=,PASS
+10:13:47,490,ZZT8 0380 Green Tea 750mL,update_price:coles,row494,wrote 18.25,wrote=True err=,PASS
+10:13:49,491,ZZT8 0381 Pasta Sauce 750mL,update_price:woolworths,row495,wrote 19.25,wrote=True err=,PASS
+10:13:51,492,ZZT8 0382 Rye Bread 750mL,update_price:coles,row496,wrote 20.25,wrote=True err=,PASS
+10:13:53,493,ZZT8 0383 Olive Oil 750mL,update_price:woolworths,row497,wrote 21.25,wrote=True err=,PASS
+10:13:55,494,ZZT8 0384 Chickpeas 750mL,update_price:coles,row498,wrote 22.25,wrote=True err=,PASS
+10:13:56,495,ZZT8 0385 Basmati Rice 12 Pack,update_price:woolworths,row499,wrote 23.25,wrote=True err=,PASS
+10:13:58,496,ZZT8 0386 Salty Crackers 12 Pack,update_price:coles,row500,wrote 24.25,wrote=True err=,PASS
+10:14:00,497,ZZT8 0387 Coconut Yoghurt 12 Pack,update_price:woolworths,row501,wrote 25.25,wrote=True err=,PASS
+10:14:02,alias,ZZT8 0004 Turmeric Powder 250g,append_alias,P118,appended,True,PASS
+10:14:04,alias,ZZT8 0012 Coconut Yoghurt 500g,append_alias,P126,appended,True,PASS
+10:14:06,alias,ZZT8 0020 Vanilla Ice Cream 1kg,append_alias,P134,appended,True,PASS
+10:14:08,alias,ZZT8 0028 Almond Milk 750mL,append_alias,P142,appended,True,PASS
+10:14:10,alias,ZZT8 0036 Salty Crackers 12 Pack,append_alias,P150,appended,True,PASS
+10:14:12,alias,ZZT8 0044 Dish Sponges 5 Pack,append_alias,P158,appended,True,PASS
+10:14:13,alias,ZZT8 0052 Dish Soap 300g,append_alias,P166,appended,True,PASS
+10:14:15,alias,ZZT8 0061 Salty Crackers 150g,append_alias,P175,appended,True,PASS
+10:14:17,alias,ZZT8 0070 Vanilla Ice Cream 250g,append_alias,P184,appended,True,PASS
+10:14:19,alias,ZZT8 0078 Almond Milk 500g,append_alias,P192,appended,True,PASS
+10:14:21,alias,ZZT8 0086 Salty Crackers 1kg,append_alias,P200,appended,True,PASS
+10:14:23,alias,ZZT8 0095 Vanilla Ice Cream 2L,append_alias,P209,appended,True,PASS
+10:14:24,alias,ZZT8 0103 Almond Milk 750mL,append_alias,P217,appended,True,PASS
+10:14:26,alias,ZZT8 0111 Salty Crackers 12 Pack,append_alias,P225,appended,True,PASS
+10:14:28,alias,ZZT8 0119 Dish Sponges 300g,append_alias,P233,appended,True,PASS
+10:14:30,alias,ZZT8 0127 Dish Soap 150g,append_alias,P241,appended,True,PASS
+10:14:32,alias,ZZT8 0135 Basmati Rice 4 Pack,append_alias,P249,appended,True,PASS
+10:14:34,alias,ZZT8 0143 Paper Towel 250g,append_alias,P257,appended,True,PASS
+10:14:36,alias,ZZT8 0151 Rice Crackers 500g,append_alias,P265,appended,True,PASS
+10:14:38,alias,ZZT8 0159 Chickpeas 1kg,append_alias,P273,appended,True,PASS
+10:14:40,alias,ZZT8 0167 Corn Flakes 2L,append_alias,P281,appended,True,PASS
+10:14:42,alias,ZZT8 0175 Sparkling Water 12 Pack,append_alias,P289,appended,True,PASS
+10:14:43,alias,ZZT8 0183 Olive Oil 5 Pack,append_alias,P297,appended,True,PASS
+10:14:45,alias,ZZT8 0191 Peanut Butter 300g,append_alias,P305,appended,True,PASS
+10:14:47,alias,ZZT8 0199 Black Coffee 150g,append_alias,P313,appended,True,PASS
+10:14:49,alias,ZZT8 0207 Rye Bread 4 Pack,append_alias,P321,appended,True,PASS
+10:14:51,alias,ZZT8 0215 Maple Syrup 250g,append_alias,P329,appended,True,PASS
+10:14:53,alias,ZZT8 0223 Long Life Milk 500g,append_alias,P337,appended,True,PASS
+10:14:55,alias,ZZT8 0231 Pasta Sauce 2L,append_alias,P345,appended,True,PASS
+10:14:56,alias,ZZT8 0239 Tomato Paste 750mL,append_alias,P353,appended,True,PASS
+10:14:58,alias,ZZT8 0247 Muesli Bars 12 Pack,append_alias,P361,appended,True,PASS
+10:15:00,alias,ZZT8 0255 Green Tea 5 Pack,append_alias,P369,appended,True,PASS
+10:15:02,alias,ZZT8 0263 Butter Beans 300g,append_alias,P377,appended,True,PASS
+10:15:04,alias,ZZT8 0271 Salted Cashews 150g,append_alias,P385,appended,True,PASS
+10:49:16,alias,ZZT8B 0004 Turmeric Powder 250g,append_alias,P118,appended,P118:P118,PASS
+10:49:18,alias,ZZT8B 0012 Coconut Yoghurt 500g,append_alias,P126,appended,P126:P126,PASS
+10:49:20,alias,ZZT8B 0020 Vanilla Ice Cream 1kg,append_alias,P134,appended,P134:P134,PASS
+10:49:22,alias,ZZT8B 0028 Almond Milk 750mL,append_alias,P142,appended,P142:P142,PASS
+10:49:24,alias,ZZT8B 0036 Salty Crackers 12 Pack,append_alias,P150,appended,P150:P150,PASS
+10:49:26,alias,ZZT8B 0044 Dish Sponges 5 Pack,append_alias,P158,appended,P158:P158,PASS
+10:49:28,alias,ZZT8B 0052 Dish Soap 300g,append_alias,P166,appended,P166:P166,PASS
+10:49:30,alias,ZZT8B 0060 Basmati Rice 150g,append_alias,P174,appended,P174:P174,PASS
+10:49:32,alias,ZZT8B 0068 Paper Towel 4 Pack,append_alias,P182,appended,P182:P182,PASS
+10:49:34,alias,ZZT8B 0076 Rice Crackers 250g,append_alias,P190,appended,P190:P190,PASS
+10:49:35,alias,ZZT8B 0084 Chickpeas 1kg,append_alias,P198,appended,P198:P198,PASS
+10:49:37,alias,ZZT8B 0092 Corn Flakes 2L,append_alias,P206,appended,P206:P206,PASS
+10:49:39,alias,ZZT8B 0100 Sea Salt 750mL,append_alias,P214,appended,P214:P214,PASS
+10:49:41,alias,ZZT8B 0108 Olive Oil 12 Pack,append_alias,P222,appended,P222:P222,PASS
+10:49:43,alias,ZZT8B 0116 Peanut Butter 5 Pack,append_alias,P230,appended,P230:P230,PASS
+10:49:45,alias,ZZT8B 0124 Black Coffee 300g,append_alias,P238,appended,P238:P238,PASS
+10:49:47,alias,ZZT8B 0132 Rye Bread 150g,append_alias,P246,appended,P246:P246,PASS
+10:49:49,alias,ZZT8B 0140 Maple Syrup 250g,append_alias,P254,appended,P254:P254,PASS
+10:49:51,alias,ZZT8B 0148 Long Life Milk 500g,append_alias,P262,appended,P262:P262,PASS
+10:49:53,alias,ZZT8B 0156 Pasta Sauce 1kg,append_alias,P270,appended,P270:P270,PASS
+10:49:55,alias,ZZT8B 0164 Tomato Paste 2L,append_alias,P278,appended,P278:P278,PASS
+10:49:57,alias,ZZT8B 0172 Muesli Bars 750mL,append_alias,P286,appended,P286:P286,PASS
+10:49:59,alias,ZZT8B 0180 Green Tea 12 Pack,append_alias,P294,appended,P294:P294,PASS
+10:50:01,alias,ZZT8B 0188 Butter Beans 5 Pack,append_alias,P302,appended,P302:P302,PASS
+10:50:02,alias,ZZT8B 0197 Muesli Bars 150g,append_alias,P311,appended,P311:P311,PASS
+10:50:04,kw,ZZT8B 0006 Pasta Sauce 250g,set_keyword:coles,row120,wrote,wrote=True err=,PASS
+10:50:06,kw,ZZT8B 0014 Tomato Paste 1kg,set_keyword:coles,row128,wrote,wrote=True err=,PASS
+10:50:08,kw,ZZT8B 0022 Muesli Bars 2L,set_keyword:coles,row136,wrote,wrote=True err=,PASS
+10:50:10,kw,ZZT8B 0030 Green Tea 750mL,set_keyword:coles,row144,wrote,wrote=True err=,PASS
+10:50:12,kw,ZZT8B 0038 Butter Beans 12 Pack,set_keyword:coles,row152,wrote,wrote=True err=,PASS
+10:50:14,kw,ZZT8B 0046 Salted Cashews 5 Pack,set_keyword:coles,row160,wrote,wrote=True err=,PASS
+10:50:16,kw,ZZT8B 0054 Turmeric Powder 300g,set_keyword:coles,row168,wrote,wrote=True err=,PASS
+10:50:18,kw,ZZT8B 0062 Coconut Yoghurt 150g,set_keyword:coles,row176,wrote,wrote=True err=,PASS
+10:50:20,kw,ZZT8B 0070 Vanilla Ice Cream 250g,set_keyword:coles,row184,wrote,wrote=True err=,PASS
+10:50:22,kw,ZZT8B 0078 Almond Milk 500g,set_keyword:coles,row192,wrote,wrote=True err=,PASS
+10:50:24,kw,ZZT8B 0086 Salty Crackers 1kg,set_keyword:coles,row200,wrote,wrote=True err=,PASS
+10:50:26,kw,ZZT8B 0094 Dish Sponges 2L,set_keyword:coles,row208,wrote,wrote=True err=,PASS
+10:50:27,kw,ZZT8B 0102 Dish Soap 750mL,set_keyword:coles,row216,wrote,wrote=True err=,PASS
+10:50:29,kw,ZZT8B 0110 Basmati Rice 12 Pack,set_keyword:coles,row224,wrote,wrote=True err=,PASS
+10:50:31,kw,ZZT8B 0118 Paper Towel 5 Pack,set_keyword:coles,row232,wrote,wrote=True err=,PASS
+10:50:33,kw,ZZT8B 0126 Rice Crackers 150g,set_keyword:coles,row240,wrote,wrote=True err=,PASS
+10:50:35,kw,ZZT8B 0134 Chickpeas 4 Pack,set_keyword:coles,row248,wrote,wrote=True err=,PASS
+10:50:37,kw,ZZT8B 0142 Corn Flakes 250g,set_keyword:coles,row256,wrote,wrote=True err=,PASS
+10:50:39,kw,ZZT8B 0150 Sea Salt 500g,set_keyword:coles,row264,wrote,wrote=True err=,PASS
+10:50:41,kw,ZZT8B 0158 Olive Oil 1kg,set_keyword:coles,row272,wrote,wrote=True err=,PASS
+10:50:43,kw,ZZT8B 0166 Peanut Butter 2L,set_keyword:coles,row280,wrote,wrote=True err=,PASS
+10:50:45,kw,ZZT8B 0174 Black Coffee 750mL,set_keyword:coles,row288,wrote,wrote=True err=,PASS
+10:50:47,kw,ZZT8B 0182 Rye Bread 5 Pack,set_keyword:coles,row296,wrote,wrote=True err=,PASS
+10:50:49,kw,ZZT8B 0190 Maple Syrup 300g,set_keyword:coles,row304,wrote,wrote=True err=,PASS
+10:50:51,na,ZZT8B 0003 Almond Milk 250g,mark_na:woolworths,row117,NA written,wrote=True err=,PASS
+10:50:53,na,ZZT8B 0009 Chickpeas 500g,mark_na:woolworths,row123,NA written,wrote=True err=,PASS
+10:50:55,na,ZZT8B 0015 Maple Syrup 1kg,mark_na:woolworths,row129,NA written,wrote=True err=,PASS
+10:50:57,na,ZZT8B 0021 Salted Cashews 2L,mark_na:woolworths,row135,NA written,wrote=True err=,PASS
+10:50:59,na,ZZT8B 0027 Dish Soap 2L,mark_na:woolworths,row141,NA written,wrote=True err=,PASS
+10:51:01,na,ZZT8B 0033 Olive Oil 750mL,mark_na:woolworths,row147,NA written,wrote=True err=,PASS
+10:51:02,na,ZZT8B 0039 Tomato Paste 12 Pack,mark_na:woolworths,row153,NA written,wrote=True err=,PASS
+10:51:05,na,ZZT8B 0045 Vanilla Ice Cream 5 Pack,mark_na:woolworths,row159,NA written,wrote=True err=,PASS
+10:51:06,na,ZZT8B 0051 Rice Crackers 300g,mark_na:woolworths,row165,NA written,wrote=True err=,PASS
+10:51:08,na,ZZT8B 0057 Rye Bread 150g,mark_na:woolworths,row171,NA written,wrote=True err=,PASS
+10:51:10,na,ZZT8B 0063 Butter Beans 4 Pack,mark_na:woolworths,row177,NA written,wrote=True err=,PASS
+10:51:12,na,ZZT8B 0069 Dish Sponges 4 Pack,mark_na:woolworths,row183,NA written,wrote=True err=,PASS
+10:51:14,na,ZZT8B 0075 Sea Salt 250g,mark_na:woolworths,row189,NA written,wrote=True err=,PASS
+10:51:16,na,ZZT8B 0081 Pasta Sauce 500g,mark_na:woolworths,row195,NA written,wrote=True err=,PASS
+10:51:18,na,ZZT8B 0087 Coconut Yoghurt 1kg,mark_na:woolworths,row201,NA written,wrote=True err=,PASS
+10:51:20,na,ZZT8B 0093 Paper Towel 2L,mark_na:woolworths,row207,NA written,wrote=True err=,PASS
+10:51:22,na,ZZT8B 0099 Black Coffee 750mL,mark_na:woolworths,row213,NA written,wrote=True err=,PASS
+10:51:24,na,ZZT8B 0105 Green Tea 12 Pack,mark_na:woolworths,row219,NA written,wrote=True err=,PASS
+10:51:26,na,ZZT8B 0111 Salty Crackers 12 Pack,mark_na:woolworths,row225,NA written,wrote=True err=,PASS
+10:51:28,na,ZZT8B 0117 Corn Flakes 5 Pack,mark_na:woolworths,row231,NA written,wrote=True err=,PASS
+10:51:30,na,ZZT8B 0123 Long Life Milk 300g,mark_na:woolworths,row237,NA written,wrote=True err=,PASS
+10:51:32,na,ZZT8B 0129 Turmeric Powder 150g,mark_na:woolworths,row243,NA written,wrote=True err=,PASS
+10:51:34,na,ZZT8B 0135 Basmati Rice 4 Pack,mark_na:woolworths,row249,NA written,wrote=True err=,PASS
+10:51:36,na,ZZT8B 0141 Peanut Butter 250g,mark_na:woolworths,row255,NA written,wrote=True err=,PASS
+10:51:38,na,ZZT8B 0147 Muesli Bars 500g,mark_na:woolworths,row261,NA written,wrote=True err=,PASS
+10:51:39,na,ZZT8B 0153 Almond Milk 500g,mark_na:woolworths,row267,NA written,wrote=True err=,PASS
+10:51:41,na,ZZT8B 0159 Chickpeas 1kg,mark_na:woolworths,row273,NA written,wrote=True err=,PASS
+10:51:43,na,ZZT8B 0165 Maple Syrup 2L,mark_na:woolworths,row279,NA written,wrote=True err=,PASS
+10:51:45,na,ZZT8B 0171 Salted Cashews 750mL,mark_na:woolworths,row285,NA written,wrote=True err=,PASS
+10:51:47,na,ZZT8B 0177 Dish Soap 12 Pack,mark_na:woolworths,row291,NA written,wrote=True err=,PASS
+10:51:49,na,ZZT8B 0183 Olive Oil 5 Pack,mark_na:woolworths,row297,NA written,wrote=True err=,PASS
+10:51:51,na,ZZT8B 0189 Tomato Paste 300g,mark_na:woolworths,row303,NA written,wrote=True err=,PASS
+10:51:53,na,ZZT8B 0196 Salted Cashews 150g,mark_na:coles,row310,NA written,wrote=True err=,PASS
+10:51:56,gone,ZZT8B 0005 Green Tea 250g,stamp_gone,D119,GONE,GONE,PASS
+10:52:00,gone,ZZT8B 0005 Green Tea 250g,resurrect_via_update,D119,cleared,7.77,PASS
+10:52:03,gone,ZZT8B 0025 Sea Salt 2L,stamp_gone,D139,GONE,GONE,PASS
+10:52:06,gone,ZZT8B 0025 Sea Salt 2L,resurrect_via_update,D139,cleared,7.77,PASS
+10:52:10,gone,ZZT8B 0045 Vanilla Ice Cream 5 Pack,stamp_gone,D159,GONE,GONE,PASS
+10:52:13,gone,ZZT8B 0045 Vanilla Ice Cream 5 Pack,resurrect_via_update,D159,cleared,7.77,PASS
+10:52:16,gone,ZZT8B 0065 Maple Syrup 4 Pack,stamp_gone,D179,GONE,GONE,PASS
+10:52:20,gone,ZZT8B 0065 Maple Syrup 4 Pack,resurrect_via_update,D179,cleared,7.77,PASS
+10:52:24,gone,ZZT8B 0085 Basmati Rice 1kg,stamp_gone,D199,GONE,GONE,PASS
+10:52:27,gone,ZZT8B 0085 Basmati Rice 1kg,resurrect_via_update,D199,cleared,7.77,PASS
+10:52:31,gone,ZZT8B 0105 Green Tea 12 Pack,stamp_gone,D219,GONE,GONE,PASS
+10:52:34,gone,ZZT8B 0105 Green Tea 12 Pack,resurrect_via_update,D219,cleared,7.77,PASS
+10:52:37,gone,ZZT8B 0125 Sea Salt 300g,stamp_gone,D239,GONE,GONE,PASS
+10:52:41,gone,ZZT8B 0125 Sea Salt 300g,resurrect_via_update,D239,cleared,7.77,PASS
+10:52:44,gone,ZZT8B 0145 Vanilla Ice Cream 250g,stamp_gone,D259,GONE,GONE,PASS
+10:52:48,gone,ZZT8B 0145 Vanilla Ice Cream 250g,resurrect_via_update,D259,cleared,7.77,PASS
+10:52:51,gone,ZZT8B 0165 Maple Syrup 2L,stamp_gone,D279,GONE,GONE,PASS
+10:52:54,gone,ZZT8B 0165 Maple Syrup 2L,resurrect_via_update,D279,cleared,7.77,PASS
+10:52:58,gone,ZZT8B 0185 Basmati Rice 5 Pack,stamp_gone,D299,GONE,GONE,PASS
+10:53:01,gone,ZZT8B 0185 Basmati Rice 5 Pack,resurrect_via_update,D299,cleared,7.77,PASS
+10:53:08,V,Crackers Tasty Cheese,"variant_add(merged row2, reverted)",woolworths,merged,ok,PASS
+10:53:10,V,garbage bags,variant_add(row3),coles,EXPECTED merge,wrote=False merged=False,FAIL
+10:53:15,V,Bread Wholemeal Sandwich,"variant_add(merged row4, reverted)",woolworths,merged,ok,PASS
+10:53:17,V,baking paper 15m,variant_add(row5),coles,EXPECTED merge,wrote=False merged=False,FAIL
+10:53:22,V,Bread White Soft Sandwich,"variant_add(merged row6, reverted)",woolworths,merged,ok,PASS
+10:53:24,V,medium sandwich bags 30pk,variant_add(row7),coles,EXPECTED merge,wrote=False merged=False,FAIL
+10:53:26,V,softner,variant_add(row8),woolworths,EXPECTED merge,wrote=False merged=False,FAIL
+10:53:27,V,sandwich icecream 4pk,variant_add(row9),coles,EXPECTED merge,wrote=False merged=False,FAIL
+10:53:33,V,30m Aluminium Foil,"variant_add(merged row10, reverted)",woolworths,merged,ok,PASS
+10:53:34,V,banana kids 5,variant_add(row11),coles,EXPECTED merge,wrote=False merged=False,FAIL
+10:53:40,V,3L Full Cream Milk,"variant_add(merged row12, reverted)",woolworths,merged,ok,PASS
+10:53:41,V,dare no sugar dbl expresso 2l,variant_add(row13),coles,EXPECTED merge,wrote=False merged=False,FAIL
+10:53:47,V,600g Organic Free Range Eggs 12 Pack,"variant_add(merged row14, reverted)",woolworths,merged,ok,PASS
+10:53:48,V,salted cashews,variant_add(row15),coles,EXPECTED merge,wrote=False merged=False,FAIL
+10:53:54,V,AAA Battery,"variant_add(merged row16, reverted)",woolworths,merged,ok,PASS
+10:53:55,V,battery aa,variant_add(row17),coles,EXPECTED merge,wrote=False merged=False,FAIL
+10:53:57,V,tomato,variant_add(row18),woolworths,EXPECTED merge,wrote=False merged=False,FAIL
+10:53:59,V,bounty chocolate,variant_add(row19),coles,EXPECTED merge,wrote=False merged=False,FAIL
+10:54:04,V,each Capsicum Green,"variant_add(merged row20, reverted)",woolworths,merged,ok,PASS
+10:54:06,V,sunbites sour 60g,variant_add(row21),coles,EXPECTED merge,wrote=False merged=False,FAIL
+10:54:11,V,Chips Corn,"variant_add(merged row22, reverted)",woolworths,merged,ok,PASS
+10:54:13,V,evamay pads with wings super 14 pack,variant_add(row23),coles,EXPECTED merge,wrote=False merged=False,FAIL
+10:54:18,V,Breadsticks Nutella,"variant_add(merged row24, reverted)",woolworths,merged,ok,PASS
+10:54:20,V,mount franklin water 600ml,variant_add(row25),coles,EXPECTED merge,wrote=False merged=False,FAIL
+10:54:25,V,each Hot Hands Hand Warmers Pair,"variant_add(merged row26, reverted)",woolworths,merged,ok,PASS
+10:54:27,V,spring onion bunch each,variant_add(row27),coles,EXPECTED merge,wrote=False merged=False,FAIL
+10:54:32,V,250Ml V Watermelon,"variant_add(merged row28, reverted)",woolworths,merged,ok,PASS
+10:54:34,V,v blackcurrent 250ml,variant_add(row29),coles,EXPECTED merge,wrote=False merged=False,FAIL
+10:54:37,V,Ml V Zero 250,variant_add(row312),woolworths,EXPECTED merge,wrote=True merged=None,FAIL
+10:54:38,V,red rock chilli sriracha,variant_add(row31),coles,EXPECTED merge,wrote=False merged=False,FAIL
+10:54:40,D,Tasty Cheese Crackers,exact_dup_add(allow_duplicate),both,refused,wrote=False err=already tracked (row 2: 'Tasty Cheese Crackers') — use,PASS
+10:54:41,D,Garbage Bags,exact_dup_add(allow_duplicate),both,refused,wrote=False err=already tracked (row 3: 'Garbage Bags') — use update/m,PASS
+10:54:43,D,Wholemeal Sandwich Bread,exact_dup_add(allow_duplicate),both,refused,wrote=False err=already tracked (row 4: 'Wholemeal Sandwich Bread') — ,PASS
+10:54:45,D,Baking Paper 15m,exact_dup_add(allow_duplicate),both,refused,wrote=False err=already tracked (row 5: 'Baking Paper 15m') — use upda,PASS
+10:54:46,D,White Soft Sandwich Bread,exact_dup_add(allow_duplicate),both,refused,wrote=False err=already tracked (row 6: 'White Soft Sandwich Bread') —,PASS
+10:54:48,D,Medium Sandwich bags 30Pk,exact_dup_add(allow_duplicate),both,refused,wrote=False err=already tracked (row 7: 'Medium Sandwich bags 30Pk') —,PASS
+10:54:49,D,Softner,exact_dup_add(allow_duplicate),both,refused,wrote=False err=already tracked (row 8: 'Softner') — use update/map in,PASS
+10:54:51,D,Sandwich Icecream 4Pk,exact_dup_add(allow_duplicate),both,refused,wrote=False err=already tracked (row 9: 'Sandwich Icecream 4Pk') — use,PASS
+10:54:53,D,Aluminium Foil 30m,exact_dup_add(allow_duplicate),both,refused,wrote=False err=already tracked (row 10: 'Aluminium Foil 30m') — use u,PASS
+10:54:54,D,Banana Kids 5,exact_dup_add(allow_duplicate),both,refused,wrote=False err=already tracked (row 11: 'Banana Kids 5') — use update,PASS

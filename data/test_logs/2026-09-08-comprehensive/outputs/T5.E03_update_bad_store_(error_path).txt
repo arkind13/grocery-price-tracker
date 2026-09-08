@@ -1,0 +1,8 @@
+$ update --product Full Cream Milk 3L --store aldi --price 9.99
+--- rc=2 secs=0.4 ---
+
+[stderr]
+usage: grocery_price_cli.py update [-h] --product PRODUCT
+                                   --store {woolworths,coles} --price PRICE
+                                   [--dry-run]
+grocery_price_cli.py update: error: argument --store: invalid choice: 'aldi' (choose from woolworths, coles)

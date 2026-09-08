@@ -1,0 +1,22 @@
+$ compare --items chicken breast
+--- rc=0 secs=3.7 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. chicken breast · 5 pack
+   🟢 Woolworths  $3.80 — Jumpy's Chicken Multipack 5 pack (sheet)
+   🔴 Coles       $4.00 — Jumpy's Chicken Multipack 5 pack (sheet)
+
+📊 TOTALS
+```
+╔════════════════════════╗
+║ Store        Raw Final ║
+║ Woolworths $4.00 $3.80 ║
+║ Coles      $4.00 $4.00 ║
+╚════════════════════════╝
+```
+
+🏆 Cheapest: Woolworths — you save $0.20 (vs Coles)
+🏷️ WW discounts: −$0.20 (5% all $0.20)
+
+[stderr]

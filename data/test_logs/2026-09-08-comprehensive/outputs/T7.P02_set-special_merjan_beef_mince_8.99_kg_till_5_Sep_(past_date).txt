@@ -1,0 +1,5 @@
+$ local-deals --set-special merjan beef mince 8.99/kg --till 5 September --note multi buy 2 for $15
+--- rc=0 secs=4.7 ---
+Merjan Brothers Quality Meats special: beef mince /kg = 8.99 (till 5 Sep) — was empty [row 94]
+
+[stderr]

@@ -1,0 +1,22 @@
+[
+ {"id":"T5.E01","label":"update --dry-run (plan only)","args":["update","--product","Full Cream Milk 3L","--store","coles","--price","9.99","--dry-run"]},
+ {"id":"T5.E02","label":"update unknown product (clean error)","args":["update","--product","ZZT8 Nonexistent Widget","--store","coles","--price","9.99"]},
+ {"id":"T5.E03","label":"update bad store (error path)","args":["update","--product","Full Cream Milk 3L","--store","aldi","--price","9.99"]},
+ {"id":"T5.E04","label":"live-refresh retired refusal","args":["live-refresh"]},
+ {"id":"T5.E05","label":"wednesday --source live refused","args":["wednesday","--source","live","--dry-run"]},
+ {"id":"T5.E06","label":"add-to-list show alias","args":["add-to-list","show"]},
+ {"id":"T5.E07","label":"todo done invalid code (error path)","args":["todo","done","--items","QQQ"]},
+ {"id":"T5.E08","label":"todo gone empty selection (error path)","args":["todo","gone"]},
+ {"id":"T5.E09","label":"missed-pricing gone invalid code","args":["missed-pricing","gone","--items","QQQ"]},
+ {"id":"T5.E10","label":"map unknown list (error path)","args":["map","bananas","--next"]},
+ {"id":"T5.E11","label":"backfill-sizes --dry-run","args":["backfill-sizes","--dry-run"]},
+ {"id":"T5.E12","label":"backfill-keywords","args":["backfill-keywords","--dry-run"]},
+ {"id":"T5.E13","label":"backfill-subcategories --dry-run","args":["backfill-subcategories","--dry-run"]},
+ {"id":"T5.E14","label":"backfill-codes --dry-run","args":["backfill-codes","--dry-run"]},
+ {"id":"T5.E15","label":"backfill-home-brands --dry-run","args":["backfill-home-brands","--dry-run"]},
+ {"id":"T5.E16","label":"topics-check","args":["topics-check"]},
+ {"id":"T5.E17","label":"prefer invalid code (error path)","args":["prefer","--code","QQQ"]},
+ {"id":"T5.E18","label":"shop --status no session","args":["shop","--status"]},
+ {"id":"T5.E19","label":"shop --items empty (error path)","args":["shop","--items",""]},
+ {"id":"T5.E20","label":"analyze unknown query (fallback)","args":["analyze","--query","wombats"]}
+]

@@ -1,0 +1,18 @@
+$ optimize --items Banana Kids 5, Bounty Chocolate, Wonder White Bread, Hillview Cheese Slice, Jumpy's Chicken Multipack --min-saving 50
+--- rc=0 secs=10.6 ---
+🧠 SMART BASKET — 5 ITEMS
+━━━━━━━━━━━━━━━━━━━━
+
+✅ ONE TRIP: WOOLWORTHS — $15.73
+
+🟢 Buy from Woolworths — 5 items
+   1. Banana Kids 5 — $2.71 (sheet)
+   2. Bounty Chocolate — $1.42 (sheet)
+   3. Wonder White Bread — $4.37 (sheet)
+   4. Hillview Cheese Slice — $3.43 (sheet)
+   5. Jumpy's Chicken Multipack — $3.80 (sheet)
+   💵 Woolworths subtotal: $15.73
+
+💡 Splitting would only save $8.27 — showing Woolworths only.
+
+[stderr]

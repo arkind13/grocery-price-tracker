@@ -1,0 +1,5 @@
+$ todo done --items QQQ
+--- rc=1 secs=0.2 ---
+
+[stderr]
+Error: unknown code 'QQQ' — current codes: ESQ, NJL, DSF, AVE

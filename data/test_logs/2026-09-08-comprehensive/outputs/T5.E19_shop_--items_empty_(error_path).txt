@@ -1,0 +1,5 @@
+$ shop --items 
+--- rc=1 secs=0.3 ---
+
+[stderr]
+Error: pass --items, --answers, --status, --undo or --abort.

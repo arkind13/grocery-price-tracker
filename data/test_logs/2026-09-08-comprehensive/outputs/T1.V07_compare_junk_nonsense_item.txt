@@ -1,0 +1,27 @@
+$ compare --items xyzzy plugh quantum banana 999
+--- rc=0 secs=4.1 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. xyzzy plugh quantum banana 999  🏠 · 5 Pk
+   🟢 Woolworths  $2.71 — Banana Kids 5 5 Pk (sheet)
+   🔴 Coles       $4.90 — Banana Kids 5 5 Pk (sheet)
+
+📊 TOTALS
+```
+╔════════════════════════╗
+║ Store        Raw Final ║
+║ Woolworths $3.00 $2.71 ║
+║ Coles      $4.90 $4.90 ║
+╚════════════════════════╝
+```
+
+──────────
+🏷️ HOME BRAND EXTRA
+xyzzy plugh quantum banana 999 · $2.85 → $2.71
+💰 Home extra: $0.14
+
+🏆 Cheapest: Woolworths — you save $2.19 (vs Coles)
+🏷️ WW discounts: −$0.29 (5% all $0.15 + 🏠 home extra $0.14)
+
+[stderr]

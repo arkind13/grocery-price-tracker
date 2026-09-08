@@ -1,0 +1,19 @@
+$ map coles --na
+--- rc=0 secs=55.8 ---
+✅ Marked 'Jumpy's Chicken Multipack' as NA at coles (row 44)
+
+--- Item 2/8 ---
+
+  Looking up coles: Raw Sugar 3Kg
+  (matched on simplified query: 'Raw Sugar')
+  Coles results:
+    1) COLES SIMPLY AUSTRALIAN RAW SUGAR 1KG $1.80 [Everyday]
+    2) WHOLE EARTH SUGAR RAW REPLACEMENT 200G $8.90
+    3) WHOLE EARTH MONK FRUIT 100% NATURAL SWEETENER GRANULES 200G $6.80 [Was $8.50]
+    4) COLES SIMPLY AUSTRALIAN RAW SUGAR 2KG $3.00 [Everyday]
+    5) CSR RAW SUGAR 1KG $2.50 [Was $2.90]
+
+✳️ Next: --add / --na / --keyword NAME / --skip / (stop)
+
+[stderr]
+[coles_extractor] Search 'Raw Sugar': found 5 products

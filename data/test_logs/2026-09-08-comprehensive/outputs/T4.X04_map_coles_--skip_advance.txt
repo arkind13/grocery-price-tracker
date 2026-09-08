@@ -1,0 +1,14 @@
+$ map coles --skip
+--- rc=0 secs=13.5 ---
+✅ Skipped: Sunbites Wholegrain 8 Multipack
+
+--- Item 6/8 ---
+
+  Looking up coles: Greek Salad Kit 270g
+  Coles results:
+    1) COLES KITCHEN GREEK STYLE SALAD KIT 300G $8.80
+
+✳️ Next: --add / --na / --keyword NAME / --skip / (stop)
+
+[stderr]
+[coles_extractor] Search 'Greek Salad Kit 270g': found 1 products

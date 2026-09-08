@@ -1,0 +1,18 @@
+$ map coles --skip
+--- rc=0 secs=10.6 ---
+✅ Skipped: the Juice Brothers Tropical
+
+--- Item 5/8 ---
+
+  Looking up coles: Sunbites Wholegrain 8 Multipack
+  Coles results:
+    1) SUNBITES GRAIN WAVES CHIPS KIDS' LUNCHBOX MULTIPACK 8PK 176G $6.00 [Special]
+    2) SUNBITES CRACKERS MIX KIDS' LUNCHBOX MULTIPACK 12PK 288G $5.50 [Everyday]
+    3) SUNBITES SEA SALT SNACK CRACKERS WITH QUINOA SHARE PACK:.:105 GRAM $2.50 [Was $3.30]
+    4) SUNBITES GRAINWAVES WMEAL CHIPS CHEDDAR 170G $5.00
+    5) SUNBITES CHEDDAR & CHIVES SNACK CRACKERS WITH QUINOA SHARE PACK:.:110 GRAM $2.50 [Was $3.30]
+
+✳️ Next: --add / --na / --keyword NAME / --skip / (stop)
+
+[stderr]
+[coles_extractor] Search 'Sunbites Wholegrain 8 Multipack': found 5 products

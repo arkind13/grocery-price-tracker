@@ -1,0 +1,28 @@
+$ search --product energy drink --expand
+--- rc=0 secs=1.9 ---
+🔍 ENERGY DRINK — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Monster Energy Drink Blue Hawaiian Can 500mL
+   🟢 Woolworths  $3.13 · 500mL  🏷️ Was $4.70
+2. OxyShred Energy Drink Passionfruit Can 355mL
+   🟢 Woolworths  $3.23 · 355mL  🏷️ Was $4.90
+3. Monster Energy Drink Rio Punch Cans 500mL x 4 pack
+   🟢 Woolworths  $9.40 · 500mL x 4 pack  🏷️ Was $16.50
+4. Monster Energy Drink Lando Norris Cans 500mL x 4 pack
+   🟢 Woolworths  $9.40 · 500mL x 4 pack  🏷️ Was $16.50
+5. V Energy Green Cans 330mL x 6 pack
+   🟢 Woolworths  $12.25 · 330mL x 6 pack
+6. Monster Energy Ultra Cans 500mL x 4 pack
+   🟢 Woolworths  $9.40 · 500mL x 4 pack  🏷️ Was $16.50
+7. Monster Energy Zero Sugar Cans 500mL x 4 pack
+   🟢 Woolworths  $9.40 · 500mL x 4 pack  🏷️ Was $16.50
+8. Monster Energy Ultra Strawberry Dreams 500mL x 4 pack
+   🟢 Woolworths  $9.40 · 500mL x 4 pack  🏷️ Was $16.50
+⚠️ Coles not checked (unavailable)
+
+🏆 Cheapest: Woolworths at $3.13
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Scrape.do breaker open — skipping Coles calls until cooldown expires

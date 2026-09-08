@@ -1,0 +1,227 @@
+ts,item_no,item,op,target,expected,actual,pass
+08:45:12,2,Tasty Cheese Crackers,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:45:12,2,Tasty Cheese Crackers,update_single_price:woolworths,row2,wrote 3.09,wrote=True err=,PASS
+08:45:12,3,Garbage Bags,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:45:13,3,Garbage Bags,update_single_price:coles,row3,wrote 9.94,wrote=True err=,PASS
+08:45:13,4,Wholemeal Sandwich Bread,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:45:14,4,Wholemeal Sandwich Bread,update_single_price:woolworths,row4,wrote 36.06,wrote=True err=,PASS
+08:45:14,5,Baking Paper 15m,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:45:14,5,Baking Paper 15m,update_single_price:coles,row5,wrote 25.68,wrote=True err=,PASS
+08:45:14,6,White Soft Sandwich Bread,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:45:15,6,White Soft Sandwich Bread,update_single_price:woolworths,row6,wrote 24.42,wrote=True err=,PASS
+08:45:15,7,Medium Sandwich bags 30Pk,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:45:15,7,Medium Sandwich bags 30Pk,update_single_price:coles,row7,wrote 28.2,wrote=True err=,PASS
+08:45:15,8,Softner,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:45:16,8,Softner,update_single_price:woolworths,row8,wrote 5.26,wrote=True err=,PASS
+08:45:16,9,Sandwich Icecream 4Pk,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:45:16,9,Sandwich Icecream 4Pk,update_single_price:coles,row9,wrote 22.07,wrote=True err=,PASS
+08:45:26,10,Aluminium Foil 30m,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:45:26,10,Aluminium Foil 30m,update_single_price:woolworths,row10,wrote 33.49,wrote=True err=,PASS
+08:45:26,11,Banana Kids 5,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:45:27,11,Banana Kids 5,update_single_price:coles,row11,wrote 29.43,wrote=True err=,PASS
+08:45:27,12,Full Cream Milk 3L,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:45:27,12,Full Cream Milk 3L,update_single_price:woolworths,row12,wrote 5.93,wrote=True err=,PASS
+08:45:27,13,Dare No Sugar Dbl Expresso 2L,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:45:28,13,Dare No Sugar Dbl Expresso 2L,update_single_price:coles,row13,wrote 6.72,wrote=True err=,PASS
+08:45:28,14,Organic Free Range Eggs 12 Pack 600g,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:45:29,14,Organic Free Range Eggs 12 Pack 600g,update_single_price:woolworths,row14,wrote 34.93,wrote=True err=,PASS
+08:45:29,15,Salted Cashews,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:45:29,15,Salted Cashews,update_single_price:coles,row15,wrote 5.86,wrote=True err=,PASS
+08:45:29,16,Battery AAA,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:45:30,16,Battery AAA,update_single_price:woolworths,row16,wrote 23.68,wrote=True err=,PASS
+08:45:30,17,Battery AA,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:45:30,17,Battery AA,update_single_price:coles,row17,wrote 5.78,wrote=True err=,PASS
+08:45:30,18,Tomato,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:45:31,18,Tomato,update_single_price:woolworths,row18,wrote 32.87,wrote=True err=,PASS
+08:45:31,19,Bounty Chocolate,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:45:32,19,Bounty Chocolate,update_single_price:coles,row19,wrote 22.49,wrote=True err=,PASS
+08:45:32,20,Capsicum Green each,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:45:32,20,Capsicum Green each,update_single_price:woolworths,row20,wrote 24.23,wrote=True err=,PASS
+08:46:18,21,Sunbites Sour 60g,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:46:18,21,Sunbites Sour 60g,update_single_price:coles,row21,wrote 6.64,wrote=True err=,PASS
+08:46:18,22,Corn Chips,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:46:19,22,Corn Chips,update_single_price:woolworths,row22,wrote 8.31,wrote=True err=,PASS
+08:46:19,23,Evamay Pads With Wings Super 14 pack,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:46:20,23,Evamay Pads With Wings Super 14 pack,update_single_price:coles,row23,wrote 26.67,wrote=True err=,PASS
+08:46:20,24,Nutella Breadsticks,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:46:20,24,Nutella Breadsticks,update_single_price:woolworths,row24,wrote 13.22,wrote=True err=,PASS
+08:46:20,25,Mount Franklin Water 600Ml,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:46:21,25,Mount Franklin Water 600Ml,update_single_price:coles,row25,wrote 7.6,wrote=True err=,PASS
+08:46:21,26,Hot Hands Hand Warmers Pair each,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:46:21,26,Hot Hands Hand Warmers Pair each,update_single_price:woolworths,row26,wrote 20.23,wrote=True err=,PASS
+08:46:33,27,Spring Onion Bunch each,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:46:33,27,Spring Onion Bunch each,update_single_price:coles,row27,wrote 12.35,wrote=True err=,PASS
+08:46:33,28,V Watermelon 250Ml,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:46:34,28,V Watermelon 250Ml,update_single_price:woolworths,row28,wrote 37.95,wrote=True err=,PASS
+08:47:20,29,V Blackcurrent 250Ml,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:47:21,29,V Blackcurrent 250Ml,update_single_price:coles,row29,wrote 28.56,wrote=True err=,PASS
+08:47:21,30,V Zero 250 Ml,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:47:21,30,V Zero 250 Ml,update_single_price:woolworths,row30,wrote 25.13,wrote=True err=,PASS
+08:47:34,31,Red Rock Chilli Sriracha,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:47:35,31,Red Rock Chilli Sriracha,update_single_price:coles,row31,wrote 17.34,wrote=True err=,PASS
+08:47:48,32,Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:47:49,32,Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g,update_single_price:woolworths,row32,wrote 19.86,wrote=True err=,PASS
+08:47:49,33,Red Bull Sugar Free,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:47:50,33,Red Bull Sugar Free,update_single_price:coles,row33,wrote 24.09,wrote=True err=,PASS
+08:47:50,34,Woolworths Fresh Herb Coriander Bunch each,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:47:50,34,Woolworths Fresh Herb Coriander Bunch each,update_single_price:woolworths,row34,wrote 2.82,wrote=True err=,PASS
+08:47:59,35,Loacker Chocolate,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:48:00,35,Loacker Chocolate,update_single_price:coles,row35,wrote 18.68,wrote=True err=,PASS
+08:48:44,36,Mount Franklin Sparkling Lime 450Ml,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:48:44,36,Mount Franklin Sparkling Lime 450Ml,update_single_price:woolworths,row36,wrote 9.38,wrote=True err=,PASS
+08:48:44,37,Eclipse Intense Mint,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:48:45,37,Eclipse Intense Mint,update_single_price:coles,row37,wrote 3.22,wrote=True err=,PASS
+08:48:45,38,So Chocolate Almond 1L,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:48:45,38,So Chocolate Almond 1L,update_single_price:woolworths,row38,wrote 16.41,wrote=True err=,PASS
+08:48:45,39,Brown Onion 1Kg,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:48:46,39,Brown Onion 1Kg,update_single_price:coles,row39,wrote 15.76,wrote=True err=,PASS
+08:48:46,40,Up&Go Chocolate Protein 500Ml,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:48:47,40,Up&Go Chocolate Protein 500Ml,update_single_price:woolworths,row40,wrote 36.7,wrote=True err=,PASS
+08:48:47,41,Daily Juice Orange Pulp 500ml,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:48:47,41,Daily Juice Orange Pulp 500ml,update_single_price:coles,row41,wrote 18.11,wrote=True err=,PASS
+08:48:47,42,Jumpy's Chicken Potato Chips 5 pack,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:48:48,42,Jumpy's Chicken Potato Chips 5 pack,update_single_price:woolworths,row42,wrote 39.54,wrote=True err=,PASS
+08:48:48,43,Cheese Puff Pastry,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:48:48,43,Cheese Puff Pastry,update_single_price:coles,row43,wrote 9.76,wrote=True err=,PASS
+08:48:48,44,Jumpy's Chicken Multipack,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:48:49,44,Jumpy's Chicken Multipack,update_single_price:woolworths,row44,wrote 4.18,wrote=True err=,PASS
+08:48:49,45,Hillview Cheese Slice,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:48:49,45,Hillview Cheese Slice,update_single_price:coles,row45,wrote 17.72,wrote=True err=,PASS
+08:48:49,46,Wonder White Bread,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:48:50,46,Wonder White Bread,update_single_price:woolworths,row46,wrote 9.76,wrote=True err=,PASS
+08:49:02,47,Raw Sugar 3Kg,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:49:03,47,Raw Sugar 3Kg,update_single_price:coles,row47,wrote 36.76,wrote=True err=,PASS
+08:49:03,48,Up&Go Strawberry 3*250ml,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:03,48,Up&Go Strawberry 3*250ml,update_single_price:woolworths,row48,wrote 4.04,wrote=True err=,PASS
+08:49:03,49,Royal Gala Apple 1 Kg,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:04,49,Royal Gala Apple 1 Kg,update_single_price:coles,row49,wrote 25.96,wrote=True err=,PASS
+08:49:04,50,the Juice Brothers Tropical,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:04,50,the Juice Brothers Tropical,update_single_price:woolworths,row50,wrote 4.89,wrote=True err=,PASS
+08:49:04,51,Weet Bix Kids,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:05,51,Weet Bix Kids,update_single_price:coles,row51,wrote 33.71,wrote=True err=,PASS
+08:49:05,52,Kettle Chilli 165G,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:05,52,Kettle Chilli 165G,update_single_price:woolworths,row52,wrote 30.16,wrote=True err=,PASS
+08:49:05,53,Sunbites Sour Cream Mulipack,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:06,53,Sunbites Sour Cream Mulipack,update_single_price:coles,row53,wrote 10.92,wrote=True err=,PASS
+08:49:06,54,Mr Kipling Choc 6 Pk,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:07,54,Mr Kipling Choc 6 Pk,update_single_price:woolworths,row54,wrote 23.54,wrote=True err=,PASS
+08:49:30,55,Chocolate Hazelnut Spread,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:49:30,55,Chocolate Hazelnut Spread,update_single_price:coles,row55,wrote 11.31,wrote=True err=,PASS
+08:49:30,56,Eggs Free Rage 12Pc,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:31,56,Eggs Free Rage 12Pc,update_single_price:woolworths,row56,wrote 29.92,wrote=True err=,PASS
+08:49:31,57,Farmer Union Greek Yoghurt 1Kg,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:32,57,Farmer Union Greek Yoghurt 1Kg,update_single_price:coles,row57,wrote 16.01,wrote=True err=,PASS
+08:49:32,58,Blueberries,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:32,58,Blueberries,update_single_price:woolworths,row58,wrote 40.36,wrote=True err=,PASS
+08:49:32,59,Mccain Jalepeno,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:33,59,Mccain Jalepeno,update_single_price:coles,row59,wrote 21.23,wrote=True err=,PASS
+08:49:33,60,Sunny Queen Free Range 12 Pk,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:33,60,Sunny Queen Free Range 12 Pk,update_single_price:woolworths,row60,wrote 22.91,wrote=True err=,PASS
+08:49:33,61,Twisted Chocolate Icecream,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:34,61,Twisted Chocolate Icecream,update_single_price:coles,row61,wrote 33.41,wrote=True err=,PASS
+08:49:44,62,Radiant Advanced Ultra Powder+,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:49:45,62,Radiant Advanced Ultra Powder+,update_single_price:woolworths,row62,wrote 26.04,wrote=True err=,PASS
+08:49:45,63,Strawberries,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:45,63,Strawberries,update_single_price:coles,row63,wrote 8.14,wrote=True err=,PASS
+08:49:45,64,Raspberries Punnet 125g,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:46,64,Raspberries Punnet 125g,update_single_price:woolworths,row64,wrote 35.8,wrote=True err=,PASS
+08:49:46,65,Extra Spearmint Chewing Multipack,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:46,65,Extra Spearmint Chewing Multipack,update_single_price:coles,row65,wrote 19.15,wrote=True err=,PASS
+08:49:46,66,Sunbites Grain Waves Sour Cream & Chives 22g x 8 pack,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:47,66,Sunbites Grain Waves Sour Cream & Chives 22g x 8 pack,update_single_price:woolworths,row53,wrote 5.32,wrote=True err=,PASS
+08:49:47,67,Smith Cheese & Onion Multipack 8,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:47,67,Smith Cheese & Onion Multipack 8,update_single_price:coles,row67,wrote 40.24,wrote=True err=,PASS
+08:49:47,68,V Watermelon 4*250,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:48,68,V Watermelon 4*250,update_single_price:woolworths,row68,wrote 28.4,wrote=True err=,PASS
+08:49:48,69,V Sugarfree 4*250,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:49,69,V Sugarfree 4*250,update_single_price:coles,row69,wrote 40.31,wrote=True err=,PASS
+08:49:49,70,David Beckham Instinct,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:49:49,70,David Beckham Instinct,update_single_price:woolworths,row70,wrote 37.34,wrote=True err=,PASS
+08:49:59,71,Greek Salad Kit 400g,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:50:00,71,Greek Salad Kit 400g,update_single_price:coles,row71,wrote 31.28,wrote=True err=,PASS
+08:50:00,72,Tegel Nashville Tenders 500g,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:50:00,72,Tegel Nashville Tenders 500g,update_single_price:woolworths,row72,wrote 16.08,wrote=True err=,PASS
+08:50:16,73,Obela Hommus 3Pk 60g,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:50:17,73,Obela Hommus 3Pk 60g,update_single_price:coles,row73,wrote 25.89,wrote=True err=,PASS
+08:50:17,74,Freshen Up Spray,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:50:17,74,Freshen Up Spray,update_single_price:woolworths,row74,wrote 27.08,wrote=True err=,PASS
+08:50:17,75,Greek Salad Kit 270g,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:50:18,75,Greek Salad Kit 270g,update_single_price:coles,row75,wrote 3.96,wrote=True err=,PASS
+08:50:27,76,Steggles Korean Tenders 600g,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:50:27,76,Steggles Korean Tenders 600g,update_single_price:woolworths,row76,wrote 24.73,wrote=True err=,PASS
+08:50:40,77,Steggles Habanero Wings 1Kg,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:50:40,77,Steggles Habanero Wings 1Kg,update_single_price:coles,row77,wrote 26.69,wrote=True err=,PASS
+08:50:40,78,Woolworths Beef Mince 500g,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:50:41,78,Woolworths Beef Mince 500g,update_single_price:woolworths,row78,wrote 5.93,wrote=True err=,PASS
+08:50:54,79,Yumi's Herb Falafel 200g,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:50:54,79,Yumi's Herb Falafel 200g,update_single_price:coles,row79,wrote 21.95,wrote=True err=,PASS
+08:50:54,80,Carman's Apple & Blueberry Fruit Straps 5 pack,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:50:55,80,Carman's Apple & Blueberry Fruit Straps 5 pack,update_single_price:woolworths,row80,wrote 16.22,wrote=True err=,PASS
+08:51:09,81,Woolworths Greek Style Fetta 200g,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:51:10,81,Woolworths Greek Style Fetta 200g,update_single_price:coles,row81,wrote 33.77,wrote=True err=,PASS
+08:51:19,82,Tamar Valley Dairy Yoghurt Mango & Cream 170g,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:51:19,82,Tamar Valley Dairy Yoghurt Mango & Cream 170g,update_single_price:woolworths,row82,wrote 7.19,wrote=True err=,PASS
+08:51:32,83,Farmers Union Greek Style High Protein Yoghurt Pouch Mango 1,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:51:33,83,Farmers Union Greek Style High Protein Yoghurt Pouch Mango 1,update_single_price:coles,row83,wrote 35.29,wrote=True err=,PASS
+08:51:41,84,Tamar Valley Dairy Yoghurt Mango & Cream 700g,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:51:41,84,Tamar Valley Dairy Yoghurt Mango & Cream 700g,update_single_price:woolworths,row84,wrote 16.47,wrote=True err=,PASS
+08:52:24,85,Tegel Take Outs Nashville Style Chicken Burgers 600g,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:52:25,85,Tegel Take Outs Nashville Style Chicken Burgers 600g,update_single_price:coles,row85,wrote 24.06,wrote=True err=,PASS
+08:53:13,86,Birds Eye Golden Crunch Thin & Crispy Chips 900g,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:53:14,86,Birds Eye Golden Crunch Thin & Crispy Chips 900g,update_single_price:woolworths,row86,wrote 3.98,wrote=True err=,PASS
+08:53:39,87,V Energy Zero Sugar Drink Blackcurrant & Yuzu 250mL,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:53:39,87,V Energy Zero Sugar Drink Blackcurrant & Yuzu 250mL,update_single_price:coles,row87,wrote 6.21,wrote=True err=,PASS
+08:53:46,88,Glow Lab Coconut & Sandalwood Body Wash 900mL,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:53:46,88,Glow Lab Coconut & Sandalwood Body Wash 900mL,update_single_price:woolworths,row88,wrote 24.32,wrote=True err=,PASS
+08:54:30,89,White Glo Professional Whitening Toothpaste 115g,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:54:31,89,White Glo Professional Whitening Toothpaste 115g,update_single_price:coles,row89,wrote 38.47,wrote=True err=,PASS
+08:54:31,90,RAW SUGAR 2KG,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:54:31,90,RAW SUGAR 2KG,update_single_price:woolworths,row90,wrote 24.31,wrote=True err=,PASS
+08:54:46,91,Woolworths Little Gem Lettuce Green 2 pack,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:54:47,91,Woolworths Little Gem Lettuce Green 2 pack,update_single_price:coles,row91,wrote 13.09,wrote=True err=,PASS
+08:54:47,92,Full+ On The Go Meal Replacement Chocolate 480mL,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:54:48,92,Full+ On The Go Meal Replacement Chocolate 480mL,update_single_price:woolworths,row92,wrote 28.04,wrote=True err=,PASS
+08:54:49,93,DAIRY FARMERS THICK & CREAMY MANGO & PASSIONFRUIT YOGHURT,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:54:50,93,DAIRY FARMERS THICK & CREAMY MANGO & PASSIONFRUIT YOGHURT,update_single_price:coles,row93,wrote 5.6,wrote=True err=,PASS
+08:54:50,94,Green's Original Pancake Shake 375g,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:54:51,94,Green's Original Pancake Shake 375g,update_single_price:woolworths,row94,wrote 38.8,wrote=True err=,PASS
+08:54:52,95,Thanks To Nature Shaving Cream Cherry Blossom & White Tea 15,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:54:52,95,Thanks To Nature Shaving Cream Cherry Blossom & White Tea 15,update_single_price:coles,row95,wrote 10.43,wrote=True err=,PASS
+08:54:53,96,Woolworths Tasty Shredded Cheese 500g,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:54:54,96,Woolworths Tasty Shredded Cheese 500g,update_single_price:woolworths,row96,wrote 34.33,wrote=True err=,PASS
+08:54:55,97,Woolworths Mozzarella Shredded Cheese 500g,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:54:55,97,Woolworths Mozzarella Shredded Cheese 500g,update_single_price:coles,row97,wrote 36.8,wrote=True err=,PASS
+08:54:56,98,Woolworths Light Tasty Shredded Cheese 500g,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:54:57,98,Woolworths Light Tasty Shredded Cheese 500g,update_single_price:woolworths,row98,wrote 17.14,wrote=True err=,PASS
+08:54:57,99,LIDDELLS LACTOSE FREE SHREDDED CHEESE 250G,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:54:58,99,LIDDELLS LACTOSE FREE SHREDDED CHEESE 250G,update_single_price:coles,row99,wrote 7.86,wrote=True err=,PASS
+08:54:58,100,Bio Cheese Dairy Free Cheddar Slices 200g,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:54:59,100,Bio Cheese Dairy Free Cheddar Slices 200g,update_single_price:woolworths,row100,wrote 40.49,wrote=True err=,PASS
+08:54:59,101,Woolworths Microwave Basmati Rice 250g,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:55:00,101,Woolworths Microwave Basmati Rice 250g,update_single_price:coles,row101,wrote 30.6,wrote=True err=,PASS
+08:55:00,102,Woolworths Pasta Spirals 500g,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:55:01,102,Woolworths Pasta Spirals 500g,update_single_price:woolworths,row102,wrote 26.68,wrote=True err=,PASS
+08:55:01,103,Yucateco XXXTRA Hot Habanero Sauce 120mL,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:55:02,103,Yucateco XXXTRA Hot Habanero Sauce 120mL,update_single_price:coles,row103,wrote 2.23,wrote=True err=,PASS
+08:55:02,104,Mount Franklin Lightly Sparkling Water Lime Bottle 1.25L,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:55:02,104,Mount Franklin Lightly Sparkling Water Lime Bottle 1.25L,update_single_price:woolworths,row104,wrote 13.5,wrote=True err=,PASS
+08:55:03,105,Woolworths Coat & Cook Seasoning Mix Southern Fried Chicken ,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:55:04,105,Woolworths Coat & Cook Seasoning Mix Southern Fried Chicken ,update_single_price:coles,row105,wrote 18.58,wrote=True err=,PASS
+08:55:04,106,DermaVeen Daily Nourish Moisturising Lotion 500mL,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:55:05,106,DermaVeen Daily Nourish Moisturising Lotion 500mL,update_single_price:woolworths,row106,wrote 6.49,wrote=True err=,PASS
+08:55:06,107,DermaVeen Extra Hydration Intensive Moisturising Lotion 500m,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:55:06,107,DermaVeen Extra Hydration Intensive Moisturising Lotion 500m,update_single_price:coles,row107,wrote 14.66,wrote=True err=,PASS
+08:55:07,108,DERMAVEEN EXTRA HYDRATION INTENSIVE MOISTURISING LOTION COLL,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:55:08,108,DERMAVEEN EXTRA HYDRATION INTENSIVE MOISTURISING LOTION COLL,update_single_price:woolworths,row108,wrote 3.61,wrote=True err=,PASS
+08:55:08,109,Casa Serena 500ml Body Lotion/Moisturiser Hand/Skin Cream Bl,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:55:09,109,Casa Serena 500ml Body Lotion/Moisturiser Hand/Skin Cream Bl,update_single_price:coles,row109,wrote 30.72,wrote=True err=,PASS
+08:55:10,110,CETAPHIL MOISTURISING LOTION 473ML,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:55:11,110,CETAPHIL MOISTURISING LOTION 473ML,update_single_price:woolworths,row110,wrote 26.65,wrote=True err=,PASS
+08:55:11,111,AVEENO DAILY MOISTURISING BODY LOTION,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:55:12,111,AVEENO DAILY MOISTURISING BODY LOTION,update_single_price:coles,row111,wrote 9.4,wrote=True err=,PASS
+08:55:13,112,Mozzarella Cheese Sticks 235g 10 Pack,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:55:13,112,Mozzarella Cheese Sticks 235g 10 Pack,update_single_price:woolworths,row112,wrote 17.33,wrote=True err=,PASS
+08:55:13,113,Olive Oil Spread 500g,lookup,engine,found/exact,LookupStatus.EXACT_SHEET,PASS
+08:55:14,113,Olive Oil Spread 500g,update_single_price:coles,row113,wrote 16.47,wrote=True err=,PASS
+08:55:15,114,Lindt Hot Choc Flakes Tin 210g,lookup,engine,found/exact,LookupStatus.SHEET_AND_LIVE,PASS
+08:55:15,114,Lindt Hot Choc Flakes Tin 210g,update_single_price:woolworths,row114,wrote 33.77,wrote=True err=,PASS

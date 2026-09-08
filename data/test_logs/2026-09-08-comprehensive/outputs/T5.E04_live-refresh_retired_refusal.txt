@@ -1,0 +1,37 @@
+$ live-refresh
+--- rc=1 secs=191.5 ---
+🔄 LIVE REFRESH
+━━━━━━━━━━━━━━━━━━━━
+Opening the live window (local Chrome, headed)…
+COLES_USER/COLES_PASS missing — add them to .env and re-run live-refresh
+Add ONE item to your Price Compare list in the open window (coles)…
+
+──────────
+🟢 Woolworths
+Login · FAILED
+Flush · OK
+Added · 0
+Failed · 3
+Parked · 0
+Reason · not logged in — nothing attempted
+  ❌ Acme Pasta Penne 500g
+  ❌ WW Yogurt B
+  ❌ WW Yogurt A
+Fetch · FAILED
+  ❌ Exact-match list name(s) not found: ['Price Compare', 'Special list (28)']. Available lists: []. Rename the list (or update LIST_NAMES) — guessing is never attempted.
+──────────
+🔴 Coles
+Login · FAILED
+Discovery · failed — run 'live-refresh --recapture' to train
+Flush · OK
+Added · 0
+Failed · 1
+Parked · 0
+Reason · not logged in — nothing attempted
+  ❌ Acme Pasta Penne 500g
+Fetch · FAILED
+  ❌ Page.evaluate: SyntaxError: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+
+⚠️ Live refresh finished with failures — see above.
+
+[stderr]
