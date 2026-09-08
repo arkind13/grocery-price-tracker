@@ -675,5 +675,103 @@ class TestFindCandidatesBoundaries(unittest.TestCase):
         self.assertEqual(self._names("sugar 2kg")[0], "RAW SUGAR 2KG")
 
 
+# ============================================================================
+# R2-1 (D19): the Col P alias token path must run the SAME negation
+# guards as Step 3 — "sugar" may never auto-answer "V Zero" via the
+# alias "V Energy Zero Sugar Original | 250mL" (full-token alias match
+# fired before the FIX-6 guards). Fixture names mirror the real sheet
+# rows cited in the verification report (row 30 V Zero, rows 47/90 raw
+# sugar).
+# ============================================================================
+
+
+class TestAliasNegationGuardR2_1(unittest.TestCase):
+
+    ROWS = [
+        # Real sheet shape: the alias text carries "Zero Sugar" and the
+        # pipe splits off the size ("250mL" becomes its own alias).
+        ["V Zero 250 Ml", "Drinks", "250mL", "$2.52", "$2.65", "",
+         "V Energy", "2026-09-08 09:00",
+         "", "", "", "", "", "", "",
+         "V Energy Zero Sugar Original | 250mL"],
+        ["Raw Sugar 3Kg", "Pantry", "3kg", "$4.10", "$4.30", "",
+         "", "2026-09-08 09:00",
+         "", "", "", "", "", "", "", ""],
+        ["RAW SUGAR 2KG", "Pantry", "2kg", "$2.90", "$3.10", "",
+         "", "2026-09-08 09:00",
+         "", "", "", "", "", "", "", ""],
+        ["Red Bull Sugar Free", "Drinks", "4x250ml", "$9.50", "$9.80", "",
+         "", "2026-09-08 09:00",
+         "", "", "", "", "", "", "", ""],
+        ["Coca Cola", "Drinks", "375ml", "$2.00", "$2.10", "",
+         "", "2026-09-08 09:00",
+         "", "", "", "", "", "", "", "Diet Coke"],
+    ]
+
+    def setUp(self):
+        self.ws = _make_worksheet_with_header(rows=self.ROWS)
+        self.engine = LookupEngine(worksheet=self.ws)
+
+    def test_find_alias_token_skips_negated_alias(self):
+        """The D19 repro: token "sugar" is a subset of the V Zero
+        alias, but the alias negates it — no alias hit."""
+        self.assertIsNone(
+            self.engine._ensure_index().find_alias_token("sugar"))
+
+    def test_sugar_auto_picks_raw_sugar_not_v_zero(self):
+        """compare auto mode: query "sugar" resolves to a RAW SUGAR
+        row, never V Zero / Red Bull Sugar Free."""
+        result = self.engine.find_product("sugar", interactive=False)
+        self.assertEqual(result.status, LookupStatus.EXACT_SHEET)
+        self.assertIn(result.generic_name, ("Raw Sugar 3Kg",
+                                            "RAW SUGAR 2KG"))
+        self.assertNotEqual(result.generic_name, "V Zero 250 Ml")
+        self.assertNotEqual(result.generic_name, "Red Bull Sugar Free")
+
+    def test_sugar_interactive_asks_with_raw_sugar_candidates(self):
+        result = self.engine.find_product("sugar", interactive=True)
+        self.assertEqual(result.status, LookupStatus.CANDIDATES)
+        names = [c.generic_name for c in result.candidates]
+        self.assertNotIn("V Zero 250 Ml", names)
+        self.assertIn("Raw Sugar 3Kg", names)
+
+    def test_zero_sugar_query_still_matches_v_zero(self):
+        """Directionality: the negation lives in the QUERY, so the
+        alias may still auto-answer its own product."""
+        result = self.engine.find_product("zero sugar original",
+                                          interactive=False)
+        self.assertEqual(result.status, LookupStatus.KEYWORD_ALIAS)
+        self.assertEqual(result.generic_name, "V Zero 250 Ml")
+
+    def test_diet_qualifier_alias_refused_for_plain_query(self):
+        """"diet" joined the shared negation list (R2-1): plain
+        "coke" may not auto-answer through the "Diet Coke" alias."""
+        self.assertIsNone(
+            self.engine._ensure_index().find_alias_token("coke"))
+
+        def stub_ww(query, page_size=5):
+            return []
+
+        def stub_coles(query, page_size=5):
+            return ([], "ok")
+
+        with patch(
+            "extractors.woolworths_extractor."
+            "fetch_woolworths_search_noauth",
+            side_effect=stub_ww,
+        ), patch(
+            "extractors.coles_extractor.fetch_coles_search_status",
+            side_effect=stub_coles,
+        ):
+            result = self.engine.find_product("coke", interactive=False)
+        self.assertNotEqual(result.status, LookupStatus.KEYWORD_ALIAS)
+
+    def test_diet_coke_exact_query_matches(self):
+        """Query that CARRIES the qualifier matches its alias exactly."""
+        result = self.engine.find_product("diet coke", interactive=True)
+        self.assertEqual(result.status, LookupStatus.KEYWORD_ALIAS)
+        self.assertEqual(result.generic_name, "Coca Cola")
+
+
 if __name__ == "__main__":
     unittest.main()

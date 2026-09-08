@@ -201,9 +201,12 @@ class LookupIndex:
         self._generic_map: dict[str, dict] = {}
         self._keyword_map: dict[str, dict] = {}
 
-        # Col P alias structures
+        # Col P alias structures — the token index also keeps the raw
+        # alias text so the R2-1 negation guard can test adjacency in
+        # the ALIAS itself, where the crossing lives ("Zero Sugar"
+        # inside "V Energy Zero Sugar Original", D19).
         self._alias_exact: dict[str, dict] = {}
-        self._alias_token: list[tuple[set, dict]] = []
+        self._alias_token: list[tuple[set, dict, str]] = []
 
         # Resolve column indices by header name
         specials_col: dict[str, int] = {}
@@ -323,7 +326,7 @@ class LookupIndex:
                     self._alias_exact[a_norm] = row_dict
                 tokens = self._significant_tokens(alias)
                 if tokens:
-                    self._alias_token.append((tokens, row_dict))
+                    self._alias_token.append((tokens, row_dict, alias))
 
     @staticmethod
     def _normalize(s: str) -> str:
@@ -371,6 +374,13 @@ class LookupIndex:
         normalisation on both sides ("apples" matches the alias token
         "apple" — user report 2026-09-03). Returns the best match
         (highest token overlap) or None.
+
+        R2-1 (D19): an alias whose text NEGATES a query token ("V
+        Energy Zero Sugar Original" for query "sugar" — the full token
+        "sugar" sits next to "zero") can never auto-answer while the
+        query itself lacks that negation; such aliases are skipped and
+        the scan continues, so a clean alias (or, later, Step 3 Col A
+        partials such as the RAW SUGAR rows) still wins.
         """
         query_tokens = self._significant_tokens(query)
         if not query_tokens:
@@ -378,20 +388,23 @@ class LookupIndex:
 
         best_row: Optional[dict] = None
         best_overlap = 0
-        for alias_tokens, row_dict in self._alias_token:
+        for alias_tokens, row_dict, alias_text in self._alias_token:
             alias_variants: set = set()
             for token in alias_tokens:
                 alias_variants |= _token_variants(token)
             # Every query token must be present in the alias, allowing
             # singular/plural forms on either side ("apples" <-> "apple").
-            if all(
+            if not all(
                 _token_variants(token) & alias_variants
                 for token in query_tokens
             ):
-                overlap = len(query_tokens)
-                if overlap > best_overlap:
-                    best_overlap = overlap
-                    best_row = row_dict
+                continue
+            if _negation_crossed(query, alias_text):
+                continue
+            overlap = len(query_tokens)
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_row = row_dict
         return best_row
 
     # --- Step 3: partial candidates ---
@@ -560,7 +573,11 @@ def _significant_query_tokens(query: str) -> list:
 # these describes the ABSENCE of the queried thing ("Red Bull Sugar
 # Free", "Dare No Sugar", "V Energy Zero Sugar" for query "sugar") —
 # ported from the subcategory boundary philosophy (FIX-6, D5).
-_NEGATION_TOKENS = {"free", "no", "zero", "less", "sugarfree"}
+# R2-1 (D19): extended with "diet" and "lactosefree" so the Col P
+# alias path shares the SAME qualifier list ("Diet Coke" is not
+# "coke"; "Lactose Free Milk" is not "milk"). ONE list, one place.
+_NEGATION_TOKENS = {"free", "no", "zero", "less", "sugarfree",
+                    "diet", "lactosefree"}
 
 
 def _negation_crossed(query: str, name: str) -> bool:
@@ -571,18 +588,24 @@ def _negation_crossed(query: str, name: str) -> bool:
     "Dare No Sugar") while the query itself carries no negation —
     such candidates are never auto-picked (they may still be shown
     interactively, labelled).
+
+    R2-1 (D19): token membership is singular/plural folded on both
+    sides ("sugar" in the query guards "Zero Sugars" in the name),
+    and the same guard now runs on the Col P alias path.
     """
-    q_tokens = set(_significant_query_tokens(query))
-    if not q_tokens:
+    q_variant_sets = [_token_variants(t)
+                      for t in _significant_query_tokens(query)]
+    if not q_variant_sets:
         return False
     name_tokens = LookupIndex._normalize(name).replace("-", " ").split()
     for i, tok in enumerate(name_tokens):
-        if tok not in q_tokens:
+        if not any(vs & _token_variants(tok) for vs in q_variant_sets):
             continue
         for j in (i - 1, i + 1):
             if (0 <= j < len(name_tokens)
                     and name_tokens[j] in _NEGATION_TOKENS
-                    and name_tokens[j] not in q_tokens):
+                    and not any(_token_variants(name_tokens[j]) & vs
+                                for vs in q_variant_sets)):
                 return True
     return False
 
