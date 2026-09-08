@@ -4047,5 +4047,202 @@ class TestSearchPinDeterminism(unittest.TestCase):
             self.assertEqual(pin["results"][0]["name"], "WW Yogurt A")
 
 
+# ============================================================================
+# R2-4 (D13/D13-R/D3-residue): honest unavailable-store messaging — one
+# helper turns the scrapedo breaker state into a stdout line with the
+# REASON + retry time; all three surfaces use it and never print "no
+# results" when the store was unreachable.
+# ============================================================================
+
+
+class TestStoreUnavailableReasonR2_4(unittest.TestCase):
+
+    def _craft_health(self, tmpdir, state):
+        """Write a fake scrapedo_health.json; return its path."""
+        from extractors import coles_extractor as ce
+        path = Path(tmpdir) / "scrapedo_health.json"
+        path.write_text(json.dumps(state), encoding="utf-8")
+        return patch.object(ce, "SCRAPEDO_HEALTH_PATH", path)
+
+    def test_reason_breaker_open_carries_retry_time(self):
+        from grocery_price_cli import _store_unavailable_reason
+        from datetime import datetime
+        import time as _time
+        until = _time.time() + 600
+        expected = datetime.fromtimestamp(until).strftime("%H:%M")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._craft_health(tmpdir, {"fail_streak": 3,
+                                             "last_fail_ts": _time.time(),
+                                             "open_until": until}):
+                self.assertEqual(_store_unavailable_reason("coles"),
+                                 f"breaker open until {expected}")
+
+    def test_reason_failed_attempts_without_open_breaker(self):
+        from grocery_price_cli import _store_unavailable_reason
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._craft_health(tmpdir, {"fail_streak": 2,
+                                             "last_fail_ts": 1.0,
+                                             "open_until": 0.0}):
+                self.assertEqual(_store_unavailable_reason("coles"),
+                                 "2 failed attempts")
+                self.assertEqual(
+                    _store_unavailable_reason("Coles"), "2 failed attempts")
+
+    def test_reason_healthy_or_non_coles_store(self):
+        from grocery_price_cli import _store_unavailable_reason
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._craft_health(tmpdir, {"fail_streak": 0,
+                                             "last_fail_ts": 0.0,
+                                             "open_until": 0.0}):
+                self.assertEqual(_store_unavailable_reason("coles"), "")
+                self.assertEqual(
+                    _store_unavailable_reason("woolworths"), "")
+
+    def test_unavailable_line_carries_reason_and_nothing_written(self):
+        from grocery_price_cli import _store_unavailable_line
+        import time as _time
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._craft_health(tmpdir, {"fail_streak": 3,
+                                             "last_fail_ts": _time.time(),
+                                             "open_until": _time.time()
+                                             + 600}):
+                line = _store_unavailable_line("coles")
+        self.assertIn("Coles unavailable (breaker open until", line)
+        self.assertIn("nothing written, item left on the list", line)
+
+    def test_unavailable_line_without_reason_keeps_old_wording(self):
+        from grocery_price_cli import _store_unavailable_line
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._craft_health(tmpdir, {"fail_streak": 0,
+                                             "last_fail_ts": 0.0,
+                                             "open_until": 0.0}):
+                line = _store_unavailable_line("coles")
+        self.assertIn("Coles unavailable right now", line)
+        self.assertIn("item left on the list", line)
+
+    @patch("extractors.coles_extractor.fetch_coles_search_status")
+    @patch("extractors.woolworths_extractor."
+           "fetch_woolworths_search_noauth")
+    def test_search_surface_shows_reason_and_retry_time(
+            self, mock_ww, mock_coles):
+        """Surface (c): plain search — 'Coles not checked (unavailable
+        — breaker open until HH:MM)' instead of a bare '(unavailable)'."""
+        from grocery_price_cli import _cmd_search
+        from extractors.models import ProductItem
+        import time as _time
+        mock_ww.return_value = [
+            ProductItem("woolworths", "WW Milk 2L", 3.50)]
+        mock_coles.return_value = ([], "breaker_open")
+        args = argparse.Namespace(product="milk")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._craft_health(tmpdir, {"fail_streak": 3,
+                                             "last_fail_ts": _time.time(),
+                                             "open_until": _time.time()
+                                             + 600}):
+                old_stdout = sys.stdout
+                try:
+                    sys.stdout = io.StringIO()
+                    code = _cmd_search(args)
+                    output = sys.stdout.getvalue()
+                finally:
+                    sys.stdout = old_stdout
+        self.assertEqual(code, 0)
+        self.assertIn("Coles not checked (unavailable", output)
+        self.assertIn("breaker open until", output)
+
+    @patch("extractors.coles_extractor.fetch_coles_search")
+    def test_map_batch_surface_never_says_no_results_when_broken(
+            self, mock_coles):
+        """Surface (b): _resolve_and_print_store with the breaker open
+        prints the honest line, never 'No coles results found'."""
+        from grocery_price_cli import _resolve_and_print_store
+        import time as _time
+        mock_coles.return_value = []
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._craft_health(tmpdir, {"fail_streak": 3,
+                                             "last_fail_ts": _time.time(),
+                                             "open_until": _time.time()
+                                             + 600}):
+                old_stdout = sys.stdout
+                try:
+                    sys.stdout = io.StringIO()
+                    result = _resolve_and_print_store("coles", "Milk 2L")
+                    output = sys.stdout.getvalue()
+                finally:
+                    sys.stdout = old_stdout
+        self.assertEqual(result, [])
+        self.assertIn("Coles unavailable (breaker open until", output)
+        self.assertIn("nothing written", output)
+        self.assertNotIn("No coles results found", output)
+
+    def test_map_batch_surface_healthy_store_keeps_no_results(self):
+        """Healthy store with a genuinely empty result still reads as
+        not-listed ('No coles results found')."""
+        from grocery_price_cli import _resolve_and_print_store
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._craft_health(tmpdir, {"fail_streak": 0,
+                                             "last_fail_ts": 0.0,
+                                             "open_until": 0.0}):
+                with patch(
+                        "extractors.coles_extractor.fetch_coles_search",
+                        return_value=[]):
+                    old_stdout = sys.stdout
+                    try:
+                        sys.stdout = io.StringIO()
+                        _resolve_and_print_store("coles", "Milk 2L")
+                        output = sys.stdout.getvalue()
+                    finally:
+                        sys.stdout = old_stdout
+        self.assertIn("No coles results found", output)
+
+    @patch("core.lookup.LookupEngine")
+    @patch("core.sheets_client.connect_worksheet")
+    @patch("grocery_price_cli._load_env")
+    def test_tagged_add_forced_live_never_says_no_results_when_broken(
+            self, mock_env, mock_ws, mock_engine_cls):
+        """Surface (a): the D13-R repro — tagged debt whose find_product
+        returns CANDIDATES (sheet hit), so the FORCED live search runs;
+        breaker-open Coles must print the honest unavailable line, rc=1,
+        never 'No live search results found'."""
+        from core.lookup import LookupStatus
+        from grocery_price_cli import _cmd_map_noninteractive
+
+        class _Cands:
+            pass
+
+        engine = mock_engine_cls.return_value
+        engine.find_product.return_value = SimpleNamespace(
+            status=LookupStatus.CANDIDATES, live_items=[],
+            store_unavailable=[])
+        engine._live_result.return_value = SimpleNamespace(
+            store_unavailable=["coles"], live_items=[])
+        mock_ws.return_value = FakeWorksheet([_make_header()])
+        import time as _time
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self._craft_health(tmpdir, {"fail_streak": 3,
+                                             "last_fail_ts": _time.time(),
+                                             "open_until": _time.time()
+                                             + 600}):
+                old_stdout = sys.stdout
+                try:
+                    sys.stdout = io.StringIO()
+                    code = _cmd_map_noninteractive(
+                        argparse.Namespace(next=False, pick=None, add=True,
+                                           skip=False, na=False,
+                                           forget=False, keyword=None,
+                                           unit=None, subcategory=""),
+                        "unmatched",
+                        ["Yallamundi Farm Organic Eggs 700g [coles]"],
+                        0, {}, Path(tmpdir) / "progress.json",
+                        Path(tmpdir))
+                    output = sys.stdout.getvalue()
+                finally:
+                    sys.stdout = old_stdout
+        self.assertEqual(code, 1)
+        self.assertIn("Coles unavailable (breaker open until", output)
+        self.assertIn("nothing written", output)
+        self.assertNotIn("No live search results found", output)
+
+
 if __name__ == "__main__":
     unittest.main()
