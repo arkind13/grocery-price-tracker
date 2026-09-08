@@ -2289,6 +2289,122 @@ def _cmd_wednesday_refs():
     return [_cmd_wednesday]
 
 
+class TestWednesdayDryRunWritesNothing(unittest.TestCase):
+    """FIX-2 (defect D8): `wednesday --dry-run` must not rewrite
+    data/unmatched.txt (destroyed 39 lines of accumulated debt on
+    2026-09-08) nor any other data/ state file. The would-be unmatched
+    list is PRINTED, never written."""
+
+    def _wed_args(self, **overrides):
+        defaults = {"dry_run": True, "no_scp": True, "no_telegram": True,
+                    "source": "docx"}
+        defaults.update(overrides)
+        return argparse.Namespace(**defaults)
+
+    def test_dry_run_leaves_unmatched_txt_and_data_dir_untouched(self):
+        """Dry run over a REAL temp data dir: unmatched.txt byte-identical,
+        no new files, debt enrichment not called, would-write printed."""
+        from extractors.models import ProductItem
+        import hashlib
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        tmp = Path(tmp.name)
+        data_dir = tmp / "data"
+        data_dir.mkdir()
+        # The accumulated debt the dry run must NOT clobber (D8).
+        old_debt = ("# Unmatched items (parsed from .docx but no keyword "
+                    "hit) — 2 total\n\nOld Debt Widget 500g [woolworths]\n"
+                    "Old Debt Slices 300g [coles]\n")
+        (data_dir / "unmatched.txt").write_text(old_debt, encoding="utf-8")
+        before = {p.name: hashlib.md5(
+            p.read_bytes()).hexdigest() for p in data_dir.iterdir()}
+
+        fake_report = SimpleNamespace(
+            rows_examined=0, rows_updated=0, items_matched=0,
+            items_skipped=0, stores_synced=[], range_written="",
+            warnings=[])
+        pending_debt = [
+            {"store": "woolworths", "raw_name": "Zz New Widget 500g",
+             "price": None, "status": "pending"},
+            {"store": "coles", "raw_name": "Zz New Slices 300g",
+             "price": None, "status": "pending"},
+        ]
+
+        class _FakeMatcher:
+            def __init__(self, index):
+                pass
+
+            def match_batch(self, items):
+                return [SimpleNamespace(matched=True) for _ in items]
+
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch(
+                "grocery_price_cli._TRACKER", tmp))
+            stack.enter_context(patch(
+                "grocery_price_cli._load_env", return_value=None))
+            stack.enter_context(patch(
+                "extractors.doc_parser.parse_docx_cache",
+                side_effect=lambda store: [
+                    ProductItem(store=store, raw_name=f"{store} item",
+                                price=1.0)]))
+            stack.enter_context(patch(
+                "core.name_matcher.load_keyword_index",
+                return_value=object()))
+            stack.enter_context(patch(
+                "core.name_matcher.NameMatcher", _FakeMatcher))
+            stack.enter_context(patch(
+                "core.name_matcher.get_pending_mappings",
+                return_value=pending_debt))
+            enrich_patcher = patch(
+                "core.name_matcher.refresh_pending_prices",
+                return_value=0)
+            enrich_mock = stack.enter_context(enrich_patcher)
+            stack.enter_context(patch(
+                "grocery_price_cli._extract_woolworths_specials",
+                return_value=[]))
+            stack.enter_context(patch(
+                "core.sheets_client.connect_worksheet",
+                return_value=FakeWorksheet([_make_header()])))
+            stack.enter_context(patch(
+                "grocery_price_cli._read_ignored_items",
+                return_value=set()))
+            stack.enter_context(patch(
+                "grocery_price_cli._reset_list_action_progress",
+                return_value=None))
+            stack.enter_context(patch(
+                "subprocess.run",
+                return_value=SimpleNamespace(returncode=0, stdout="",
+                                             stderr="")))
+            stack.enter_context(patch(
+                "core.sheets_sync.sync_prices",
+                return_value=fake_report))
+            old_stdout = sys.stdout
+            try:
+                sys.stdout = io.StringIO()
+                code = _cmd_wednesday_refs()[0](self._wed_args())
+                out = sys.stdout.getvalue()
+            finally:
+                sys.stdout = old_stdout
+
+        self.assertEqual(code, 0)
+        # The debt file is byte-identical (was: replaced by 2 lines).
+        self.assertEqual(
+            (data_dir / "unmatched.txt").read_text(encoding="utf-8"),
+            old_debt)
+        # No new/changed file anywhere under data/ (writes, mtimes
+        # aside — content hashes must all match).
+        after = {p.name: hashlib.md5(
+            p.read_bytes()).hexdigest() for p in data_dir.iterdir()}
+        self.assertEqual(before, after)
+        # Debt enrichment writes the queue — must not run on dry-run.
+        enrich_mock.assert_not_called()
+        # The would-write list is still SHOWN (printed, not written).
+        self.assertIn("[DRY RUN] would write 2 item(s)", out)
+        self.assertIn("(would write) Zz New Widget 500g [woolworths]", out)
+        self.assertIn("(would write) Zz New Slices 300g [coles]", out)
+
+
 class TestDiscoveryStatusPrints(unittest.TestCase):
     """D27/WP4: live-refresh prints per-store Discovery status lines."""
 

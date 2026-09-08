@@ -42,6 +42,7 @@ if str(_PROJECT) not in sys.path:
 from core.uom import Verdict, compare_sizes, parse_size
 from core.sheets_sync import PRICE_COL, _find_col, _col_letter, _pad_rows
 from core.sheets_sync import _update_with_backoff, _sydney_now_str
+from core.sheets_sync import _is_gone
 
 # Column indices in Products_Master (0-based, positional, locked)
 COL_GENERIC = 0       # A — Product_Name
@@ -231,9 +232,15 @@ class LookupIndex:
 
             # Parse prices D/E/F
             prices: dict = {}
+            gone: list = []
             for store_key, col_idx in PRICE_COL.items():
                 if col_idx < len(row) and row[col_idx]:
                     cell = str(row[col_idx])
+                    if _is_gone(cell):
+                        # FIX-1 (D6): a GONE cell drops the price but the
+                        # verdict must survive to gate the compare live-fill.
+                        gone.append(store_key)
+                        continue
                     m = _price_re.search(cell)
                     if m:
                         prices[store_key] = float(m.group(1))
@@ -270,6 +277,7 @@ class LookupIndex:
                 "category": category,
                 "size": size,
                 "prices": prices,
+                "gone": gone,
                 "specials": specials,
                 "rewards": rewards,
                 "aliases": aliases,
@@ -807,6 +815,48 @@ class LookupEngine:
             return resolve_halal_item(query, worksheet=self._worksheet)
         return self._live_result(query)
 
+    def _gate_mixed_additions(self, additions: dict, live: "LookupResult",
+                              sheet_res: "LookupResult") -> dict:
+        """FIX-1 (D6): UOM-gate live fills against the sheet row.
+
+        Every gated store will be paired in the report with a sheet
+        price of ``sheet_res`` (unless the sheet side has no prices at
+        all — a pure live-live pair already gated by select_live_pair).
+        Mixed pairs must pass the same 20% band: sheet side = Col C,
+        live side = the listing's parsed size.
+
+        GONE guard (user rule 2026-09-03, option (b) of fix-spec
+        FIX-1): a GONE cell is the user's verified-unavailable verdict.
+        A live hit may answer it ONLY when it is the SAME product per
+        name_matcher.is_same_product AND passes the UOM gate — never a
+        different size/product.
+        """
+        if not additions:
+            return additions
+        row = (self._index.get_row(sheet_res.row_index)
+               if sheet_res.row_index else None)
+        sheet_size = parse_size(row["size"]) if row else None
+        gone: set = set(row.get("gone", ())) if row else set()
+        from core.name_matcher import is_same_product
+        gated: dict = {}
+        for store, price in additions.items():
+            if store in gone and not is_same_product(
+                    live.matched_names.get(store, ""),
+                    sheet_res.generic_name):
+                # Different product: the GONE verdict stands.
+                continue
+            if sheet_res.prices:
+                # Mixed pair: live size must sit in the band around the
+                # sheet row's Col C size.
+                live_size = parse_size(
+                    live.matched_sizes.get(store, "") or "")
+                cmp = compare_sizes(sheet_size, live_size)
+                if cmp.verdict not in (Verdict.COMPARABLE_SAME,
+                                       Verdict.COMPARABLE_TOLERANT):
+                    continue
+            gated[store] = price
+        return gated
+
     def _finish_sheet_result(self, sheet_res: LookupResult, query: str,
                              interactive: bool) -> LookupResult:
         """Sheet resolution + live fill of missing stores (compare only).
@@ -840,6 +890,13 @@ class LookupEngine:
         live = self._live_result(query)
         additions = {s: live.prices[s] for s in missing
                      if s in live.prices}
+        # FIX-1 (D6): a sheet price must never pair with a live price of
+        # a different size. _live_result only gates live-live pairs; every
+        # mixed-provenance addition re-runs the SAME 20% band here (sheet
+        # side = Col C, live side = the listing's size). GONE verdicts get
+        # the stricter same-product guard. Rejected stores stay unpriced
+        # (per-store missing note in the report) — never a wrong-size total.
+        additions = self._gate_mixed_additions(additions, live, sheet_res)
         if not additions:
             # Live search added nothing usable — keep the sheet answer.
             return sheet_res
