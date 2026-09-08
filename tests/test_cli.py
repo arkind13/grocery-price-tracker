@@ -4345,5 +4345,61 @@ class TestStoreUnavailableReasonR2_4(unittest.TestCase):
         self.assertNotIn("No live search results found", output)
 
 
+# ============================================================================
+# R2-12 (T1.A03): `specials --store coles` leaked the Woolworths
+# Wednesday report above the Coles sheet view — the store filter now
+# applies to EVERY section of the specials output.
+# ============================================================================
+
+
+class TestSpecialsStoreFilterR2_12(unittest.TestCase):
+
+    REPORT_BODY = ("WW Snickers Bar 50g — save $0.80 (40% off)"
+                   " · $1.20")
+
+    def _run(self, store_value):
+        from grocery_price_cli import _cmd_specials
+        import tempfile as _tf
+        tmp = _tf.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        tmp = Path(tmp.name)
+        (tmp / "data").mkdir()
+        (tmp / "data" / "ww_specials_report.txt").write_text(
+            "# Woolworths specials report — generated "
+            f"{datetime.now().strftime('%Y-%m-%d')}\n"
+            f"{self.REPORT_BODY}\n", encoding="utf-8")
+        args = argparse.Namespace(store=store_value)
+        with patch("grocery_price_cli._TRACKER", tmp), \
+             patch("grocery_price_cli._load_env",
+                   return_value=None), \
+             patch("core.specials_reporter.get_active_specials",
+                   return_value=[]), \
+             patch("core.specials_reporter.format_specials_report",
+                   return_value="sheet view\n"), \
+             patch("extractors.woolworths_extractor."
+                   "fetch_woolworths_list", return_value=[]):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                code = _cmd_specials(args)
+        self.assertEqual(code, 0)
+        return buf.getvalue()
+
+    def test_store_coles_shows_no_ww_report(self):
+        out = self._run("coles")
+        self.assertNotIn(self.REPORT_BODY, out)
+        self.assertNotIn("Latest Wednesday report", out)
+        self.assertIn("sheet view", out)
+
+    def test_store_woolworths_shows_report(self):
+        out = self._run("woolworths")
+        self.assertIn(self.REPORT_BODY, out)
+        self.assertIn("Latest Wednesday report", out)
+
+    def test_store_all_shows_report(self):
+        out = self._run("all")
+        self.assertIn(self.REPORT_BODY, out)
+        self.assertIn("Latest Wednesday report", out)
+
+
 if __name__ == "__main__":
     unittest.main()
