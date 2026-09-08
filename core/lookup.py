@@ -981,24 +981,27 @@ class LookupEngine:
         live side = the listing's parsed size.
 
         GONE guard (user rule 2026-09-03, option (b) of fix-spec
-        FIX-1): a GONE cell is the user's verified-unavailable verdict.
-        A live hit may answer it ONLY when it is the SAME product per
-        name_matcher.is_same_product AND passes the UOM gate — never a
-        different size/product.
+        FIX-1) and BLANK/unavailable guard (R2-2, D20): a live hit may
+        fill a store ONLY when it is the SAME product per
+        name_matcher.is_same_product — GONE cells and blank cells run
+        through this ONE gate so the two paths cannot drift apart
+        again (D20: the blank-cell path once paired a 235g gift box
+        into a 210g hot-chocolate row). The UOM 20% band below still
+        applies on top.
         """
         if not additions:
             return additions
         row = (self._index.get_row(sheet_res.row_index)
                if sheet_res.row_index else None)
         sheet_size = parse_size(row["size"]) if row else None
-        gone: set = set(row.get("gone", ())) if row else set()
         from core.name_matcher import is_same_product
         gated: dict = {}
         for store, price in additions.items():
-            if store in gone and not is_same_product(
+            if not is_same_product(
                     live.matched_names.get(store, ""),
                     sheet_res.generic_name):
-                # Different product: the GONE verdict stands.
+                # Different product: refused for EVERY cell state —
+                # a GONE verdict stands, a blank cell stays missing.
                 continue
             if sheet_res.prices:
                 # Mixed pair: live size must sit in the band around the

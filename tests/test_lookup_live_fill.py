@@ -72,11 +72,13 @@ class TestLiveFill(unittest.TestCase):
     """The one-sided/unpriced row live-fill (compare auto mode)."""
 
     def test_one_sided_row_live_fills_missing_store(self):
-        # Both live sides return a size-comparable product; the WW
-        # sheet price is kept and only the MISSING store is filled.
+        # Both live sides return the SAME product (R2-2 product-identity
+        # gate — D20 killed different-product fills); the WW sheet price
+        # is kept and only the MISSING store is filled.
         ww = _stub_live([ProductItem("woolworths", "Tip Top Bread 650g",
                                      3.10, size="650g")],
-                        [_live_coles()])
+                        [ProductItem("coles", "Coles Tip Top Bread 650g",
+                                     2.20, size="650g")])
         with ww[0], ww[1]:
             result = _engine([INCOMPLETE_ROW]).find_product(
                 "Tip Top Bread 650g", interactive=False)
@@ -89,7 +91,7 @@ class TestLiveFill(unittest.TestCase):
         self.assertEqual(result.matched_names["woolworths"],
                          "Tip Top Bread 650g")
         self.assertEqual(result.matched_names["coles"],
-                         "Coles Bakery White 650g")
+                         "Coles Tip Top Bread 650g")
         self.assertEqual(result.row_index, 2)  # sheet anchor kept
 
     def test_interactive_keeps_pure_sheet_answer(self):
@@ -157,7 +159,10 @@ class TestLiveFill(unittest.TestCase):
 
 
 def _live_ww():
-    return ProductItem("woolworths", "WW Beef Mince 500g", 8.00,
+    # R2-2 (D20): live fills must be the SAME product — store-prefixed
+    # listings fold ("Woolworths" is a store word); a bare "WW" prefix
+    # would now be refused by the product-identity gate.
+    return ProductItem("woolworths", "Woolworths Beef Mince 500g", 8.00,
                        size="500g")
 
 
@@ -257,6 +262,64 @@ class TestMixedPairUomGate(unittest.TestCase):
             ).find_product("Sunbites Sour 60g", interactive=False)
         self.assertEqual(result.status, LookupStatus.EXACT_SHEET)
         self.assertEqual(result.prices, {"coles": 2.50})
+
+
+# ============================================================================
+# R2-2 (D20): blank-cell live fill must pass is_same_product — the SAME
+# rule GONE cells got in FIX-1. The verification round's live evidence:
+# compare "Lindt Hot Choc Flakes Tin 210g" (Coles $14.00 sheet, WW cell
+# BLANK) live-filled "Lindt Lindor Assorted Chocolate Gift Box 235g"
+# $17.10 (sizes 11.9% apart — inside the 20% band, different product).
+# ============================================================================
+
+
+class TestBlankCellSameProductGateR2_2(unittest.TestCase):
+    """One parametrized battery over BOTH empty-cell states: the
+    product-identity gate must behave identically for a BLANK cell and
+    a GONE cell (one shared gate — fix-spec R2-2)."""
+
+    LINDT_ROW_NAME = "Lindt Hot Choc Flakes Tin 210g"
+    LINDOR_LIVE = ("Lindt Lindor Assorted Chocolate Gift Box 235g",
+                   17.10, "235g")
+    SAME_LIVE = ("Lindt Hot Choc Flakes Tin 210g", 16.50, "210g")
+
+    def _run(self, ww_cell_value, live_tuple):
+        row = [self.LINDT_ROW_NAME, "Pantry", "210g",
+               ww_cell_value, "$14.00", "",
+               "2026-01-15 09:00", "lindt"]
+        live_name, live_price, live_size = live_tuple
+        ww = _stub_live(
+            [ProductItem("woolworths", live_name, live_price,
+                         size=live_size)],
+            [ProductItem("coles", "Coles " + self.LINDT_ROW_NAME, 14.00,
+                         size="210g")])
+        with ww[0], ww[1]:
+            return _engine([row]).find_product(self.LINDT_ROW_NAME,
+                                               interactive=False)
+
+    def test_different_product_refused_both_cell_states(self):
+        # The D20 scenario: within the 20% size band, DIFFERENT product
+        # — refused for a blank cell AND a GONE cell; the honest
+        # missing-at-WW block renders (no WW price, sheet answer kept).
+        for cell in ("", "GONE"):
+            with self.subTest(ww_cell=cell or "blank"):
+                result = self._run(cell, self.LINDOR_LIVE)
+                self.assertEqual(result.status,
+                                 LookupStatus.EXACT_SHEET)
+                self.assertEqual(result.prices, {"coles": 14.00})
+                self.assertNotIn("woolworths", result.prices)
+
+    def test_same_product_fills_both_cell_states(self):
+        # A genuine same-product live hit (restock) fills for BOTH
+        # cell states — the gate must not over-block.
+        for cell in ("", "GONE"):
+            with self.subTest(ww_cell=cell or "blank"):
+                result = self._run(cell, self.SAME_LIVE)
+                self.assertEqual(result.status,
+                                 LookupStatus.SHEET_AND_LIVE)
+                self.assertEqual(result.prices,
+                                 {"woolworths": 16.50, "coles": 14.00})
+                self.assertEqual(result.sources["woolworths"], "live")
 
 
 if __name__ == "__main__":
