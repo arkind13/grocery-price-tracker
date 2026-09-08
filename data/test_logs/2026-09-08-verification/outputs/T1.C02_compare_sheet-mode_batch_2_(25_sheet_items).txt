@@ -1,0 +1,122 @@
+$ compare --items Spring Onion Bunch each, V Watermelon 250Ml, V Blackcurrent 250Ml, V Zero 250 Ml, Red Rock Chilli Sriracha, Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g, Red Bull Sugar Free, Woolworths Fresh Herb Coriander Bunch each, Loacker Chocolate, Mount Franklin Sparkling Lime 450Ml, Eclipse Intense Mint, So Chocolate Almond 1L, Brown Onion 1Kg, Up&Go Chocolate Protein 500Ml, Daily Juice Orange Pulp 500ml, Jumpy's Chicken Potato Chips 5 pack, Cheese Puff Pastry, Jumpy's Chicken Multipack, Hillview Cheese Slice, Wonder White Bread, Raw Sugar 3Kg, Up&Go Strawberry 3*250ml, Royal Gala Apple 1 Kg, the Juice Brothers Tropical, Weet Bix Kids --mode sheet
+--- rc=0 secs=4.6 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. Spring Onion Bunch each  🏠 · ⚠️ unit unavailable
+   🔴 Coles       $3.00
+
+2. V Watermelon 250Ml · ⚠️ unit unavailable
+   🟢 Woolworths  $11.40
+   🔴 Coles       $7.20
+
+3. V Blackcurrent 250Ml · ⚠️ unit unavailable
+   🟢 Woolworths  $2.52
+
+4. V Zero 250 Ml · ⚠️ unit unavailable
+   🟢 Woolworths  $2.52
+   🔴 Coles       $2.65
+
+5. Red Rock Chilli Sriracha · ⚠️ unit unavailable
+   🔴 Coles       $6.00
+
+6. Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g · ⚠️ unit unavailable
+   🔴 Coles       $3.30
+
+7. Red Bull Sugar Free · ⚠️ unit unavailable
+   🟢 Woolworths  $3.04
+   🔴 Coles       $3.20
+
+8. Woolworths Fresh Herb Coriander Bunch each  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $2.97
+   🔴 Coles       $3.30
+
+9. Loacker Chocolate · ⚠️ unit unavailable
+   🔴 Coles       $3.30
+
+10. Mount Franklin Sparkling Lime 450Ml · ⚠️ unit unavailable
+   🟢 Woolworths  $3.37
+
+11. Eclipse Intense Mint · ⚠️ unit unavailable
+   🟢 Woolworths  $3.32
+   🔴 Coles       $3.50
+
+12. So Chocolate Almond 1L · ⚠️ unit unavailable
+   🟢 Woolworths  $3.32
+   🔴 Coles       $3.50
+
+13. Brown Onion 1Kg  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $2.26
+   🔴 Coles       $3.60
+
+14. Up&Go Chocolate Protein 500Ml · ⚠️ unit unavailable
+   🟢 Woolworths  $3.42
+   🔴 Coles       $4.50
+
+15. Daily Juice Orange Pulp 500ml · ⚠️ unit unavailable
+   🟢 Woolworths  $2.80
+   🔴 Coles       $2.95
+
+16. Jumpy's Chicken Potato Chips 5 pack · ⚠️ unit unavailable
+   🟢 Woolworths  $3.80
+   🔴 Coles       $4.00
+
+17. Cheese Puff Pastry  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $3.61
+   🔴 Coles       $2.50
+
+18. Jumpy's Chicken Multipack · ⚠️ unit unavailable
+   🟢 Woolworths  $3.80
+   🔴 Coles       $4.00
+
+19. Hillview Cheese Slice  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $3.43
+   🔴 Coles       $7.50
+
+20. Wonder White Bread · ⚠️ unit unavailable
+   🟢 Woolworths  $4.37
+   🔴 Coles       $4.60
+
+21. Raw Sugar 3Kg  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $4.06
+
+22. Up&Go Strawberry 3*250ml · ⚠️ unit unavailable
+   🟢 Woolworths  $3.32
+   🔴 Coles       $7.00
+
+23. Royal Gala Apple 1 Kg · ⚠️ unit unavailable
+   🟢 Woolworths  $7.50
+   🔴 Coles       $7.90
+
+24. the Juice Brothers Tropical · ⚠️ unit unavailable
+   🟢 Woolworths  $4.27
+   🔴 Coles       $5.00
+
+25. Weet Bix Kids · ⚠️ unit unavailable
+   🟢 Woolworths  $4.75
+   🔴 Coles       $5.00
+
+📊 TOTALS
+```
+╔══════════════════════════╗
+║ Store         Raw  Final ║
+║ Woolworths $89.20 $83.85 ║
+║ Coles      $97.50 $97.50 ║
+╚══════════════════════════╝
+```
+
+──────────
+🏷️ HOME BRAND EXTRA
+Woolworths Fresh Herb Coriander Bunch each · $3.13 → $2.97
+Brown Onion 1Kg · $2.38 → $2.26
+Cheese Puff Pastry · $3.80 → $3.61
+Hillview Cheese Slice · $3.61 → $3.43
+Raw Sugar 3Kg · $4.27 → $4.06
+💰 Home extra: $0.86
+
+🏆 Cheapest: Woolworths — you save $13.65 (vs Coles)
+🏷️ WW discounts: −$5.35 (5% all $4.49 + 🏠 home extra $0.86)
+⚠️ 4 items missing at Woolworths
+⚠️ 3 items missing at Coles
+
+[stderr]

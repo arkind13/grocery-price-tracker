@@ -1,0 +1,14 @@
+$ todo show
+--- rc=0 secs=4.5 ---
+📝 TO-DO — WEBSITE ADDS (ONE QUEUE)
+━━━━━━━━━━━━━━━━━━━━
+
+1. Acme Pasta Penne 500g · 500g (Coles) [ESQ]
+2. Acme Pasta Penne 500g · 500g (Woolworths) [NJL]
+3. WW Yogurt B · 1kg (Woolworths) [DSF]
+4. WW Yogurt A · 1kg (Woolworths) [AVE]
+
+📊 4 pending
+💬 Reply 'done 1,HUY' once added on the store websites — done always saves the keyword. Reply 'gone 1,HUY' if an item is unavailable at that store (price cell GONE, keyword kept).
+
+[stderr]

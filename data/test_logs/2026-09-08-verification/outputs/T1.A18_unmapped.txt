@@ -1,0 +1,16 @@
+$ unmapped
+--- rc=0 secs=0.5 ---
+📋 PENDING LINKS — STORAGE BEHIND THE UNMATCHED LIST
+━━━━━━━━━━━━━━━━━━━━
+
+These are store-list lines still waiting for a store keyword.
+They appear on the Unmatched list (minus ignored junk) until
+linked — manually via map, or automatically by the Wednesday
+run when the keyword exists / the exact name matches.
+
+1. Byron Bay Chilli Co. Smoky Chipotle Hot Sauce | 150mL [coles] · Byron · 150mL · General · x1
+2. Yallamundi Farm Organic Free Range Eggs 12 Pack | 700g [coles] · Yallamundi · 12 Pack · General · x1
+
+📊 2 item(s) waiting for a keyword
+
+[stderr]

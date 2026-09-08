@@ -1,0 +1,17 @@
+$ search --product café ☕ coffee capsules
+--- rc=0 secs=40.9 ---
+🔍 CAFÉ ☕ COFFEE CAPSULES — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Campos Roma Coffee Capsules 10 pack
+   🟢 Woolworths  $7.60 · 10 pack  🏷️ Was $10.00
+2. Campos Superior Aluminium Coffee Capsules 10 pack
+   🟢 Woolworths  $7.60 · 10 pack  🏷️ Was $10.00
+3. Campos Superior Medium Dark Roast Coffee Capsules 30 pack
+   🟢 Woolworths  $26.60 · 30 pack
+⚠️ Coles not checked (unavailable)
+
+🏆 Cheapest: Woolworths at $7.60
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]

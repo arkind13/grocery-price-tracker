@@ -1,0 +1,12 @@
+$ map coles --next
+--- rc=0 secs=1.2 ---
+--- Item 1/8 ---
+
+  Looking up coles: Up&Go Chocolate Protein 500Ml
+  No coles results found. Use --keyword NAME or --skip.
+
+✳️ Next: --add / --na / --keyword NAME / --skip / (stop)
+
+[stderr]
+[coles_extractor] Scrape.do breaker open — skipping Coles calls until cooldown expires
+[coles_extractor] Scrape.do breaker open — skipping Coles calls until cooldown expires

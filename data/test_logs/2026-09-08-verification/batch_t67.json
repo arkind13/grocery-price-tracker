@@ -1,0 +1,7 @@
+[
+ {"id":"T6.P01","label":"set-permanent fruitopia carrots 6.50/kg","args":["local-deals","--set-permanent","fruitopia","carrots","6.50/kg"]},
+ {"id":"T7.P02","label":"set-special merjan beef mince 8.99/kg till 5 Sep (past date)","args":["local-deals","--set-special","merjan","beef mince","8.99/kg","--till","5 September","--note","multi buy 2 for $15"]},
+ {"id":"T6.P03","label":"post-log FRU0809260930 (code resolution)","args":["local-deals","--post-log","FRU0809260930"]},
+ {"id":"T6.P04","label":"friday-gate retirement notice","args":["local-deals","--friday-gate"]},
+ {"id":"T6.P05","label":"daily-scan off-window (silent exit expected)","args":["local-deals","--daily-scan"]}
+]

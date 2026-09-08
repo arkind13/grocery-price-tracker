@@ -1,0 +1,28 @@
+$ compare --items eggplant
+--- rc=0 secs=17.5 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. eggplant · ⚠️ unit unavailable
+   ⚠️ No matching product — sizes don't compare.
+      Woolworths: Fresh Eggplant each · each
+      Coles:      SERA STUFFED EGGPLANTS 300G · 300g
+   💬 Reply 'expand' to see more results.
+
+📊 TOTALS
+```
+╔══════════════════════╗
+║ Store      Raw Final ║
+║ Woolworths   —     — ║
+║ Coles        —     — ║
+╚══════════════════════╝
+```
+
+❌ No prices available for any store.
+⚠️ 1 item missing at Woolworths
+⚠️ 1 item missing at Coles
+
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Search 'eggplant': found 5 products

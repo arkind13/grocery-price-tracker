@@ -1,0 +1,7 @@
+$ map unmatched --add
+--- rc=1 secs=4.8 ---
+--- Item 2/2 ---
+No live search results found for 'Yallamundi Farm Organic Free Range Eggs 12 Pack | 700g'. Use --skip or --forget.
+
+[stderr]
+[coles_extractor] Scrape.do breaker open — skipping Coles calls until cooldown expires

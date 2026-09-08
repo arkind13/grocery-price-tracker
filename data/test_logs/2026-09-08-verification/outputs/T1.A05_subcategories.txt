@@ -1,0 +1,99 @@
+$ subcategories
+--- rc=0 secs=5.3 ---
+🗂️ SUB-CATEGORIES
+━━━━━━━━━━━━━━━━━━━━
+
+corn chips · 1
+beef mince · 1
+chicken mince · 0
+chicken breast · 0
+chicken thigh · 0
+chicken drumstick · 0
+chicken wings · 0
+whole chicken · 0
+beef diced · 0
+lamb & mutton · 0
+goat · 0
+veal · 0
+processed meats · 0
+chicken schnitzel · 0
+shredded cheese · 4
+crackers · 1
+greek yoghurt · 1
+eggs · 3
+milk · 1
+juice · 2
+water · 1
+chocolate spread · 1
+chocolate · 5
+mints · 2
+spring onion · 1
+onion · 1
+bananas · 1
+blueberries · 1
+raspberries · 1
+strawberries · 1
+apples · 1
+capsicum · 1
+cucumber · 0
+tomato · 1
+fresh herbs · 0
+potatoes · 0
+salad · 0
+bread · 3
+pancake mix · 1
+sugar · 2
+pasta · 1
+rice · 1
+sauce · 1
+ice cream · 1
+pads · 1
+hand warmers · 1
+aa battery (sheet-only) · 1
+aaa battery (sheet-only) · 1
+almond milk (sheet-only) · 1
+aluminium foil (sheet-only) · 1
+baking paper (sheet-only) · 1
+body lotion (sheet-only) · 6
+body wash (sheet-only) · 1
+broast chicken (sheet-only) · 1
+cashews (sheet-only) · 1
+cheese pastry (sheet-only) · 1
+cheese slices (sheet-only) · 2
+cheese sticks (sheet-only) · 1
+chicken chips (sheet-only) · 2
+chilli chips (sheet-only) · 2
+cold coffee (sheet-only) · 1
+coriander (sheet-only) · 1
+david beckham deo (sheet-only) · 1
+falafel (sheet-only) · 1
+fetta cheese (sheet-only) · 1
+freezer snacks (sheet-only) · 4
+fruit strips (sheet-only) · 1
+fruit yoghurt (sheet-only) · 3
+garbage bags (sheet-only) · 1
+greek salad (sheet-only) · 2
+hommus (sheet-only) · 1
+hot chips (sheet-only) · 1
+hot chocolate (sheet-only) · 1
+jalepeno bites (sheet-only) · 1
+laundary powder (sheet-only) · 1
+lettuce (sheet-only) · 1
+olive spread (sheet-only) · 1
+onion chips (sheet-only) · 1
+protein chocolate (sheet-only) · 2
+red bull (sheet-only) · 1
+sandwich bags (sheet-only) · 1
+shaving cream (sheet-only) · 1
+softner (sheet-only) · 1
+softner spray (sheet-only) · 1
+sparkling water (sheet-only) · 2
+sunbites chips (sheet-only) · 3
+toothpaste (sheet-only) · 1
+up&go (sheet-only) · 1
+v energy drink (sheet-only) · 6
+weet bix (sheet-only) · 1
+yoghurt pouch (sheet-only) · 2
+needs review · 1
+
+[stderr]

@@ -1,0 +1,36 @@
+$ compare --items Banana Kids 5, Bounty Chocolate, Sunbites Sour 60g
+--- rc=0 secs=26.3 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. Banana Kids 5  🏠 · 5 Pk
+   🟢 Woolworths  $2.71 — Banana Kids 5 5 Pk (sheet)
+   🔴 Coles       $4.90 — Banana Kids 5 5 Pk (sheet)
+
+2. Bounty Chocolate · 50g
+   🟢 Woolworths  $1.42 — Bounty Chocolate 50g (sheet)
+   🔴 Coles       $3.00 — Bounty Chocolate 50g (sheet)
+
+3. Sunbites Sour 60g · 60g
+   🔴 Coles       $2.70 — Sunbites Sour 60g 60g (sheet)
+
+📊 TOTALS
+```
+╔══════════════════════════╗
+║ Store         Raw  Final ║
+║ Woolworths  $4.50  $4.13 ║
+║ Coles      $10.60 $10.60 ║
+╚══════════════════════════╝
+```
+
+──────────
+🏷️ HOME BRAND EXTRA
+Banana Kids 5 · $2.85 → $2.71
+💰 Home extra: $0.14
+
+🏆 Cheapest: Woolworths — you save $6.47 (vs Coles)
+🏷️ WW discounts: −$0.37 (5% all $0.23 + 🏠 home extra $0.14)
+⚠️ 1 item missing at Woolworths
+
+[stderr]
+[coles_extractor] Search 'Sunbites Sour 60g': found 4 products

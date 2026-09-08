@@ -1,0 +1,22 @@
+[
+ {"id":"T2.S01","label":"live search broccoli","args":["search","--product","broccoli"]},
+ {"id":"T2.S02","label":"live search chobani yogurt 1kg","args":["search","--product","Chobani Greek Yogurt 1kg"]},
+ {"id":"T2.S03","label":"live search coca cola 2l","args":["search","--product","coca cola 2l"]},
+ {"id":"T2.S04","label":"live search generic dog food","args":["search","--product","dog food"]},
+ {"id":"T2.S05","label":"live search junk nonsense","args":["search","--product","zzxxyy qwerty nonsense product 42"]},
+ {"id":"T2.S06","label":"live search unicode emoji","args":["search","--product","café ☕ coffee capsules"]},
+ {"id":"T2.S07","label":"live search injection-style string","args":["search","--product","'; DROP TABLE products; --"]},
+ {"id":"T2.S08","label":"live search single letter m","args":["search","--product","m"]},
+ {"id":"T2.S09","label":"live search number 12345","args":["search","--product","12345"]},
+ {"id":"T2.S10","label":"live search pasta sauce --expand","args":["search","--product","pasta sauce","--expand"]},
+ {"id":"T2.S11","label":"live search lindt hot choc flakes (missed-pricing item)","args":["search","--product","Lindt Hot Choc Flakes Milk Tin 210g"]},
+ {"id":"T2.S12","label":"live search mozzarella sticks 10pk (delete-pending row)","args":["search","--product","Mozzarella Cheese Sticks 235g 10 Pack"]},
+ {"id":"T2.S13","label":"live search spring onion bunch (N/A keyword)","args":["search","--product","Spring Onion Bunch each"]},
+ {"id":"T2.S14","label":"live search gluten free bread","args":["search","--product","gluten free bread"]},
+ {"id":"T2.S15","label":"live search tuna in oil","args":["search","--product","tuna in oil"]},
+ {"id":"T2.S16","label":"live search red bull sugarfree 4pack (multibuy row)","args":["search","--product","Red Bull Sugar Free 4 Pack"]},
+ {"id":"T2.S17","label":"live search 200-char string","args":["search","--product","aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa supermarket product"]},
+ {"id":"T2.S18","label":"live search empty product","args":["search","--product",""]},
+ {"id":"T2.S19","label":"live search halal chicken mince","args":["search","--product","halal chicken mince"]},
+ {"id":"T2.S20","label":"live search energy drink --expand junk store","args":["search","--product","energy drink","--expand"]}
+]

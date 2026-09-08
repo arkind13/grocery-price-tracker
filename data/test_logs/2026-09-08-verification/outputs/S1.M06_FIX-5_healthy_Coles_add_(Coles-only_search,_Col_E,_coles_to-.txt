@@ -1,0 +1,13 @@
+$ map unmatched --add
+--- rc=0 secs=18.8 ---
+--- Item 2/2 ---
+✅ Added 'YALLAMUNDI FARM ORGANIC FREE RANGE EGGS 700G 12PK' to sheet (row 115, coles $14.30)
+✅ Alias 'Yallamundi Farm Organic Free Range Eggs 12 Pack | 700g' saved to Col P.
+Queued on the TO-DO list: 'YALLAMUNDI FARM ORGANIC FREE RANGE EGGS 700G 12PK' · 700g (Coles) [VXF]
+💬 Reply 'todo gone VXF' if this isn't the right product.
+💬 'todo show' any time to review the queue.
+
+All 2 items in 'unmatched' resolved!
+
+[stderr]
+[coles_extractor] Search 'Yallamundi Farm Organic Free Range Eggs 12 Pack | 700g': found 2 products

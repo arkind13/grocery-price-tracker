@@ -1,0 +1,29 @@
+$ analyze --query categories
+--- rc=0 secs=4.8 ---
+📊 CATEGORY BREAKDOWN
+━━━━━━━━━━━━━━━━━━━━
+
+```
+Category      Count
+Uncategorised 37   
+Drinks        13   
+Vegetables    12   
+Dairy         9    
+Chips         9    
+Snacks        5    
+Chocolate     5    
+Kitchen       4    
+Bakery        3    
+Laundry       3    
+Freezer       3    
+Ice Cream     2    
+Electronics   2    
+Pantry        2    
+Coffee        1    
+Health        1    
+Misc          1    
+Personal Care 1    
+Dips          1    
+```
+
+[stderr]

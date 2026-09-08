@@ -1,0 +1,25 @@
+$ compare --items Lindt Hot Choc Flakes Tin 210g
+--- rc=0 secs=18.4 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. Lindt Hot Choc Flakes Tin 210g · 235g
+   🟢 Woolworths  $17.10 — Lindt Lindor Assorted Chocolate Gift Box 235g 235g (live) (was $30.00)
+   🔴 Coles       $14.00 — Lindt Hot Choc Flakes Tin 210g 210g (sheet)
+
+📊 TOTALS
+```
+╔══════════════════════════╗
+║ Store         Raw  Final ║
+║ Woolworths $18.00 $17.10 ║
+║ Coles      $14.00 $14.00 ║
+╚══════════════════════════╝
+```
+
+🏆 Cheapest: Coles — you save $3.10 (vs Woolworths)
+🏷️ WW discounts: −$0.90 (5% all $0.90)
+
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Search 'Lindt Hot Choc Flakes Tin 210g': found 2 products

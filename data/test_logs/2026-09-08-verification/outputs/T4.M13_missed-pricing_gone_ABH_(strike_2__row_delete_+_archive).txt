@@ -1,0 +1,5 @@
+$ missed-pricing gone --items ABH
+--- rc=1 secs=5.5 ---
+
+[stderr]
+Error: unknown code 'ABH' — current codes: ABC, ABD, ABE, ABF, ABG

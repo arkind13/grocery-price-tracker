@@ -1,0 +1,7 @@
+$ local-deals --set-special merjan beef mince 8.99/kg --till 5 September --note multi buy 2 for 5
+--- rc=2 secs=0.3 ---
+
+[stderr]
+usage: grocery_price_cli.py [-h]
+                            {specials,rewards,compare,optimize,search,recipe,update,sync,specials-scan,unmapped,no-price,lists,missed-pricing,wednesday,live-refresh,map,add-to-list,searched-items,todo,backfill-keywords,backfill-home-brands,backfill-sizes,shop,prefer,subcategories,backfill-subcategories,backfill-codes,analyze,topics-check,local-deals,backfill-halal-check} ...
+grocery_price_cli.py: error: unrecognized arguments: 8.99/kg

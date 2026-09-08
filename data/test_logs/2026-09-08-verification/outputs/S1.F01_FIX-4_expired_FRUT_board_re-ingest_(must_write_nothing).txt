@@ -1,0 +1,7 @@
+$ local-deals --ingest FRUT --no-telegram
+--- rc=0 secs=1.6 ---
+[ingest] FRUT: processing 1 file(s)
+[ingest] anniversary_board.txt: deals ended Sun 06 Sep — nothing written
+[ingest] 0 cells written — every readable post had already ended
+
+[stderr]

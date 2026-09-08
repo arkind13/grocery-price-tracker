@@ -1,0 +1,5 @@
+$ update --product ZZTEST T4V Mechanism Product 250g --store woolworths --price 0
+--- rc=1 secs=0.4 ---
+
+[stderr]
+Error: price must be > 0 (got 0.0)

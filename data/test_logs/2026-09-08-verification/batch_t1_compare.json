@@ -1,0 +1,57 @@
+[
+ {
+  "id": "T1.C01",
+  "label": "compare sheet-mode batch 1 (25 sheet items)",
+  "args": [
+   "compare",
+   "--items",
+   "Tasty Cheese Crackers, Garbage Bags, Wholemeal Sandwich Bread, Baking Paper 15m, White Soft Sandwich Bread, Medium Sandwich bags 30Pk, Softner, Sandwich Icecream 4Pk, Aluminium Foil 30m, Banana Kids 5, Full Cream Milk 3L, Dare No Sugar Dbl Expresso 2L, Organic Free Range Eggs 12 Pack 600g, Salted Cashews, Battery AAA, Battery AA, Tomato, Bounty Chocolate, Capsicum Green each, Sunbites Sour 60g, Corn Chips, Evamay Pads With Wings Super 14 pack, Nutella Breadsticks, Mount Franklin Water 600Ml, Hot Hands Hand Warmers Pair each",
+   "--mode",
+   "sheet"
+  ]
+ },
+ {
+  "id": "T1.C02",
+  "label": "compare sheet-mode batch 2 (25 sheet items)",
+  "args": [
+   "compare",
+   "--items",
+   "Spring Onion Bunch each, V Watermelon 250Ml, V Blackcurrent 250Ml, V Zero 250 Ml, Red Rock Chilli Sriracha, Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g, Red Bull Sugar Free, Woolworths Fresh Herb Coriander Bunch each, Loacker Chocolate, Mount Franklin Sparkling Lime 450Ml, Eclipse Intense Mint, So Chocolate Almond 1L, Brown Onion 1Kg, Up&Go Chocolate Protein 500Ml, Daily Juice Orange Pulp 500ml, Jumpy's Chicken Potato Chips 5 pack, Cheese Puff Pastry, Jumpy's Chicken Multipack, Hillview Cheese Slice, Wonder White Bread, Raw Sugar 3Kg, Up&Go Strawberry 3*250ml, Royal Gala Apple 1 Kg, the Juice Brothers Tropical, Weet Bix Kids",
+   "--mode",
+   "sheet"
+  ]
+ },
+ {
+  "id": "T1.C03",
+  "label": "compare sheet-mode batch 3 (25 sheet items)",
+  "args": [
+   "compare",
+   "--items",
+   "Kettle Chilli 165G, Sunbites Sour Cream Mulipack, Mr Kipling Choc 6 Pk, Chocolate Hazelnut Spread, Eggs Free Rage 12Pc, Farmer Union Greek Yoghurt 1Kg, Blueberries, Mccain Jalepeno, Sunny Queen Free Range 12 Pk, Twisted Chocolate Icecream, Radiant Advanced Ultra Powder+, Strawberries, Raspberries Punnet 125g, Extra Spearmint Chewing Multipack, Sunbites Grain Waves Sour Cream & Chives 22g x 8 pack, Smith Cheese & Onion Multipack 8, V Watermelon 4*250, V Sugarfree 4*250, David Beckham Instinct, Greek Salad Kit 400g, Tegel Nashville Tenders 500g, Obela Hommus 3Pk 60g, Freshen Up Spray, Greek Salad Kit 270g, Steggles Korean Tenders 600g",
+   "--mode",
+   "sheet"
+  ]
+ },
+ {
+  "id": "T1.C04",
+  "label": "compare sheet-mode batch 4 (25 sheet items)",
+  "args": [
+   "compare",
+   "--items",
+   "Steggles Habanero Wings 1Kg, Woolworths Beef Mince 500g, Yumi's Herb Falafel 200g, Carman's Apple & Blueberry Fruit Straps 5 pack, Woolworths Greek Style Fetta 200g, Tamar Valley Dairy Yoghurt Mango & Cream 170g, Farmers Union Greek Style High Protein Yoghurt Pouch Mango 150g, Tamar Valley Dairy Yoghurt Mango & Cream 700g, Tegel Take Outs Nashville Style Chicken Burgers 600g, Birds Eye Golden Crunch Thin & Crispy Chips 900g, V Energy Zero Sugar Drink Blackcurrant & Yuzu 250mL, Glow Lab Coconut & Sandalwood Body Wash 900mL, White Glo Professional Whitening Toothpaste 115g, RAW SUGAR 2KG, Woolworths Little Gem Lettuce Green 2 pack, Full+ On The Go Meal Replacement Chocolate 480mL, DAIRY FARMERS THICK & CREAMY MANGO & PASSIONFRUIT YOGHURT, Green's Original Pancake Shake 375g, Thanks To Nature Shaving Cream Cherry Blossom & White Tea 150mL, Woolworths Tasty Shredded Cheese 500g, Woolworths Mozzarella Shredded Cheese 500g, Woolworths Light Tasty Shredded Cheese 500g, LIDDELLS LACTOSE FREE SHREDDED CHEESE 250G, Bio Cheese Dairy Free Cheddar Slices 200g, Woolworths Microwave Basmati Rice 250g",
+   "--mode",
+   "sheet"
+  ]
+ },
+ {
+  "id": "T1.C05",
+  "label": "compare sheet-mode batch 5 (13 sheet items)",
+  "args": [
+   "compare",
+   "--items",
+   "Woolworths Pasta Spirals 500g, Yucateco XXXTRA Hot Habanero Sauce 120mL, Mount Franklin Lightly Sparkling Water Lime Bottle 1.25L, Woolworths Coat & Cook Seasoning Mix Southern Fried Chicken 50g, DermaVeen Daily Nourish Moisturising Lotion 500mL, DermaVeen Extra Hydration Intensive Moisturising Lotion 500mL, DERMAVEEN EXTRA HYDRATION INTENSIVE MOISTURISING LOTION COLLOIDAL OATMEAL, Casa Serena 500ml Body Lotion/Moisturiser Hand/Skin Cream Blood Orange & Citrus, CETAPHIL MOISTURISING LOTION 473ML, AVEENO DAILY MOISTURISING BODY LOTION, Mozzarella Cheese Sticks 235g 10 Pack, Olive Oil Spread 500g, Lindt Hot Choc Flakes Tin 210g",
+   "--mode",
+   "sheet"
+  ]
+ }
+]

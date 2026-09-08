@@ -1,0 +1,28 @@
+$ search --product pasta sauce --expand
+--- rc=0 secs=2.3 ---
+🔍 PASTA SAUCE — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Mutti Sugo Semplice Pasta Sauce Parmesan 400g
+   🟢 Woolworths  $4.56 · 400g
+2. Woolworths Essentials Chunky Pasta Sauce 700g
+   🟢 Woolworths  $2.48 · 700g
+3. Macro Organic Pasta Sauce Chunky Bolognese 500g
+   🟢 Woolworths  $2.26 · 500g
+4. Dolmio Classic Tomato With Basil Pasta Sauce 500g
+   🟢 Woolworths  $2.38 · 500g
+5. Woolworths Essentials Traditional Pasta Sauce 700g
+   🟢 Woolworths  $2.07 · 700g
+6. Macro Organic Pasta Sauce Chunky Tomato Garlic Basil 500g
+   🟢 Woolworths  $2.26 · 500g
+7. Leggo's Bolognese Chunky Tomato Garlic & Herbs Pasta Sauce …
+   🟢 Woolworths  $3.13 · 500g
+8. Raguletto Red Wine Bolognese Pasta Sauce With Tomato & Garl…
+   🟢 Woolworths  $2.56 · 500g
+⚠️ Coles not checked (unavailable)
+
+🏆 Cheapest: Woolworths at $2.07
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Scrape.do breaker open — skipping Coles calls until cooldown expires

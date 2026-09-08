@@ -1,0 +1,22 @@
+$ compare --items Sunbites Sour 60g
+--- rc=0 secs=14.9 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. Sunbites Sour 60g · 60g
+   🔴 Coles       $2.70 — Sunbites Sour 60g 60g (sheet)
+
+📊 TOTALS
+```
+╔════════════════════════╗
+║ Store        Raw Final ║
+║ Woolworths     —     — ║
+║ Coles      $2.70 $2.70 ║
+╚════════════════════════╝
+```
+
+🏆 Cheapest: Coles
+⚠️ 1 item missing at Woolworths
+
+[stderr]
+[coles_extractor] Search 'Sunbites Sour 60g': found 4 products

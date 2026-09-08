@@ -1,0 +1,18 @@
+$ search --product Spring Onion Bunch each
+--- rc=0 secs=2.5 ---
+🔍 SPRING ONION BUNCH EACH — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Spring Onion Bunch each
+   🟢 Woolworths  $2.85 · each
+2. Yates Spring Onions Seeds each
+   🟢 Woolworths  $4.08 · each
+3. Macro Onion Spring Organic each
+   🟢 Woolworths  $4.51 · each
+⚠️ Coles not checked (unavailable)
+
+🏆 Cheapest: Woolworths at $2.85
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Scrape.do breaker open — skipping Coles calls until cooldown expires

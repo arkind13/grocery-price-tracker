@@ -1,0 +1,22 @@
+$ compare --items sugar
+--- rc=0 secs=5.1 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. sugar · 250 Ml
+   🟢 Woolworths  $2.52 — V Zero 250 Ml 250 Ml (sheet)
+   🔴 Coles       $2.65 — V Zero 250 Ml 250 Ml (sheet)
+
+📊 TOTALS
+```
+╔════════════════════════╗
+║ Store        Raw Final ║
+║ Woolworths $2.65 $2.52 ║
+║ Coles      $2.65 $2.65 ║
+╚════════════════════════╝
+```
+
+🏆 Cheapest: Woolworths — you save $0.13 (vs Coles)
+🏷️ WW discounts: −$0.13 (5% all $0.13)
+
+[stderr]

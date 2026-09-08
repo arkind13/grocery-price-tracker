@@ -1,0 +1,11 @@
+{
+  "woolworths": {
+    "method": "POST",
+    "url": "/apis/ui/mylists/72974742/Items",
+    "body_shape": {
+      "Quantity": 1,
+      "Source": "RR",
+      "StockCode": 768054
+    }
+  }
+}

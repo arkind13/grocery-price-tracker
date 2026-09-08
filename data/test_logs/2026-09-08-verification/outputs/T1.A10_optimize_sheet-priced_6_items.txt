@@ -1,0 +1,25 @@
+$ optimize --items Jumpy's Chicken Potato Chips 5 pack, Cheese Puff Pastry, Jumpy's Chicken Multipack, Hillview Cheese Slice, Wonder White Bread, Raw Sugar 3Kg
+--- rc=0 secs=12.4 ---
+🧠 SMART BASKET — 6 ITEMS
+━━━━━━━━━━━━━━━━━━━━
+
+✅ SPLIT SHOP — SAVE $6.87
+(counted item vs item: Σ per-item gaps)
+
+🟢 Buy from Woolworths — 4 items
+   1. Jumpy's Chicken Potato Chips 5 pack — $3.80 (sheet)
+   2. Jumpy's Chicken Multipack — $3.80 (sheet)
+   3. Hillview Cheese Slice — $3.43 (sheet)
+   4. Wonder White Bread — $4.37 (sheet)
+   💵 Woolworths subtotal: $15.40
+
+🔴 Buy from Coles — 2 items
+   5. Cheese Puff Pastry — $2.50 (sheet)
+   6. RAW SUGAR 2KG — $3.00 (sub)
+   💵 Coles subtotal: $5.50
+
+💰 Total savings this trip: $6.87
+✔ Using closest sheet substitute (not written):
+   Raw Sugar 3Kg → RAW SUGAR 2KG (coles)
+
+[stderr]

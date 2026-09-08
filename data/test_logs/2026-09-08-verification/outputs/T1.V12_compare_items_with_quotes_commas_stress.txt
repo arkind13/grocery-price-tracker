@@ -1,0 +1,38 @@
+$ compare --items O'Brien "premium" milk, egg
+--- rc=0 secs=27.3 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. O'Brien "premium" milk · ⚠️ unit unavailable
+   ⚠️ No matching product — sizes don't compare.
+      Woolworths: a2 Platinum Premium Toddler Milk Drink Stage 3 900g · 900g
+      Coles:      CALIFIA FARMS BARISTA OAT UHT MILK 1L · 1L
+   💬 Reply 'expand' to see more results.
+
+2. egg  🏠 · 12 Eggs
+   🟢 Woolworths  $9.57 — Organic Free Range Eggs 12 Pack 600g 12 Eggs (sheet)
+   🔴 Coles       $10.80 — Organic Free Range Eggs 12 Pack 600g 12 Eggs (sheet)
+
+📊 TOTALS
+```
+╔══════════════════════════╗
+║ Store         Raw  Final ║
+║ Woolworths $10.60  $9.57 ║
+║ Coles      $10.80 $10.80 ║
+╚══════════════════════════╝
+```
+
+──────────
+🏷️ HOME BRAND EXTRA
+egg · $10.07 → $9.57
+💰 Home extra: $0.50
+
+🏆 Cheapest: Woolworths — you save $1.23 (vs Coles)
+🏷️ WW discounts: −$1.03 (5% all $0.53 + 🏠 home extra $0.50)
+⚠️ 1 item missing at Woolworths
+⚠️ 1 item missing at Coles
+
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Search 'O'Brien "premium" milk': found 5 products

@@ -1,0 +1,14 @@
+$ search --product halal chicken mince
+--- rc=0 secs=2.5 ---
+🔍 HALAL CHICKEN MINCE — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Zwan Luncheon Meat Halal Chicken 850g
+   🟢 Woolworths  $10.16 · 850g
+⚠️ Coles not checked (unavailable)
+
+🏆 Cheapest: Woolworths at $10.16
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Scrape.do breaker open — skipping Coles calls until cooldown expires

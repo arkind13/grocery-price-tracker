@@ -1,0 +1,45 @@
+ts,item_no,item,op,target,expected,actual,pass
+16:18:39,B,Crackers Tasty Cheese,variant(0) merge+revert,woolworths,merged,row2,PASS
+16:18:52,B,garbage bags,variant(1) merge+revert,coles,merged,row3,PASS
+16:18:55,B,Wholemeal Sandwich Bread,variant(2),woolworths,EXPECTED merge,wrote=False merged=False,FAIL
+16:19:14,B,15m Baking Paper,variant(0) merge+revert,coles,merged,row5,PASS
+16:19:31,B,white soft sandwich bread,variant(1) merge+revert,woolworths,merged,row6,PASS
+16:19:34,B,Medium Sandwich bags 30Pk,variant(2),coles,EXPECTED merge,wrote=False merged=False,FAIL
+16:19:37,B,Softner,variant(0),woolworths,EXPECTED merge,wrote=False merged=False,FAIL
+16:20:00,B,sandwich icecream 4pk,variant(1) merge+revert,coles,merged,row9,PASS
+16:20:03,B,Aluminium Foil 30m,variant(2),woolworths,EXPECTED merge,wrote=False merged=False,FAIL
+16:20:12,B,5 Banana Kids,variant(0) merge+revert,coles,merged,row11,PASS
+16:20:22,B,full cream milk 3l,variant(1) merge+revert,woolworths,merged,row12,PASS
+16:20:25,B,Dare No Sugar Dbl Expresso 2L,variant(2),coles,EXPECTED merge,wrote=False merged=False,FAIL
+16:20:35,B,600g Organic Free Range Eggs 12 Pack,variant(0) merge+revert,woolworths,merged,row14,PASS
+16:20:46,B,salted cashews,variant(1) merge+revert,coles,merged,row15,PASS
+16:20:49,B,Battery AAA,variant(2),woolworths,EXPECTED merge,wrote=False merged=False,FAIL
+16:20:59,B,AA Battery,variant(0) merge+revert,coles,merged,row17,PASS
+16:21:09,B,tomato,variant(1) merge+revert,woolworths,merged,row18,PASS
+16:21:12,B,Bounty Chocolate,variant(2),coles,EXPECTED merge,wrote=False merged=False,FAIL
+16:21:23,B,each Capsicum Green,variant(0) merge+revert,woolworths,merged,row20,PASS
+16:21:35,B,sunbites sour 60g,variant(1) merge+revert,coles,merged,row21,PASS
+16:21:38,B,Corn Chips,variant(2),woolworths,EXPECTED merge,wrote=False merged=False,FAIL
+16:21:43,B,pack Evamay Pads With Wings Super 14,variant(0),coles,EXPECTED merge,wrote=True merged=None,FAIL
+16:21:53,B,nutella breadsticks,variant(1) merge+revert,woolworths,merged,row24,PASS
+16:21:56,B,Mount Franklin Water 600Ml,variant(2),coles,EXPECTED merge,wrote=False merged=False,FAIL
+16:22:06,B,each Hot Hands Hand Warmers Pair,variant(0) merge+revert,woolworths,merged,row26,PASS
+16:22:18,B,spring onion bunch each,variant(1) merge+revert,coles,merged,row27,PASS
+16:22:23,B,V Watermelon 250Ml,variant(2),woolworths,EXPECTED merge,wrote=False merged=False,FAIL
+16:22:33,B,250Ml V Blackcurrent,variant(0) merge+revert,coles,merged,row29,PASS
+16:22:42,B,v zero 250 ml,variant(1) merge+revert,woolworths,merged,row30,PASS
+16:22:45,B,Red Rock Chilli Sriracha,variant(2),coles,EXPECTED merge,wrote=False merged=False,FAIL
+16:22:52,C,Tasty Cheese Crackers,exact_dup_add,both,refused,wrote=False err=already tracked (row 2: 'Tasty Cheese Crackers') — use,PASS
+16:22:55,C,Garbage Bags,exact_dup_add,both,refused,wrote=False err=already tracked (row 3: 'Garbage Bags') — use update/m,PASS
+16:23:05,C,Wholemeal Sandwich Bread,exact_dup_add,both,refused,wrote=False err=already tracked (row 4: 'Wholemeal Sandwich Bread') — ,PASS
+16:23:09,C,Baking Paper 15m,exact_dup_add,both,refused,wrote=False err=already tracked (row 5: 'Baking Paper 15m') — use upda,PASS
+16:23:12,C,White Soft Sandwich Bread,exact_dup_add,both,refused,wrote=False err=already tracked (row 6: 'White Soft Sandwich Bread') —,PASS
+16:23:15,C,Medium Sandwich bags 30Pk,exact_dup_add,both,refused,wrote=False err=already tracked (row 7: 'Medium Sandwich bags 30Pk') —,PASS
+16:23:18,C,Softner,exact_dup_add,both,refused,wrote=False err=already tracked (row 8: 'Softner') — use update/map in,PASS
+16:23:22,C,Sandwich Icecream 4Pk,exact_dup_add,both,refused,wrote=False err=already tracked (row 9: 'Sandwich Icecream 4Pk') — use,PASS
+16:23:25,C,Aluminium Foil 30m,exact_dup_add,both,refused,wrote=False err=already tracked (row 10: 'Aluminium Foil 30m') — use u,PASS
+16:23:28,C,Banana Kids 5,exact_dup_add,both,refused,wrote=False err=already tracked (row 11: 'Banana Kids 5') — use update,PASS
+16:27:22,D,ZZT8C 0005 Rice Crackers 500g,gone_resurrect,D120,cleared,7.77,PASS
+16:27:34,D,ZZT8C 0015 Almond Milk 2L,gone_resurrect,D130,cleared,7.77,PASS
+16:27:43,D,ZZT8C 0025 Rice Crackers 500g,gone_resurrect,D140,cleared,7.77,PASS
+16:27:52,E,teardown,delete+drift,all,"0 leftover, 0 drift, named=113",leftover=0 drift=18 named=114,FAIL

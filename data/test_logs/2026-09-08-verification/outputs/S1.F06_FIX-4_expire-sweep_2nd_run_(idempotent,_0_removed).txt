@@ -1,0 +1,5 @@
+$ local-deals --expire-sweep
+--- rc=0 secs=4.7 ---
+[local-deals] expiry sweep: 0 cell(s) removed
+
+[stderr]

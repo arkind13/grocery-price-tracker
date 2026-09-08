@@ -1,0 +1,20 @@
+$ missed-pricing gone --items ABH
+--- rc=0 secs=12.5 ---
+✅ [ABH] ZZTEST T4V Mechanism Product 250g — woolworths price cell marked GONE (row 116) — keyword untouched.
+✅ [ABH] ZZTEST T4V Mechanism Product 250g — coles price cell marked GONE (row 116) — keyword untouched.
+✅ [ABH] ZZTEST T4V Mechanism Product 250g — both stores GONE, row 116 deleted (archived to deleted_rows.json)
+
+📊 2 price cell(s) marked GONE, 1 row(s) deleted. Missed pricing now: 4 fixable · 1 delete-pending
+──────────
+🔎 WOOLWORTHS
+    [ABC] Woolworths kw='Spring Onion Bunch each' · N/A 2026-09-02 — Spring Onion Bunch each · Bunch (new)
+    [ABD] Woolworths kw='Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g' · N/A 2026-09-02 — Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g · 150 gm (new)
+    [ABF] Woolworths kw='LINDT HOT CHOC FLAKE MILK TIN 210G' · (blank) — Lindt Hot Choc Flakes Tin 210g · 210g (new)
+──────────
+🔎 COLES
+    [ABE] Coles kw="Green's Original Pancake Shake | 375g" · (blank) — Green's Original Pancake Shake 375g · 375g (new)
+──────────
+☠ BOTH STORES — DELETE-PENDING
+    [ABG] ☠ Mozzarella Cheese Sticks 235g 10 Pack · 235g 10 Pack (WW blank · Coles GONE, new)
+
+[stderr]

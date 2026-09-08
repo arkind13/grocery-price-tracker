@@ -1,0 +1,48 @@
+$ compare --items Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g, Red Bull Sugar Free, Woolworths Fresh Herb Coriander Bunch each, Loacker Chocolate, Mount Franklin Sparkling Lime 450Ml, Eclipse Intense Mint
+--- rc=0 secs=111.5 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g · 150 gm
+   🔴 Coles       $3.30 — Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g 150 gm (sheet)
+
+2. Red Bull Sugar Free · 250 Ml
+   🟢 Woolworths  $3.04 — Red Bull Sugar Free 250 Ml (sheet)
+   🔴 Coles       $3.20 — Red Bull Sugar Free 250 Ml (sheet)
+
+3. Woolworths Fresh Herb Coriander Bunch each  🏠 · Bunch
+   🟢 Woolworths  $2.97 — Woolworths Fresh Herb Coriander Bunch each Bunch (sheet)
+   🔴 Coles       $3.30 — Woolworths Fresh Herb Coriander Bunch each Bunch (sheet)
+
+4. Loacker Chocolate · 125g
+   🔴 Coles       $3.30 — Loacker Chocolate 125g (sheet)
+
+5. Mount Franklin Sparkling Lime 450Ml · 450Ml
+   🟢 Woolworths  $3.37 — Mount Franklin Sparkling Lime 450Ml 450Ml (sheet)
+
+6. Eclipse Intense Mint · 40g
+   🟢 Woolworths  $3.32 — Eclipse Intense Mint 40g (sheet)
+   🔴 Coles       $3.50 — Eclipse Intense Mint 40g (sheet)
+
+📊 TOTALS
+```
+╔══════════════════════════╗
+║ Store         Raw  Final ║
+║ Woolworths $13.55 $12.70 ║
+║ Coles      $16.60 $16.60 ║
+╚══════════════════════════╝
+```
+
+──────────
+🏷️ HOME BRAND EXTRA
+Woolworths Fresh Herb Coriander Bunch each · $3.13 → $2.97
+💰 Home extra: $0.16
+
+🏆 Cheapest: Woolworths — you save $3.90 (vs Coles)
+🏷️ WW discounts: −$0.85 (5% all $0.69 + 🏠 home extra $0.16)
+⚠️ 2 items missing at Woolworths
+⚠️ 1 item missing at Coles
+
+[stderr]
+[coles_extractor] Search 'Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g': found 1 products
+[coles_extractor] Search 'Loacker Chocolate': found 3 products

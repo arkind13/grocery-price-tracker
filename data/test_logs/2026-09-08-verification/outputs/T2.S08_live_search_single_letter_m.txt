@@ -1,0 +1,18 @@
+$ search --product m
+--- rc=0 secs=2.5 ---
+🔍 M — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Chupa Chups Sour Belt 1 Metre 55g
+   🟢 Woolworths  $2.66 · 55g
+2. 3M Tartan Silver/Grey Duct Tape (50mmx30m)
+   🟢 Woolworths  $23.70 · ⚠️ unit unavailable
+3. Nilfisk MH 5M-210/1100 FUEL opearted Pressure Washer
+   🟢 Woolworths  $10838.55 · 1EA
+⚠️ Coles not checked (unavailable)
+
+🏆 Cheapest: Woolworths at $2.66
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Scrape.do breaker open — skipping Coles calls until cooldown expires

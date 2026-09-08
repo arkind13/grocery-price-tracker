@@ -1,0 +1,50 @@
+[
+ {
+  "id": "S1.V01",
+  "label": "FIX-1 Sunbites Sour 60g (60g sheet vs 110g live must NOT pair)",
+  "args": ["compare", "--items", "Sunbites Sour 60g"],
+  "timeout": 240
+ },
+ {
+  "id": "S1.V02",
+  "label": "FIX-1 regression Lindt tin (blank WW cell, live hit — must be same-product within 20% if paired)",
+  "args": ["compare", "--items", "Lindt Hot Choc Flakes Tin 210g"],
+  "timeout": 240
+ },
+ {
+  "id": "S1.V03",
+  "label": "FIX-6 chicken breast (must never answer Jumpy's chips)",
+  "args": ["compare", "--items", "chicken breast"],
+  "timeout": 240
+ },
+ {
+  "id": "S1.V04",
+  "label": "FIX-6 sugar (must never answer Red Bull/V Sugarfree)",
+  "args": ["compare", "--items", "sugar"],
+  "timeout": 240
+ },
+ {
+  "id": "S1.V05",
+  "label": "FIX-6 eggplant boundary (must not hit eggs)",
+  "args": ["compare", "--items", "eggplant"],
+  "timeout": 240
+ },
+ {
+  "id": "S1.V06",
+  "label": "FIX-7 junk query (found-block, no totals)",
+  "args": ["compare", "--items", "xyzzy plugh quantum banana 999"],
+  "timeout": 240
+ },
+ {
+  "id": "S1.V07",
+  "label": "FIX-7 legit fuzzy milkk (resolve or ask, no nonsense)",
+  "args": ["compare", "--items", "milkk"],
+  "timeout": 240
+ },
+ {
+  "id": "S1.V08",
+  "label": "Round-B watch: plain milk query still auto-prices (negation guard over-block check)",
+  "args": ["compare", "--items", "milk"],
+  "timeout": 240
+ }
+]

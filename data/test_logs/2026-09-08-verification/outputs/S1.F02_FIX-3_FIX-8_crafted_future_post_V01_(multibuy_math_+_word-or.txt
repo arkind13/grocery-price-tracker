@@ -1,0 +1,10 @@
+$ local-deals --ingest FRU0926V01 --no-telegram
+--- rc=0 secs=11.6 ---
+[ingest] FRU0926V01: processing 1 file(s)
+[ingest] board.txt: 3 items (text; valid until Sun 20 Sep)
+   - Celery — $1.50/ea (2 for $2.99)
+   - Carrots 1kg Bag — $2.00/ea (2 for $4.00)
+   - 5kg Bag Washed Potatoes — $2.99/ea
+[ingest] Local_Deals tab updated (133 rows incl. headers)
+
+[stderr]

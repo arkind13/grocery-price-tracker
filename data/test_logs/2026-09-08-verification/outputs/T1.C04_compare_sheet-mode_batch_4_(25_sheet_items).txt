@@ -1,0 +1,111 @@
+$ compare --items Steggles Habanero Wings 1Kg, Woolworths Beef Mince 500g, Yumi's Herb Falafel 200g, Carman's Apple & Blueberry Fruit Straps 5 pack, Woolworths Greek Style Fetta 200g, Tamar Valley Dairy Yoghurt Mango & Cream 170g, Farmers Union Greek Style High Protein Yoghurt Pouch Mango 150g, Tamar Valley Dairy Yoghurt Mango & Cream 700g, Tegel Take Outs Nashville Style Chicken Burgers 600g, Birds Eye Golden Crunch Thin & Crispy Chips 900g, V Energy Zero Sugar Drink Blackcurrant & Yuzu 250mL, Glow Lab Coconut & Sandalwood Body Wash 900mL, White Glo Professional Whitening Toothpaste 115g, RAW SUGAR 2KG, Woolworths Little Gem Lettuce Green 2 pack, Full+ On The Go Meal Replacement Chocolate 480mL, DAIRY FARMERS THICK & CREAMY MANGO & PASSIONFRUIT YOGHURT, Green's Original Pancake Shake 375g, Thanks To Nature Shaving Cream Cherry Blossom & White Tea 150mL, Woolworths Tasty Shredded Cheese 500g, Woolworths Mozzarella Shredded Cheese 500g, Woolworths Light Tasty Shredded Cheese 500g, LIDDELLS LACTOSE FREE SHREDDED CHEESE 250G, Bio Cheese Dairy Free Cheddar Slices 200g, Woolworths Microwave Basmati Rice 250g --mode sheet
+--- rc=0 secs=4.5 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. Steggles Habanero Wings 1Kg · ⚠️ unit unavailable
+   🔴 Coles       $11.00
+
+2. Woolworths Beef Mince 500g  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $13.54
+   🔴 Coles       $14.50
+
+3. Yumi's Herb Falafel 200g · ⚠️ unit unavailable
+   🟢 Woolworths  $4.94
+
+4. Carman's Apple & Blueberry Fruit Straps 5 pack · ⚠️ unit unavailable
+   🟢 Woolworths  $5.70
+   🔴 Coles       $5.40
+
+5. Woolworths Greek Style Fetta 200g  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $2.71
+
+6. Tamar Valley Dairy Yoghurt Mango & Cream 170g · ⚠️ unit unavailable
+   🟢 Woolworths  $1.44
+
+7. Farmers Union Greek Style High Protein Yoghurt Pouch Mango … · ⚠️ unit unavailable
+   🟢 Woolworths  $3.04
+
+8. Tamar Valley Dairy Yoghurt Mango & Cream 700g · ⚠️ unit unavailable
+   🟢 Woolworths  $7.12
+
+9. Tegel Take Outs Nashville Style Chicken Burgers 600g · ⚠️ unit unavailable
+   🟢 Woolworths  $11.40
+
+10. Birds Eye Golden Crunch Thin & Crispy Chips 900g · ⚠️ unit unavailable
+   🟢 Woolworths  $5.70
+
+11. V Energy Zero Sugar Drink Blackcurrant & Yuzu 250mL · ⚠️ unit unavailable
+   🟢 Woolworths  $2.52
+
+12. Glow Lab Coconut & Sandalwood Body Wash 900mL · ⚠️ unit unavailable
+   🟢 Woolworths  $17.10
+
+13. White Glo Professional Whitening Toothpaste 115g · ⚠️ unit unavailable
+   🟢 Woolworths  $2.85
+
+14. RAW SUGAR 2KG  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $2.71
+   🔴 Coles       $3.00
+
+15. Woolworths Little Gem Lettuce Green 2 pack  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $4.43
+
+16. Full+ On The Go Meal Replacement Chocolate 480mL · ⚠️ unit unavailable
+   🟢 Woolworths  $5.65
+
+17. DAIRY FARMERS THICK & CREAMY MANGO & PASSIONFRUIT YOGHURT · ⚠️ unit unavailable
+   🟢 Woolworths  $6.27
+
+18. Green's Original Pancake Shake 375g  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $1.71
+
+19. Thanks To Nature Shaving Cream Cherry Blossom & White Tea 1… · ⚠️ unit unavailable
+   🟢 Woolworths  $4.75
+
+20. Woolworths Tasty Shredded Cheese 500g  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $7.50
+
+21. Woolworths Mozzarella Shredded Cheese 500g  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $7.50
+
+22. Woolworths Light Tasty Shredded Cheese 500g  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $7.50
+
+23. LIDDELLS LACTOSE FREE SHREDDED CHEESE 250G · ⚠️ unit unavailable
+   🟢 Woolworths  $7.36
+
+24. Bio Cheese Dairy Free Cheddar Slices 200g · ⚠️ unit unavailable
+   🟢 Woolworths  $8.55
+
+25. Woolworths Microwave Basmati Rice 250g  🏠 · ⚠️ unit unavailable
+   🟢 Woolworths  $1.49
+
+📊 TOTALS
+```
+╔════════════════════════════╗
+║ Store          Raw   Final ║
+║ Woolworths $153.72 $143.48 ║
+║ Coles       $33.90  $33.90 ║
+╚════════════════════════════╝
+```
+
+──────────
+🏷️ HOME BRAND EXTRA
+Woolworths Beef Mince 500g · $14.25 → $13.54
+Woolworths Greek Style Fetta 200g · $2.85 → $2.71
+RAW SUGAR 2KG · $2.85 → $2.71
+Woolworths Little Gem Lettuce Green 2 pack · $4.66 → $4.43
+Green's Original Pancake Shake 375g · $1.80 → $1.71
+Woolworths Tasty Shredded Cheese 500g · $7.89 → $7.50
+Woolworths Mozzarella Shredded Cheese 500g · $7.89 → $7.50
+Woolworths Light Tasty Shredded Cheese 500g · $7.89 → $7.50
+Woolworths Microwave Basmati Rice 250g · $1.57 → $1.49
+💰 Home extra: $2.56
+
+🏆 Cheapest: Coles — you save $109.58 (vs Woolworths)
+🏷️ WW discounts: −$10.24 (5% all $7.68 + 🏠 home extra $2.56)
+⚠️ 1 item missing at Woolworths
+⚠️ 21 items missing at Coles
+
+[stderr]

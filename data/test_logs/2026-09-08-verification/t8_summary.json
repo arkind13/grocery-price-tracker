@@ -1,0 +1,16 @@
+{
+ "phase_a_runs": "run1: 380 written/0 refused (grid-ceiling crash R17); run2: 188 written/0 refused, in-call read-back verify passed each add until read-quota 429 raised loudly",
+ "adds_written_total": 568,
+ "variant_merged": "18/30",
+ "exact_refused": "10/10",
+ "subset_alias": "4/4",
+ "subset_kw": "4/4",
+ "subset_na": "5/5",
+ "gone_resurrect": "3/3",
+ "final_named_rows": 113,
+ "final_drift_cells": 0,
+ "hard_failures": [
+  "FIX-10: variant created a NEW ROW: 'pack Evamay Pads With Wings Super 14'"
+ ],
+ "run3_post_cleanup": "Evamay reorder-variant duplicate row deleted by verifier; final drift re-verified 0 after cleanup; D22 recorded (reorder variant appended instead of merging)"
+}

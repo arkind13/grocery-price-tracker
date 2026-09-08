@@ -1,0 +1,5 @@
+$ search --product 
+--- rc=1 secs=0.4 ---
+
+[stderr]
+Error: --product is required

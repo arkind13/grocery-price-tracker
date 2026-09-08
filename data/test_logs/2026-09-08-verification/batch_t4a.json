@@ -1,0 +1,14 @@
+[
+ {"id":"T4.M01","label":"todo show with 6 entries (4 real + 2 test)","args":["todo","show"]},
+ {"id":"T4.M02","label":"todo done mixed invalid code (all-or-nothing expected)","args":["todo","done","--items","DAR,ZZZ"]},
+ {"id":"T4.M03","label":"todo done DAR (writes WW keyword)","args":["todo","done","--items","DAR"]},
+ {"id":"T4.M04","label":"todo show after done","args":["todo","show"]},
+ {"id":"T4.M05","label":"todo gone BWL (Coles GONE stamp)","args":["todo","gone","--items","BWL"]},
+ {"id":"T4.M06","label":"todo show after gone","args":["todo","show"]},
+ {"id":"T4.M07","label":"update ZZTEST ww price 0 (error path probe)","args":["update","--product","ZZTEST T4 Mechanism Product 250g","--store","woolworths","--price","0"]},
+ {"id":"T4.M08","label":"missed-pricing show (ZZTEST expected under WW fixable)","args":["missed-pricing"]},
+ {"id":"T4.M09","label":"missed-pricing gone GHC (stamp GONE at WW)","args":["missed-pricing","gone","--items","GHC"]},
+ {"id":"T4.M10","label":"missed-pricing show (delete-pending expected)","args":["missed-pricing"]},
+ {"id":"T4.M11","label":"missed-pricing purge dry-run","args":["missed-pricing","--purge","--dry-run"]},
+ {"id":"T4.M12","label":"missed-pricing purge (delete row + archive)","args":["missed-pricing","--purge"]}
+]

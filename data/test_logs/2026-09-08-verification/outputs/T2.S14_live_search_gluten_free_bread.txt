@@ -1,0 +1,18 @@
+$ search --product gluten free bread
+--- rc=0 secs=2.2 ---
+🔍 GLUTEN FREE BREAD — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Tip Top Gluten Free The One White Sliced Bread 550g
+   🟢 Woolworths  $7.03 · 550g
+2. Woolworths Free From Gluten Seeded Bread Loaf 450g
+   🟢 Woolworths  $4.96 · 450g
+3. Woolworths Free From Gluten White Bread Loaf 440g
+   🟢 Woolworths  $4.96 · 440g
+⚠️ Coles not checked (unavailable)
+
+🏆 Cheapest: Woolworths at $4.96
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Scrape.do breaker open — skipping Coles calls until cooldown expires

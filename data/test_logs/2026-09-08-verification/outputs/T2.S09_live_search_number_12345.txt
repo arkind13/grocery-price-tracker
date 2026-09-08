@@ -1,0 +1,18 @@
+$ search --product 12345
+--- rc=0 secs=3.4 ---
+🔍 12345 — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Strawberries Punnet 250g
+   🟢 Woolworths  $0.00 · 250g
+2. Cavendish Bananas each
+   🟢 Woolworths  $0.79 · each
+3. Gourmet Tomato each
+   🟢 Woolworths  $0.51 · each
+⚠️ Coles not checked (unavailable)
+
+🏆 Cheapest: Woolworths at $0.00
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Scrape.do breaker open — skipping Coles calls until cooldown expires

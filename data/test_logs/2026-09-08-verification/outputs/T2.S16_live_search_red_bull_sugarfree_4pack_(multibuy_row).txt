@@ -1,0 +1,18 @@
+$ search --product Red Bull Sugar Free 4 Pack
+--- rc=0 secs=2.7 ---
+🔍 RED BULL SUGAR FREE 4 PACK — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Red Bull Energy Drink Sugar Free 250mL x 4 pack
+   🟢 Woolworths  $7.41 · 250mL x 4 pack  🏷️ Was $13.00
+2. Red Bull The Lilac Edition Sugar Free Energy Drink Cans 250…
+   🟢 Woolworths  $7.41 · 250mL x 4 pack  🏷️ Was $13.00
+3. Red Bull Sugarfree Energy Drink Berry Edition 250mL x 4 pack
+   🟢 Woolworths  $7.41 · 250mL x 4 pack  🏷️ Was $13.00
+⚠️ Coles not checked (unavailable)
+
+🏆 Cheapest: Woolworths at $7.41
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Scrape.do breaker open — skipping Coles calls until cooldown expires

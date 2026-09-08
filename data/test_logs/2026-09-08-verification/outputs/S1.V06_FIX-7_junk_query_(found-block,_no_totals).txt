@@ -1,0 +1,28 @@
+$ compare --items xyzzy plugh quantum banana 999
+--- rc=0 secs=18.1 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. xyzzy plugh quantum banana 999 · ⚠️ unit unavailable
+   ⚠️ No matching product — sizes don't compare.
+      Woolworths: Quantum Alkaline 9V each · each
+      Coles:      YOPLAIT PETITE MIAM KIDS YOGHURT POUCH BANANA · 70g
+   💬 Reply 'expand' to see more results.
+
+📊 TOTALS
+```
+╔══════════════════════╗
+║ Store      Raw Final ║
+║ Woolworths   —     — ║
+║ Coles        —     — ║
+╚══════════════════════╝
+```
+
+❌ No prices available for any store.
+⚠️ 1 item missing at Woolworths
+⚠️ 1 item missing at Coles
+
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Search 'xyzzy plugh quantum banana 999': found 5 products

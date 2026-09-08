@@ -1,0 +1,27 @@
+$ compare --items milk
+--- rc=0 secs=5.0 ---
+🛒 BASKET COMPARISON
+━━━━━━━━━━━━━━━━━━━━
+
+1. milk  🏠 · 3L
+   🟢 Woolworths  $4.43 — Full Cream Milk 3L 3L (sheet)
+   🔴 Coles       $5.15 — Full Cream Milk 3L 3L (sheet)
+
+📊 TOTALS
+```
+╔════════════════════════╗
+║ Store        Raw Final ║
+║ Woolworths $4.90 $4.43 ║
+║ Coles      $5.15 $5.15 ║
+╚════════════════════════╝
+```
+
+──────────
+🏷️ HOME BRAND EXTRA
+milk · $4.66 → $4.43
+💰 Home extra: $0.23
+
+🏆 Cheapest: Woolworths — you save $0.72 (vs Coles)
+🏷️ WW discounts: −$0.47 (5% all $0.24 + 🏠 home extra $0.23)
+
+[stderr]

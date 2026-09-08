@@ -1,0 +1,23 @@
+$ search --product Chobani Greek Yogurt 1kg
+--- rc=0 secs=43.5 ---
+🔍 CHOBANI GREEK YOGURT 1KG — LIVE PRICES
+━━━━━━━━━━━━━━━━━━━━
+
+1. Chobani Greek Yogurt Vanilla 907g
+   🟢 Woolworths  $8.36 · 907g
+2. Chobani 20G Protein Greek Yogurt Pouch Vanilla 190g
+   🟢 Woolworths  $0.00 · 190g
+3. Chobani 20G Protein Greek Yogurt Pouch Salted Caramel 190g
+   🟢 Woolworths  $2.85 · 190g  🏷️ Was $4.00
+4. CHOBANI GREEK YOGURT LEMON
+   🔴 Coles       $3.00 · 160g
+5. CHOBANI GREEK YOGURT VANILLA
+   🔴 Coles       $3.00 · 160g
+6. CHOBANI GREEK YOGURT STRAWBERRY
+   🔴 Coles       $3.00 · 160g
+
+🏆 Cheapest: Woolworths at $0.00
+💬 Reply 'add item N' to queue a result for Wednesday.
+
+[stderr]
+[coles_extractor] Search 'Chobani Greek Yogurt 1kg': found 3 products

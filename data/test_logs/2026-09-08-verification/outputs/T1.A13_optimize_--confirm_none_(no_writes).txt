@@ -1,0 +1,5 @@
+$ optimize --items Greek Salad Kit 270g, Smith Cheese & Onion Multipack 8, V Watermelon 4*250, Red Bull Sugar Free, Jumpy's Chicken Potato Chips 5 pack --confirm none
+--- rc=1 secs=1.2 ---
+
+[stderr]
+Nothing to confirm — run optimize first; it lists the items it wants to live-search.

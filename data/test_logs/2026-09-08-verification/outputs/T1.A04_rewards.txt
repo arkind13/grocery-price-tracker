@@ -1,0 +1,5 @@
+$ rewards
+--- rc=0 secs=5.3 ---
+No bonus rewards (column O not populated).
+
+[stderr]

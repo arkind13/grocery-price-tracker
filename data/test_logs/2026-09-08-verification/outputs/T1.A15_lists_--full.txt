@@ -1,0 +1,114 @@
+$ lists --full
+--- rc=0 secs=5.8 ---
+📊 THE 7 LISTS — LIVE COUNTS
+━━━━━━━━━━━━━━━━━━━━
+
+1. Unmatched — 2
+2. Woolworths missing — 0
+3. Coles missing — 24 (1 also in missed pricing)
+4. To-do (website adds) — 4
+5. Forgotten/ignored — 34
+6. Missed pricing — 5 (4 fixable · 1 delete-pending)
+7. Sub-category reviews — 1
+
+──────────
+📃 UNMATCHED
+Byron Bay Chilli Co. Smoky Chipotle Hot Sauce | 150mL [coles]
+Yallamundi Farm Organic Free Range Eggs 12 Pack | 700g [coles]
+
+──────────
+📃 WOOLWORTHS MISSING
+none
+
+──────────
+📃 COLES MISSING
+Jumpy's Chicken Multipack · 5 pack
+Yumi's Herb Falafel 200g · 200g
+Woolworths Greek Style Fetta 200g · 200g
+Tamar Valley Dairy Yoghurt Mango & Cream 170g · 170g
+Farmers Union Greek Style High Protein Yoghurt Pouch Mango 150g · 150g
+Tamar Valley Dairy Yoghurt Mango & Cream 700g · 700g
+Tegel Take Outs Nashville Style Chicken Burgers 600g · 600g
+Birds Eye Golden Crunch Thin & Crispy Chips 900g · 900g
+V Energy Zero Sugar Drink Blackcurrant & Yuzu 250mL · 250mL
+Glow Lab Coconut & Sandalwood Body Wash 900mL · 900mL
+White Glo Professional Whitening Toothpaste 115g · 115g
+Woolworths Little Gem Lettuce Green 2 pack · 2 pack
+Full+ On The Go Meal Replacement Chocolate 480mL · 480mL
+DAIRY FARMERS THICK & CREAMY MANGO & PASSIONFRUIT YOGHURT · 600g
+Thanks To Nature Shaving Cream Cherry Blossom & White Tea 150mL · 150mL
+Woolworths Tasty Shredded Cheese 500g · 500g
+Woolworths Mozzarella Shredded Cheese 500g · 500g
+Woolworths Light Tasty Shredded Cheese 500g · 500g
+LIDDELLS LACTOSE FREE SHREDDED CHEESE 250G · 250g
+Bio Cheese Dairy Free Cheddar Slices 200g · 200g
+Woolworths Microwave Basmati Rice 250g · 250g
+Woolworths Pasta Spirals 500g · 500g
+DermaVeen Daily Nourish Moisturising Lotion 500mL · 500mL
+Lindt Hot Choc Flakes Tin 210g · 210g  ⚠ also in missed pricing
+
+──────────
+📃 TO-DO — WEBSITE ADDS (one queue; 'todo done' saves the keyword, 'todo gone' marks it GONE)
+Acme Pasta Penne 500g · 500g (Coles) [ESQ]
+Acme Pasta Penne 500g · 500g (Woolworths) [NJL]
+WW Yogurt B · 1kg (Woolworths) [DSF]
+WW Yogurt A · 1kg (Woolworths) [AVE]
+
+──────────
+📃 FORGOTTEN/IGNORED
+1 item(s) in cart [woolworths]
+Add to cart [woolworths]
+Anything At All [woolworths]
+Birds Eye Golden Crunch Thin & Crispy Chips 900g [woolworths]
+Coles Simply White Sandwich Loaf | 650g [coles]
+Dairy Farmers Thick & Creamy Mango & Passionfruit Yoghurt 150g [woolworths]
+Ends 7 Jul. [woolworths]
+Explore our brands [coles]
+Farmers Union Greek Style High Protein Yoghurt Pouch Mango 150g [woolworths]
+Freezer [woolworths]
+Full+ On The Go Meal Replacement Chocolate 480mL [woolworths]
+Glow Lab Coconut & Sandalwood Body Wash 900mL [woolworths]
+Personal Care [woolworths]
+Sanitarium So Good Chocolate Almond Long Life Milk 1L [woolworths]
+Sanitarium So Good Chocolate Almond Long Life Milk UHT 1L [woolworths]
+Some Random New Product 200g [woolworths]
+Tamar Valley Dairy Yoghurt Mango & Cream 170g [woolworths]
+Tamar Valley Dairy Yoghurt Mango & Cream 700g [woolworths]
+Tamar Valley The Creamery Yoghurt Pouch Mangoes & Cream 150g [woolworths]
+Tegel Take Outs Nashville Style Chicken Burgers 600g [woolworths]
+Thanks To Nature Shaving Cream Cherry Blossom & White Tea 150mL [woolworths]
+Totally Unknown Product 999g [aldi]
+Twisted Healthy Treats Rich Chocolate Licks Zero Frozen Dessert Sticks 80mL x 4 pack [woolworths]
+V Energy Zero Sugar Drink Blackcurrant & Yuzu 250mL [woolworths]
+View similar [woolworths]
+White Glo Professional Whitening Toothpaste 115g [woolworths]
+Woolworths Beef Mince 500g [coles]
+Woolworths Greek Style Fetta 200g [woolworths]
+Woolworths Little Gem Lettuce Green 2 pack [woolworths]
+Woolworths Original Pancake Mixer 350g [woolworths]
+Yumi's Herb Falafel 200g [woolworths]
+bega [woolworths]
+items worth [woolworths]
+oatly [woolworths]
+
+──────────
+📃 SUB-CATEGORY REVIEWS (unsure — nothing guessed; say the right sub-category or leave for the agent to ask)
+Zwan Luncheon Meat Halal Chicken 850g
+
+──────────
+📃 MISSED PRICING — WOOLWORTHS (keyword present, price unusable)
+[ABC] Woolworths kw='Spring Onion Bunch each' · N/A 2026-09-02 — Spring Onion Bunch each · Bunch (new)
+[ABD] Woolworths kw='Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g' · N/A 2026-09-02 — Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g · 150 gm (new)
+[ABF] Woolworths kw='LINDT HOT CHOC FLAKE MILK TIN 210G' · (blank) — Lindt Hot Choc Flakes Tin 210g · 210g (new)
+
+──────────
+📃 MISSED PRICING — COLES (keyword present, price unusable)
+[ABE] Coles kw="Green's Original Pancake Shake | 375g" · (blank) — Green's Original Pancake Shake 375g · 375g (new)
+
+──────────
+📃 MISSED PRICING — BOTH STORES (delete-pending, auto-delete after a 2nd failed Wednesday; purge on request)
+[ABG] ☠ Mozzarella Cheese Sticks 235g 10 Pack · 235g 10 Pack (WW blank · Coles GONE, new)
+
+⚠️ 🗂️ Sub-category reviews — 1 row(s) need your call ('needs review' marker); names in 'lists --full' or the weekly post.
+
+[stderr]

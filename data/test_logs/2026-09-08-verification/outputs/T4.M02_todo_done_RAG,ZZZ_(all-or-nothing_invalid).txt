@@ -1,0 +1,5 @@
+$ todo done --items RAG,ZZZ
+--- rc=1 secs=0.3 ---
+
+[stderr]
+Error: unknown code 'ZZZ' — current codes: ESQ, XKF, NJL, DSF, AVE, RAG

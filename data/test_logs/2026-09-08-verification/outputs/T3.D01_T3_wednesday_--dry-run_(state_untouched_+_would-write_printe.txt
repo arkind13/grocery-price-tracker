@@ -1,0 +1,65 @@
+$ wednesday --dry-run --no-prompt --no-telegram --no-scp
+--- rc=0 secs=25.2 ---
+📅 WEDNESDAY GROCERY SYNC
+━━━━━━━━━━━━━━━━━━━━
+
+Step 0: (skipped: dry-run / --no-scp — using local queue copies)
+📝 TO-DO — ADD THESE TO YOUR STORE WEBSITE LISTS
+━━━━━━━━━━━━━━━━━━━━
+  1. Acme Pasta Penne 500g · 500g (Coles) [ESQ]
+  2. Acme Pasta Penne 500g · 500g (Woolworths) [NJL]
+  3. WW Yogurt B · 1kg (Woolworths) [DSF]
+  4. WW Yogurt A · 1kg (Woolworths) [AVE]
+  📊 4 pending — add them on the websites, update the docx files, then type done.
+  💬 'todo done <codes>' saves the keywords; 'todo gone <codes>' marks an item unavailable.
+
+Step 1: Parsing Word documents...
+  ✅ Woolworths: 72 items parsed
+  ✅ Coles: 59 items parsed
+  Total: 131 items across 2 store(s)
+
+Step 1c: [DRY RUN] Reporting exact-name auto-heals only
+Step 1c: No exact-name auto-heals needed
+
+Step 2: Matching against sheet keyword index...
+  Woolworths: 67/72 matched
+  Coles: 56/59 matched
+
+⚠️ Step 3: [DRY RUN] Skipping sheet write
+[DRY RUN] sync_prices: matched=123 skipped=8 rows_to_update=123
+          stores=['coles', 'woolworths'] ts=2026-09-08 14:52
+          would mark unavailable=0 not-found N/A=52
+          planned_range=A2:S115 warnings=[]
+  Rows examined: 114
+  Rows updated: 123
+  Items matched: 123 / skipped: 8
+  Stores synced: ['coles', 'woolworths']
+  Not found in list (marked N/A): 52
+
+Step 3b: Dead-row auto-delete (two strikes)...
+  Auto-delete: 1 both-dead row(s) — 0 on 2nd strike, 1 new candidate(s)
+
+Step 3c: Tallying the to-do list with the sheet...
+  To-do tally: 4 pending — none resolved on the sheet yet
+
+Step 4: Generating list files...
+  (debt price enrichment: [DRY RUN] skipped — queue untouched)
+  unmatched.txt: [DRY RUN] would write 2 item(s) — existing file preserved
+    (would write) Byron Bay Chilli Co. Smoky Chipotle Hot Sauce | 150mL [coles]
+    (would write) Yallamundi Farm Organic Free Range Eggs 12 Pack | 700g [coles]
+  wool_missing.txt: (dry-run — skipped, existing file preserved)
+  coles_missing.txt: (dry-run — skipped, existing file preserved)
+
+Step 5: [DRY RUN] Skipping scp
+
+Step 7: [DRY RUN] Skipping Telegram
+
+Step 8: Parsing Woolworths specials report...
+  12 specials found (save / multi-buy only)
+  [DRY RUN] Skipping Telegram specials report
+
+━━━━━━━━━━━━━━━━━━━━
+⚠️ DRY RUN COMPLETE — no sheet write, no scp, no Telegram
+━━━━━━━━━━━━━━━━━━━━
+
+[stderr]

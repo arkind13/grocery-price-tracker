@@ -1,0 +1,16 @@
+{
+  "saved_at": "2026-09-08T02:52:12+00:00",
+  "product": "milk",
+  "results": [
+    {
+      "name": "Coles Milk 2L",
+      "store": "coles",
+      "price": 3.2,
+      "brand": "",
+      "size": "",
+      "category": "",
+      "is_special": false,
+      "special_desc": ""
+    }
+  ]
+}

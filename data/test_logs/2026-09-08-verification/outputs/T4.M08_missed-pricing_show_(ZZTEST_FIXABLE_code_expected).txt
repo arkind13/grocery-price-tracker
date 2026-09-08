@@ -1,0 +1,25 @@
+$ missed-pricing show
+--- rc=0 secs=3.6 ---
+🔎 MISSED PRICING
+━━━━━━━━━━━━━━━━━━━━
+
+FIXABLE — keyword present, price unusable (fix the keyword, or mark it GONE: 'missed-pricing gone --items <code>'):
+
+──────────
+🔎 WOOLWORTHS
+1. [ABC] Woolworths kw='Spring Onion Bunch each' · N/A 2026-09-02 — Spring Onion Bunch each · Bunch (new)
+2. [ABD] Woolworths kw='Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g' · N/A 2026-09-02 — Chobani 15G Protein Greek Yogurt Strawberry Pouch 150g · 150 gm (new)
+4. [ABF] Woolworths kw='LINDT HOT CHOC FLAKE MILK TIN 210G' · (blank) — Lindt Hot Choc Flakes Tin 210g · 210g (new)
+
+──────────
+🔎 COLES
+3. [ABE] Coles kw="Green's Original Pancake Shake | 375g" · (blank) — Green's Original Pancake Shake 375g · 375g (new)
+
+──────────
+☠ BOTH STORES — DELETE-PENDING (auto-deleted after a 2nd failed Wednesday)
+5. [ABG] ☠ Mozzarella Cheese Sticks 235g 10 Pack · 235g 10 Pack (WW blank · Coles GONE, new)
+6. [ABH] ☠ ZZTEST T4V Mechanism Product 250g · 250g (WW NA · Coles GONE, new)
+
+📊 4 fixable (3 woolworths · 1 coles) · 2 delete-pending
+
+[stderr]
