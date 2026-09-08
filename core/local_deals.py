@@ -2570,10 +2570,15 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
                     break                      # next section starts
                 block_end += 1
         for row in section_rows:
+            # FIX-8 (D4): match existing rows by the canonical key
+            # (order-free token set via name_matcher, variety-aware —
+            # the same normalization build_rows and --set-special
+            # use) — NOT exact Col A text, so "5kg Bag Washed
+            # Potatoes" merges into "Washed Potatoes 5kg Bag".
+            target_key = canonical_key(_base_name(row[0]))
             match = next(
                 (i for i in range(title_idx + 1, block_end)
-                 if str(grid[i][0]).strip()
-                 == str(row[0]).strip()),
+                 if canonical_key(_base_name(grid[i][0])) == target_key),
                 None)
             if match is None:
                 grid.insert(block_end, list(row))

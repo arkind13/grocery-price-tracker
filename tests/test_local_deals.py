@@ -1419,3 +1419,86 @@ class TestMultibuySingleDivider(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class _TabGrid:
+    """Minimal Local_Deals worksheet stand-in (grid + batch update)."""
+
+    def __init__(self, grid):
+        self.grid = grid
+
+    def get_all_values(self):
+        return [list(r) for r in self.grid]
+
+    def clear(self):
+        pass
+
+    def freeze(self, rows=1):
+        pass
+
+    def update(self, values, range_name):
+        self.grid = values
+
+
+class TestTabDedupWordOrder(unittest.TestCase):
+    """FIX-8 (D4): word-order-insensitive row merging in the
+    Local_Deals tab. Live symptom: post said '5kg Bag Washed
+    Potatoes' while the tab row was 'Washed Potatoes 5kg Bag' ->
+    ingest APPENDED a second row instead of merging."""
+
+    def _tab(self, *item_rows):
+        grid = [
+            ["Product", "Dunya perm (site)", "Dunya special (FB)",
+             "Merjan perm", "Merjan special", "Fruitopia perm",
+             "Fruitopia special", "Abu Salim perm",
+             "Abu Salim special", "Comments"],
+            ["Prices valid until", "", "", "", "", "", "", "", "",
+             ""],
+            ["FRUITS", "", "", "", "", "", "", "", "", ""],
+        ]
+        grid.extend(item_rows)
+        return _TabGrid(grid)
+
+    def test_word_order_variant_merges_newest_price_wins(self):
+        ws = self._tab(["Washed Potatoes 5kg Bag", "", "", "", "",
+                        "", "3.50 (till 11 Sep)", "", "", ""])
+        ld.merge_store_tab(ws, "fruitopia", [{
+            "item": "5kg Bag Washed Potatoes", "price": 2.99,
+            "unit": "ea", "price_kind": "single", "category": "fruits",
+        }])
+        grid = ws.get_all_values()
+        potatoes = [r for r in grid
+                    if "potato" in str(r[0]).lower()]
+        self.assertEqual(len(potatoes), 1)        # ONE row, merged
+        self.assertEqual(potatoes[0][0],
+                         "Washed Potatoes 5kg Bag")  # name kept
+        self.assertEqual(potatoes[0][6], 2.99)     # newest price wins
+
+    def test_royal_gala_stays_apart_from_generic_apples(self):
+        ws = self._tab(["Apples", "", "", "", "", "", "4.50", "",
+                        "", ""])
+        ld.merge_store_tab(ws, "fruitopia", [{
+            "item": "Royal Gala Apples", "price": 3.90,
+            "unit": "ea", "price_kind": "single", "category": "fruits",
+        }])
+        grid = ws.get_all_values()
+        apple_rows = [r for r in grid
+                      if "apple" in str(r[0]).lower()]
+        self.assertEqual(len(apple_rows), 2)      # variety stays apart
+        names = {r[0] for r in apple_rows}
+        self.assertIn("Apples", names)
+        self.assertIn("Royal Gala Apples /ea", names)
+
+    def test_unit_suffix_rows_merge_with_plain_names(self):
+        # Real tab rows carry ' /ea' suffixes — the base-name key
+        # strips them, so 'Cos Lettuce' merges into 'Cos Lettuce /ea'.
+        ws = self._tab(["Cos Lettuce /ea", "", "", "", "", "",
+                        "0.99", "", "", ""])
+        ld.merge_store_tab(ws, "fruitopia", [{
+            "item": "Cos Lettuce", "price": 1.29,
+            "unit": "ea", "price_kind": "single", "category": "fruits",
+        }])
+        grid = ws.get_all_values()
+        lettuce = [r for r in grid if "lettuce" in str(r[0]).lower()]
+        self.assertEqual(len(lettuce), 1)
+        self.assertEqual(lettuce[0][6], 1.29)
