@@ -110,6 +110,16 @@ topic (151), the Wednesday reminder cron, Coles/Aldi columns + archived
 rows, and any Telegram topic/list ceremony beyond: specials message +
 the one list. Nothing user-owned is deleted without archive.
 
+FILE CLEANUP (mandatory plan item): the rebuild generates its own paper
+trail — this prompt, the architecture doc, the plan, coder reports,
+verification reports. The plan must include a FINAL TIDY step: at
+close-out, ALL of these move into `old md/` (e.g.
+`old md/2026-09-v2-rebuild/`), leaving the tracker root with ONLY the
+living documents (README, PROJECT-MAP, architecture-spec — the active
+one, test.md in the parent). Rule: the root never accumulates round
+files; every session's artifacts are archived the moment their round
+closes, and the living docs are updated instead.
+
 ## FIRST CODER TASK (Round 1 of the plan — call it out explicitly)
 
 Fix the live Local_Deals comment-lifecycle issue: when a special is
