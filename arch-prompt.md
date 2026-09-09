@@ -42,11 +42,12 @@ new queues, no new cross-checks per shop).
   NO auto-add code paths anywhere. NO code writes keywords.
 
 **Lists — exactly ONE visible list:**
-"Local shop items missing from Woolworths" — the merge of the old
-unmatched / wool-missing / missed-pricing concepts. Every entry carries
-its 3-letter code. GONE semantics preserved: writing GONE to the WW
-price cell removes the item from the list and genuinely means "Woolies
-doesn't stock it." Ignore list exists but is HIDDEN unless explicitly
+"Local shop items whose Woolworths side is BLANK (no price + no
+keywords)" — i.e. local items the user hasn't tracked at Woolies yet.
+Every entry carries its 3-letter code. Exit routes: user fills
+price + keywords + says done → leaves the list; or GONE → leaves the
+list. Wool-only items never appear on the list (their local-side line is
+just blanked). Ignore list exists but is HIDDEN unless explicitly
 requested.
 
 **Wednesday run (local machine):** paste Woolworths docx → sync prices
@@ -69,6 +70,37 @@ convergence ceremony, no 7-list posting. Target: ~15–30 seconds total.
   (rename/gone/done/remove), they go into ONE batch command executed in
   one call — the agent is FORBIDDEN from pre-investigation turns. With
   one sheet and one list there is nothing to investigate.
+
+**Row-parity model (user decision — added 2026-09-09, SUPERSEDES any
+fuzzy-matching assumptions):**
+- The Local_Deals tab and the Woolworths master carry the SAME item set,
+  ALWAYS — even when an item exists on only one side. Both tabs hold the
+  exact same item count; a one-sided item exists as a row on the other
+  side with BLANK fields.
+- Local has it, Wool doesn't → row exists on both sides; the Wool side
+  price + keywords stay EMPTY, and the item appears on the Telegram
+  missing list. The user then MANUALLY adds the WW price + adds the item
+  to the Wool website list + fills keywords → says "done" → the item
+  leaves the Telegram list. If unavailable, the user says GONE → GONE is
+  written, mentioned in Telegram, item leaves the list.
+- Wool has it, local doesn't → NO list entry. The local-side line is
+  simply blanked. No other changes.
+- The Local tab is HALAL-ONLY by default. The halal identifier is the
+  Wool keywords column (Col P): local "beef mince" vs Wool (non-halal)
+  "beef mince" is NOT a match — only "halal beef mince" matches across
+  both sides (a new line the user creates). Plain non-halal lines stay
+  blank on the local side forever.
+- MIGRATION TASK: rename all current local-list butchery items to
+  "halal xxx" naming so they match the Wool side.
+- RULE for future local-deal ingests: butchery/meat items are
+  auto-prefixed "halal xxx"; any local-sync item not present on the Wool
+  side is added to the Telegram missing list automatically.
+- The architect MUST stress-test this model's edge cases in questions
+  (e.g.: the FB boards change weekly — what happens to parity when a
+  shop's board drops an item? does a blank Wool-side row survive board
+  rotation? what happens to the existing NON-halal meat rows on the
+  master — archived? do fruit/veg items need the prefix? what does
+  "exact item count" mean across multiple local shops sharing items?).
 
 **Charter — cleanup (explicit deliverable):** produce a DELETION
 MANIFEST of everything the rebuild retires: obsolete state files
@@ -100,6 +132,16 @@ only — no changes to lookup logic, no new state."
 Named operations with hard targets: sheet lookup reply ≤10s; live search
 reply ≤20s; batch correction ≤10s; Wednesday run ≤30s; one-list render
 ≤5s. If a design choice risks a budget, it is the wrong choice.
+
+## ARCHITECT BEHAVIOUR — INTERVIEW FIRST, ASSUME NOTHING
+The user has explicitly instructed: ask HUNDREDS of questions with ZERO
+assumptions before writing the architecture. The row-parity model above
+is the user's intent in their words — interrogate every edge case
+(board rotation vs parity, multi-shop shared items, halal prefix rules
+per domain, what "count" means, migration of non-halal meat rows, done/
+gone verb grammar, what happens on ingest failures) and only write the
+docs when the user has answered. A wrong assumption here costs another
+rebuild.
 
 ## Your deliverables
 1. `architecture-spec-v2.md` — target architecture: sheet schema v2,
