@@ -740,7 +740,7 @@ def set_date_cmd(code: str, filename: str, date_text: str) -> int:
         tab.clear()
         tab.freeze(rows=2)
         tab.update(values=grid,
-                   range_name=f"A1:J{len(grid)}")
+                   range_name=f"A1:K{len(grid)}")
     except Exception as exc:  # noqa: BLE001 — log update already safe
         print(f"[set-date] ⚠️ sheet re-stamp failed: {exc}")
     print(f"[set-date] {filename}: valid until "
@@ -1059,10 +1059,10 @@ def friday_gate_mark_fired(now: datetime | None = None) -> None:
 
 SECTION_ORDER = ("FRUITS", "BUTCHERY", "OTHER")
 
-TAB_COLUMNS = [  # Local_Deals tab layout v2 (user rule 2026-09-07):
-    # every shop gets a PERMANENT column (no validity) and a SPECIAL
-    # column (validity-stamped cells); comparisons read special
-    # first, then permanent.
+TAB_COLUMNS = [  # Local_Deals tab layout v2.1 (user rule 2026-09-07,
+    # + Round-2 col K): every shop gets a PERMANENT column (no
+    # validity) and a SPECIAL column (validity-stamped cells);
+    # comparisons read special first, then permanent.
     ("dunya_perm", "Dunya perm (site)"),   # dunyabutchery.com.au
     ("dunya_sp", "Dunya special (FB)"),    # Facebook post prices
     ("merjan_perm", "Merjan perm"),
@@ -1072,6 +1072,7 @@ TAB_COLUMNS = [  # Local_Deals tab layout v2 (user rule 2026-09-07):
     ("abusalim_perm", "Abu Salim perm"),
     ("abusalim_sp", "Abu Salim special"),
     ("comments", "Comments"),       # shop-tagged multibuy/bulk notes
+    ("item_code", "Item_Code"),     # col K: paired master code (v2)
 ]
 # Kept for callers that reason about the four physical shops.
 STORE_COLUMNS = [
@@ -1434,7 +1435,7 @@ def rebuild_tab(worksheet, rows_by_section: dict,
                 store_keys: list[str],
                 validity: dict[str, str] | None = None) -> None:
     """Rewrite THIS run's shops' SPECIAL columns; preserve everything
-    else (idempotent). ONE batch update A1:J{N}.
+    else (idempotent). ONE batch update A1:K{N}.
 
     Layout v2 semantics (user rule 2026-09-07):
     - PERMANENT columns (Dunya site + manual perm entries) are NEVER
@@ -1496,7 +1497,7 @@ def rebuild_tab(worksheet, rows_by_section: dict,
     run_shop_keys = [k.replace("_fb", "") for k in run_keys]
     grid = [["Product"] + [name for _k, name in TAB_COLUMNS],
             ["Prices valid until", "n/a (live site)",
-             "", "", "", "", "", "", "", ""]]
+             "", "", "", "", "", "", "", "", ""]]
     # Row 2: keep non-run shops' existing summary stamps.
     if len(old) > 1 and str(old[1][0]).strip() == \
             "Prices valid until":
@@ -1559,7 +1560,7 @@ def rebuild_tab(worksheet, rows_by_section: dict,
             grid[1][col] = text
     worksheet.clear()
     worksheet.freeze(rows=2)
-    worksheet.update(values=grid, range_name=f"A1:J{len(grid)}")
+    worksheet.update(values=grid, range_name=f"A1:K{len(grid)}")
 
 
 @dataclass
@@ -1611,12 +1612,12 @@ def _numeric_price(cell) -> float | None:
 
 
 def _load_master_rows(worksheet) -> list[dict]:
-    """READ-ONLY Products_Master scan.
+    """READ-ONLY Products_Master scan (v2 13-column layout).
 
     Returns {row_index, name, category, size, wool_price,
-    coles_price, subcategory} (numeric-decoded D/E). Fixed indices
-    per the documented layout: A name, B coarse category, C size,
-    D Woolworths, E Coles, Q Sub_Category. Never writes.
+    subcategory} (numeric-decoded D). Fixed indices per the v2
+    layout (spec §3.1): A name, B coarse category, C size,
+    D Woolworths, K Sub_Category. Never writes.
     """
     all_values = worksheet.get_all_values()
     if not all_values:
@@ -1636,8 +1637,7 @@ def _load_master_rows(worksheet) -> list[dict]:
             "category": _cell(row, 1),
             "size": _cell(row, 2),
             "wool_price": _numeric_price(_cell(row, 3)),
-            "coles_price": _numeric_price(_cell(row, 4)),
-            "subcategory": normalize_subcategory(_cell(row, 16)),
+            "subcategory": normalize_subcategory(_cell(row, 10)),
         })
     return rows
 
@@ -1680,20 +1680,17 @@ def _unit_prices_agree(deal: dict, master_row: dict) -> bool:
 
 
 def _master_unit_price(master_row: dict) -> tuple[float, str, str] | None:
-    """Master baseline on its comparison basis.
+    """Master baseline on its comparison basis (Q20: RAW WW only).
 
     Returns (unit_price, basis, store_name) — $/kg when the size
     parses as weight, else the raw unit price on the 'ea' basis, from
-    the cheaper numeric D/E cell. None when no numeric baseline.
+    the Woolworths D cell. None when no numeric baseline.
     """
     from core.uom import FAMILY_WEIGHT, parse_size
     baseline = None
-    for store, key in (("Woolworths", "wool_price"),
-                       ("Coles", "coles_price")):
-        price = master_row.get(key)
-        if price is not None and (baseline is None
-                                  or price < baseline[0]):
-            baseline = (price, store)
+    price = master_row.get("wool_price")
+    if price is not None:
+        baseline = (price, "Woolworths")
     if baseline is None:
         return None
     parsed = parse_size(master_row.get("size") or "")
@@ -1924,12 +1921,10 @@ def match_and_detect(rows, master_rows, site_catalogues) -> list[MatchResult]:
             continue
         baseline_unit_price, master_basis, baseline_store = master_unit
         flyer_unit_price, flyer_basis = deal_unit
-        # Baseline display value: the chosen store's raw cell.
+        # Baseline display value: the raw WW D cell (Q20 — the Coles
+        # arm is retired with the v2 sheet).
         result.baseline_store = baseline_store
-        result.baseline_price = (
-            best_master.get("wool_price")
-            if baseline_store == "Woolworths"
-            else best_master.get("coles_price"))
+        result.baseline_price = best_master.get("wool_price")
         # Bases must agree: a $/kg flyer needs a $/kg master baseline
         # (the kg->ea pairing was already blocked by
         # _unit_prices_agree above; this is defensive only).
@@ -2571,7 +2566,7 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
     if len(grid) < 2 or str(grid[1][0]).strip() != \
             "Prices valid until":
         grid.insert(1, ["Prices valid until", "n/a (live site)",
-                        "", "", "", "", "", "", "", ""])
+                        "", "", "", "", "", "", "", "", ""])
     if valid_until is not None and col is not None \
             and kind == "special":
         grid[1][col] = f"valid until {valid_until:%a %d %b}"
@@ -2622,7 +2617,7 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
                     grid[match][comments_col], store_key, raw_note)
     worksheet.clear()
     worksheet.freeze(rows=2)
-    worksheet.update(values=grid, range_name=f"A1:J{len(grid)}")
+    worksheet.update(values=grid, range_name=f"A1:K{len(grid)}")
     return len(grid)
 
 
@@ -2762,7 +2757,7 @@ def sweep_expired_specials(worksheet, today: "date | None" = None
 
     if changed:
         worksheet.clear()
-        worksheet.update(values=grid, range_name=f"A1:J{len(grid)}")
+        worksheet.update(values=grid, range_name=f"A1:K{len(grid)}")
     return lines
 
 
@@ -2830,7 +2825,7 @@ def repair_orphan_comments(worksheet) -> list[str]:
     if changed:
         worksheet.clear()
         worksheet.update(values=grid,
-                         range_name=f"A1:J{len(grid)}")
+                         range_name=f"A1:K{len(grid)}")
     return lines
 
 
@@ -2886,7 +2881,7 @@ def set_store_prices(worksheet, store_key: str, kind: str,
     if len(grid) < 2 or str(grid[1][0]).strip() != \
             "Prices valid until":
         grid.insert(1, ["Prices valid until", "n/a (live site)",
-                        "", "", "", "", "", "", "", ""])
+                        "", "", "", "", "", "", "", "", ""])
 
     lines: list[str] = []
     for entry in entries:
@@ -2949,7 +2944,7 @@ def set_store_prices(worksheet, store_key: str, kind: str,
             grid[1][col] = f"valid until {till:%a %d %b}"
 
     worksheet.clear()
-    worksheet.update(values=grid, range_name=f"A1:J{len(grid)}")
+    worksheet.update(values=grid, range_name=f"A1:K{len(grid)}")
     return lines
 
 

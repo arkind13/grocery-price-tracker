@@ -150,30 +150,29 @@ class TestDocxColesMarkers(unittest.TestCase):
 
 class TestReporterVocabulary(unittest.TestCase):
     HEADER = ["Product_Name", "Category", "Size", "Woolworths_Price",
-              "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
-              "Search_Keyword_Woolworths", "Search_Keyword_Coles",
-              "Search_Keyword_Aldi", "Aldi_Refresh",
-              "Woolworths_Specials", "Coles_Specials", "Rewards_Points"]
+              "Brand_Type", "Last_Updated", "Search_Keyword_Woolworths",
+              "Woolworths_Specials", "Rewards_Points", "Keywords",
+              "Sub_Category", "Item_Code", "Preferred"]
 
-    def _rows(self, ww_cell, coles_cell):
+    def _rows(self, ww_cell):
         return [
             self.HEADER,
-            ["Milk 2L", "", "", "$4.50", "$4.20", "", "", "",
-             "", "", "", "", ww_cell, coles_cell, ""],
+            ["Milk 2L", "", "", "$4.50", "", "", "", ww_cell,
+             "", "", "", "", ""],
         ]
 
     def test_no_and_empty_excluded(self):
-        ws = FakeWorksheet(self._rows("no", ""))
+        ws = FakeWorksheet(self._rows("no"))
         self.assertEqual(get_active_specials(worksheet=ws), [])
 
     def test_vocabulary_included_with_cell_as_desc(self):
-        ws = FakeWorksheet(self._rows("discount", "multi-buy"))
+        ws = FakeWorksheet(self._rows("multi-buy"))
         result = get_active_specials(worksheet=ws)
         descs = sorted(r["special_desc"] for r in result)
-        self.assertEqual(descs, ["discount", "multi-buy"])
+        self.assertEqual(descs, ["multi-buy"])
 
     def test_legacy_free_text_reports_as_discount_special(self):
-        ws = FakeWorksheet(self._rows("50% off", ""))
+        ws = FakeWorksheet(self._rows("50% off"))
         result = get_active_specials(worksheet=ws)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["special_desc"], "50% off")
@@ -183,17 +182,16 @@ class TestSpecialsUnitTags(unittest.TestCase):
     """A7: specials lines always carry the unit tag (Rule A)."""
 
     HEADER = ["Product_Name", "Category", "Size", "Woolworths_Price",
-              "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
-              "Search_Keyword_Woolworths", "Search_Keyword_Coles",
-              "Search_Keyword_Aldi", "Aldi_Refresh",
-              "Woolworths_Specials", "Coles_Specials", "Rewards_Points"]
+              "Brand_Type", "Last_Updated", "Search_Keyword_Woolworths",
+              "Woolworths_Specials", "Rewards_Points", "Keywords",
+              "Sub_Category", "Item_Code", "Preferred"]
 
     def test_format_specials_report_appends_unit_and_marker(self):
         from core.specials_reporter import format_specials_report
         out = format_specials_report([
-            {"name": "Oat Milk", "store": "coles", "price": 2.0,
+            {"name": "Oat Milk", "store": "woolworths", "price": 2.0,
              "special_desc": "was $3", "brand": "", "size": "1L"},
-            {"name": "Bread", "store": "coles", "price": 1.0,
+            {"name": "Bread", "store": "woolworths", "price": 1.0,
              "special_desc": "", "brand": "", "size": ""},
         ])
         self.assertIn("1. Oat Milk · 1L", out)
@@ -204,10 +202,10 @@ class TestSpecialsUnitTags(unittest.TestCase):
             self.HEADER,
             # Col C (index 2) holds the size for the first product,
             # "" for the second (legacy blank -> displays the note).
-            ["Oat Milk", "", "1L", "$3.00", "", "", "", "",
-             "", "", "", "", "Half Price", "", ""],
-            ["Bread", "", "", "", "$2.00", "", "", "",
-             "", "", "", "", "", "Special", ""],
+            ["Oat Milk", "", "1L", "$3.00", "", "", "",
+             "Half Price", "", "", "", "", ""],
+            ["Bread", "", "", "", "", "", "",
+             "Special", "", "", "", "", ""],
         ])
         rows = get_active_specials(worksheet=ws)
         self.assertTrue(rows)

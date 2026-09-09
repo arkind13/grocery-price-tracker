@@ -17,7 +17,8 @@ def _resolve_brand_col(header) -> int:
     """Resolve the brand column index for a Products_Master header.
 
     Prefers a column titled "Brand", then "Brand_Type"; falls back to
-    positional Col G (index 6) which is the historical brand cell.
+    positional col E (index 4) — the v2 13-column layout's brand cell
+    (spec §3.1).
 
     Args:
         header: first spreadsheet row (list of title strings).
@@ -28,7 +29,7 @@ def _resolve_brand_col(header) -> int:
     col = _find_col(header, "Brand")
     if col is None:
         col = _find_col(header, "Brand_Type")
-    return 6 if col is None else col
+    return 4 if col is None else col
 
 
 # ============================================================================
@@ -45,8 +46,10 @@ def get_active_specials(store=None, worksheet=None) -> list:
 
     Returns:
         list[dict], each: {name, store, special_desc, price, brand,
-        row_index}. A product is "on special" if its store specials cell
-        (M for woolworths, N for coles) is non-empty and not "no" (D25/A6).
+        row_index}. A product is "on special" if its Woolworths
+        specials cell (col H in the v2 13-column layout) is non-empty
+        and not "no" (D25/A6). The Coles arm is retired with the v2
+        sheet (Coles data never lands in the sheet, spec §1).
     """
     store_lower = store.lower() if store else None
 
@@ -62,18 +65,15 @@ def get_active_specials(store=None, worksheet=None) -> list:
     header = all_values[0]
     rows = all_values[1:]
 
-    # Resolve specials columns by header name
+    # Resolve the specials column by header name (col H post-v2).
     specials_col = {}
-    for store_key in ("woolworths", "coles"):
-        if store_lower and store_lower != store_key:
-            continue
-        header_name = f"{store_key.capitalize()}_Specials"
-        idx = _find_col(header, header_name)
+    if store_lower in (None, "woolworths"):
+        idx = _find_col(header, "Woolworths_Specials")
         if idx is not None:
-            specials_col[store_key] = idx
+            specials_col["woolworths"] = idx
         else:
             print(
-                f"[specials_reporter] {header_name} column absent",
+                "[specials_reporter] Woolworths_Specials column absent",
                 file=sys.stderr,
             )
 
@@ -102,9 +102,10 @@ def get_active_specials(store=None, worksheet=None) -> list:
             # legacy free text) reports as a special (discount).
             if not cell or cell.lower() == "no":
                 continue
-            # Parse price
+            # Parse price (Woolworths D — the only price column in
+            # the v2 layout, spec §3.1)
             price = None
-            price_col = PRICE_COL.get(store_key)
+            price_col = PRICE_COL.get("woolworths")
             if price_col is not None and price_col < len(row):
                 pcell = str(row[price_col])
                 m = re.search(r"(?:A\$|\$)\s*(\d+\.?\d*)", pcell)
@@ -117,7 +118,7 @@ def get_active_specials(store=None, worksheet=None) -> list:
                         pass
             results.append({
                 "name": name,
-                "store": store_key,
+                "store": "woolworths",
                 "special_desc": cell,
                 "price": price,
                 "brand": brand,
@@ -186,22 +187,22 @@ def get_bonus_rewards(store=None, worksheet=None) -> list:
             if store_lower and store_lower not in rewards_text.lower():
                 continue
 
-            # Parse price (any store, first available) — remember which
-            # store's column supplied it so discounts can be attributed.
+            # Parse the Woolworths D price (the only price column in
+            # the v2 layout) — discounts attribute to woolworths.
             price = None
             price_store = ""
-            for store_key, price_col in PRICE_COL.items():
-                if price_col < len(row) and row[price_col]:
-                    cell = str(row[price_col])
-                    m = re.search(r"(?:A\$|\$)\s*(\d+\.?\d*)", cell)
-                    if m:
-                        price = float(m.group(1))
-                        price_store = store_key
-                        break
+            price_col = PRICE_COL.get("woolworths")
+            if price_col is not None and price_col < len(row) \
+                    and row[price_col]:
+                cell = str(row[price_col])
+                m = re.search(r"(?:A\$|\$)\s*(\d+\.?\d*)", cell)
+                if m:
+                    price = float(m.group(1))
+                    price_store = "woolworths"
+                else:
                     try:
                         price = float(cell)
-                        price_store = store_key
-                        break
+                        price_store = "woolworths"
                     except (ValueError, TypeError):
                         pass
 
