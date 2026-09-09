@@ -1,7 +1,7 @@
 # Rebuild Plan — grocery tracker v2 (phased, time-boxed, days-sized)
 
 - **Date:** 2026-09-09 · **Stage:** 01 Architect
-- **Input:** `architecture-spec.md` (v2, 2026-09-09 — decision log §2 there)
+- **Input:** `architecture-spec.md` (v2, 2026-09-09 — decision log §2 there; + §18 user-approved amendments A1–A3, 2026-09-09)
 - **Status:** AWAITING USER APPROVAL — no coding starts until approved.
 - **Standing rule for every round:** the system is FULLY FUNCTIONAL the
   moment each round ends (user rule, interview Q19). No round deletes a
@@ -37,6 +37,10 @@ out of an order that keeps the system usable.
    cells — Local_Deals rows 115 (Celery) and 116 (Carrots 1kg Bag) —
    plus a scan for any other empty-cell comment segments.
 3. One regression test per audited path (4+ new tests).
+4. **Test-hygiene riders (spec §18/A3):** refresh the date-rotted
+   specials fixture to a rolling date; de-flake the scan-window timing
+   test (larger offset). Suite must be fully green (only Round-3-known
+   nits existed; after this round, none).
 4. **Full Google Sheet backup**: copy the spreadsheet (all 4 tabs) to
    `grocery-tracker-backup-YYYY-MM-DD`; verify by row/column counts of
    every tab. This backup is the safety net for Round 2 and satisfies

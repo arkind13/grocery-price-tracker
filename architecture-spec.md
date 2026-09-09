@@ -357,3 +357,37 @@ first — §rebuild-plan Round 1).
    tracked-but-unavailable, NOT missing (the keyword is the tracked
    signal); marker-only cells without a keyword cannot occur (markers
    are only written for keyword-matched rows).
+
+
+## §18 AMENDMENTS (user-approved 2026-09-09, after plan review)
+
+These supersede any contradicting line elsewhere in this spec.
+
+**A1 — Q18 resolved: option (a), full parity accepted.** The migration
+absorbs the ENTIRE Local_Deals tab (including every Dunya catalogue row)
+as blank-Wool-side parity rows. The day-one missing list may carry
+~100 entries; the user accepts and works through it.
+
+**A2 — parity repair semantics (supersedes §3.3 "repairs are NEVER
+automatic"):** the Wednesday/sync parity check now has THREE outcomes:
+1. **Bottom-append miss (user added row(s) at the end of master but not
+   Local_Deals):** the run AUTO-REPAIRS during the run — mirrors the
+   missing row(s) to the other tab (blank fields, code assigned, item
+   lands on the missing list if the local side has a price). No user
+   action needed.
+2. **Middle-insert detected (a row appeared between existing rows):**
+   HARD ALERT during the run — `row #N was inserted in the middle — move
+   it to the bottom manually and run sync again to copy it over to the
+   other sheet.` No automatic re-positioning; the user moves it, the next
+   sync mirrors it.
+3. **Aligned:** silence (a single clean line at most).
+The append-only rule for manual edits is now a stated USER rule,
+enforced by detection (outcome 2), not prevention.
+
+**A3 — Round 1 riders (test hygiene, user-approved "just make it
+clean"):** fix the two documented suite nits in Round 1 so every
+subsequent round runs green: (a) refresh the date-rotted specials
+fixture to a rolling date; (b) de-flake the scan-window timing test
+(larger offset). Plain-language: two tests were badly written (one
+depended on today's date, one on computer speed) — they fail randomly
+and mask real failures; Round 1 fixes both.
