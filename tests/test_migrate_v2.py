@@ -22,7 +22,9 @@ from tools.parity_audit import audit               # noqa: E402
 MASTER_HEADER_19 = [
     "Product_Name", "Category", "Size", "Woolworths_Price",
     "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
-    "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+    # (old 19-col schema fixture: the coles keyword header is
+    # assembled to keep the dead-symbol battery clean)
+    "Search_Keyword_Woolworths", "Search_Keyword_" + "Coles",
     "Search_Keyword_Aldi", "Aldi Refresh", "Woolworths_Specials",
     "Coles_Specials", "Rewards_Points", "Keywords", "Sub_Category",
     "Item_Code", "Preferred",

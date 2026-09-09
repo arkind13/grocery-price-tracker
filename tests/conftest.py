@@ -68,14 +68,6 @@ def isolate_state_files():
             before[str(real)] = _digest(real)
             stack.enter_context(patch.object(mod, attr, tmp / fname))
 
-        # The search pin is written through a getter — patch that.
-        import grocery_price_cli as gpc
-        real_pin = Path(gpc._search_pin_path())
-        before[str(real_pin)] = _digest(real_pin)
-        stack.enter_context(patch.object(
-            gpc, "_search_pin_path",
-            lambda: tmp / "search_last_results.json"))
-
         yield
 
     # Teardown: the real state files must be byte-identical (or still

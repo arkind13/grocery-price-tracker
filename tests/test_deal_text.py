@@ -859,7 +859,7 @@ class TestMergeStoreTab(unittest.TestCase):
              "bulk_size": None, "category": "fruits",
              "notes": ""},
         ]
-        rows = ld.merge_store_tab(tab, "fruitopia", deals)
+        rows, new_rows = ld.merge_store_tab(tab, "fruitopia", deals)
         self.assertGreater(rows, 0)
         grid = tab.grid
         apples = next(r for r in grid
@@ -872,13 +872,18 @@ class TestMergeStoreTab(unittest.TestCase):
         lettuce = next(r for r in grid
                        if str(r[0]).strip().startswith("Cos Lettuce"))
         self.assertEqual(lettuce[6], 0.99)          # appended
+        # Round 3 (Q27): the new row BOTTOM-APPENDS at grid end —
+        # never a mid-tab insert inside its section block.
+        self.assertEqual(new_rows,
+                         ["Cos Lettuce /ea [new row — master mirror "
+                          "skipped (no master handle)]"])
         idx_f = next(i for i, r in enumerate(grid)
                      if r and r[0] == "FRUITS")
         idx_b = next(i for i, r in enumerate(grid)
                      if r and r[0] == "BUTCHERY")
         idx_l = next(i for i, r in enumerate(grid)
                      if str(r[0]).strip().startswith("Cos Lettuce"))
-        self.assertTrue(idx_f < idx_l < idx_b)      # inside block
+        self.assertTrue(idx_l > idx_f and idx_l > idx_b)
 
     def test_merge_stamps_validity_row(self):
         """User rule 2026-09-07: row 2 carries 'Prices valid until'
@@ -893,8 +898,8 @@ class TestMergeStoreTab(unittest.TestCase):
              "bulk_size": None, "category": "fruits",
              "notes": ""},
         ]
-        rows = ld.merge_store_tab(tab, "fruitopia", deals,
-                                  valid_until=_date(2026, 9, 12))
+        rows, _new = ld.merge_store_tab(
+            tab, "fruitopia", deals, valid_until=_date(2026, 9, 12))
         self.assertGreater(rows, 0)
         grid = tab.grid
         self.assertEqual(grid[1][0], "Prices valid until")
@@ -974,7 +979,7 @@ class TestIngestFlow(unittest.TestCase):
                     patch.object(ld, "ensure_local_deals_tab",
                                  return_value=self._FakeTab([])), \
                     patch.object(ld, "merge_store_tab",
-                                 return_value=5) as mst, \
+                                 return_value=(5, [])) as mst, \
                     patch.object(ld, "_send_message",
                                  return_value={"ok": True}):
                 rc = ld.ingest_code("FRUT")
@@ -1017,7 +1022,7 @@ class TestIngestFlow(unittest.TestCase):
                     patch.object(ld, "ensure_local_deals_tab",
                                  return_value=self._FakeTab([])), \
                     patch.object(ld, "merge_store_tab",
-                                 return_value=5) as mst, \
+                                 return_value=(5, [])) as mst, \
                     patch.object(ld, "_send_message",
                                  return_value={"ok": True}):
                 with contextlib.redirect_stdout(io.StringIO()) as out:
@@ -1064,7 +1069,7 @@ class TestIngestFlow(unittest.TestCase):
                     patch.object(ld, "ensure_local_deals_tab",
                                  return_value=self._FakeTab([])), \
                     patch.object(ld, "merge_store_tab",
-                                 return_value=5), \
+                                 return_value=(5, [])), \
                     patch.object(ld, "match_and_detect",
                                  return_value=[object()]) as mad, \
                     patch.object(ld, "render_post1",
@@ -1264,31 +1269,62 @@ class TestDunyaSiteSync(unittest.TestCase):
             rc = ld.sync_dunya_site(dry_run=dry_run)
         return rc, sent
 
-    def test_initial_build_cents_converted(self):
-        tab = self._FakeTab([])
-        rc, sent = self._sync(tab)
+    def test_site_update_cents_converted_and_unmatched_skipped(self):
+        """Round 3 (§18/A1): site items NEVER auto-create rows. A
+        catalogue item matching an existing (migration-named,
+        halal-prefixed) row updates it in place — cents -> dollars;
+        an UNMATCHED site item is skipped + reported, never appended."""
+        from core import local_deals as ld
+        beef_name = "Halal " + ld._clean_site_name("BEEF MINCE (5KG)")
+        skewer_name = "Halal " + ld._clean_site_name(
+            "Chicken Skewer (each)")
+        ghost_name = "Halal Totally Absent Product"
+        tab = self._FakeTab([
+            ["Product", "", "", "", "", "", "", "", "", "", ""],
+            ["Prices valid until", "n/a (live site)", "", "", "",
+             "", "", "", "", "", ""],
+            [beef_name, "", "", "", "", "", "", "", "", "", "DUN1"],
+            [skewer_name, "", "", "", "", "", "", "", "", "", "DUN2"],
+        ])
+        catalogue = [dict(d) for d in self.CATALOGUE]
+        catalogue.append({"name": "TOTALLY ABSENT PRODUCT",
+                          "price": 999, "regular_price": 999,
+                          "categories": [], "unit": ""})
+        rc, sent = self._sync(tab, catalogue=catalogue)
         self.assertEqual(rc, 0)
         grid = tab.grid
-        beef = next(r for r in grid
-                    if str(r[0]).strip().startswith("BEEF MINCE (5KG)"))
-        self.assertEqual(beef[1], 64.99)     # 6499 cents -> $64.99
+        self.assertEqual(len(grid), 4)          # NO new rows (A1)
+        beef = next(r for r in grid if r[0] == beef_name)
+        self.assertEqual(beef[1], 64.99)        # 6499 cents -> $64.99
+        skewer = next(r for r in grid if r[0] == skewer_name)
+        self.assertEqual(skewer[1], 2.99)       # sale price lands
+        self.assertIn("site sync: 2 items", sent[0])
         self.assertIn("1 on offer", sent[0])
-        self.assertIn("Chicken Skewer", sent[0])
+        self.assertIn("Not tracked — add via an FB post or a "
+                      "manual entry", sent[0])
+        self.assertIn("TOTALLY ABSENT PRODUCT", sent[0])
 
     def test_second_run_reports_price_changes(self):
-        tab = self._FakeTab([])
-        self._sync(tab)
+        from core import local_deals as ld
+        # rows carry the DISPLAY name (unit suffix) — the same text a
+        # first sync would have written
+        beef_name = ("Halal "
+                     + ld._clean_site_name("BEEF MINCE (5KG)")
+                     + " /ea")
+        skewer_name = "Halal " + ld._clean_site_name(
+            "Chicken Skewer (each)") + " /ea"
+        tab = self._FakeTab([
+            ["Product", "", "", "", "", "", "", "", "", "", ""],
+            ["Prices valid until", "n/a (live site)", "", "", "",
+             "", "", "", "", "", ""],
+            [beef_name, 64.99, "", "", "", "", "", "", "", "", "DUN1"],
+            [skewer_name, 2.99, "", "", "", "", "", "", "", "", "DUN2"],
+        ])
         cheaper = [dict(d) for d in self.CATALOGUE]
         cheaper[0]["price"] = 5999             # mince on sale
-        sent = []
-        with patch("core.local_deals.os.getenv",
-                   return_value="dummy"):
-            pass
-        tab2 = self._FakeTab(tab.grid)
-        rc, sent = self._sync(tab2, catalogue=cheaper)
+        rc, sent = self._sync(tab, catalogue=cheaper)
         self.assertEqual(rc, 0)
-        beef = next(r for r in tab2.grid
-                    if str(r[0]).strip().startswith("BEEF MINCE (5KG)"))
+        beef = next(r for r in tab.grid if r[0] == beef_name)
         self.assertEqual(beef[1], 59.99)       # updated in place
         self.assertIn("Price changes", sent[0])
         self.assertIn("59.99", sent[0])
@@ -1305,7 +1341,17 @@ class TestDunyaSiteSync(unittest.TestCase):
         """Meat specials are mostly multi-buys: '2 FOR $30' in the
         name -> multibuy deal, effective rate in the specials cell,
         bundle note in Comments, offer flagged vs regular."""
-        tab = self._FakeTab([])
+        from core import local_deals as ld
+        lamb_name = ("Halal "
+                     + ld._clean_site_name(
+                         "Lamb Leg Roast &#8211; 2.5-3kg 2 FOR $30")
+                     + " /ea")
+        tab = self._FakeTab([
+            ["Product", "", "", "", "", "", "", "", "", "", ""],
+            ["Prices valid until", "n/a (live site)", "", "", "",
+             "", "", "", "", "", ""],
+            [lamb_name, "", "", "", "", "", "", "", "", "", "DUN1"],
+        ])
         catalogue = [
             {"name": "Lamb Leg Roast &#8211; 2.5-3kg 2 FOR $30",
              "price": 3000, "regular_price": 4000,
@@ -1314,10 +1360,10 @@ class TestDunyaSiteSync(unittest.TestCase):
         rc, sent = self._sync(tab, catalogue=catalogue)
         self.assertEqual(rc, 0)
         grid = tab.grid
-        lamb = next(r for r in grid
-                    if str(r[0]).strip().startswith("Lamb Leg Roast"))
-        # clean name (entity decoded, size fragment dropped)
-        self.assertEqual(lamb[0], "Lamb Leg Roast /ea")
+        lamb = next(r for r in grid if r[0] == lamb_name)
+        # clean name (entity decoded, size fragment dropped) — the
+        # matched row keeps its Col A text; only cells update
+        self.assertEqual(lamb[0], lamb_name)
         # PERM cell (site prices are permanent) = effective unit rate
         self.assertEqual(lamb[1], 15.0)
         # comments = the shop-tagged bundle note

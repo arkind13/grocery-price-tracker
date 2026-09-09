@@ -486,3 +486,111 @@ def fenced_table(
         body = ["║ " + line + " ║" for line in content_lines]
         return fence + "\n" + "\n".join([top] + body + [bottom]) + "\n" + fence
     return fence + "\n" + "\n".join(content_lines) + "\n" + fence
+
+
+# ============================================================================
+# v2 style kit (rebuild Round 3, architecture-spec §11)
+#
+# Binding kit elements: emoji section headers, bold item names, aligned
+# price columns, 🏆 winner badge, GONE / 🏷️ multi-buy badges, compact
+# footer (date + code legend), hard 4000-char cap with clean chunk
+# splitting. "Bold item names" is STRUCTURAL by design law: the item
+# name leads its own line in every block (this module never emits
+# markdown — the gateway strips it, spec §11: "lively is achieved with
+# emoji + structure + consistent layout, never with extra characters
+# of prose"). No animation claims anywhere.
+# ============================================================================
+
+# Telegram hard cap is 4096 — the kit's own budget is 4000 (the
+# pre-send check core.local_deals.MSG_CHAR_LIMIT already uses).
+MESSAGE_CHAR_LIMIT = 4000
+
+# Emoji section headers (spec §11): store + domain vocabulary.
+SECTION_ICONS = {
+    "woolworths": "🟢",
+    "coles": "🔴",
+    "butchery": "🔪",
+    "fruit shop": "🍎",
+    "fruit & veg": "🍎",
+    "other": "🛒",
+    "missing list": "📋",
+    "live": "🔍",
+    "specials": "🏷️",
+}
+
+# GONE badge — the ❌ vocabulary icon + the literal sheet marker.
+GONE_BADGE = "❌ GONE"
+
+
+def section_header(label: str, icon: str | None = None) -> str:
+    """One emoji section-header line ("🟢 Woolworths").
+
+    The icon comes from SECTION_ICONS by lowercase label match; an
+    explicit ``icon`` overrides; unknown labels fall back to "•"
+    (structure survives, no silent emoji-less header).
+    """
+    glyph = icon if icon is not None else \
+        SECTION_ICONS.get(str(label).strip().lower(), "•")
+    return f"{glyph} {label}"
+
+
+def winner_line(price, label: str, prefix: str = "Best local") -> str:
+    """The 🏆 winner badge line ("🏆 Best local: $7.99 — Merjan").
+
+    ``price`` may be a float (money()-formatted) or a pre-rendered
+    string passed through unchanged.
+    """
+    price_txt = money(price) if isinstance(price, (int, float)) \
+        else str(price)
+    return f"🏆 {prefix}: {price_txt} — {label}"
+
+
+def gone_badge(text: str = "GONE") -> str:
+    """The GONE badge ("❌ GONE"); ``text`` customises the suffix."""
+    return f"❌ {text}"
+
+
+def legend_footer(ts=None, legend: str = "[CODE] = sheet Item_Code"
+                  ) -> str:
+    """Compact footer: date + code legend on ONE line.
+
+    Args:
+        ts: optional datetime (defaults to now; DATE only, not time —
+            compact per §11).
+        legend: the code-legend text.
+
+    Returns:
+        str: "⏱️ 2026-09-10 · [CODE] = sheet Item_Code".
+    """
+    moment = ts if ts is not None else datetime.now()
+    return f"⏱️ {moment.strftime('%Y-%m-%d')} {SEP} {legend}"
+
+
+def split_message(text: str, limit: int = MESSAGE_CHAR_LIMIT) -> list:
+    """Split ``text`` into <=limit-char chunks on LINE boundaries.
+
+    Clean chunk splitting: never mid-line, never mid-word; a single
+    over-limit line is hard-split at exactly ``limit`` characters as
+    the only fallback. Returns ``[text]`` unchanged when it fits.
+    """
+    text = str(text or "")
+    if len(text) <= limit:
+        return [text]
+    chunks: list = []
+    current = ""
+    for line in text.split("\n"):
+        while len(line) > limit:          # pathological single line
+            if current:
+                chunks.append(current)
+                current = ""
+            chunks.append(line[:limit])
+            line = line[limit:]
+        candidate = f"{current}\n{line}" if current else line
+        if len(candidate) > limit and current:
+            chunks.append(current)
+            current = line
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+    return chunks

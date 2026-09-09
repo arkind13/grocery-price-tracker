@@ -1,7 +1,7 @@
 """Shared headless Google Sheets connection helper.
 
 Promoted from core/name_matcher.py Section C. Used by name_matcher (read),
-schema_upgrade, and sheets_sync (write). Never reads credentials.json.
+schema_upgrade, and the v2 batch verbs. Never reads credentials.json.
 """
 from __future__ import annotations
 
@@ -95,8 +95,10 @@ def connect_worksheet(worksheet_name: str = "Products_Master"):
         sheet = client.open_by_key(spreadsheet_id)
         return sheet.worksheet(worksheet_name)
     except Exception as exc:
+        detail = str(exc) or str(getattr(exc, "__cause__", "") or
+                                 exc.__class__.__name__)
         raise RuntimeError(
-            f"Failed to connect to worksheet '{worksheet_name}': {exc}"
+            f"Failed to connect to worksheet '{worksheet_name}': {detail}"
         ) from exc
 
 
@@ -127,6 +129,10 @@ def connect_spreadsheet():
         client = gspread.authorize(creds)
         return client.open_by_key(spreadsheet_id)
     except Exception as exc:
+        # gspread wraps API errors in an arg-less exception — surface
+        # the cause (e.g. "[403]: Project … has been deleted").
+        detail = str(exc) or str(getattr(exc, "__cause__", "") or
+                                 exc.__class__.__name__)
         raise RuntimeError(
-            f"Failed to connect to spreadsheet: {exc}"
+            f"Failed to connect to spreadsheet: {detail}"
         ) from exc

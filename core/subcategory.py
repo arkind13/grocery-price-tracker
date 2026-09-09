@@ -71,6 +71,29 @@ def strip_phrase(phrase: str) -> list[str]:
     return out or normalize_subcategory(phrase).split()
 
 
+def _token_variants(token: str) -> set:
+    """Singular/plural normalisation variants of one token.
+
+    Absorbed from the retired v1 lookup engine in Round 3 — this was
+    the only surviving use. "ies"->"y", trailing "es", and trailing "s"
+    each produce an extra candidate variant.
+
+    Args:
+        token (str): lowercased single word.
+
+    Returns:
+        set: the token plus its plausible singular/plural forms.
+    """
+    variants = {token}
+    if token.endswith("ies") and len(token) > 4:
+        variants.add(token[:-3] + "y")
+    if token.endswith("es") and len(token) > 3:
+        variants.add(token[:-2])
+    if token.endswith("s") and len(token) > 2:
+        variants.add(token[:-1])
+    return variants
+
+
 def match_subcategory(phrase: str, sheet_labels: list[str]) -> str:
     """Best sheet label for a shopping-list phrase, or "".
 
@@ -81,7 +104,6 @@ def match_subcategory(phrase: str, sheet_labels: list[str]) -> str:
     Only whole tokens count ("mini cucumber" phrase matches label
     "cucumber" via subset; "cucumber mini" also tries the joined
     form). Sheet labels ONLY (D4 — the sheet is the truth)."""
-    from core.lookup import _token_variants
 
     def variants(tokens: set[str]) -> set[str]:
         out: set[str] = set()

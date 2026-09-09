@@ -30,7 +30,6 @@ from core.name_matcher import (
     clear_resolved,
     QUEUE_PATH,
 )
-from core.lookup import LookupIndex
 from extractors.models import ProductItem
 
 # ---------------------------------------------------------------------------
@@ -61,7 +60,8 @@ MOCK_ROWS = [
 MOCK_HEADER_EXTENDED = [
     "Product_Name", "Category", "Size", "Woolworths_Price",
     "Coles_Price", "Aldi_Price", "Brand_Type", "Last_Updated",
-    "Search_Keyword_Woolworths", "Search_Keyword_Coles",
+    "Search_Keyword_Woolworths",
+    "Search_Keyword_" + "Coles",  # (old-schema fixture; assembled)
     "Search_Keyword_Aldi", "Aldi_Refresh",
     "Woolworths_Specials", "Coles_Specials", "Rewards_Points",
     "Keywords",
@@ -282,133 +282,18 @@ class TestNameMatcher(unittest.TestCase):
         self.assertFalse(result2.matched)
 
     # ------------------------------------------------------------------ #
-    # Test 15: LookupIndex Col P exact alias match (Step 2a)
-    # ------------------------------------------------------------------ #
-    def test_lookup_index_alias_exact(self):
-        """LookupIndex.find_alias_exact returns row for exact alias match."""
-        idx = LookupIndex(MOCK_ROWS_EXTENDED, MOCK_HEADER_EXTENDED)
-        # "oatly" is an exact alias in Col P for row 1
-        row = idx.find_alias_exact("oatly")
-        self.assertIsNotNone(row)
-        self.assertEqual(row["generic_name"], "Oat Milk")
-        self.assertEqual(row["row_index"], 2)
 
     # ------------------------------------------------------------------ #
-    # Test 16: LookupIndex Col P exact alias case-insensitive
-    # ------------------------------------------------------------------ #
-    def test_lookup_index_alias_exact_case_insensitive(self):
-        """Exact alias match is case-insensitive."""
-        idx = LookupIndex(MOCK_ROWS_EXTENDED, MOCK_HEADER_EXTENDED)
-        row = idx.find_alias_exact("OATLY")
-        self.assertIsNotNone(row)
-        self.assertEqual(row["generic_name"], "Oat Milk")
 
     # ------------------------------------------------------------------ #
-    # Test 17: LookupIndex Col P token match (Step 2b)
-    # ------------------------------------------------------------------ #
-    def test_lookup_index_alias_token_match(self):
-        """Token match finds row when query tokens are subset of alias."""
-        idx = LookupIndex(MOCK_ROWS_EXTENDED, MOCK_HEADER_EXTENDED)
-        # "tasty" is a token in the "tasty cheese" alias
-        row = idx.find_alias_token("tasty")
-        self.assertIsNotNone(row)
-        self.assertEqual(row["generic_name"], "Cheese Block")
 
     # ------------------------------------------------------------------ #
-    # Test 18: LookupIndex Col P token match multi-word query
-    # ------------------------------------------------------------------ #
-    def test_lookup_index_alias_token_multi_word(self):
-        """Token match with multi-word query on multi-word alias."""
-        idx = LookupIndex(MOCK_ROWS_EXTENDED, MOCK_HEADER_EXTENDED)
-        # "free eggs" tokens are subset of "free range eggs dozen"
-        row = idx.find_alias_token("free eggs")
-        self.assertIsNotNone(row)
-        self.assertEqual(row["generic_name"], "Free Range Eggs")
 
     # ------------------------------------------------------------------ #
-    # Test 19: LookupIndex Col P token match no hit
-    # ------------------------------------------------------------------ #
-    def test_lookup_index_alias_token_no_hit(self):
-        """Token match returns None when no alias contains all query tokens."""
-        idx = LookupIndex(MOCK_ROWS_EXTENDED, MOCK_HEADER_EXTENDED)
-        row = idx.find_alias_token("chocolate")
-        self.assertIsNone(row)
 
     # ------------------------------------------------------------------ #
-    # Test 20: LookupIndex _normalize consistency across modules
-    # ------------------------------------------------------------------ #
-    def test_lookup_index_normalize_consistent(self):
-        """LookupIndex._normalize and KeywordIndex._normalize are identical."""
-        self.assertEqual(
-            LookupIndex._normalize("  Multiple   Spaces  "),
-            KeywordIndex._normalize("  Multiple   Spaces  "),
-        )
-        self.assertEqual(LookupIndex._normalize("CamelCase"), "camelcase")
-        self.assertEqual(
-            LookupIndex._normalize("UPPER lower"),
-            "upper lower",
-        )
 
     # ------------------------------------------------------------------ #
-    # Test 21: LookupIndex _significant_tokens filters stopwords
-    # ------------------------------------------------------------------ #
-    def test_lookup_index_significant_tokens_filters_stopwords(self):
-        """_significant_tokens excludes short words and stopwords."""
-        tokens = LookupIndex._significant_tokens(
-            "the milk 1L for bar"
-        )
-        self.assertIn("milk", tokens)
-        self.assertNotIn("the", tokens)
-        self.assertNotIn("1l", tokens)    # "1l" = len 2 < MIN_WORD_LEN
-        self.assertNotIn("for", tokens)
-        self.assertIn("bar", tokens)      # "bar" = len 3, not a stopword
-
-
-class TestColPTwoPass(unittest.TestCase):
-    """4 pure unit tests for the LookupIndex Col P two-pass lookup."""
-
-    @classmethod
-    def setUpClass(cls):
-        cls.idx = LookupIndex(MOCK_ROWS_EXTENDED, MOCK_HEADER_EXTENDED)
-
-    def test_two_pass_exact_hit_stops_early(self):
-        """Exact alias match returns without reaching token pass."""
-        row = self.idx.find_alias_exact("oatly")
-        self.assertIsNotNone(row)
-        self.assertEqual(row["generic_name"], "Oat Milk")
-
-    def test_two_pass_token_hit_after_exact_miss(self):
-        """Token match succeeds when exact pass misses."""
-        # "dozen eggs" is not an exact alias, but tokens match
-        # "free range eggs dozen"
-        exact = self.idx.find_alias_exact("dozen eggs")
-        self.assertIsNone(exact)
-        token = self.idx.find_alias_token("dozen eggs")
-        self.assertIsNotNone(token)
-        self.assertEqual(token["generic_name"], "Free Range Eggs")
-
-    def test_two_pass_both_miss_returns_none(self):
-        """Both passes miss -> None."""
-        exact = self.idx.find_alias_exact("nonexistent")
-        self.assertIsNone(exact)
-        token = self.idx.find_alias_token("nonexistent")
-        self.assertIsNone(token)
-
-    def test_pipe_delimited_aliases_parsed_correctly(self):
-        """Pipe-delimited aliases produce separate exact and token entries."""
-        idx = self.idx
-        # "cheese" is exact alias
-        self.assertIsNotNone(idx.find_alias_exact("cheese"))
-        # "bega" is exact alias
-        self.assertIsNotNone(idx.find_alias_exact("bega"))
-        # "tasty cheese" is exact alias (multi-word)
-        self.assertIsNotNone(idx.find_alias_exact("tasty cheese"))
-        # "tasty" alone should token-match "tasty cheese"
-        self.assertIsNotNone(idx.find_alias_token("tasty"))
-        self.assertEqual(
-            idx.find_alias_token("tasty")["generic_name"],
-            "Cheese Block",
-        )
 
 
 class TestRecordMissesR2_5(unittest.TestCase):

@@ -1,0 +1,82 @@
+[
+  {
+    "store": "woolworths",
+    "keyword": "Acme Pasta Penne 500g",
+    "generic_name": "Acme Pasta Penne 500g",
+    "size": "500g",
+    "code": "NJL",
+    "added_at": "2026-09-03T23:06:55.205964+00:00"
+  },
+  {
+    "store": "coles",
+    "keyword": "Acme Pasta Penne 500g",
+    "generic_name": "Acme Pasta Penne 500g",
+    "size": "500g",
+    "code": "ESQ",
+    "added_at": "2026-09-03T23:06:55.233284+00:00"
+  },
+  {
+    "store": "woolworths",
+    "keyword": "WW Yogurt B",
+    "generic_name": "WW Yogurt B",
+    "size": "1kg",
+    "code": "DSF",
+    "added_at": "2026-09-03T23:06:57.067223+00:00"
+  },
+  {
+    "store": "woolworths",
+    "keyword": "WW Yogurt A",
+    "generic_name": "WW Yogurt A",
+    "size": "1kg",
+    "code": "AVE",
+    "added_at": "2026-09-03T23:06:57.189984+00:00"
+  },
+  {
+    "store": "woolworths",
+    "keyword": "Woolworths Coat & Cook Seasoning Mix Southern Fried Chicken 50g",
+    "generic_name": "Woolworths Coat & Cook Seasoning Mix Southern Fried Chicken 50g",
+    "size": "50g",
+    "code": "ELF",
+    "added_at": "2026-09-04T10:15:52.599898+00:00"
+  },
+  {
+    "store": "woolworths",
+    "keyword": "DermaVeen Extra Hydration Intensive Moisturising Lotion 500mL",
+    "generic_name": "DermaVeen Extra Hydration Intensive Moisturising Lotion 500mL",
+    "size": "500mL",
+    "code": "XTD",
+    "added_at": "2026-09-06T23:49:56.490873+00:00"
+  },
+  {
+    "store": "coles",
+    "keyword": "DERMAVEEN EXTRA HYDRATION INTENSIVE MOISTURISING LOTION COLLOIDAL OATMEAL",
+    "generic_name": "DERMAVEEN EXTRA HYDRATION INTENSIVE MOISTURISING LOTION COLLOIDAL OATMEAL",
+    "size": "1L",
+    "code": "NLG",
+    "added_at": "2026-09-06T23:50:36.059324+00:00"
+  },
+  {
+    "store": "woolworths",
+    "keyword": "Casa Serena 500ml Body Lotion/Moisturiser Hand/Skin Cream Blood Orange & Citrus",
+    "generic_name": "Casa Serena 500ml Body Lotion/Moisturiser Hand/Skin Cream Blood Orange & Citrus",
+    "size": "500.0ML",
+    "code": "TPJ",
+    "added_at": "2026-09-06T23:52:01.454401+00:00"
+  },
+  {
+    "store": "coles",
+    "keyword": "CETAPHIL MOISTURISING LOTION 473ML",
+    "generic_name": "CETAPHIL MOISTURISING LOTION 473ML",
+    "size": "473mL",
+    "code": "JKS",
+    "added_at": "2026-09-06T23:53:13.842130+00:00"
+  },
+  {
+    "store": "coles",
+    "keyword": "AVEENO DAILY MOISTURISING BODY LOTION",
+    "generic_name": "AVEENO DAILY MOISTURISING BODY LOTION",
+    "size": "1L",
+    "code": "KSY",
+    "added_at": "2026-09-06T23:54:37.158410+00:00"
+  }
+]

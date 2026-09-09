@@ -2,6 +2,8 @@
 Local_Deals read per command. Never writes. Never live-searches."""
 from __future__ import annotations
 
+from pathlib import Path
+
 from core.halal import is_meat_term
 from core.local_deals import (
     BUTCHERY_DOMAIN, PRODUCE_SUBCATEGORIES, SHOP_TAGS, STORE_COLUMNS,
@@ -12,6 +14,9 @@ from core.subcategory import normalize_subcategory
 MASTER_TAB = "Products_Master"
 ALIAS_DELIM = "|"
 GONE_MARKER = "GONE"
+VALIDITY_LABEL = "Prices valid until"
+IGNORED_PATH = (Path(__file__).resolve().parent.parent / "data"
+                / "ignored_items.txt")
 
 _DOMAIN_LABELS = ({normalize_subcategory(s) for s in BUTCHERY_DOMAIN}
                   | {normalize_subcategory(s)
@@ -67,7 +72,7 @@ def parse_ld_row(sheet_row: int, row: list,
     code = str(row[10]).strip() if len(row) > 10 else ""
     if not name and not code:
         return None
-    if name in ("Prices valid until", "Product") or \
+    if name in (VALIDITY_LABEL, "Product") or \
             name in ("FRUITS", "BUTCHERY", "OTHER"):
         return None
     prices: dict = {}
@@ -189,17 +194,43 @@ def lookup_item(query: str, master_rows, ld_rows) -> dict:
             "best": None, "code": "", "query": q}
 
 
-def missing_list(master_rows, ld_rows) -> list:
+def ignored_codes(path=None) -> set:
+    """Codes hidden by the `ignore` verdict (spec §6).
+
+    The ignore file's v2 lines start with '[CODE]'; legacy free-text
+    lines carry no code and never match. Missing/corrupt file -> an
+    empty set.
+    """
+    path = Path(path) if path else IGNORED_PATH
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return set()
+    codes: set = set()
+    for line in lines:
+        text = line.strip()
+        if text.startswith("[") and "]" in text:
+            code = text[1:text.index("]")].strip().upper()
+            if code:
+                codes.add(code)
+    return codes
+
+
+def missing_list(master_rows, ld_rows, ignored_path=None) -> list:
     """§6 rule: local side has ≥1 shop price AND D has no real price
     AND D != GONE AND keyword col G empty. Every entry carries its
     Item_Code. N/A + keyword = tracked-but-unavailable, NOT missing
-    (§17.6) — the keyword-empty test covers it."""
+    (§17.6) — the keyword-empty test covers it. Codes on the ignore
+    list are HIDDEN (spec §6 — revealed only by the `ignored` verb)."""
+    hidden = ignored_codes(ignored_path)
     by_code = {ld["code"]: ld for ld in ld_rows if ld["code"]}
     items: list = []
     for master in master_rows:
         if master["gone"] or master["keyword"]:
             continue
         if master["ww_num"] is not None:
+            continue
+        if master["code"] and master["code"].upper() in hidden:
             continue
         ld = by_code.get(master["code"])
         if not ld or not ld["prices"]:
@@ -215,19 +246,36 @@ def _shop_label(shop_key: str) -> str:
     return dict(STORE_COLUMNS).get(shop_key, shop_key)
 
 
+# §11 emoji section headers: local shops by domain (butchery 🔪 /
+# fruit shop 🍎); Woolworths itself is 🟢 (kit SECTION_ICONS).
+_SHOP_ICONS = {"dunya": "🔪", "dunya_fb": "🔪", "merjan": "🔪",
+               "fruitopia": "🍎", "abusalim": "🍎"}
+
+
 def _local_lines(result: dict) -> list:
+    """Aligned per-shop price lines (kit: aligned price columns)."""
+    from core.telegram_format import _cells
+
+    entries = sorted(result["local"].items(),
+                     key=lambda kv: kv[1][0])
+    labels = [f"{_SHOP_ICONS.get(shop, '·')} {_shop_label(shop)}"
+              for shop, _ in entries]
+    width = max((_cells(label) for label in labels), default=0)
     lines: list = []
-    for shop, (price, kind) in sorted(
-            result["local"].items(),
-            key=lambda kv: kv[1][0]):
-        tag = {"special": "special", "permanent": ""}[kind]
-        suffix = f" ({tag})" if tag else ""
-        lines.append(f"  {_shop_label(shop)}: ${price:.2f}{suffix}")
+    for label, (shop, (price, kind)) in zip(labels, entries):
+        pad = " " * max(0, width - _cells(label))
+        tag = {"special": " (special)", "permanent": ""}[kind]
+        lines.append(f"  {label}{pad}  ${price:.2f}{tag}")
     return lines
 
 
 def render_lookup(result: dict) -> str:
-    """Style-LITE plain lines (style kit lands in Round 3)."""
+    """Style-Kit v2 block (spec §11): emoji section headers, the item
+    name on its own (bold-by-structure) line, aligned price columns,
+    🏆 winner badge, GONE badge, compact footer (date + code legend).
+    Answer LOGIC is the §8 table — unchanged from Round 2."""
+    from core.telegram_format import GONE_BADGE, legend_footer, \
+        section_header, winner_line
     from core.woolworths_discounts import format_discounted_price, \
         is_woolworths_home_brand
 
@@ -238,17 +286,25 @@ def render_lookup(result: dict) -> str:
     if status == "tracked":
         name = master["name"]
         home = is_woolworths_home_brand(name, master["brand"])
-        lines.append(f"{name} — Woolworths "
-                     f"{format_discounted_price(master['ww_num'], home)}"
-                     + (f" · {master['size']}" if master["size"] else ""))
+        # item line: the name leads its own block (structural bold)
+        head = name + (f" · {master['size']}" if master["size"]
+                       else "")
+        if home:
+            head += "  🏠"
+        lines.append(head)
+        ww_price = format_discounted_price(master["ww_num"], home)
+        lines.append(f"  {section_header('Woolworths')}  {ww_price}")
     elif status == "gone":
-        lines.append(f"{master['name']} — GONE at Woolworths")
+        lines.append(f"{master['name']}")
+        lines.append(f"  {GONE_BADGE} at Woolworths")
     elif status == "na":
-        lines.append(f"{master['name']} — unavailable this week "
+        lines.append(f"{master['name']}")
+        lines.append(f"  🟢 Woolworths — unavailable this week "
                      f"({master['na_marker']})")
     elif status == "missing":
-        lines.append(f"{master['name']} — not tracked at Woolworths, "
-                     f"on the missing list [{master['code']}]")
+        lines.append(f"{master['name']}")
+        lines.append(f"  not tracked at Woolworths — missing list "
+                     f"[{master['code']}]")
     elif status == "meat-local-only":
         lines.append("Not tracked at Woolworths — missing list "
                      f"[{result['code']}]")
@@ -261,19 +317,24 @@ def render_lookup(result: dict) -> str:
     lines.extend(_local_lines(result))
     best = result.get("best")
     if best:
-        lines.append(f"  🏆 Best local: ${best[1]:.2f} — "
-                     f"{_shop_label(best[0])}")
+        lines.append(f"  {winner_line(best[1], _shop_label(best[0]))}")
     code = result.get("code")
     if code and status in ("tracked", "gone", "na"):
         lines.append(f"  [{code}]")
+    if status in ("tracked", "gone", "na", "missing",
+                  "meat-local-only"):
+        lines.append(f"  {legend_footer()}")
     return "\n".join(lines)
 
 
 def render_list(items: list) -> str:
-    """'[CODE] name — best $X (shop)' lines + count."""
+    """The ONE list, styled (spec §6/§11): 📋 header, '[CODE] name —
+    best $X (shop)' lines, count + compact footer."""
+    from core.telegram_format import legend_footer, section_header
+
     if not items:
         return "The missing list is empty — every local price is at Woolworths."
-    lines: list = []
+    lines: list = [section_header("Missing list")]
     for item in items:
         best = item.get("best_local")
         best_txt = ""
@@ -283,4 +344,5 @@ def render_list(items: list) -> str:
         lines.append(f"[{item['code']}] {item['name']}{best_txt}")
     lines.append("")
     lines.append(f"📋 {len(items)} item(s) on the missing list")
+    lines.append(legend_footer())
     return "\n".join(lines)

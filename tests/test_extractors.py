@@ -76,28 +76,6 @@ class TestProductItem(unittest.TestCase):
         self.assertEqual(d["price"], 2.00)
         self.assertIn("timestamp", d)
 
-    def test_to_tuple(self):
-        """to_tuple returns 12 elements matching Products_Master columns."""
-        from extractors.models import ProductItem
-
-        item = ProductItem(
-            store="woolworths",
-            raw_name="Test Milk",
-            price=4.50,
-            category="Dairy",
-            size="1L",
-            brand="Test Brand",
-        )
-        t = item.to_tuple()
-        self.assertEqual(len(t), 12)
-        self.assertEqual(t[0], "Test Milk")   # Product_Name
-        self.assertEqual(t[1], "Dairy")        # Category
-        self.assertEqual(t[2], "1L")           # Size
-        self.assertEqual(t[3], "")             # Woolworths_Price
-        self.assertEqual(t[4], "")             # Coles_Price
-        self.assertEqual(t[5], "")             # Aldi_Price
-        self.assertEqual(t[6], "Test Brand")   # Brand_Type
-
 
 class TestProductItemMultiBuy(unittest.TestCase):
     """Multi-buy fields on ProductItem (plan §S11, D-MB2)."""
@@ -119,16 +97,6 @@ class TestProductItemMultiBuy(unittest.TestCase):
         d = item.to_dict()
         self.assertEqual(d["multi_buy_qty"], 2)
         self.assertEqual(d["multi_buy_total"], 6.00)
-
-    def test_to_tuple_length_unchanged(self):
-        # Q/R/S are written by sheets_sync, not by the model: the
-        # tuple stays 12 columns (A..L only).
-        from extractors.models import ProductItem
-
-        item = ProductItem(store="coles", raw_name="Test Item",
-                           price=2.00, multi_buy_qty=3,
-                           multi_buy_total=9.00)
-        self.assertEqual(len(item.to_tuple()), 12)
 
 
 # =========================================================================

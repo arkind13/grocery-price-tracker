@@ -61,29 +61,6 @@ class ProductItem:
         """Return a JSON-serialisable dict of this item."""
         return asdict(self)
 
-    def to_tuple(self) -> tuple:
-        """Return a tuple matching the ``Products_Master`` column order.
-
-        Columns: (Product_Name, Category, Size, Woolworths_Price,
-        Coles_Price, Aldi_Price, Brand_Type, Last_Updated,
-        Search_Keyword_Woolworths, Search_Keyword_Coles,
-        Search_Keyword_Aldi, Aldi_Refresh)
-        """
-        return (
-            self.raw_name,  # Product_Name
-            self.category,  # Category
-            self.size,      # Size
-            "",             # Woolworths_Price (filled by sync)
-            "",             # Coles_Price (filled by sync)
-            "",             # Aldi_Price (filled by sync)
-            self.brand,     # Brand_Type
-            self.timestamp, # Last_Updated
-            "",             # Search_Keyword_Woolworths (filled by matcher)
-            "",             # Search_Keyword_Coles (filled by matcher)
-            "",             # Search_Keyword_Aldi (filled by matcher)
-            "",             # Aldi_Refresh
-        )
-
 
 def _now_iso() -> str:
     """Return current UTC time as ISO-8601 string (seconds precision)."""

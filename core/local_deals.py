@@ -10,7 +10,6 @@ from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from core.basket_optimizer import DEFAULT_SPLIT_THRESHOLD  # noqa: F401
 from core.name_matcher import similarity_tokens, token_set_ratio
 from core.subcategory import normalize_subcategory
 from core.sydney_time import SYDNEY_TZ, sydney_now, sydney_today
@@ -18,6 +17,10 @@ from core.sydney_time import SYDNEY_TZ, sydney_now, sydney_today
 ALERT_PCT = 20.0                # strictly greater (20.0 -> no alert)
 MATCH_MIN_RATIO = 0.65          # master-match threshold (§1.4.3)
 MSG_CHAR_LIMIT = 4000           # hard pre-send check (4096 budget)
+# Split-recommendation threshold in the standout report — the value
+# the retired Round-3 split-optimizer module carried (this is the
+# only survivor).
+DEFAULT_SPLIT_THRESHOLD = 3.00  # dollars; split only worth it above this
 STATE_PATH = (Path(__file__).resolve().parent.parent / "data"
               / "local_deals_cron_state.json")
 SCAN_STATE_PATH = (Path(__file__).resolve().parent.parent / "data"
@@ -845,6 +848,10 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
                   f"{exc.__class__.__name__} — skipped")
             continue
 
+        # Q17 (Round 3): butchery posts are prefixed at normalization
+        # — every item, whatever the type; fruit shops never.
+        deals = _prefix_butcher_deals(store["key"], deals)
+
         if not deals:
             print(f"[ingest] {path.name}: 0 prices read — skipped")
             continue
@@ -912,11 +919,18 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
         # post/file in the post log + summary — never merged away.
         newest_valid = next((b["valid_until"] for b in batches
                              if b["valid_until"]), None)
-        rows = merge_store_tab(worksheet, col_store,
-                               list(reversed(all_vision_deals)),
-                               valid_until=newest_valid)
+        # §4.2 parity auto-create: the SAME operation bottom-appends
+        # the blank master counterpart (name + code + sub-category;
+        # D/G blank) for every NEW row.
+        rows, new_rows = merge_store_tab(
+            worksheet, col_store,
+            list(reversed(all_vision_deals)),
+            valid_until=newest_valid,
+            master_ws=spreadsheet.worksheet("Products_Master"))
         print(f"[ingest] Local_Deals tab updated ({rows} rows incl. "
               f"headers)")
+        for line in new_rows:
+            print(f"   + {line}")
 
         # Standout check vs the master sheet — the SAME >20% machinery
         # as the Friday/on-demand report (user rule 2026-09-07: the
@@ -1284,6 +1298,24 @@ def _store_kind(store_key: str) -> str:
         return "butchery"        # dunya_fb = Dunya's Facebook posts
     return next((s["kind"] for s in STORES if s["key"] == store_key),
                 "")
+
+
+def _prefix_butcher_deals(store_key: str, deals: list) -> list:
+    """Q17 halal prefix at deal normalization: EVERY item from a
+    butchery-source store gets the 'Halal ' prefix — regardless of
+    item type; fruit shops are never prefixed. Idempotent (an item
+    already carrying 'halal' stays as-is) and order-preserving; the
+    deals are mutated in place AND returned for chaining. The master
+    side inherits the same name via the bottom-append mirror, so
+    plain (non-halal) master rows can never pair with butchery items
+    (Q11, spec §5)."""
+    if _store_kind(store_key) != "butchery":
+        return deals
+    for deal in deals:
+        item = str(deal.get("item") or "").strip()
+        if item and "halal" not in item.lower():
+            deal["item"] = f"Halal {item}"
+    return deals
 
 
 def _section_for(deal: dict) -> str:
@@ -2423,7 +2455,8 @@ def _process_store(store: dict, run_dir: Path, today_syd) -> list[dict]:
         Deal dicts enriched with store_key/store_name/post_ref.
     """
     if store.get("pipeline") == "timeline":
-        return _process_store_timeline(store, run_dir, today_syd)
+        deals = _process_store_timeline(store, run_dir, today_syd)
+        return _prefix_butcher_deals(store["key"], deals)
 
     from extractors.fb_flyer_fetch import fetch_store_posts
     from core.flyer_vision import parse_board_images
@@ -2449,7 +2482,7 @@ def _process_store(store: dict, run_dir: Path, today_syd) -> list[dict]:
     if not deals:
         from extractors.fb_flyer_fetch import FetchUnavailable
         raise FetchUnavailable("no deals parsed from any post")
-    return deals
+    return _prefix_butcher_deals(store["key"], deals)
 
 
 def extract_post_deals(post, run_dir, store_key: str
@@ -2520,17 +2553,47 @@ def _to_vision_deal(d: dict, category: str) -> dict:
     }
 
 
+def _canonical_match_index(grid: list, name: str) -> int | None:
+    """Grid-wide FIX-8 match: the first ITEM row whose canonical base
+    name equals `name`'s, else None. Structural rows (header,
+    validity stamp, section titles) never match. Grid-wide since
+    Round 3: new rows bottom-append OUTSIDE their section block
+    (Q27), so a section-scoped scan would never re-find them."""
+
+    def _item_row(i: int) -> bool:
+        first = str(grid[i][0]).strip()
+        if not first or first in SECTION_ORDER:
+            return False
+        return first != "Prices valid until"
+
+    target = canonical_key(_base_name(name))
+    for i in range(1, len(grid)):
+        if _item_row(i) and \
+                canonical_key(_base_name(grid[i][0])) == target:
+            return i
+    return None
+
+
 def merge_store_tab(worksheet, store_key: str, deals: list[dict],
                     valid_until=None,
-                    ) -> int:
+                    master_ws=None) -> tuple[int, list[str]]:
     """Merge ONE store's deals into the existing Local_Deals tab.
 
     The ingest flow must NOT touch the other stores' cells: the
     current grid is read, matching Product rows (same section, same
-    Col A text) get this store's column cell updated, unmatched rows
-    are appended inside their section block, and the FULL grid is
-    written back in ONE batch update (layout: header, "Prices valid
-    until" row, then per section a title row + item rows).
+    Col A text) get this store's column cell updated, and the FULL
+    grid is written back in ONE batch update (layout: header, "Prices
+    valid until" row, then per section a title row + item rows).
+
+    v2 (Round 3, Q27 + §18/A2): NEW rows APPEND AT GRID END — a
+    mid-tab insert would read as a parity middle_insert hard alert.
+    When `master_ws` is given, the SAME operation appends the blank
+    13-col master counterpart row (name + Item_Code from
+    item_code_registry.json + Sub_Category by domain; price D and
+    keyword G stay BLANK per §4.2) and writes the code into the LD
+    row's col K — bottom-append parity on BOTH tabs in one
+    operation. `master_ws=None` (tests/legacy) skips the master
+    mirror; the report still names the rows that WOULD mirror.
 
     Args:
         worksheet: gspread/Fake worksheet handle for Local_Deals.
@@ -2546,9 +2609,12 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
             for this store's column (newest dated post). Never
             stamped for the Dunya PERMANENT column (live site
             prices — no validity period).
+        master_ws: optional handle for the master tab — enables
+            the parity auto-create mirror (spec §4.2).
 
     Returns:
-        int: number of grid rows written (header included).
+        (int, list[str]): number of grid rows written (header
+        included) + one report line per new (appended) row.
     """
     rows_by_section = build_rows({store_key: deals})
     col, kind = _target_column(store_key)
@@ -2571,39 +2637,24 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
             and kind == "special":
         grid[1][col] = f"valid until {valid_until:%a %d %b}"
 
+    appended: list[list] = []    # NEW rows, in append order
     for section in SECTION_ORDER:
         section_rows = rows_by_section.get(section) or []
         if not section_rows:
             continue
-        # Locate this section's title row and its block extent.
-        title_idx = next((i for i, row in enumerate(grid)
-                          if row and str(row[0]).strip() == section),
-                         None)
-        if title_idx is None:
-            title_idx = len(grid)
-            grid.append([section] + [""] * len(TAB_COLUMNS))
-            block_end = title_idx + 1
-        else:
-            block_end = title_idx + 1
-            while block_end < len(grid):
-                first = str(grid[block_end][0]).strip()
-                if first and first in SECTION_ORDER:
-                    break                      # next section starts
-                block_end += 1
         for row in section_rows:
             # FIX-8 (D4): match existing rows by the canonical key
             # (order-free token set via name_matcher, variety-aware —
             # the same normalization build_rows and --set-special
             # use) — NOT exact Col A text, so "5kg Bag Washed
             # Potatoes" merges into "Washed Potatoes 5kg Bag".
-            target_key = canonical_key(_base_name(row[0]))
-            match = next(
-                (i for i in range(title_idx + 1, block_end)
-                 if canonical_key(_base_name(grid[i][0])) == target_key),
-                None)
+            # Round 3: matching is GRID-WIDE — new rows bottom-append
+            # outside their section block (Q27), so the v1
+            # section-scoped scan would never find them again.
+            match = _canonical_match_index(grid, row[0])
             if match is None:
-                grid.insert(block_end, list(row))
-                block_end += 1
+                grid.append(list(row))
+                appended.append(grid[-1])
             elif col is not None:
                 if row[col] != "":
                     grid[match][col] = row[col]
@@ -2615,10 +2666,64 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
                             if incoming else "")
                 grid[match][comments_col] = _merge_comment_cell(
                     grid[match][comments_col], store_key, raw_note)
+
+    new_row_lines: list[str] = []
+    if appended:
+        new_row_lines = _mirror_new_rows(store_key, appended,
+                                         master_ws)
     worksheet.clear()
     worksheet.freeze(rows=2)
     worksheet.update(values=grid, range_name=f"A1:K{len(grid)}")
-    return len(grid)
+    return len(grid), new_row_lines
+
+
+def _mirror_new_rows(store_key: str, appended: list,
+                     master_ws) -> list[str]:
+    """Bottom-append parity (§4.2/§18-A2): one blank 13-col master
+    row per appended LD row — name, Item_Code from the registry,
+    Sub_Category by domain; D (price) and G (keyword) BLANK. The
+    code also lands in the LD row's col K. ONE clear+update on the
+    master tab. `master_ws=None` mirrors nothing but still reports
+    the rows that WOULD mirror (tests/legacy)."""
+    lines: list[str] = []
+    if master_ws is None:
+        for ld_row in appended:
+            lines.append(f"{ld_row[0]} [new row — master mirror "
+                         f"skipped (no master handle)]")
+        return lines
+    from core import item_codes
+
+    master_grid = [list(r) for r in
+                   (master_ws.get_all_values() or [])]
+    taken = item_codes.retired_codes(item_codes.load_registry())
+    for r in master_grid[1:]:
+        c = str(r[11]).strip().upper() if len(r) > 11 else ""
+        if c:
+            taken.add(c)
+    sub = "butchery" if _store_kind(store_key) == "butchery" \
+        else "fruit & veg"
+    sheet_id = item_codes._spreadsheet_id(master_ws)
+    pending: list[tuple[str, int]] = []
+    for ld_row in appended:
+        code = item_codes.generate_codes(
+            taken, 1, seed=f"merge:{store_key}:{ld_row[0]}")[0]
+        taken.add(code)
+        ld_row[10] = code                        # col K
+        m_row = [""] * 13
+        m_row[0] = str(ld_row[0])
+        m_row[10] = sub
+        m_row[11] = code
+        master_grid.append(m_row)
+        pending.append((code, len(master_grid)))  # 1-based sheet row
+        lines.append(f"{ld_row[0]} [new row, code {code}]")
+    master_ws.clear()
+    master_ws.update(values=master_grid,
+                     range_name=f"A1:M{len(master_grid)}")
+    # Confirm AFTER the write succeeded (item_codes discipline D-IC4).
+    for code, row_index in pending:
+        item_codes.confirm_code(code, row_index,
+                                spreadsheet_id=sheet_id)
+    return lines
 
 
 # --- special-first tab reading (user rule 2026-09-07) --------------------
@@ -2841,17 +2946,22 @@ def _base_name(col_a: str) -> str:
 
 def set_store_prices(worksheet, store_key: str, kind: str,
                      entries: list[dict],
-                     till: "date | None" = None) -> list[str]:
+                     till: "date | None" = None,
+                     master_ws=None) -> list[str]:
     """Write PERMANENT or SPECIAL prices for one shop by hand.
 
     User rule 2026-09-07: chat messages like 'update permanent
     pricing for fruitopia - carrots @ 6.50/kg' land here. Rows are
-    matched by EXACT canonical key (the Col A unit suffix ignored);
-    a non-matching item APPENDS a new row in the shop's domain
-    section (butcheries -> BUTCHERY, fruit shops -> FRUITS).
-    Permanent cells carry NO validity; special cells are stamped
-    ' (till <d Mon>)' when `till` is given. An optional per-entry
-    note is shop-tagged into the shared Comments column.
+    matched by EXACT canonical key (the Col A unit suffix ignored,
+    grid-wide — matching is not section-scoped any more); a
+    non-matching item APPENDS A NEW ROW AT GRID END (Round 3, Q27 —
+    never a mid-tab insert). When `master_ws` is given, the SAME
+    operation bottom-appends the blank master counterpart (§4.2
+    parity auto-create, codes from the registry). Permanent cells
+    carry NO validity; special cells are stamped ' (till <d Mon>)'
+    when `till` is given. An optional per-entry note is shop-tagged
+    into the shared Comments column. Butchery-sourced entries get
+    the Q17 'Halal ' prefix at normalization (_prefix_butcher_deals).
 
     Args:
         worksheet: gspread/Fake worksheet handle for Local_Deals.
@@ -2861,6 +2971,8 @@ def set_store_prices(worksheet, store_key: str, kind: str,
             rate (multibuy rate precomputed by the caller).
         till: validity end for special entries (optional; undated
             specials are legal but the sweep can never clear them).
+        master_ws: optional handle for the master tab — enables
+            the parity auto-create mirror for NEW rows.
 
     Returns:
         list[str]: report lines ("Fruitopia special: Carrots /kg =
@@ -2871,8 +2983,6 @@ def set_store_prices(worksheet, store_key: str, kind: str,
     col = (_perm_column_for(store_key) if kind == "perm"
            else _special_column_for(store_key))
     comments_col = _grid_col("comments")
-    section = "BUTCHERY" if _store_kind(store_key) == "butchery" \
-        else "FRUITS"
 
     grid = worksheet.get_all_values() or [["Product"] + [
         name for _k, name in TAB_COLUMNS]]
@@ -2883,7 +2993,9 @@ def set_store_prices(worksheet, store_key: str, kind: str,
         grid.insert(1, ["Prices valid until", "n/a (live site)",
                         "", "", "", "", "", "", "", "", ""])
 
+    entries = _prefix_butcher_deals(store_key, entries)
     lines: list[str] = []
+    appended: list[list] = []
     for entry in entries:
         item = str(entry.get("item") or "").strip()
         price = entry.get("price")
@@ -2898,27 +3010,8 @@ def set_store_prices(worksheet, store_key: str, kind: str,
                                  "price_kind": "single"})
         if unit not in ("kg", "ea"):
             display = item           # no suffix without a unit
-        target_key = canonical_key(_base_name(display))
 
-        # Locate the shop's domain section block.
-        title_idx = next((i for i, row in enumerate(grid)
-                          if str(row[0]).strip() == section), None)
-        if title_idx is None:
-            title_idx = len(grid)
-            grid.append([section] + [""] * len(TAB_COLUMNS))
-            block_end = title_idx + 1
-        else:
-            block_end = title_idx + 1
-            while block_end < len(grid):
-                first = str(grid[block_end][0]).strip()
-                if first and first in SECTION_ORDER:
-                    break
-                block_end += 1
-
-        match = next(
-            (i for i in range(title_idx + 1, block_end)
-             if canonical_key(_base_name(grid[i][0])) == target_key),
-            None)
+        match = _canonical_match_index(grid, display)
         cell = _stamp_validity(round(float(price), 2), till) \
             if kind == "special" else round(float(price), 2)
         if match is None:
@@ -2926,7 +3019,8 @@ def set_store_prices(worksheet, store_key: str, kind: str,
             row[col] = cell
             if note:
                 row[comments_col] = _tag_note(store_key, note)
-            grid.insert(block_end, row)
+            grid.append(row)
+            appended.append(grid[-1])
             lines.append(f"{shop} {kind}: {display} = {cell}"
                          f" [new row]")
         else:
@@ -2943,6 +3037,9 @@ def set_store_prices(worksheet, store_key: str, kind: str,
         if kind == "special" and till is not None:
             grid[1][col] = f"valid until {till:%a %d %b}"
 
+    if appended:
+        lines.extend(_mirror_new_rows(store_key, appended,
+                                      master_ws))
     worksheet.clear()
     worksheet.update(values=grid, range_name=f"A1:K{len(grid)}")
     return lines
@@ -3081,6 +3178,11 @@ def sync_dunya_site(dry_run: bool = False, send: bool = True,
             "regular_price": regular,
         })
 
+    # Q17: Dunya is a butchery source — every site item is prefixed
+    # at normalization (matched rows were renamed at migration, so
+    # the prefix is what makes them match).
+    deals = _prefix_butcher_deals("dunya", deals)
+
     on_offer = [d for d in deals
                 if d.get("regular_price")
                 and d["price"] < d["regular_price"]]
@@ -3103,12 +3205,22 @@ def sync_dunya_site(dry_run: bool = False, send: bool = True,
     dunya_col = _perm_column_for("dunya")     # site prices column
     before = {str(r[0]).strip(): r[dunya_col]
               for r in grid_before[1:] if len(r) > dunya_col}
+    # §18/A1: site items NEVER auto-create rows — the site catalogue
+    # was absorbed ONCE at migration; later unmatched items are
+    # skipped + reported (add via an FB post or a manual entry).
+    matched = [d for d in deals
+               if _canonical_match_index(grid_before,
+                                         _display_name(d)) is not None]
+    skipped = [d for d in deals if d not in matched]
     rows = merge_store_tab(worksheet, "dunya",
                            [{k: v for k, v in d.items()
                              if k != "regular_price"}
-                            for d in deals])
-    print(f"[dunya-site] synced {len(deals)} items "
+                            for d in matched])
+    print(f"[dunya-site] synced {len(matched)} items "
           f"({rows} grid rows); {len(on_offer)} on offer")
+    for d in skipped:
+        print(f"[dunya-site] not tracked — add via an FB post or a "
+              f"manual entry: {d['item']}")
 
     changes = []
     for d in deals:
@@ -3123,7 +3235,7 @@ def sync_dunya_site(dry_run: bool = False, send: bool = True,
         if abs(old - d["price"]) >= 0.01:
             changes.append((d["item"], old, d["price"]))
 
-    lines = [f"🐑 Dunya Butchery site sync: {len(deals)} items "
+    lines = [f"🐑 Dunya Butchery site sync: {len(matched)} items "
              f"({len(on_offer)} on offer) — Local_Deals updated"]
     if changes:
         lines.append(f"Price changes since last sync: "
@@ -3139,6 +3251,11 @@ def sync_dunya_site(dry_run: bool = False, send: bool = True,
             lines.append(f"  • {d['item']} {_money(d['price'])} "
                          f"(regular {_money(d['regular_price'])}, "
                          f"save {_money(save)})")
+    if skipped:
+        lines.append("Not tracked — add via an FB post or a manual "
+                     "entry:")
+        for d in skipped:
+            lines.append(f"  • {d['item']}")
     bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
     topic_id = _env_int(LOCAL_DEALS_TOPIC_ENV)
     receipt = _send_message(bot_token, TELEGRAM_CHAT_ID,

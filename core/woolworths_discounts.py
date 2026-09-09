@@ -33,7 +33,7 @@ HOME_BRAND_EXTRA_DISCOUNT = 0.05
 #                    extra). Sheets still store raw prices.
 #   False          : every surface automatically reverts to the ORIGINAL
 #                    raw Woolworths price — compare, search, recipe,
-#                    specials, specials-scan, rewards, map/lookup, the
+#                    specials, the retired v1 scan/rewards/map flows, the
 #                    Wednesday report, and cheapest-store math. No other
 #                    code changes needed (e.g. for users without the
 #                    Woolworths team discount).

@@ -10,7 +10,23 @@ import re
 import sys
 from typing import Optional
 
-from core.sheets_sync import _find_col, PRICE_COL
+# (inlined from the retired v1 sync module in Round 3; these two
+# were the only survivors this module needed)
+PRICE_COL = {"woolworths": 3, "coles": 4}   # D, E
+
+
+def _normalize_header(h: str) -> str:
+    return re.sub(r"\s+", "", str(h or "")).lower()
+
+
+def _find_col(header: list, name: str):
+    """0-based index of header matching name (case-insensitive,
+    whitespace-normalized), else None."""
+    target = _normalize_header(name)
+    for i, h in enumerate(header):
+        if _normalize_header(h) == target:
+            return i
+    return None
 
 
 def _resolve_brand_col(header) -> int:
@@ -273,6 +289,10 @@ def format_specials_report(specials: list, store=None) -> str:
 
     lines.append("")
     lines.append(f"📊 {len(specials)} active specials")
+    # Round-3 kit restyle (spec §11): every user-facing block ends
+    # with the compact footer (date + code legend).
+    from core.telegram_format import legend_footer
+    lines.append(legend_footer())
     return "\n".join(lines)
 
 

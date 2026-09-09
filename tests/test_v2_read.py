@@ -203,6 +203,11 @@ class TestRender(unittest.TestCase):
         self.assertIn("$", out)
         self.assertIn("🏆", out)
         self.assertIn("[AUG]", out)
+        # style kit v2 (spec §11): emoji section header for the
+        # WW line + compact footer with the code legend
+        self.assertIn("🟢 Woolworths", out)
+        self.assertIn("⏱️ 2026-", out)
+        self.assertIn("[CODE] = sheet Item_Code", out)
 
     def test_render_gone_keeps_locals(self):
         master = [_m("Halal Sausages", "HSG", ww="GONE",

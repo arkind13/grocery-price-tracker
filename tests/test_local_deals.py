@@ -90,7 +90,7 @@ def _master(name="Woolworths Beef Diced 1kg", size="1kg",
             coarse="", idx=2):
     """Products_Master row as produced by _load_master_rows."""
     return {"row_index": idx, "name": name, "category": coarse,
-            "size": size, "wool_price": wool, "coles_price": coles,
+            "size": size, "wool_price": wool, "coles_amt": coles,
             "subcategory": sub}
 
 
@@ -186,10 +186,12 @@ class TestSheetRebuild(unittest.TestCase):
         self.assertEqual(ws.updates, writes)
 
     def test_products_master_single_read_occurrence(self):
-        """Assert-by-grep: the master sheet name occurs exactly once
-        in core/local_deals.py (inside the read helper)."""
+        """Assert-by-grep: the master sheet name occurs exactly
+        twice in core/local_deals.py — the read helper's docstring
+        and the Round-3 §4.2 mirror wiring in ingest_code (the ONLY
+        place code may open the master tab by name)."""
         source = Path(ld.__file__).read_text(encoding="utf-8")
-        self.assertEqual(source.count("Products_Master"), 1)
+        self.assertEqual(source.count("Products_Master"), 2)
 
 
 # ---------------------------------------------------------------------------
@@ -1110,8 +1112,10 @@ class TestSetStorePrices(unittest.TestCase):
             till=self.TILL)
         self.assertTrue(lines)
         grid = ws.get_all_values()
-        comment = next(r[9] for r in grid if str(r[0]).startswith(
-            "beef mince"))
+        # Q17 (Round 3): the butchery entry is 'Halal '-prefixed at
+        # normalization — the note contract is unchanged by it.
+        comment = next(r[9] for r in grid if str(r[0]).lower()
+                       .startswith("halal beef mince"))
         self.assertEqual(comment, "[MER] multi buy 2 for $15")
 
         # Second write on the same row replaces the segment — still
@@ -1122,20 +1126,21 @@ class TestSetStorePrices(unittest.TestCase):
               "note": "deal $2x this week only"}],
             till=self.TILL)
         grid = ws.get_all_values()
-        comment = next(r[9] for r in grid if str(r[0]).startswith(
-            "beef mince"))
+        comment = next(r[9] for r in grid if str(r[0]).lower()
+                       .startswith("halal beef mince"))
         self.assertEqual(comment, "[MER] deal $2x this week only")
 
     def test_new_row_appended_in_shop_section_with_stamp(self):
+        """Round 3 (Q27): a new row APPENDS AT GRID END — never a
+        mid-tab insert inside the section block."""
         ws = _v2_ws([])
         lines = ld.set_store_prices(ws, "fruitopia", "special",
                                     [{"item": "Carrots",
                                       "price": 0.75, "unit": "ea"}],
                                     till=self.TILL)
         grid = ws.get_all_values()
-        self.assertEqual(grid[2][0], "FRUITS")
-        self.assertEqual(grid[3][0], "Carrots /ea")
-        self.assertEqual(grid[3][6], "0.75 (till 12 Sep)")
+        self.assertEqual(grid[-1][0], "Carrots /ea")   # grid end
+        self.assertEqual(grid[-1][6], "0.75 (till 12 Sep)")
         self.assertEqual(grid[1][6], "valid until Sat 12 Sep")
         self.assertIn("[new row]", lines[0])
 
@@ -1158,9 +1163,9 @@ class TestSetStorePrices(unittest.TestCase):
                             [{"item": "Carrots", "price": 6.50,
                               "unit": "kg"}])
         grid = ws.get_all_values()
-        self.assertEqual(grid[3][5], 6.50)        # fruitopia PERM
+        self.assertEqual(grid[-1][5], 6.50)       # fruitopia PERM
         self.assertEqual(grid[1][5], "")          # no validity stamp
-        self.assertEqual(grid[3][6], "")          # special untouched
+        self.assertEqual(grid[-1][6], "")         # special untouched
 
     def test_notes_shop_tagged_and_merged_across_shops(self):
         ws = _v2_ws([
@@ -1179,9 +1184,10 @@ class TestSetStorePrices(unittest.TestCase):
             "[FRU] multi buy 2 for $1.50 — $0.75/ea; "
             "[ABS] bulk 3 for $2")
 
-    def test_butchery_shop_entries_route_to_butchery_section(self):
-        """Merjan (butchery) pricing beef merges inside BUTCHERY;
-        a butchery's produce entry appends under BUTCHERY too."""
+    def test_butchery_entry_q11_separate_from_plain_row(self):
+        """Round 3 (Q11/§5): a butchery entry is 'Halal '-prefixed —
+        it NEVER merges into a plain (non-halal) row; the plain row
+        stays untouched and the halal entry gets its own row."""
         ws = _v2_ws([
             ["BUTCHERY", "", "", "", "", "", "", "", "", ""],
             ["Beef Diced /kg", "", "", 9.50, "", "", "", "", "",
@@ -1191,9 +1197,10 @@ class TestSetStorePrices(unittest.TestCase):
                                     [{"item": "beef diced",
                                       "price": 8.99, "unit": "kg"}])
         grid = ws.get_all_values()
-        self.assertEqual(grid[3][4], 8.99)        # matched, no dup
-        self.assertEqual(len(grid), 4)
-        self.assertIn("[row 4]", lines[0])
+        self.assertEqual(grid[3][3], 9.50)     # plain row untouched
+        self.assertEqual(grid[-1][0], "Halal beef diced /kg")
+        self.assertEqual(grid[-1][4], 8.99)    # merjan special col
+        self.assertEqual(len(grid), 5)         # one new row only
 
     def test_unreadable_entry_reported_not_written(self):
         ws = _v2_ws([])

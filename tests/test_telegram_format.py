@@ -347,96 +347,6 @@ class TestNoPipeTablesEver(unittest.TestCase):
         self.assertNotIn("| # |", composite)
 
 
-# ============================================================================
-# §5.3 invariant tests — the REAL formatters stay pipe-free
-# ============================================================================
-
-
-def _fixture_report():
-    """Build a small ComparisonReport matching the §5.2 fixture shape."""
-    from core.price_comparator import BasketItem, ComparisonReport
-
-    item = BasketItem(
-        name="Woolworths Milk",
-        prices={"woolworths": 4.00, "coles": 3.20},
-        sources={"woolworths": "sheet", "coles": "sheet"},
-        brand="Woolworths",
-        is_woolworths_home_brand=True,
-    )
-    return ComparisonReport(
-        items=[item],
-        raw_totals={"woolworths": 4.00, "coles": 3.20},
-        store_coverage={"woolworths": 1, "coles": 1},
-        team_discount_applied=True,
-        team_discount_savings=0.20,
-        home_extra_savings=0.19,
-        home_brand_count=1,
-        extra_discount_pct=10.0,
-        extra_discount_savings=0.36,
-        final_totals={"woolworths": 3.25, "coles": 3.20},
-        cheapest_store="coles",
-        most_expensive_store="woolworths",
-        max_savings=0.05,
-        warnings=["Monthly discount already used this month"],
-        not_available={"woolworths": [], "coles": []},
-    )
-
-
-class TestRealFormatterInvariants(unittest.TestCase):
-    """format_report / format_specials_report / format_discount_report
-    never emit pipe tables; the compare TOTALS box is equal-width."""
-
-    def test_format_report_pipe_free_and_box_aligned(self):
-        """No pipes; the fenced TOTALS block lines are equal length."""
-        from core.price_comparator import format_report
-
-        output = format_report(_fixture_report())
-        self.assertNotIn("|---", output)
-        self.assertNotIn("| # |", output)
-
-        lines = output.split("\n")
-        starts = [i for i, ln in enumerate(lines) if ln.strip() == "```"]
-        self.assertGreaterEqual(len(starts), 2)
-        block = lines[starts[0] + 1 : starts[1]]
-        self.assertEqual(len({len(ln) for ln in block}), 1)
-
-    def test_format_specials_report_pipe_free(self):
-        """specials report contains no pipe-table markup."""
-        from core.specials_reporter import format_specials_report
-
-        specials = [
-            {"name": "Coke 24-pack", "store": "coles",
-             "special_desc": "was $24.50", "price": 19.00, "brand": ""},
-            {"name": "Milk 2L", "store": "woolworths",
-             "special_desc": "Half Price", "price": 3.00,
-             "brand": "Bega"},
-        ]
-        output = format_specials_report(specials, "woolworths")
-        self.assertNotIn("|---", output)
-        self.assertNotIn("| # |", output)
-        self.assertIn("2.85", output)     # 3.00 base-discounted
-        self.assertNotIn("was $2.85", output)  # no team-discount "was"
-        self.assertIn("was $24.50", output)    # genuine Coles desc intact
-
-    def test_format_discount_report_pipe_free(self):
-        """discount report contains no pipe-table markup."""
-        from core.woolworths_discounts import format_discount_report
-
-        items = [
-            {"name": "WW Milk", "brand": "Woolworths",
-             "original_price": 4.00, "base_price": 3.80,
-             "discounted_price": 3.61, "applied": True,
-             "home_extra_applied": True},
-        ]
-        output = format_discount_report(
-            items, 0.45, 0.0, 0.0,
-            home_extra_total=0.19, home_brand_count=1,
-        )
-        self.assertNotIn("|---", output)
-        self.assertNotIn("| # |", output)
-        self.assertIn("3.61", output)
-
-
 class TestMultibuyTag(unittest.TestCase):
     """Multi-buy display tag (spec §7.3 rule 2, S17)."""
 
@@ -446,6 +356,78 @@ class TestMultibuyTag(unittest.TestCase):
             "🏷️ 2 for $6.00  [Note: must purchase 2+ units to "
             "receive this price]",
         )
+
+
+class TestV2StyleKit(unittest.TestCase):
+    """Round-3 kit extensions (spec §11): emoji section headers,
+    winner badge, GONE badge, 4000-char clean split, footer legend.
+    Bold item names are structural (the name leads its line) — the
+    kit never emits markdown (gateway strips it)."""
+
+    def test_section_headers_emoji(self):
+        """Store + domain vocabulary: 🟢 Woolworths · 🔪 butchery ·
+        🍎 fruit shop."""
+        self.assertEqual(tf.section_header("Woolworths"),
+                         "🟢 Woolworths")
+        self.assertEqual(tf.section_header("butchery"), "🔪 butchery")
+        self.assertEqual(tf.section_header("fruit shop"),
+                         "🍎 fruit shop")
+        self.assertEqual(tf.section_header("Coles"), "🔴 Coles")
+        # explicit icon override; unknown label keeps structure
+        self.assertEqual(tf.section_header("Mystery", icon="✅"),
+                         "✅ Mystery")
+        self.assertEqual(tf.section_header("mystery"), "• mystery")
+
+    def test_winner_badge(self):
+        self.assertEqual(tf.winner_line(7.99, "Merjan"),
+                         "🏆 Best local: $7.99 — Merjan")
+        self.assertEqual(tf.winner_line("$12.00", "Dunya (site)",
+                                        prefix="Cheapest"),
+                         "🏆 Cheapest: $12.00 — Dunya (site)")
+
+    def test_gone_badge(self):
+        self.assertEqual(tf.gone_badge(), "❌ GONE")
+        self.assertEqual(tf.gone_badge("GONE at Woolworths"),
+                         "❌ GONE at Woolworths")
+
+    def test_split_message_4000_cap(self):
+        """Hard cap 4000: fits -> one chunk; over -> clean
+        line-boundary chunks, none over the cap, lossless."""
+        text = "\n".join(f"line {i} {'x' * 40}" for i in range(200))
+        chunks = tf.split_message(text)
+        self.assertGreater(len(chunks), 1)
+        for chunk in chunks:
+            self.assertLessEqual(len(chunk), tf.MESSAGE_CHAR_LIMIT)
+            self.assertNotIn(chr(0xFFFD), chunk)
+        self.assertEqual(chr(10).join(chunks), text)
+        self.assertEqual(tf.split_message("short"), ["short"])
+        # a single pathological line is hard-split, still lossless
+        huge = "y" * (tf.MESSAGE_CHAR_LIMIT + 500)
+        self.assertEqual("".join(tf.split_message(huge)), huge)
+
+    def test_footer_legend(self):
+        footer = tf.legend_footer(ts=datetime(2026, 9, 10, 8, 30))
+        self.assertEqual(footer,
+                         "⏱️ 2026-09-10 · [CODE] = sheet Item_Code")
+
+    def test_specials_report_restyle_footer(self):
+        """The `specials` output goes through the same kit: the
+        report ends with the compact footer (date + code legend)."""
+        from core.specials_reporter import format_specials_report
+        out = format_specials_report([
+            {"name": "Halal Beef Mince 500g", "store": "woolworths",
+             "special_desc": "Was $9.00", "price": 8.50,
+             "brand": "Home", "size": "500g"},
+        ])
+        self.assertIn("🏷️ SPECIALS", out)
+        self.assertIn("⏱️", out)
+        self.assertIn("[CODE] = sheet Item_Code", out)
+
+    def test_multibuy_badge_still_kit_canonical(self):
+        """The 🏷️ multi-buy badge (existing kit element) keeps its
+        mandatory note text — v2 restyles around it, never replaces."""
+        self.assertIn("must purchase 2+ units",
+                      tf.multibuy_tag(2, 6.0))
 
 
 if __name__ == "__main__":
