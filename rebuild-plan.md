@@ -24,6 +24,16 @@ out of an order that keeps the system usable.
 | 5 | Verification (speed budget + live Telegram) + FINAL TIDY | 0.5 day |
 | | **Total** | **~4.5 days** |
 
+### Round status (living tracker — update at every round close; same table every round)
+
+| Round | Scope (one line) | Time-box | Status | Closed |
+|-------|------------------|----------|--------|--------|
+| 1 | Comment lifecycle + orphan cleanup + backup system (PC + VPS + daily cron) | 0.5 d | ✅ **DONE** — checker PASS, 1319 green ×10 runs, tracker `933af6e` / parent `5342201` | 2026-09-09 |
+| 2 | Sheet migration v2 (gates G1–G3) + `price`/`list` read path + parity audit | 1 d | 🔶 work order issued (`implementation-plan.md`) — **awaiting user approval** | — |
+| 3 | 6 verbs + batch engine + style kit + deletion manifest | 1.5 d | ⬜ pending | — |
+| 4 | Wednesday v2 + skills rewrite + VPS sync | 1 d | ⬜ pending | — |
+| 5 | Speed-budget verification + FINAL TIDY | 0.5 d | ⬜ pending | — |
+
 ---
 
 ## Round 1 — Local_Deals comment lifecycle + backup (FIRST CODER TASK)

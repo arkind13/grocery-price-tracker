@@ -1,553 +1,342 @@
-# Implementation Plan — v2 Round 1: Local_Deals comment lifecycle + full sheet backup
+# Implementation Plan — v2 Round 2: Sheet migration v2 + minimal v2 read path
 
 - **Date:** 2026-09-09 · **Stage:** 02 Plan → 03 Code
-- **Inputs:** `architecture-spec.md` (v2, §2 Q19 + §16 boundaries),
-  `rebuild-plan.md` (Round 1), `core/local_deals.py` @ HEAD
-  (`feature/qrs-shop-multibuy`), `tests/test_local_deals.py`,
-  `grocery_price_cli.py` (parent root).
-- **Scope guard:** Round 1 ONLY. No schema changes, no deletions, no new
-  commands beyond `--comment-repair`, no VPS behavior change. The system
-  stays fully functional throughout (user rule Q19).
-- **Rule:** this file is overwritten in place every planning round —
-  never renamed, never forked.
+- **Inputs:** `architecture-spec.md` (v2 + §18 A1–A3), `rebuild-plan.md`
+  (Round 2 scope, step-0 gate, USER GATE rule), Round-1 close-out
+  (tracker `933af6e` / parent `5342201`, checker PASS, 1319 green),
+  live sheet probe 2026-09-09 (§0 below).
+- **SCOPE GUARD:** Round 2 ONLY. No verb surface beyond `price`/`list`,
+  no v1 module deletions (dispatch-disable only — deletion is Round 3),
+  no Wednesday v2 (Round 4), no style kit (Round 3; style-lite here).
+  **If reality contradicts the spec at any step: STOP and report —
+  never adapt silently.**
+- **Rule:** this file is overwritten in place each round.
 
-## 0. Audit matrix (the charter deliverable — every price-removal path)
+## 0. Ground truth (live probe 2026-09-09) + design consequences
 
-| # | Path | Where | Status entering Round 1 | Round-1 action |
-|---|------|-------|------------------------|----------------|
-| A1 | Expire sweep clears a dated special | `sweep_expired_specials` (core/local_deals.py:2661) | FIXED by FIX-4 — comment dies with the cell; test `test_expired_cell_cleared_comment_dies_with_it` exists | none (already green) |
-| A2 | New-post merge, item matched, now plain | `merge_store_tab` matched branch (2598–2622) + `build_rows` (1423–1429) | FIXED by FIX-4 — newest deal owns the segment; empty note clears | add merge-level regression test T5.4 |
-| A3 | New-post merge, item DROPPED by the post | `merge_store_tab` — loop only visits the new post's rows | BY DESIGN (spec §4.4 / Q7): board rotation never deletes; an unexpired/undated cell + its comment survive TOGETHER until the sweep clears the pair | pin the invariant with test T5.5 so no future change separates them |
-| A4 | Manual plain reprice (`--set-special`/`--set-permanent` without `--note`) | `set_store_prices` matched branch (2869–2877) | **GAP — the `if note:` guard leaves the stale promo segment** | **FIX (Task 1) + tests T5.1–T5.3** |
-| A5 | Item (row) removal | none — v1 never deletes Local_Deals rows | no code path exists; v2 `remove` verb (Round 3) deletes the row wholesale, so the comment dies with the row | document only |
-| A6 | Dunya site sync reprice/offer-end | `sync_dunya_site` → `merge_store_tab` (3041) | covered by A2 | document only |
-| A7 | Pre-fix residue on the LIVE tab | Local_Deals rows 115 (Celery /ea) + 116 (Carrots 1kg Bag /ea): `[FRU] [multi buy 2 for $1.50 — $0.75/ea]` on empty cells | confirmed by the architect's live probe 2026-09-09 | repair function (Task 2) + CLI flag (Task 3) + live run (Task 6) |
+| Fact | Value | Consequence |
+|------|-------|-------------|
+| Products_Master | 113×19; 112 data rows, **all 112 already carry Item_Codes** | Migration assigns codes ONLY to new blank rows |
+| Strict keep rule (Sub_Category ∈ `BUTCHERY_DOMAIN` ∪ `PRODUCE_SUBCATEGORIES`, both importable from `core.local_deals`) | **KEEP 10 / LEAVE 102** | Differs from the "~80 archived" estimate — NOT a spec contradiction: the G1 preview is authoritative, and 4 borderline labels (lettuce, coriander, greek salad ×2 — produce-adjacent but outside the sets) are surfaced as a BORDERLINE section for the user's one-time ruling at the gate |
+| Local_Deals | 133 rows = header + validity row + 2 section titles + **129 item rows (105 with ≥1 shop price)** | Day-one missing list ≤ ~105 entries (spec §18/A1 accepted) |
+| Backup system (Round-1 close) | local `backups/grocery-tracker-backup-2026-09-09.json` + VPS copy + daily 03:17 CEST cron; Google cloud-copy blocked for the SA (403 quota) | S0 verifies AND refreshes all three legs; the pre-migration JSON is the restore net |
+| LD grid writers (`merge_store_tab`, `sweep_expired_specials`, `set_store_prices`, `repair_orphan_comments`, `rebuild_tab`) | all write range `A1:J{n}` and normalize width to `len(TAB_COLUMNS)+1` = 10 | **TRAP:** once col K (Item_Code) exists, every such write TRUNCATES it. Task S5w widens ALL writers to 11 cols / `A1:K{n}` FIRST, with a regression test per writer |
+| Master writers post-migration | Wednesday v1, map/todo/update/sync reference dead columns → dispatch-disabled (S6); `sheets_sync.py` needs NO remap this round | Between R2 and R4 NOTHING writes master D except the user, manually in the sheet — exactly spec §4.2 |
 
-Edge rules for the repair (binding): a shop's tagged segment is stripped
-ONLY when BOTH that shop's permanent and special cells are blank
-(whitespace-only). Non-numeric offer text in a cell counts as PRESENT
-(never stripped). Untagged free text in the Comments column is preserved
-verbatim. The repair never deletes rows and never touches other columns.
+**USER GATE protocol (binding):** each gate prints its complete preview,
+then asks exactly `APPLY? (y/n)`. `y` proceeds; anything else aborts
+with ZERO further sheet writes. Gates run in the coder session with the
+user present; none may be skipped, reordered, or batched together.
 
-## Task 1 — Fix A4: manual plain reprice clears the shop's segment
+## S0 — Backup freshness gate (STOP-gate; scripted; BEFORE any write)
 
-**File:** `grocery-price-tracker/core/local_deals.py` (1 file, ~4 lines)
-**Anchor (search block, `set_store_prices`, lines 2869–2877):**
-
-```python
-        else:
-            old = grid[match][col]
-            grid[match][col] = cell
-            if note:
-                grid[match][comments_col] = _merge_comment_cell(
-                    grid[match][comments_col], store_key, note)
-```
-
-**Replace with:**
-
-```python
-        else:
-            old = grid[match][col]
-            grid[match][col] = cell
-            # R1-A4: the newest entry owns the Comments cell — a plain
-            # reprice (no note) CLEARS this shop's stale segment, same
-            # rule as the ingest merge path (FIX-4).
-            grid[match][comments_col] = _merge_comment_cell(
-                grid[match][comments_col], store_key, note)
-```
-
-Error boundary: none new — `_merge_comment_cell` already handles
-empty/None cells. The new-row branch (`if note:` at 2864) stays as-is
-(a new row has no prior segment to clear).
-
-**Verify (Local Terminal, tracker root):**
+**Local:**
 ```bash
-"$USERPROFILE/anaconda3/python.exe" -m py_compile core/local_deals.py
-"$USERPROFILE/anaconda3/python.exe" -m pytest tests/test_local_deals.py -k "manual_reprice" -q
+cd "C:/Users/User.DESKTOP-R2G441H/Documents/AI related/grocery-price-tracker"
+"$USERPROFILE/anaconda3/python.exe" tools/sheet_backup.py    # exit 0; today's JSON in backups/
 ```
-
-## Task 2 — `repair_orphan_comments` (A7 core)
-
-**File:** `grocery-price-tracker/core/local_deals.py` (1 file, 1 insert)
-**Insert exactly after `sweep_expired_specials` ends (after its final
-`return lines`, line 2766) and BEFORE the `# --- manual pricing entry`
-comment line (2769):**
-
-```python
-def repair_orphan_comments(worksheet) -> list[str]:
-    """Strip shop-tagged Comments segments whose shop has NO price
-    left in the row (both the permanent AND special cells blank).
-
-    Round-1 (A7): clears the pre-FIX-4 sweep residue (e.g. '[FRU]
-    multi buy 2 for $1.50' on empty cells — Local_Deals rows 115/116).
-    Conservative by design: a NON-NUMERIC offer-text cell counts as a
-    present price (never stripped); untagged free text is preserved
-    verbatim; rows and other columns are never touched. Idempotent —
-    a second run reports nothing.
-
-    Args:
-        worksheet: gspread/Fake worksheet handle for Local_Deals.
-
-    Returns:
-        list[str]: report lines, e.g. "Fruitopia Mt Druitt: Celery
-        /ea — orphan comment '[FRU] multi buy …' removed".
-    """
-    try:
-        grid = worksheet.get_all_values() or []
-    except Exception:  # noqa: BLE001 — missing tab -> nothing to do
-        return []
-    if len(grid) < 3:
-        return []
-    width = len(TAB_COLUMNS) + 1
-    grid = [(list(r) + [""] * width)[:width] for r in grid]
-    names = {k: name for k, name in STORE_COLUMNS}
-    comments_col = _grid_col("comments")
-    lines: list[str] = []
-    changed = False
-    for row in grid[2:]:
-        name = str(row[0]).strip()
-        if not name or name in SECTION_ORDER:
-            continue
-        cell = str(row[comments_col] or "")
-        if not _TAG_RE.search(cell):
-            continue
-        kept: list[str] = []
-        for seg in cell.split(";"):
-            seg = seg.strip()
-            if not seg:
-                continue
-            m = _TAG_RE.match(seg)
-            if m is None:
-                kept.append(seg)            # free text survives
-                continue
-            shop = _shop_key_for_tag(m.group(1))
-            priced = any(
-                col is not None and len(row) > col
-                and str(row[col]).strip()
-                for col in (_perm_column_for(shop),
-                            _special_column_for(shop)))
-            if priced:
-                kept.append(seg)
-            else:
-                lines.append(f"{names.get(shop, shop)}: {name} — "
-                             f"orphan comment '{seg}' removed")
-                changed = True
-        rebuilt = "; ".join(kept)
-        if rebuilt != cell:
-            row[comments_col] = rebuilt
-    if changed:
-        worksheet.clear()
-        worksheet.update(values=grid,
-                         range_name=f"A1:J{len(grid)}")
-    return lines
-```
-
-Error boundary: missing/empty tab → `[]` (mirrors the sweep). No new
-imports (`re`, `TAB_COLUMNS`, `STORE_COLUMNS`, `_TAG_RE`,
-`_shop_key_for_tag`, `_grid_col`, `_perm_column_for`,
-`_special_column_for`, `SECTION_ORDER` are all module-level already).
-
-**Verify:**
+**Remote VPS:**
 ```bash
-"$USERPROFILE/anaconda3/python.exe" -m py_compile core/local_deals.py
-"$USERPROFILE/anaconda3/python.exe" -m pytest tests/test_local_deals.py -k "repair" -q
+ssh myvps 'docker exec openclaw-core python3 /app/tasks/ai-tools/grocery-price-tracker/tools/sheet_backup.py && ls /home/ubuntu/openclaw/tasks/ai-tools/grocery-price-tracker/backups/'
+ssh myvps 'crontab -l | grep sheet_backup'                   # expect the 03:17 line
 ```
+**STOP conditions (abort the session, report, no writes):** any exit
+≠ 0; today's JSON absent locally or on the VPS; cron line missing.
+Also confirm the pre-migration artifact
+`grocery-tracker-backup-2026-09-09.json` still exists on both sides at
+close (daily files never replace it).
 
-## Task 3 — CLI flag `--comment-repair`
+## S1 — Migration tool, preview mode (code only; no writes)
 
-**File:** `grocery_price_cli.py` (parent root; 2 small inserts)
-
-**(a) Parser — insert immediately after the `--expire-sweep` block
-(anchor: lines 463–467, before `ld.set_defaults(func=_cmd_local_deals)`):**
+**File:** `grocery-price-tracker/tools/migrate_v2.py` (NEW). Pure
+grid-in/grid-out helpers (offline-testable); only `main()` touches the
+sheet. CLI: `preview` · `apply-stay-leave` · `apply-columns` ·
+`apply-parity` · `audit`.
 
 ```python
-    ld.add_argument("--comment-repair", action="store_true",
-                    help="Strip shop-tagged Comments segments whose "
-                         "shop has no price left in the row (both "
-                         "permanent + special cells empty) — clears "
-                         "the pre-fix sweep residue")
-```
-
-**(b) Handler — insert immediately after the `expire_sweep` handler
-block (anchor: after its `return 0` at line 4129, before the
-`provision_topic` block):**
-
-```python
-    if getattr(args, "comment_repair", False):
-        from core.sheets_client import connect_spreadsheet
-        from core.local_deals import (ensure_local_deals_tab,
-                                      repair_orphan_comments)
-        worksheet = ensure_local_deals_tab(connect_spreadsheet())
-        removed = repair_orphan_comments(worksheet)
-        print(f"[local-deals] comment repair: {len(removed)} "
-              f"orphan segment(s) removed")
-        for line in removed:
-            print(f"  • {line}")
-        return 0
-```
-
-Placement note: this sits in the flag-check chain that runs BEFORE any
-default scan action, so `local-deals --comment-repair` (flag alone)
-does exactly one thing and returns. Mirror the expire-sweep handler's
-import style exactly.
-
-**Verify:**
-```bash
-"$USERPROFILE/anaconda3/python.exe" -m py_compile grocery_price_cli.py
-"$USERPROFILE/anaconda3/python.exe" grocery_price_cli.py local-deals --help
-# expect the new flag listed; running it bare waits for Task 6 (live sheet)
-```
-
-## Task 4 — Full sheet backup utility (work-order deliverable)
-
-**File:** `grocery-price-tracker/tools/sheet_backup.py` (NEW — the
-designated home for the v2 one-shot utilities; Round 2's migration
-tools land here too. Recorded as a §16 interpretation: the spec
-authorizes "one-time migration/parity utilities" without naming a
-folder — `tools/` is it.)
-
-```python
-"""One-shot FULL Google Sheet backup (v2 rebuild Round 1).
-
-Copies the grocery spreadsheet (EVERY tab) to a new spreadsheet named
-grocery-tracker-backup-YYYY-MM-DD, then re-opens the copy and verifies
-each tab's row count + row width against the source. Exit 0 = every
-tab verified; exit 1 = any mismatch or failure (copy kept for
-inspection). Never prints secret values.
-
-Run from the tracker root:
-  anaconda3/python.exe tools/sheet_backup.py
+"""One-shot v2 sheet migration (Round 2). Subcommands:
+  preview           — G1/G2/G3 previews (read-only)
+  apply-stay-leave  — G1 outcome: Archive tab + retire rows
+  apply-columns     — G2 outcome: drop E,F,J,K,L,N
+  apply-parity      — G3 outcome: halal renames + blank master rows +
+                      Local_Deals col K + positional alignment
+  audit             — parity audit via tools/parity_audit.audit
 """
-from __future__ import annotations
+KEEP_SETS = (BUTCHERY_DOMAIN, PRODUCE_SUBCATEGORIES)   # core.local_deals
+BORDERLINE = {"lettuce", "coriander", "greek salad"}   # user rules at G1
 
-import sys
-from pathlib import Path
+def stay_leave(master_grid: list[list]) -> dict:
+    """{'keep': [...], 'leave': [...], 'borderline': [...]} (row dicts
+    w/ row#, name, code, sub_category). Keep iff
+    normalize_subcategory(grid[i][16]) ∈ a KEEP set; BORDERLINE labels
+    listed separately (default: NOT kept unless the user moves them)."""
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+def build_archive_grid(master_grid: list[list]) -> list[list]:
+    """Verbatim full 19-column copy incl. header (spec §3.4)."""
 
-from core.sheets_client import connect_spreadsheet  # noqa: E402
+def drop_columns(master_grid: list[list]) -> list[list]:
+    """Remove 0-based indices [4, 5, 9, 10, 11, 13] (E,F,J,K,L,N).
+    Assert the result header == the 13 headers of spec §3.1 in order;
+    raise (do not write) on any mismatch."""
 
+def plan_halal_renames(ld_grid: list[list]) -> list[tuple[int, str, str]]:
+    """BUTCHERY-section item rows whose base name lacks 'halal'
+    (case-insensitive) → (row_idx, old_name, 'Halal ' + old_name).
+    FRUITS/OTHER rows untouched (spec §5)."""
 
-def tab_counts(spreadsheet) -> list[tuple[str, int, int]]:
-    """[(title, data-row count, max row width)] for every tab."""
-    out: list[tuple[str, int, int]] = []
-    for ws in spreadsheet.worksheets():
-        grid = ws.get_all_values() or []
-        width = max((len(r) for r in grid), default=0)
-        out.append((ws.title, len(grid), width))
-    return out
+def plan_new_master_rows(ld_grid: list[list], master_grid_13: list[list],
+                         ) -> list[dict]:
+    """Unpaired LD item rows (no master row whose canonical base name
+    matches — reuse core.local_deals.canonical_key + _base_name) →
+    [{'name': …, 'code': …, 'subcategory': …}]. Name gets the 'Halal '
+    prefix for BUTCHERY-section rows only; subcategory = the item's
+    domain label ('fruit & veg' / the butchery label). Codes: 3 letters
+    A–Z minus I/L/O, unique vs all existing master codes."""
 
+def align_grids(master_grid_13, ld_grid_11) -> tuple[list, list]:
+    """Positional alignment (spec §3.3). Unified order = LD item rows
+    in tab order (LD section rows FRUITS/BUTCHERY/OTHER preserved on
+    the LD side only), then Wool-only master rows appended at the END —
+    each mirrored by a BLANK LD item row (Col A empty, code in col K).
+    Master data row N ↔ LD row N+1; master carries NO section rows."""
 
-def compare_counts(src: list[tuple[str, int, int]],
-                   dst: list[tuple[str, int, int]]) -> list[str]:
-    """Mismatch lines ('Products_Master: 113x19 -> 110x19'); empty =
-    identical (order-insensitive by title). Missing tabs mismatch."""
-    dst_map = {t: (r, w) for t, r, w in dst}
-    lines: list[str] = []
-    for title, rows, width in src:
-        got = dst_map.get(title)
-        if got is None:
-            lines.append(f"{title}: MISSING from backup")
-        elif got != (rows, width):
-            lines.append(f"{title}: {rows}x{width} -> "
-                         f"{got[0]}x{got[1]}")
-    return lines
-
-
-def main() -> int:
-    from datetime import date
-    try:
-        src = connect_spreadsheet()
-        title = f"grocery-tracker-backup-{date.today():%Y-%m-%d}"
-        before = tab_counts(src)
-        resp = src.copy(title=title)
-        new_id = (resp["spreadsheetId"] if isinstance(resp, dict)
-                  else resp.id)
-        print(f"[backup] copy created: {title}")
-        print(f"[backup] "
-              f"https://docs.google.com/spreadsheets/d/{new_id}/edit")
-        dst = src.client.open_by_key(new_id)
-        problems = compare_counts(before, tab_counts(dst))
-        for t, rows, width in before:
-            mark = "FAIL" if any(t in p for p in problems) else "ok"
-            print(f"[backup] {mark}: {t} {rows} rows x {width} cols")
-        if problems:
-            print("[backup] VERIFICATION FAILED:")
-            for p in problems:
-                print(f"  • {p}")
-            return 1
-        print("[backup] BACKUP VERIFIED — all tabs match")
-        return 0
-    except Exception as exc:  # noqa: BLE001 — secret-free report
-        print(f"[backup] FAILED: {exc}")
-        return 1
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+def main() -> int    # argparse dispatch; apply-* ask nothing (the
+                     # SESSION owns the gates); every apply verifies
+                     # its own post-state and prints it
 ```
-
-(Coder note: if `src.client.open_by_key` is unavailable on the
-installed gspread version, use a fresh `gspread.authorize` on the
-same credentials — but NO new pip installs. The backup copy retains
-the source's tab set by default; no permission changes are needed.)
 
 **Verify:**
 ```bash
-"$USERPROFILE/anaconda3/python.exe" -m py_compile tools/sheet_backup.py
-"$USERPROFILE/anaconda3/python.exe" -m pytest tests/test_sheet_backup.py -q
+"$USERPROFILE/anaconda3/python.exe" -m py_compile tools/migrate_v2.py
+"$USERPROFILE/anaconda3/python.exe" -m pytest tests/test_migrate_v2.py -q
+"$USERPROFILE/anaconda3/python.exe" tools/migrate_v2.py preview       # live, read-only
 ```
 
-## Task 5 — Regression tests (mandatory, zero-skip, offline-only)
+## G1 — Stay/leave (USER GATE) → `apply-stay-leave`
 
-**File A:** `grocery-price-tracker/tests/test_local_deals.py` — append
-ONE class at end of file. Reuse the existing `FakeWorksheet`,
-`_v2_ws`, `_deal` helpers and the column indexes used by
-`TestSweepExpiredSpecials` (FRUITS section row, fruitopia special =
-index 6, comments = index 9). Mirror neighboring tests' deal-dict
-shape for fruitopia merges (see `TestTabDedupWordOrder`).
+Preview: KEEP (~10, with codes + sub-categories), BORDERLINE (4 rows),
+LEAVE (~102, names only + count). User moves rows between lists at the
+gate; the ruling is recorded verbatim in the session report. **APPLY?
+(y/n)** →
+1. Create `Archive` tab; write the FULL current master grid (113×19).
+2. Delete confirmed-LEAVE rows from Products_Master bottom-up
+   (`delete_rows(i)` in DESCENDING row order so indices hold).
+3. Verify + print: Archive 113×19; master = header + confirmed keeps.
 
-```python
-class TestCommentLifecycleRound1(unittest.TestCase):
-    """Round-1 audit pins: no path orphans a shop-tagged comment."""
+## G2 — Column drop (USER GATE) → `apply-columns`
 
-    def test_manual_reprice_without_note_clears_segment(self):
-        # A4: plain --set-special over a multibuy cell -> the [FRU]
-        # promo segment must die with the old price.
-        ws = _v2_ws([
-            ["FRUITS", "", "", "", "", "", "", "", "", ""],
-            ["Carrots /ea", "", "", "", "", "",
-             "0.75 (till 12 Sep)", "", "",
-             "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
-        ])
-        ld.set_store_prices(ws, "fruitopia", "special",
-                            [{"item": "Carrots", "price": 0.60,
-                              "unit": "ea"}])
-        grid = ws.get_all_values()
-        self.assertEqual(str(grid[3][6]), "0.6")
-        self.assertEqual(grid[3][9], "")
+Preview: the spec §3.1 table mapped onto the live header (old→new
+letters). **APPLY? (y/n)** → `delete_columns(i)` 1-based indices
+**14, 12, 11, 10, 6, 5 — strictly descending (N, L, K, J, F, E)**.
+Verify header equals EXACTLY:
+`Product_Name, Category, Size, Woolworths_Price, Brand_Type,
+Last_Updated, Search_Keyword_Woolworths, Woolworths_Specials,
+Rewards_Points, Keywords, Sub_Category, Item_Code, Preferred`.
 
-    def test_manual_reprice_with_note_replaces_segment(self):
-        ws = _v2_ws([
-            ["FRUITS", "", "", "", "", "", "", "", "", ""],
-            ["Carrots /ea", "", "", "", "", "",
-             "0.75 (till 12 Sep)", "", "",
-             "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
-        ])
-        ld.set_store_prices(ws, "fruitopia", "special",
-                            [{"item": "Carrots", "price": 0.60,
-                              "unit": "ea", "note": "3 for $1.80"}])
-        self.assertEqual(
-            ws.get_all_values()[3][9], "[FRU] 3 for $1.80")
+## G3 — Parity migration (USER GATE) → `apply-parity`
 
-    def test_manual_new_row_note_still_tags_shop(self):
-        ws = _v2_ws([["FRUITS", "", "", "", "", "", "", "", "", ""]])
-        ld.set_store_prices(ws, "fruitopia", "special",
-                            [{"item": "Celery", "price": 1.20,
-                              "unit": "ea", "note": "fresh cut"}])
-        self.assertEqual(
-            ws.get_all_values()[3][9], "[FRU] fresh cut")
+Preview prints ALL of: halal rename list; new blank master rows with
+codes (~unpaired LD items); Local_Deals col-K append + backfill plan;
+final aligned order (side-by-side counts + first/last 5 pairs).
+**APPLY? (y/n)** → in order:
+1. **S4** renames on Local_Deals (`Halal xxx`, BUTCHERY rows only).
+2. Blank master rows APPENDED at the bottom (13-col row: name,
+   Item_Code, Sub_Category only — D/G stay BLANK; spec §4.2).
+3. LD col K: header `Item_Code` + the paired master code on every item
+   row (existing code for matched rows, the new code for created rows;
+   blank Wool-only LD rows carry their master code too).
+4. **S7** alignment: rewrite both tabs via `align_grids` — one
+   `clear()` + one `update()` per tab (`A1:M{n}` master / `A1:K{n}` LD).
+5. `tools/migrate_v2.py audit` → must print ALIGNED.
 
-    def test_merge_plain_reprice_clears_segment(self):
-        # A2 merge-level pin (FIX-4 was parser-level tested).
-        ws = _v2_ws([
-            ["FRUITS", "", "", "", "", "", "", "", "", ""],
-            ["Carrots /ea", "", "", "", "", "",
-             "0.75 (till 12 Sep)", "", "",
-             "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
-        ])
-        ld.merge_store_tab(ws, "fruitopia", [
-            {"item": "Carrots", "category": "fruit",
-             "price_kind": "single", "price": 0.6, "unit": "ea"}])
-        grid = ws.get_all_values()
-        row = next(r for r in grid if str(r[0]).startswith("Carrots"))
-        self.assertEqual(str(row[6]), "0.6")
-        self.assertEqual(row[9], "")
+## S5w — Widen ALL Local_Deals grid writers to 11 columns (code; run BEFORE any ingest/sweep can fire again)
 
-    def test_merge_dropped_item_keeps_cell_and_comment_together(self):
-        # A3 design pin: a post that no longer lists the item leaves
-        # cell AND comment TOGETHER (board rotation never deletes;
-        # the sweep clears the pair later — test_expired_cell_…).
-        ws = _v2_ws([
-            ["FRUITS", "", "", "", "", "", "", "", "", ""],
-            ["Carrots /ea", "", "", "", "", "",
-             "0.75 (till 12 Sep)", "", "",
-             "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
-        ])
-        ld.merge_store_tab(ws, "fruitopia", [
-            {"item": "Apples", "category": "fruit",
-             "price_kind": "single", "price": 2.5, "unit": "kg"}])
-        row = next(r for r in ws.get_all_values()
-                   if str(r[0]).startswith("Carrots"))
-        self.assertEqual(row[6], "0.75 (till 12 Sep)")
-        self.assertIn("[FRU]", row[9])
+**File:** `grocery-price-tracker/core/local_deals.py` — mechanical:
+1. `TAB_COLUMNS` (~line 1062): append `("item_code", "Item_Code")` →
+   `len(TAB_COLUMNS) == 10`; every width normalization
+   (`len(TAB_COLUMNS) + 1`) becomes 11 automatically.
+2. Every literal `range_name=f"A1:J{...}"` → `f"A1:K{...}"`
+   (`grep -n 'A1:J' core/local_deals.py` must return ZERO at the end —
+   expect ~5 sites: merge_store_tab, sweep_expired_specials,
+   set_store_prices, repair_orphan_comments, rebuild_tab, plus any the
+   grep finds).
+3. Extend hardcoded blank-row literals (`"", "", …` of length 9/10) by
+   one `""` (grep the 9-`""` literal; the inserted-rows code that uses
+   `[""] * len(TAB_COLUMNS)` scales by itself — verify, don't touch).
+4. `_load_master_rows` remap to the 13-col layout: name 0, category 1,
+   size 2, wool_price 3, subcategory **10**; DROP `coles_price` from
+   the returned dicts and delete the Coles arm of the standout compare
+   (>20% vs raw D only — spec Q20). Grep `coles_price` and `r\[4\]` in
+   the compare chain to catch every reader.
 
-    def test_repair_strips_orphan_segments(self):
-        # A7: the live residue shape (rows 115/116) — empty FRU cells.
-        ws = _v2_ws([
-            ["FRUITS", "", "", "", "", "", "", "", "", ""],
-            ["Celery /ea", "", "", "", "", "", "", "", "",
-             "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
-            ["Carrots 1kg Bag /ea", "", "", "", "", "", "", "", "",
-             "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
-        ])
-        lines = ld.repair_orphan_comments(ws)
-        self.assertEqual(len(lines), 2)
-        grid = ws.get_all_values()
-        self.assertEqual(grid[3][9], "")
-        self.assertEqual(grid[4][9], "")
-        self.assertEqual(grid[3][0], "Celery /ea")   # row KEPT
-        self.assertEqual(ld.repair_orphan_comments(ws), [])  # idem.
-
-    def test_repair_keeps_segment_when_shop_priced(self):
-        ws = _v2_ws([
-            ["FRUITS", "", "", "", "", "", "", "", "", ""],
-            ["Carrots /ea", "", "", "", "", 6.50, "", "", "",
-             "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
-        ])
-        self.assertEqual(ld.repair_orphan_comments(ws), [])
-        self.assertIn("[FRU]", ws.get_all_values()[3][9])
-
-    def test_repair_preserves_untagged_text_and_other_shops(self):
-        ws = _v2_ws([
-            ["FRUITS", "", "", "", "", 6.50, "", "", "",
-             "[FRU] note; loose text; [MER] orphan note"],
-        ])
-        lines = ld.repair_orphan_comments(ws)
-        self.assertEqual(len(lines), 1)          # only MER stripped
-        self.assertEqual(ws.get_all_values()[3][9],
-                         "[FRU] note; loose text")
-
-    def test_repair_no_tags_writes_nothing(self):
-        ws = _v2_ws([
-            ["FRUITS", "", "", "", "", "", "", "", "", ""],
-            ["Carrots /ea", "", "", "", "", 6.50, "", "", "",
-             "loose text only"],
-        ])
-        self.assertEqual(ld.repair_orphan_comments(ws), [])
-        self.assertEqual(ws.clear_calls, 0)
-```
-
-**File B:** `grocery-price-tracker/tests/test_sheet_backup.py` (NEW):
-
-```python
-"""Offline tests for tools/sheet_backup.compare_counts (no network)."""
-import sys
-import unittest
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-from sheet_backup import compare_counts
-
-
-class TestCompareCounts(unittest.TestCase):
-    def test_identical_passes(self):
-        src = [("Products_Master", 113, 19), ("Local_Deals", 133, 10)]
-        self.assertEqual(compare_counts(src, list(src)), [])
-
-    def test_row_mismatch_flagged(self):
-        src = [("Products_Master", 113, 19)]
-        self.assertEqual(
-            compare_counts(src, [("Products_Master", 110, 19)]),
-            ["Products_Master: 113x19 -> 110x19"])
-
-    def test_missing_tab_flagged(self):
-        self.assertEqual(
-            compare_counts([("Local_Deals", 133, 10)], []),
-            ["Local_Deals: MISSING from backup"])
-
-
-if __name__ == "__main__":
-    unittest.main()
-```
-
-**Verify (all of Task 5, zero skips):**
+**Verify:**
 ```bash
-"$USERPROFILE/anaconda3/python.exe" -m pytest tests/test_local_deals.py -k TestCommentLifecycleRound1 -q
-"$USERPROFILE/anaconda3/python.exe" -m pytest tests/test_sheet_backup.py -q
+"$USERPROFILE/anaconda3/python.exe" -m py_compile core/local_deals.py
+grep -n "A1:J" core/local_deals.py          # MUST output nothing
+"$USERPROFILE/anaconda3/python.exe" -m pytest tests/test_local_deals.py tests/test_cli.py -q
+```
+
+## S6 — Dispatch-disable retired v1 commands (one-line notice)
+
+**File:** `grocery_price_cli.py` (parent root). One constant + one
+intercept before the `args.func(args)` call in `main()` (locate the
+dispatch anchor by grepping `args.func`):
+
+```python
+# v2 migration (Round 2): these paths read dead columns. Round 3
+# deletes them; Round 4 rebuilds wednesday. Notice + exit 0.
+RETIRED_V1 = {"compare", "optimize", "shop", "prefer", "recipe",
+              "search", "rewards", "map", "todo", "add-to-list",
+              "searched-items", "missed-pricing", "no-price",
+              "lists", "unmapped", "specials-scan", "update",
+              "sync", "wednesday", "backfill-keywords",
+              "backfill-sizes", "backfill-subcategories",
+              "backfill-codes", "backfill-home-brands",
+              "subcategories", "live-refresh"}
+# in main(), after parse_args, before args.func(args):
+#   if getattr(args, "cmd", "") in RETIRED_V1:
+#       print("[v2] retired by the migration — returns in Round 3/4; "
+#             "the sheet is the source of truth until then")
+#       return 0
+```
+Stays LIVE: `local-deals` (all flags), `specials`, `price`, `list`.
+(Offline module tests of retired commands keep passing — modules are
+untouched; only dispatch changes.)
+
+**Verify:**
+```bash
+"$USERPROFILE/anaconda3/python.exe" grocery_price_cli.py compare --items "milk"   # notice, exit 0
+"$USERPROFILE/anaconda3/python.exe" grocery_price_cli.py local-deals --help       # unchanged
+"$USERPROFILE/anaconda3/python.exe" grocery_price_cli.py specials --store woolworths
+```
+
+## S7s — Keep `specials` alive (read-only remap)
+
+**File:** `grocery-price-tracker/core/specials_reporter.py` — remap to
+the 13-col layout: WW price D (3, unchanged), specials M(12) → **H(7)**,
+rewards O(14) → **I(8)**; delete the Coles specials arm. Update its
+tests' fixtures to the 13-col width (tests/test_specials_flags.py).
+
+**Verify:** `pytest tests/test_specials_flags.py tests/test_telegram_format.py -q` + the live `specials` run above.
+
+## S8 — Minimal v2 read path: `price` + `list`
+
+**File:** `grocery-price-tracker/core/v2_read.py` (NEW):
+
+```python
+"""v2 sheet-only read path (spec §6/§8). ONE master read + ONE
+Local_Deals read per command. Never writes. Never live-searches."""
+
+def read_tabs() -> tuple[list[dict], list[dict]]:
+    """master: {row, name, size, ww_raw, ww_num, keyword, specials,
+    aliases, subcategory, code, gone (bool), na_marker (str|None)};
+    ld: {row, name, prices: {shop_key: (float, 'special'|'permanent')},
+    code} — special-first via core.local_deals.tab_store_price."""
+
+def is_meat_query(query: str) -> bool          # core.halal.is_meat_term
+
+def lookup_item(query: str, master_rows, ld_rows) -> dict:
+    """Exact Col A / alias (col J) match, case-insensitive; a MEAT
+    query resolves only through rows whose name contains 'halal'
+    (spec §5); returns one result dict per the §8 table (tracked /
+    gone / na_marker / missing-with-code / not-tracked / out-of-domain
+    — lookup NEVER raises on a miss)."""
+
+def missing_list(master_rows, ld_rows) -> list[dict]:
+    """§6 rule: local side has ≥1 shop price AND D has no real price
+    AND D != 'GONE' AND keyword col G empty → {code, name, best_local,
+    shops}. Every entry carries its code."""
+
+def render_lookup(result: dict) -> str    # style-LITE plain lines
+def render_list(items: list[dict]) -> str  # '[CODE] name — best $X (shop)' lines + count
+```
+
+**File:** `grocery_price_cli.py` — two new subparsers (`price --item X`
+required; `list`), thin handlers calling `v2_read` + printing the
+render. One sheet read per tab per call (`list` budget ≤5s).
+
+**Verify:**
+```bash
+"$USERPROFILE/anaconda3/python.exe" -m pytest tests/test_v2_read.py -q
+"$USERPROFILE/anaconda3/python.exe" grocery_price_cli.py list
+"$USERPROFILE/anaconda3/python.exe" grocery_price_cli.py price --item "halal beef mince"
+```
+
+## S9 — Parity audit utility (A2 semantics; Round 4 wires it into Wednesday)
+
+**File:** `grocery-price-tracker/tools/parity_audit.py` (NEW):
+
+```python
+def audit(master_grid: list[list], ld_grid: list[list]) -> dict:
+    """{'status': 'aligned' | 'bottom_append' | 'middle_insert',
+    'misses': [row dicts], 'alert': str | None}.
+    Pairs: master data row N (Item_Code col L, idx 11) ↔ LD row N+1
+    (code col K, idx 10). Aligned → silence line. Extra rows at the END
+    of either tab → 'bottom_append' + the rows (Round 4's Wednesday
+    AUTO-MIRRORS those; this round only reports). A code break INSIDE
+    the sequence → 'middle_insert' + alert VERBATIM (spec §18/A2):
+    'row #N was inserted in the middle — move it to the bottom
+    manually and run sync again to copy it over to the other sheet.'"""
+```
+
+**Verify:** `pytest tests/test_parity_audit.py -q` (all three statuses,
+verbatim alert string) + live `tools/migrate_v2.py audit` → ALIGNED.
+
+## S10 — Regression tests (mandatory, zero-skip, offline, grid fixtures)
+
+1. `tests/test_migrate_v2.py` — stay/leave (incl. borderline +
+   blank-subcategory rows), `drop_columns` exact header + index
+   correctness, rename plan touches BUTCHERY only, new-row plan
+   (prefix rule + code uniqueness, no I/L/O), `align_grids` (counts,
+   per-position code pairing, blank-LD-row shape), `apply-*`
+   idempotence on a FakeSheet (second run = zero changes).
+2. `tests/test_local_deals.py` additions — **writer-width regression**
+   (the col-K truncation trap): after EACH of `merge_store_tab`,
+   `sweep_expired_specials`, `set_store_prices`,
+   `repair_orphan_comments` writes, col-K codes survive intact (4
+   tests minimum); standout is WW-only; `_load_master_rows` parses the
+   13-col layout.
+3. `tests/test_v2_read.py` — one test per §8 table row (9 cases) + §6
+   list-rule cases (listed: blank D+G + local price; NOT listed: GONE,
+   keyword-only, price-only, no-local-price) + meat-query halal
+   scoping (plain non-halal meat row invisible to a meat query).
+4. `tests/test_parity_audit.py` — as S9.
+
+**Full suite:** expect **1319 + ~25 new, 0 failed, 0 skipped**:
+```bash
 "$USERPROFILE/anaconda3/python.exe" -m pytest tests/ -q
 ```
-Expected: 9 new local_deals tests + 3 backup tests green; full suite
-green (baseline 1250 → 1262). NO test may be skipped or marked xfail.
 
-## Task 6 — Live execution (scripted; Local Terminal only)
+## S11 — Live acceptance + close-out
 
-Order matters: backup FIRST, then the repair.
+1. `tools/migrate_v2.py audit` → ALIGNED (print in the report).
+2. `grocery_price_cli.py list` — eyeball vs the sheet; report the
+   day-one count (expected ≤ ~105, spec §18/A1).
+3. Three spot lookups: one meat term (e.g. `price --item "halal beef
+   mince"`), one F&V, one archived name (expect the not-tracked /
+   out-of-domain class of answer).
+4. Final user eyeball of both tabs (gate-closing look — not a new gate).
+5. Suite green → commits (tracker: tools/, core/, tests/, plan; parent:
+   `grocery_price_cli.py`) → push → scp runtime files
+   (`grocery_price_cli.py`, `core/local_deals.py`, `core/v2_read.py`,
+   `core/specials_reporter.py`, `tools/migrate_v2.py`,
+   `tools/parity_audit.py`) to the VPS mirror → md5-verify → report
+   three-way sync status.
 
-```bash
-# 1. Full sheet backup (expect: BACKUP VERIFIED — all tabs match:
-#    Products_Master, User_Shopping_Lists, Price_History, Local_Deals)
-cd "C:/Users/User.DESKTOP-R2G441H/Documents/AI related/grocery-price-tracker"
-"$USERPROFILE/anaconda3/python.exe" tools/sheet_backup.py
+## Acceptance criteria (rebuild-plan Round 2)
 
-# 2. Orphan repair on the LIVE tab (expect: the 2 known segments —
-#    Celery row 115 + Carrots row 116 — plus any others the scan
-#    finds, each printed with a '•' line; second run reports 0)
-cd ..
-"$USERPROFILE/anaconda3/python.exe" grocery_price_cli.py local-deals --comment-repair
-"$USERPROFILE/anaconda3/python.exe" grocery_price_cli.py local-deals --comment-repair
+1. Parity audit passes — row counts equal (offset +1), every
+   Local_Deals row carries a resolvable code, every §6 list-rule case
+   renders correctly.
+2. Backup net untouched: pre-migration JSON present locally + VPS at
+   close; S0 refreshed all three backup legs before any write.
+3. User confirms G1/G2/G3 previews (rulings recorded in the report).
+4. `price` + `list` answer from the live sheet (`list` ≤5s).
+5. Full suite green, zero skips; three-way sync in sync.
 
-# 3. Post-state probe: read the live Comments column and assert no
-#    tagged segment remains on any row whose shop cells are both
-#    empty (scratch tmp_* probe script; delete it after the check)
-```
+## Rollback
 
-Failure boundary: if the backup exits 1, STOP — do not run the repair;
-report the mismatch lines verbatim. If the repair output exceeds the
-two known orphans, list every line in the report (each is a correct
-strip by the rule, but the report must show them all).
-
-## Task 7 — Suite, commit, three-way sync
-
-**Local Terminal (both repos — the CLI file is parent-repo, the rest
-are tracker-repo; commit ONLY the files this round touched):**
-```bash
-cd "C:/Users/User.DESKTOP-R2G441H/Documents/AI related/grocery-price-tracker"
-"$USERPROFILE/anaconda3/python.exe" -m pytest tests/ -q        # expect 1262 passed, 0 failed
-
-git add core/local_deals.py tests/test_local_deals.py tests/test_sheet_backup.py tools/sheet_backup.py implementation-plan.md
-git commit -m "R1 plan + comment lifecycle: manual plain reprice clears the shop segment (audit A4 fix), repair_orphan_comments + --comment-repair (A7 residue: Local_Deals rows 115/116), tools/sheet_backup.py full-backup utility; audit A1-A6 pinned/documented"
-git push origin feature/qrs-shop-multibuy
-
-cd ..
-git add grocery_price_cli.py
-git commit -m "R1: local-deals --comment-repair flag (orphan comment residue cleanup)"
-git push origin feature/qrs-shop-multibuy
-```
-
-**Remote VPS (runtime mirror — the backup/repair run LOCAL-only, but
-the changed code files must mirror):**
-```bash
-scp grocery_price_cli.py myvps:/home/ubuntu/openclaw/tasks/ai-tools/grocery_price_cli.py
-scp grocery-price-tracker/core/local_deals.py myvps:/home/ubuntu/openclaw/tasks/ai-tools/grocery-price-tracker/core/local_deals.py
-scp grocery-price-tracker/implementation-plan.md myvps:/home/ubuntu/openclaw/tasks/ai-tools/grocery-price-tracker/implementation-plan.md
-# checksum-verify both code files (md5sum local vs ssh myvps md5sum) — pairs must match
-```
-
-**Manual steps: NONE.** Everything above is agent-executable; the only
-human-visible artifacts are the backup URL (report it) and the repair
-report lines (quote them verbatim in the coder report).
-
-## Acceptance criteria (from rebuild-plan.md Round 1)
-
-1. Every audit row A1–A7 has either a pre-existing test, a new test,
-   or a documented no-path conclusion in the coder report.
-2. Rows 115/116 clean on the live tab; a follow-up `--comment-repair`
-   run reports 0.
-3. Backup spreadsheet exists, all 4 tabs verified (URL + counts in the
-   report); backup exit code 0.
-4. Full suite green, zero skips (expect 1262 passed).
-5. Both repos pushed; VPS md5s match local; report ends with the
-   three-way sync status (in sync / not, one line).
-
----
-
-## ADDENDUM (orchestrator corrections, 2026-09-09 — binding, same authority as the plan)
-
-1. **MISSING SCOPE RESTORED — A3 test-hygiene riders (spec §18/A3, rebuild-plan Round 1 item 4).** The plan omitted them. Add as Task 5b (tests/test_cli.py + tests/test_local_deals.py):
-   - (a) `TestCLI::test_specials_leads_with_fresh_report` — the fixture crafts a Wednesday report "generated 2026-09-02", which aged out of the ≤7-day window on Sep 9. Fix: generate the fixture date ROLLING (e.g. `_dt.now() - 1 day`) so the test cannot rot again.
-   - (b) `TestScanWindowsAndCutoff::test_between_alerts_window_enforced` — the final scenario's post is created 0.05s before its scan; when two consecutive `run_daily_scan` calls execute <50ms apart the assertion misses (1-in-4 flake). Fix: widen the offset to 5s.
-   - Acceptance: both tests pass on 10 consecutive suite runs; no other test changes.
-2. **CORRECTED TEST-COUNT EXPECTATIONS (Task 7 / acceptance criterion 4).** The plan's "baseline 1250 → 1262" is stale (round-2 era). Current reality: **1307 collected (1306 passed + 1 failed = the date-rot nit)**. After this round WITH the restored A3 riders: expect **1319 collected, 1319 passed, 0 failed, 0 skipped** (1307 + 9 comment-lifecycle + 3 backup + 2 rider-fixes do not add tests, they fix existing ones... net = 1319 total, all green).
-3. **FakeWorksheet note (Task 5):** `test_repair_no_tags_writes_nothing` asserts `ws.clear_calls == 0` — if the shared `FakeWorksheet` does not track `clear()` calls, add a counter to it (one attribute + one increment); do NOT weaken the assertion.
-4. Everything else in the plan stands as written. The coder follows plan + this addendum; any further deviation = STOP and report.
+The pre-migration JSON (complete 4-tab grid dump) is the restore
+artifact. Restore is MANUAL by design (spec §3.4 philosophy — a wrong
+automated restore is worse than a slow manual one): rewrite the tabs
+from the JSON; the migration tool ships no `restore` subcommand.
