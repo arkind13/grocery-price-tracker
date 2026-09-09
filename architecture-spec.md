@@ -1,545 +1,359 @@
-# Architecture Spec — Sub-Categories (Q), Item-Codes (R), Preferred (S), Multi-Buy Pricing & Full-Name Display
+# Architecture Spec — v2 Rebuild: Local Shops vs Woolworths
 
-- **Date:** 2026-09-04
+- **Date:** 2026-09-09
 - **Stage:** 01 Architect (this doc) → 02 Plan → 03 Code → 04 Architect Checker
-- **Status:** DRAFT for user confirmation. Decisions & Trade-offs in §11
-  require sign-off before 02 Plan.
-- **Inputs:** user brief 2026-09-04 (columns Q/R/S, ingestion pipeline,
-  preference state machine, multi-buy logic, name-truncation fix) + full
-  workspace inspection 2026-09-04: `README.md`, `PROJECT-MAP.md`, prior
-  `architecture-spec.md` (Col C cycle), `core/sheets_sync.py`,
-  `core/sheets_client.py`, `core/schema_upgrade.py`, `core/searched_items.py`,
-  `core/telegram_format.py`, `core/price_comparator.py`, `core/uom.py`,
-  `core/lookup.py` (structure), `extractors/models.py`,
-  `extractors/specials_parser.py`, `extractors/woolworths_extractor.py`,
-  `grocery_price_cli.py` (search/map/lists surfaces),
-  `claw-skills/grocery-price/SKILL.md`, `woolworths_master_comparison.csv`,
-  and a **read-only live header read of Products_Master** (16 cols A–P,
-  104 data rows — verified 2026-09-04).
-- **Not read (per role rules):** `pre-arch.md` (no tester involvement
-  stated), `lostbattle.md` (not prompted).
-- **Replaces:** the previous spec at this path (Units Always Visible /
-  Col C cycle, 2026-09-01 — implemented and verified per `test.md`;
-  its history stays in git).
+- **Status:** Interview COMPLETE — 27 questions across 7 themed batches, all
+  answered by the user (decision log §2). READY FOR 02 PLAN. Coding is
+  forbidden until the user approves `rebuild-plan.md`.
+- **Inputs:** `arch-prompt.md` (the work order — supersedes fuzzy-matching
+  assumptions), `README.md`, `PROJECT-MAP.md`,
+  `old md/2026-09-quality-round/` (22-defect history), live sheet probe
+  2026-09-09 (112 master rows; Local_Deals 133×10; orphan `[FRU]` comments
+  confirmed on rows 115/116).
+- **Supersedes:** this file overwrites the 2026-09-05 Local_Deals + halal
+  spec (preserved in git history; the v1 phase docs move to
+  `old md/2026-09-v2-rebuild/` at close-out).
 
 ---
 
-## 1. Goal (plain language)
+## §0 The overriding design law
 
-Today, when you say "compare eggs", the system hunts for a product whose
-*name* looks like "eggs" — it cannot tell that you mean the *category* of
-all egg products, and it has no memory of which egg product you actually
-buy. Multi-buy deals ("2 for $6.00") are detected and filed, but they
-never change comparison math. And long product names get chopped to
-24 characters in search replies ("AJI CRISPY FRY BREADING…").
+**Reduce time-to-answer.** Every command, file, list, and code path must
+either make the user's answer faster or be deleted. New local shops must be
+absorbable WITHOUT re-growing state sprawl: no new ledgers, no new queues,
+no new per-shop cross-checks. The speed budget (§12) is binding — if a
+design choice risks a budget, it is the wrong choice.
 
-This spec adds four things:
+## §1 What the project is (v2 scope)
 
-1. **Three new sheet columns** — Sub-Category (Q), Item-Code (R),
-   Preferred (S) — so every row knows its granular cluster, carries a
-   short unique ID you can type in chat, and can be marked as your
-   default pick for that cluster.
-2. **Ingestion wiring** — every path that creates a row (search add,
-   map add, optimize +add, Wednesday auto-link) fills Q/R/S at creation.
-3. **A shopping-list flow** — "eggs, apples, bread" resolves each item
-   to its sub-category, auto-picks your preferred product, asks you
-   ONE question when no preferred exists, and warns you when you
-   deliberately ask for a non-preferred variant.
-4. **Multi-buy pricing** — "2 for $6.00" is parsed, its per-unit rate
-   ($3.00) is stored, used in comparisons, and always flagged with a
-   "must buy 2+" note. Plus: search results stop cutting names off.
+Compare LOCAL SHOP prices against Woolworths for **mutton, chicken, fruits
+& vegetables**. Everything else the v1 system did (Coles/Aldi sheet
+tracking, basket optimisation, shopping-list flows, preferences, resolve
+sessions, queue convergence) is retired. Coles exists ONLY as a live-search
+result inside the `live` verb — no Coles data ever lands in the sheet.
 
----
+## §2 Decision log (interview 2026-09-09 — 27/27 answered)
 
-## 2. Verified current state (facts the design rests on)
+| # | Theme | Decision |
+|---|-------|----------|
+| Q1 | Kept rows | Sub-category rule: rows whose Sub_Category is raw meat/chicken or fruit/veg stay; coder prints stay/leave list for one-time user confirm |
+| Q2 | Archive | New `Archive` tab, full-row copy with ALL current columns; rows deleted from master; code never reads it; recovery = manual copy |
+| Q3 | Dead columns | Drop E, F, J, K, L, N (all Coles/Aldi); new layout §3.1 |
+| Q4 | Other tabs | `User_Shopping_Lists` + `Price_History` untouched |
+| Q5 | Blank rows | Ingest auto-creates the blank master counterpart row (+Item_Code); writes NO prices, NO keywords |
+| Q6 | Pairing key | NEW Item_Code column on Local_Deals; pairing by code; names may drift |
+| Q7 | Board rotation | Rows survive; deletion is manual only; GONE removes from lists, never deletes rows |
+| Q8 | Shared items | One Local_Deals row (many shop columns) ↔ ONE master row; count = unique items |
+| Q9 | F&V prefix | No halal prefix on fruit-shop items |
+| Q10 | Rename sides | Both sides get the prefix; local side automated in migration; master side matched/renamed manually BY THE USER for existing rows |
+| Q11 | Non-halal twin | Always separate rows — plain non-halal master row stays with blank local side forever |
+| Q12 | Halal marker | The name prefix IS the marker; Keywords col stays aliases-only |
+| Q13 | GONE write | Literal `GONE` into the WW price cell (row kept; real price overwrites it on return) |
+| Q14 | done | Verify-only: re-reads the row; confirms removal or reports what is still blank; writes nothing |
+| Q15 | rename | Renames the item on BOTH tabs; code + prices unchanged |
+| Q16 | remove | Deletes the row on BOTH tabs after an archive copy (the manual row-deletion mechanism) |
+| Q17 | Ingest prefix | ALL items posted by a butchery get the `halal` prefix (regardless of item type); fruit shops never |
+| Q18 | Parity sources | FULL parity — every line incl. Dunya's full website catalogue (row-for-row); new rows going forward come from FB posts + manual entries only |
+| Q19 | Round-1 scope | Delegated to architect → comment-lifecycle fix only (see §17) |
+| Q20 | Standout maths | Local vs RAW WW sheet price, >20% threshold; 5% team discount stays display-only |
+| Q21 | Wednesday reads | Woolworths.docx + Woolworths_Specials.docx ONLY; no pause, no Coles.docx, no scp/queue ceremony |
+| Q22 | List render | Live sheet read on demand (`list` verb) + Wednesday post; no cached snapshot files |
+| Q23 | Lookup reply | Compact block: WW price + all local shop prices + winner; STYLISH (§11) |
+| Q24 | live results | ≤3 compact lines per store (name, price, pack size); tracked-price side note; never writes |
+| Q25 | Verb surface | 6 Telegram verbs + local machinery; everything else deleted (§13) |
+| Q26 | Migration rows | Migration auto-creates blank master rows + codes (preview first); user manually matches/renames existing master rows |
+| Q27 | Alignment | Tabs stay POSITIONALLY aligned: row N on master = row N on Local_Deals (§3.3); Item_Code is the durable key |
 
-| Fact | Evidence |
+## §3 Sheet schema v2
+
+### 3.1 Products_Master (Woolworths-only, 13 columns)
+
+| New col | Header | Was | Notes |
+|---------|--------|-----|-------|
+| A | Product_Name | A | canonical name; `halal xxx` for butchery-sourced meat rows |
+| B | Category | B | |
+| C | Size | C | unit column (unchanged contract) |
+| D | Woolworths_Price | D | real price, `N/A <date>` / `unavailable <date>` markers, or `GONE` |
+| E | Brand_Type | G | `Home` marker kept (home-brand display discount) |
+| F | Last_Updated | H | |
+| G | Search_Keyword_Woolworths | I | THE sync keyword; filled only by the user (or `done`-verified) |
+| H | Woolworths_Specials | M | specials terms incl. `multi-buy 2/$6.00` vocabulary |
+| I | Rewards_Points | O | kept (column survives; no dedicated verb) |
+| J | Keywords | P | aliases only — halal marking lives in the NAME now |
+| K | Sub_Category | Q | drives domain gating + the kept-row rule |
+| L | Item_Code | R | permanent 3-letter ID (A–Z minus I/L/O, unique) — parity key |
+| M | Preferred | S | column survives; `prefer` command dies (no writer; manual only) |
+
+Dropped: E Coles_Price, F Aldi_Price, J/K Coles+Aldi keywords, L Aldi
+Refresh, N Coles_Specials. Column deletion renumbers everything — every
+code reference to old letters G–S must be remapped in the rebuild.
+
+### 3.2 Local_Deals (layout v2.1 — 10 existing columns + 1 new)
+
+A Product · B–I per-shop perm/special columns (unchanged) · J Comments
+(unchanged lifecycle — see Round 1) · **K Item_Code (NEW)** — the master
+code of the paired row. The new column is APPENDED (not inserted) so all
+existing column references stay valid. Shop columns keep the
+permanent/special + validity-stamp + expire-sweep mechanics exactly as-is.
+
+### 3.3 Row alignment (Q27)
+
+Master data row N (N ≥ 2) ↔ Local_Deals row N+1 (Local_Deals row 2 is the
+"Prices valid until" stamp row and is exempt). EVERY insert or removal
+mirrors on both tabs in the same operation. `Item_Code` remains the
+durable key: Wednesday's parity check (§10) verifies alignment from the
+same two reads it already does and reports drift as a warning line —
+repairs are NEVER automatic.
+
+### 3.4 Archive tab
+
+Created at migration: full copy of the pre-migration Products_Master (all
+19 columns, all 112 rows) — this is the on-sheet archive of the ~80
+retired rows and their Coles/Aldi data. Code never reads it.
+
+## §4 Row-parity model (the core invariant)
+
+1. The two tabs carry the SAME item set, ALWAYS — even one-sided items: a
+   local-only item has a master row with BLANK D + BLANK G; a Wool-only
+   item has a Local_Deals row with all shop cells blank.
+2. **Who creates rows:** FB-post ingests and manual local entries
+   auto-create the blank master counterpart (name copied with the source
+   prefix rule §5, code assigned) and route the item to the missing list.
+   The Dunya website catalogue was absorbed ONCE at migration; later site
+   items do NOT auto-create rows. NO code path ever writes prices or
+   keywords to the Wool side — the user fills those manually in the sheet.
+3. **GONE** writes `GONE` into D: item leaves the list, row survives on
+   both tabs, local prices still shown. A returning real price simply
+   overwrites the marker.
+4. **remove** deletes the row on both tabs after copying it to the
+   archive. **rename** renames on both tabs. **Board rotation never
+   deletes anything** — permanent cells persist, special cells die at
+   their stamped expiry (existing sweep).
+5. Same item at several shops = ONE row (several shop columns) ↔ ONE
+   master row. "Same item count" = unique items.
+
+## §5 Halal rules v2
+
+- **Prefix rule (source-based, Q17):** every item ingested from a
+  BUTCHERY source (Dunya FB/site, Merjan) is named `halal xxx`, whatever
+  the item type. Fruit-shop items (Fruitopia, Abu Salim) never carry the
+  prefix. Future shops get the rule by source type at registration.
+- **The marker IS the name prefix** (Q12): a master meat row is halal iff
+  its name contains `halal`. The Keywords column is aliases only.
+- **Matching across tabs** is by Item_Code — but a plain (non-halal)
+  master row NEVER pairs with a butchery item (Q11): they are different
+  items, always separate rows. Plain non-halal meat rows stay forever
+  with a blank local side.
+- **Meat-term lookups** resolve through halal-named rows only (v1's
+  halal-scoped view, simplified to the name test). The LLM live halal
+  verification, auto-add, and verdict cache are DELETED (§13).
+- Migration (Q10): the LOCAL side renames to `halal xxx` automatically
+  (preview printed); the USER manually matches current master rows worth
+  keeping and names them identically; unmatched local items get
+  auto-created blank `halal xxx` master rows + codes (Q26).
+
+## §6 The ONE list
+
+**Definition (computed live from the sheet, never cached):** every row
+where the Local_Deals side has at least one shop price AND the master side
+has no real WW price (D) AND no WW keyword (G) AND D ≠ `GONE`. Each entry
+carries its Item_Code. Wool-only items never appear (their local side is
+blank by definition).
+
+**Exits:** user fills D + G in the sheet and says `done` (verify-only) —
+or `GONE` — or `remove` — or `ignore` (hidden). The ignore list exists but
+is HIDDEN unless requested via the `ignored` verb.
+
+**Render:** the `list` verb (Telegram) and the Wednesday post produce the
+same styled list; both are fresh sheet reads (≤5s budget).
+
+## §7 Command surface (6 Telegram verbs + local machinery)
+
+| Verb | Does | Budget |
+|------|------|--------|
+| `<item>` / "price of X" (NL default) | Sheet-only lookup: WW display price (5% + home-brand extra) + every local shop's price (special-first) + winner (§11 format) | ≤10s |
+| `live <item>` | Direct web search Woolworths + Coles. ≤3 compact lines per store: name, price, pack size. PRICES ONLY — never adds items, never assigns codes, never queues. If a sheet row exists → one side-note line with the tracked WW price. No classifier, no fallback, no investigation turns | ≤20s |
+| `list` | The ONE missing list (§6), fresh from the sheet, styled, coded | ≤5s |
+| `specials` | WW specials from the sheet (col H + D deal rates); Wednesday posts it automatically | ≤10s |
+| `batch <codes+verdicts>` | ONE call: `ABC done; DEF gone; GHI rename halal lamb shoulder; JKL remove; MNO ignore`. Executes all verdicts (§4 semantics), replies per code. The agent is FORBIDDEN from pre-investigation turns — with one sheet and one list there is nothing to investigate | ≤10s |
+| `ignored` | Reveals the hidden ignore list | ≤10s |
+
+**Local machinery (not Telegram verbs):** `wednesday` (§10), the
+`local-deals` family (FB detector, inbox ingest, vision chain, Dunya site
+sync, expire sweep, set-permanent/special, ignore), and the one-time
+migration/parity utilities. Nothing else exists — §13 deletes the rest,
+including `update` (manual price writes happen directly in the sheet).
+
+**NL routing rule for the skill:** any price question → the default
+lookup; the word "live"/"search" → `live`; codes with verdicts → `batch`;
+"the list" → `list`. A sheet miss answers from Local_Deals or "not
+tracked / on the missing list [code]" — live search happens ONLY when the
+user types the live verb. No auto-live-fallback anywhere.
+
+## §8 Search semantics table
+
+| Query state | Default lookup answer |
 |---|---|
-| Sheet `Products_Master` has exactly 16 columns, A–P; Q/R/S are free | live read 2026-09-04: header = Product_Name, Category, Size, Woolworths_Price, Coles_Price, Aldi_Price, Brand_Type, Last_Updated, Search_Keyword_Woolworths, Search_Keyword_Coles, Search_Keyword_Aldi, Aldi Refresh, Woolworths_Specials, Coles_Specials, Rewards_Points, Keywords |
-| 104 data rows; Col B "Category" filled on 77 (coarse: Drinks, Dairy, Vegetables…); Col P aliases filled on all 104 | live read |
-| Existing 3-letter code system (queues only): alphabet A–Z **minus I/O**, no repeated letter, 7-day tombstones | `core/searched_items.py:52-55` |
-| Multi-buy already *detected* (docx path): `2 for $4.50` / `Any 2 \| $9` → M/N cell vocabulary `multi-buy` | `extractors/specials_parser.py` (FOR_RE/ANY_RE, `classify_special`) |
-| Multi-buy NOT captured on live paths: WW search maps only IsOnSpecial/IsHalfPrice/WasPrice/SavingsAmount; Coles maps pricing.now/was/onlineSpecial | `extractors/woolworths_extractor.py:240-251` |
-| Name truncation in search results: `item_block` truncates to `MAX_NAME_WIDTH = 24` cells | `core/telegram_format.py:47,355`; user example 2026-09-04 |
-| Comparator provenance lines already show FULL matched names (no truncation) | `core/price_comparator.py:635-658` |
-| All sheet writes are explicit-range `worksheet.update(values, range_name)` — a short range never clobbers columns outside it | `core/sheets_sync.py` (`_update_with_backoff`) |
-| Row creation funnels through ONE function: `add_product_row` (dup guard + one-line-rule merge live there) | `core/sheets_sync.py:~1040-1227` |
-| The conversational LLM in the loop is the OpenClaw agent (qwen3.7-flash) driven by `claw-skills/grocery-price/SKILL.md`; the CLI itself is deterministic and LLM-free | README §4, SKILL.md |
-| UOM gate semantics (families, 20% band, no per-unit price math) are frozen | `core/uom.py` docstring |
-
----
-
-## 3. Schema — Columns Q, R, S
-
-| Col | Header (exact) | 0-based idx | Content contract |
-|---|---|---|---|
-| Q | `Sub_Category` | 16 | Granular cluster name, lowercase, spaces allowed: `bread`, `apples`, `shredded cheese`, `cheese slice`, `eggs`. Normalisation for matching: lowercase, trim, collapse whitespace/underscores/hyphens→space. Literal marker `needs review` = classifier could not confidently place the row (surfaced by `lists`, never silently re-guessed). |
-| R | `Item_Code` | 17 | Exactly 3 uppercase letters from `ABCDEFGHJKMNPQRSTUVWXYZ` (A–Z minus **I, L, O** — case-insensitive exclusion), **no repeated letter** within a code. Unique across all rows, permanent for the life of the row, never reused after row deletion. |
-| S | `Preferred` | 18 | Empty (default) or the literal `P`. **Invariant: at most ONE `P` per distinct non-empty Sub_Category value.** |
-
-Headers are appended by extending `core/schema_upgrade.py`
-(`NEW_COLUMNS += ["Sub_Category", "Item_Code", "Preferred"]`); the
-command stays idempotent and must be run once at deploy (manual step M1).
-
-**Relationship to Col B:** Col B stays the coarse category (Drinks,
-Dairy…). Col Q is the minute cluster *below* B. Nothing reads B for
-preference logic; backfill may use B as a weak hint only.
-
-**Namespace separation:** Item-Codes (Col R, permanent row identity) are
-a DIFFERENT namespace from the queue codes (`searched_items` /
-`add_to_list`, ephemeral, A–Z minus I/O, tombstoned). They may collide
-by coincidence; contexts never overlap (`prefer ABC` vs `todo done ABC`).
-Accepted risk — see §11 D-IC4.
-
----
-
-## 4. New core modules
-
-| Module | Responsibility |
-|---|---|
-| `core/subcategory.py` (NEW) | Canonical taxonomy (ordered regex→label rules), `classify_subcategory(name, category_hint="") -> (label, confidence)`, `normalize_subcategory(s)`, `SUBCATEGORY_HEADER` constant. Specific-before-generic precedence (e.g. `cheese slice` before `cheese`; `breading`/`breadcrumbs` must NOT match `bread`). |
-| `core/item_codes.py` (NEW) | `CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ"` (23 letters), `generate_codes(existing: set, n=1, rng=None) -> list[str]`, registry cache `data/item_code_registry.json`, `ensure_codes(worksheet) -> dict` (backfill), reserve-verify loop (§8). |
-| `core/preferences.py` (NEW) | Read Q/R/S columns; `get_preferred(subcategory) -> row \| None`; `set_preferred(code) -> dict` (clear-then-set, one range write, §8); `list_subcategory_options(subcategory) -> [(row_index, name, code)]`; renders the disambiguation prompt + warning lines (exact texts §6). |
-| `core/multibuy.py` (NEW) | `parse_multibuy(desc) -> (qty, bundle_total) \| None` (reuses FOR_RE/ANY_RE from `extractors/specials_parser.py`), `effective_unit_rate(qty, total) -> float`, `format_multibuy_note(qty, total) -> str`, sheet cell codec `encode_multibuy_cell(qty, total) -> "multi-buy 2/$6.00"` and `decode_multibuy_cell(cell)`. Display+math only — never touches `core/uom.py`. |
-
-`extractors/models.py`: `ProductItem` gains optional
-`multi_buy_qty: int = 0`, `multi_buy_total: float = 0.0` (0 = none).
-Backwards-compatible for every existing caller and JSON snapshot.
-
----
-
-## 5. Ingestion & pre-processing pipeline (Requirement B)
-
-Every row-creation path funnels through `add_product_row` — the hook is
-there (single choke point, verified):
-
-```
-add_product_row(...)                        # core/sheets_sync.py
-  ├─ existing validation (store, name, price, size)      — unchanged
-  ├─ NEW: subcategory = classify_subcategory(generic_name, category_hint)
-  │        · confidence ≥ threshold → label
-  │        · below threshold      → literal "needs review"
-  │        · caller may pass --subcategory to override (CLI flags below)
-  ├─ NEW: code = item_codes.reserve_code(worksheet)      # §8 algorithm
-  ├─ row build: new_row[16]=subcategory  new_row[17]=code  new_row[18]="" (P empty)
-  │        target_width now also ≥ 19 when the header has Q/R/S
-  └─ single range write A{row}:S{row} (one API call, atomic row)
-```
-
-Paths that must pass through this hook (all verified to call
-`add_product_row` today): `search --add-item N`, `map unmatched --add`,
-`map wool/coles --add`, `optimize --confirm <code>+add`, Wednesday
-Step 1c auto-link row creation. The one-line-rule MERGE path
-(`update_single_price` on an existing row) assigns NOTHING — the row
-already owns its code/sub-category; only the price updates.
-
-New CLI flags: `search --add-item N [--subcategory TEXT]`,
-`map … --add [--subcategory TEXT]` — the agent (LLM) may pass its
-classification when it is confident; otherwise the deterministic
-classifier decides. `--subcategory` normalises through
-`normalize_subcategory`.
-
-**Legacy rows (104):** two one-time commands (mirror `backfill-sizes`):
-- `backfill-subcategories [--dry-run]` — fills Col Q only where the
-  classifier is confident; others get `needs review`; NEVER overwrites
-  a non-empty Q; prints filled/review/failed counts.
-- `backfill-codes [--dry-run]` — reads Col R once, generates the full
-  unique set in memory, ONE batched column write R2:R{last}; prints the
-  count; idempotent (rows that already have a code keep it).
-
----
-
-## 6. Shopping-list intake, disambiguation & preference machine (Requirement C)
-
-### 6.1 Where the LLM stage lives
-
-The LLM extraction stage is the **OpenClaw agent**, not the CLI. The CLI
-stays deterministic. Contract (encoded in SKILL.md, §C7):
-
-1. User sends a shopping list ("eggs, apples, bread, milk, cheese slice").
-2. Agent normalises each item to either a **sub-category name** (from the
-   taxonomy printed by `subcategories`) or a **specific product request**
-   (when the wording names a variant: "free range eggs").
-3. Agent calls `shop --items "<i1>, <i2>, …"` passing its normalised
-   text verbatim.
-4. CLI independently re-classifies each item deterministically
-   (exact sub-category name → category mode; else product mode via the
-   existing lookup chain). Agreement needs no chat; disagreement is
-   impossible to detect from the CLI side (it only sees its own reading)
-   — the agent's normalisation simply produces cleaner inputs.
-
-`compare` and `optimize` keep their current contracts; the new `shop`
-subcommand wraps `compare_basket` with the preference state machine.
-
-### 6.2 Data flow & sequence diagram
-
-```
- USER (Telegram)          Claw agent (LLM)              VPS CLI (deterministic)                Google Sheet
- ─────┬────────────────────────┬──────────────────────────────┬──────────────────────────────┬──────────
-      │ "eggs, apples,         │                              │                              │
-      │  free range eggs"      │                              │                              │
-      ├───────────────────────>│ 1. normalise items           │                              │
-      │                       │  (taxonomy ref: `subcategories`)                             │
-      │                       ├── shop --items "eggs, apples, free range eggs" ───────────────>│
-      │                       │                              │ 2. read Q/R/S + prices        │
-      │                       │                              │    (one get_all_values)       │
-      │                       │                              │ 3. per item:                  │
-      │                       │                              │    a. sub-cat match? ──yes──> mode=category
-      │                       │                              │    b. else lookup chain ────> mode=product
-      │                       │                              │ 4. mode=category:             │
-      │                       │                              │    P flagged? ──yes──> [S4] use that row
-      │                       │                              │    no P, rows>0 ─────> [S1] HALT + prompt
-      │                       │                              │    no rows at all ────> [S0] live-search offer
-      │                       │                              │ 5. mode=product:              │
-      │                       │                              │    resolved row's sub-cat has │
-      │                       │                              │    different P? ──────> [S5] compare + WARN
-      │                       │                              │ 6. compare selected rows      │
-      │<────── table, or prompt, or warning ────────────────┤                               │
-      │ "ABC" (reply)         │                              │                               │
-      ├───────────────────────>│ prefer --code ABC ──────────>│ 7. clear sibling P, set P     │
-      │                       │                              │    (ONE range write S-range) ─>│
-      │                       │                              │ 8. resume: complete the       │
-      │                       │                              │    halted comparison          │
-      │<────── final table ───┤                              │                               │
-```
-
-Wednesday ingestion runs the same Q/R/S assignment inline (§5) — no
-preference logic there (Wednesday never writes P).
-
-### 6.3 State machine & branching logic matrix
-
-| State | Name | Entry condition | Trigger → Action → Next |
-|---|---|---|---|
-| S0 | COLD_NO_ROWS | requested sub-category has zero sheet rows | live keyword offered → user gives keyword → `search` flow (`--add-item` → row created with Q/R/S via §5) → back to S1 on next `shop` run. • user cancels → item dropped from run. |
-| S1 | NO_P (halt) | ≥1 row in sub-category, none flagged P | print disambiguation prompt (§6.4) → AWAIT (S2). |
-| S2 | AWAIT_USER | prompt printed; pending state saved to `data/shop_pending.json` | user replies code/number → `prefer --code X` or `prefer --pick N` → SET_P (S3). • user replies keyword → S0 live-search path. • user cancels → item dropped, rest of list continues. |
-| S3 | SET_P | selection received | clear sibling `P` in same sub-category + set `P` on chosen row (§8 write) → resume comparison with chosen row → P_SET (S4). |
-| S4 | P_SET | sub-category has a `P` row | auto-select that row for the comparison table. If the preferred row lacks a price at one store → existing behaviour (single-store answer + ⚠️ line / found-block); NEVER silently substitutes a non-preferred row. |
-| S5 | OVERRIDE_SPECIFIC | mode=product; resolved row's sub-category has a different (or no) `P` | compare the REQUESTED row + print warning (§6.5) → user replies "switch" → SET_P (S3) on the requested row. • user replies "keep"/silence → comparison already delivered; sheet untouched. |
-| S6 | LIVE_SEARCH_ADD | new product added via S0 | row created with S empty → next `shop` hits S1 → one question sets P. (Deliberate: ingestion NEVER auto-sets P.) |
-
-Pending-run persistence: `data/shop_pending.json`
-`{started_at, items: [...], halted: [{item, subcategory, options: [{row, name, code}]}]}`
-— same atomic-JSON pattern as the queues. `prefer` consumes it, then
-finishes the run (prints the completed table). Stale pending runs (>24h)
-are reported and discarded with a pointer to re-run `shop`.
-
-### 6.4 Disambiguation prompt (Scenario 2 — exact format)
-
-```text
-Sub-Category: eggs - Which one would you like to make your preferred item?
-1 - Woolworths 12 Extra Large Free Range Eggs 700g - ABC
-2 - Coles 700g Free Range Eggs XL - DEF
-Or: Not in list? Provide another keyword for live search.
-```
-
-Full product titles (Col A, never truncated — §10), then the row code.
-Selection accepts the code (`ABC`) or the number (`2`).
-
-### 6.5 Override warning (Scenario 3 — exact format)
-
-```text
-⚠️ Warning: [Product Name] is not your preferred item for sub-category [Sub-Category].
-Would you like to switch your preferred item in the sheet?
-Reply 'switch' to make it preferred, or 'keep' to continue without switching.
-```
-
-`keep` is write-free; `switch` routes to SET_P (S3).
-
-### 6.6 New CLI surface
-
-| Command | Behaviour |
-|---|---|
-| `shop --items "…"` | §6.2 flow; wraps `compare_basket`; halted items render the §6.4 prompt instead of a table row; completed items render normally. |
-| `prefer --code ABC` / `prefer --pick N` (with a pending run) | S3 write + resume; without a pending run, still writes P and confirms (standalone use). |
-| `subcategories` | prints taxonomy labels + live per-label row counts (agent reference for normalisation; also user-browsable). |
-| `backfill-subcategories` / `backfill-codes` | §5 one-time commands. |
-
----
-
-## 7. Multi-buy promotion & pricing logic (Requirement D)
-
-### 7.1 Detection & parsing
-
-- Source strings: docx specials lines (`2 for $4.50`, `Any 2 | $9`),
-  live `special_desc` when extractors manage to capture one, and the
-  M/N sheet cell. Parser: `core/multibuy.parse_multibuy` built on the
-  EXISTING regexes (`FOR_RE`, `ANY_RE` — no duplicate patterns).
-- Live capture: WW/Coles search extractors gain best-effort fields
-  (`multi_buy_qty`, `multi_buy_total` on `ProductItem`). **The live APIs'
-  multi-buy payload shape is NOT verified** — implementation starts with
-  a read-only probe of real search responses; if the payload carries no
-  multi-buy data, live paths degrade to normal pricing (never invented)
-  and only the docx/sheet paths carry multi-buy. See §11 D-MB2.
-
-### 7.2 Storage
-
-- M/N cells keep the D25 vocabulary as a PREFIX and gain structured
-  terms: `multi-buy 2/$6.00` (flag + qty + bundle total, parseable,
-  human-readable). Readers treat any cell starting `multi-buy` as the
-  multi-buy state (backwards compatible with bare `multi-buy` cells).
-- The effective unit rate is NOT stored — it is derived on read
-  (`rate = total / qty`) so there is exactly one source of truth and no
-  stale derived numbers. (Trade-off §11 D-MB1 vs. the brief's "store
-  effective unit rate" — the rate is materialised in every output and
-  in comparison math, just not persisted redundantly.)
-
-### 7.3 Comparison algorithm
-
-```
-for each store price of an item:
-    if multi-buy (qty N, total $X):
-        effective_unit = X / N                       # e.g. 6.00/2 = $3.00
-    else:
-        effective_unit = price
-compare stores on effective_unit                      # winner + totals
-display:
-    WW line:  $3.00/u  🏷️ 2 for $6.00  [Note: must purchase 2+ units to receive this price]
-    Coles line unchanged
-```
-
-Rules (binding):
-1. Effective unit rate participates in winner math, totals, and
-   `optimize` savings EXACTLY like a normal price.
-2. Every surface that shows a multi-buy-derived price MUST carry the
-   note `[Note: must purchase 2+ units to receive this price]`
-   (compare items, totals table footnote, search result lines that show
-   a multi-buy special, specials report, shop output).
-3. `Any N | $X` promotions that span MIXED products (cross-range "any
-   2") do NOT yield a per-product rate: the item is priced normally and
-   the promotion is shown as informational text only (§11 D-MB3).
-4. Woolworths display discounts (5% / +5% home-brand) apply AFTER the
-   rate computation, display-only, exactly as today; the sheet keeps
-   raw values.
-5. UOM gate is untouched: multi-buy never relaxes size comparability;
-   the bundle multiplies PACK COUNT, not pack size.
-6. Search results already print `🏷️ <special_desc>`; when the parsed
-   multi-buy applies, the cheapest-store math uses the effective rate
-   and the result block carries the mandatory note.
-
----
-
-## 8. Spreadsheet synchronization & concurrency model
-
-### 8.1 Write primitives (no race conditions, no range corruption)
-
-| Operation | Mechanism |
-|---|---|
-| Row create (Q/R/S) | Single range write `A{row}:S{row}` inside `add_product_row` (atomic per row; existing explicit-range discipline means NO other write can clobber Q/R/S — ranges are always explicit). |
-| Set P | ① read Q+S columns → ② compute the full new S-vector for that sub-category's row span (clears + the one set) → ③ ONE range write `S{top}:S{bottom}` → ④ re-read verify (one `P` max). Failure at any step aborts with the sheet untouched except a possible no-op clear (clears of empty cells are idempotent). |
-| Code assign (new row) | reserve-verify loop, §8.2. |
-| Batch backfill | ONE column write per column (Q, R) after computing all values in memory. |
-| Rate limiting | existing `_update_with_backoff` (429 exponential backoff) reused everywhere. |
-
-### 8.2 Item-Code generation algorithm (deterministic uniqueness)
-
-```
-alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ"        # 23 letters: A–Z minus I, L, O
-shape    = 3 distinct letters               # 23×22×21 = 10,626 codes
-taken    = set(Col R values) ∪ registry codes ∪ codes of rows deleted ever
-                                                # deleted-row codes are NEVER reused
-rng      = random.Random(seed = f"{spreadsheet_id}:{attempt}")
-loop (≤ 200):
-    candidate = 3 distinct rng.choice(alphabet) letters
-    if candidate not in taken: break
-else: deterministic sequential scan of the sorted permutation space
-reserve:  write code to R{row} (single cell)
-verify:   re-read Col R; if another row now holds the same code
-          (concurrent writer), regenerate and retry  ← optimistic concurrency
-persist:  registry[data/item_code_registry.json] = {code, row, assigned_at}
-```
-
-- Seed is stable per attempt (attempt increments on each retry), so
-  runs are reproducible; uniqueness is guaranteed by check-then-write-
-  then-verify, not by the seed.
-- Local advisory file lock `data/.item_code_lock` serialises code
-  generation between concurrent LOCAL processes; VPS-vs-local races are
-  handled by the verify step (regenerate + retry). This matches the
-  system's existing tolerance for cross-machine last-writer-writes
-  (queue convergence solves queues; codes self-heal via retry).
-- Capacity note: 10,626 codes vs ~104 rows today → 100× headroom; if the
-  sheet ever approaches ~10,000 rows the shape widens to 4 letters
-  (explicit future decision, out of scope now).
-
-### 8.3 Preferred invariant maintenance
-
-Every `P` write goes through `preferences.set_preferred` (single
-writer function). The Wednesday sync NEVER touches column S. `prefer`
-is the only command that writes S. Sheet-side manual edits are
-repaired opportunistically: `shop`/`lists` detect >1 P in a
-sub-category → ⚠️ line + the FIRST P (topmost) wins until
-`prefer --code` fixes it (never auto-delete user data).
-
----
-
-## 9. Read model
-
-One `get_all_values()` per command run (existing pattern — `lists`
-already does this). `LookupIndex` gains three additive parsed fields
-per row (`subcategory`, `item_code`, `preferred`) exposed on
-`CandidateRow`/result dicts. No change to the resolution chain order
-(exact → alias → partial → live); Q/R/S ride along as metadata.
-
----
-
-## 10. Name-truncation fix (user report 2026-09-04)
-
-- `core/telegram_format.py`: `MAX_NAME_WIDTH` 24 → **60** cells.
-  `item_block` keeps calling `truncate(name, MAX_NAME_WIDTH)` — now a
-  60-cell safety valve instead of a 24-cell chop. Telegram wraps long
-  plain-text lines; search results, compare titles, queue acks all show
-  full names ("AJI CRISPY FRY BREADING MIX ORIGINAL WITH GRAVY MIX 62G"
-  = 52 chars → fits untouched).
-- `MAX_BLOCK_WIDTH` (34) for fenced monospace tables is UNCHANGED —
-  those are the phone-fit totals tables; names inside them stay
-  abbreviated by design.
-- The disambiguation prompt (§6.4) and provenance lines already use
-  full names; §6.4 mandates it.
-- Telegram 4096-char message cap: existing chunking (Wednesday ≤4000
-  parts) is reused; longer names only marginally affect part counts.
-
----
-
-## 11. Decisions & Trade-offs (require explicit user confirmation)
-
-| # | Decision | Rationale | Alternative rejected |
-|---|---|---|---|
-| D-SC1 | Sub-category values are free-text lowercase labels from a code-maintained ordered rule list (`core/subcategory.py`), NOT a closed enum | 104-row personal sheet; rules are auditable and testable; new clusters are one line of code | Closed enum (rigid) / pure LLM classification (non-deterministic, unverifiable in CI) |
-| D-SC2 | Unconfident classification writes literal `needs review` (never a guess) and `lists` surfaces the count | Mirrors the proven `backfill-sizes` honesty pattern | Best-guess writes (silent mis-clustering breaks preference selection) |
-| D-IC1 | Item-Code = LETTERS ONLY (no digits) from A–Z minus I/L/O, no repeated letter | Matches the established queue-code convention; voice/chat-friendly; the brief says "alphanumeric" but its own examples (ABC/DEF) are letters; digits would collide with the I/1-O/0 confusion the rule exists to prevent | Alphanumeric with digits (larger space, new confusion class) |
-| D-IC2 | Codes are permanent; deleted-row codes are never reused (registry keeps them retired) | "Remove XYZ" style stale-chat safety, same reasoning as queue tombstones but permanent | Reuse after deletion (stale references could point at new rows) |
-| D-IC3 | Row codes and queue codes are separate namespaces (both may contain e.g. `KAT`) | Contexts never mix (`prefer` vs `todo done`); zero migration cost | Shared namespace (forces re-coding 104 rows + queue collisions) |
-| D-IC4 | Cross-machine (VPS+local) code races resolved by optimistic verify-and-regenerate, not a global lock | No shared lock infrastructure exists; failure mode is a retry, not corruption | Distributed lock (over-engineering for a single-user system) |
-| D-P1 | New `shop` command instead of extending `compare` | Keeps `compare`'s look-only contract intact; SKILL.md routes list-intents to `shop` | Retrofit compare (changes behaviour of an established command) |
-| D-P2 | Ingestion NEVER auto-sets P; the first `shop` run prompts once | Matches the "nothing is ever saved automatically" project rule | Auto-prefer the first/cheapest row (surprising, unreviewable) |
-| D-P3 | Pending halted runs persist in `data/shop_pending.json` (24h staleness window) | Claw is conversational across turns; mirrors map-session progress pattern | In-memory only (dies between CLI invocations) |
-| D-MB1 | Store raw terms `multi-buy 2/$6.00` in M/N; DERIVE the rate at read time | Single source of truth; no stale computed values; D25 readers stay compatible via prefix match | Persist the rate (a second number that can drift from the terms) |
-| D-MB2 | Live multi-buy capture is best-effort: probe the real payloads first; degrade to normal pricing when absent | WW/Coles live payloads' multi-buy shape is UNVERIFIED (only docx markers are proven); never invent promos | Assume availability (risks hallucinated promos — violates the project's core rule) |
-| D-MB3 | Mixed-product "Any N" promos are informational only (no rate in math) | A cross-product bundle has no true per-product price | Pro-rate across products (unsound for a 2-item comparison) |
-| D-MB4 | Effective rate counts in winner/totals even if the user buys just 1 unit | The brief mandates it; the mandatory note discloses the assumption | Compare at single-unit price (ignores the deal the user asked to model) |
-| D-T1 | `MAX_NAME_WIDTH` 24 → 60 (global single constant) | One-line fix, one width policy, full names everywhere; 60 keeps a sane guard | Per-surface widths (fragmented policy) / unlimited (formatting risk in odd clients) |
-| D-X1 | `schema_upgrade.py` is the ONLY schema mutator; deploy runs it once (manual step M1) | Proven idempotent audit+append path from the M/N/O/P cycle | Ad-hoc column adds from every writer |
-
-**Open items needing the user (blocking 02 Plan):**
-1. Confirm D-IC1 (letters-only codes) — the brief says "alphanumeric".
-2. Confirm D-P1 (`shop` as a new command) or insist on retrofitting
-   `compare`.
-3. Seed taxonomy sign-off: the initial rule list (~50 labels) will be
-   drafted from the 104 live Col A names during 02 Plan and appended to
-   this spec §12 before coding.
-
----
-
-## 12. File boundaries — allowed scope for 02 Plan / 03 Code
-
-**NOTE:** `grocery_price_cli.py` lives OUTSIDE the repo root at
-`C:\Users\User.DESKTOP-R2G441H\Documents\AI related\grocery_price_cli.py`
-(same binding note as the prior cycle — plan treats it as in-scope at
-its current path).
-
-MAY modify:
-- `grocery_price_cli.py` — `shop`/`prefer`/`subcategories`/
-  `backfill-subcategories`/`backfill-codes` commands; search rendering
-  (nothing — width fix is in telegram_format); `--subcategory` flags on
-  add paths; multi-buy note surfaces
-- `core/telegram_format.py` — `MAX_NAME_WIDTH = 60`; multi-buy note
-  helper (optional, small)
-- `core/schema_upgrade.py` — Q/R/S in `NEW_COLUMNS`
-- `core/sheets_sync.py` — `add_product_row` Q/R/S hook; multi-buy M/N
-  cell encoding on sync/add paths
-- `core/lookup.py` — ADDITIVE row metadata only (subcategory/item_code/
-  preferred on `CandidateRow` + index build); chain order untouched
-- `core/price_comparator.py` — multi-buy effective rates in winner/
-  totals; mandatory notes; shop-mode row selection support
-- `extractors/specials_parser.py` — expose `parse_multibuy` reexport for
-  `core/multibuy.py` (no regex duplication)
-- `extractors/models.py` — `ProductItem.multi_buy_qty/total` (defaults 0)
-- `extractors/woolworths_extractor.py`, `extractors/coles_extractor.py`
-  — best-effort multi-buy capture AFTER the D-MB2 probe
-- NEW `core/subcategory.py`, `core/item_codes.py`, `core/preferences.py`,
-  `core/multibuy.py`
-- `claw-skills/grocery-price/SKILL.md` — LLM intake contract (§6.1),
-  `shop`/`prefer` routing, verbatim prompt/warning relay rules
-- Tests: NEW `test_subcategory.py`, `test_item_codes.py`,
-  `test_preferences.py`, `test_multibuy.py`; UPDATE `test_cli.py`,
-  `test_telegram_format.py`, `test_comparator.py`, `test_sheets_sync.py`,
-  `test_lookup.py` (metadata only)
-- `README.md`, `PROJECT-MAP.md` — per §C7 instructions
-
-MUST NOT modify: `core/uom.py` (frozen), `core/name_matcher.py`
-(read-only reuse), `telegram_gateway/`, `app.py`, `local_sync.py`,
-`.env` handling, the queues' code/tombstone systems
-(`searched_items.py`/`add_to_list.py` — Item-Code lives in its own
-module), sheet columns A–P semantics.
-
----
-
-## 13. Verification plan (for 04 Architect Checker)
-
-1. Schema: `schema_upgrade` dry-run → adds exactly Q/R/S; re-run →
-   "up to date"; existing A–P data byte-identical.
-2. Codes: 200-row synthetic fixture → all codes unique, 3 letters,
-   alphabet excludes I/L/O (case-insensitive), no repeated letter;
-   registry matches sheet; concurrent-writer simulation → verify-retry
-   path regenerates (injected collision).
-3. Preferences: set P → sibling cleared, one write-range observed;
-   two-P corruption fixture → ⚠️ detection, topmost wins, no deletion.
-4. State machine: S0/S1/S4/S5 golden output tests (prompt text EXACT
-   §6.4; warning text EXACT §6.5; pending-run round-trip; 24h staleness).
-5. Multi-buy: parse cases (`2 for $6.00`, `Any 2 | $9`, bare
-   `multi-buy` legacy cell, negative: `Cream For Men`); rate math;
-   winner flips only via effective rate; mandatory note present on every
-   multi-buy surface; mixed-product Any-N informational-only.
-6. Ingestion: every add path (search/map/optimize) yields Q/R/S on the
-   new row; merge path (one-line rule) leaves Q/R/S untouched; P empty.
-7. Truncation: 52-char name renders fully in search; fenced tables
-   still ≤34 wide; queue acks full-name.
-8. Full suite green (baseline 621) with the new files included.
-
----
-
-## 14. Coding model implementation instructions (README / PROJECT-MAP)
-
-03 Code MUST, in the same change as the code:
-
-1. **README.md** — Google Sheet schema table: add rows
-   `| Q | Sub_Category | Granular cluster (bread, shredded cheese, eggs); "needs review" marker |`,
-   `| R | Item_Code | Permanent 3-letter row ID, A–Z minus I/L/O, no repeats |`,
-   `| S | Preferred | "P" flag; at most one per sub-category; set only via prefer |`;
-   CLI table: add `shop`, `prefer`, `subcategories`,
-   `backfill-subcategories`, `backfill-codes` rows; Telegram Style Kit
-   section: `MAX_NAME_WIDTH = 60` note; new "Multi-buy pricing" section
-   (rate math + mandatory note + D-MB2 degradation); new "Shopping list
-   & preferences" section pointing at PROJECT-MAP §6F.
-2. **PROJECT-MAP.md** — add §6F "Shopping-list flow (shop)": the plain-
-   language walk of §6.2–§6.5 (cold start → prompt → prefer → warning);
-   commands table rows for the five new commands; "the 7 lists" note
-   that `needs review` sub-categories surface in `lists`; update the
-   sheet column description (§2) with Q/R/S; note Item-Code ≠ queue
-   codes.
-3. **SKILL.md** — the §6.1 LLM intake contract: normalise lists against
-   `subcategories` output, call `shop`, relay prompts/warnings VERBATIM
-   (never rephrase codes), route "make X my usual/preferred" to
-   `prefer --code`, keep the B5 never-browse rule.
-4. Update `test.md` execution log per round, as every cycle does.
-
----
-
-**Status footer:** DRAFT — awaiting user confirmation of §11 open items
-1–3 (letters-only codes; `shop` command; taxonomy seed). Then LOCKED
-for hand-off to 02 Plan with §12 boundaries and §13 verification as
-binding.
-
----
-
-## 15. Revision 2026-09-05 — user-directed overrides (post-deployment)
-
-The user reviewed the deployed Q/R/S + multi-buy round and directed
-three binding changes to §7/§11. Implemented and verified 2026-09-05
-(925 tests green); the original D-numbers remain for history.
-
-| # | Override | Detail |
+| Tracked (D real) | WW display price + local per-shop prices + winner |
+| Meat term, halal row exists | Same, through halal-named rows only |
+| Meat term, no halal row | Local butcher prices + "not tracked at Woolworths — missing list [code]" |
+| Not tracked, local has it | Local prices + missing-list line with code |
+| Not tracked, local blank too | "not tracked" (no live search) |
+| D = `GONE` | "GONE at Woolworths" + local prices still shown |
+| Tracked, `N/A <date>` marker | "unavailable this week (N/A <date>)" + local prices |
+| Out of domain (not meat/F&V) | "not tracked — outside local-shop domains" (lookup only, never errors) |
+| `live <item>` | ≤3/store prices only; sheet side note if tracked |
+
+## §9 Ingest pipeline (what stays, what changes)
+
+STAYS as-is: twice-daily FB post detector (05:00/15:00 Sydney windows),
+inbox codes, image→vision / text→parser chain, per-shop merge
+(`merge_store_tab`), validity stamps + expire sweep, shop-tagged Comments
+(with the Round-1 lifecycle fix), Dunya WooCommerce site sync + catalogue
+cache, manual set-permanent/set-special, >20% standout maths vs raw WW
+price (Q20).
+
+CHANGES: ingest pairs by Item_Code; a butchery post's items are
+auto-prefixed `halal xxx` (Q17); an item with no master row auto-creates
+the blank counterpart row + code and routes to the missing list (§4.2);
+new shop columns are added by editing the existing STORES constant — no
+new state per shop.
+
+## §10 Wednesday run v2 (local machine)
+
+1. Parse `Woolworths.docx` → match by col G keyword → overwrite D prices
+   (markers `N/A`/`unavailable` + multi-buy deal-rate rule unchanged).
+2. Parse `Woolworths_Specials.docx` → update H + D deal rates.
+3. Parity check (from the same reads): counts + code alignment — one
+   warning line if drift, never auto-repair.
+4. Post: specials message (specials-wool topic 206) + the ONE missing
+   list (weekly-lists topic 208). No interactive pause, no reminders, no
+   scp/queue convergence, no 7-list ceremony. Target ≤30s end-to-end.
+
+The Wednesday reminder cron and topic 151 are deleted (§13).
+
+## §11 Telegram style kit (Q23 — "wow" requirement)
+
+Every user-facing message uses one consistent styled template: emoji
+section headers (🟢 Woolworths · 🔪 butchery · 🍎 fruit shop), bold item
+names, aligned price columns, 🏆 winner badge, GONE/multi-buy badges, and
+a compact footer (date + code legend). Telegram messages cannot animate —
+"lively" is achieved with emoji + structure + consistent layout, never
+with extra characters of prose. Max 4000 chars/message; the style kit is
+tested (v1's `test_telegram_format.py` carries forward, restyled).
+
+## §12 Speed budget (binding)
+
+| Operation | Hard target | Design consequence |
 |---|---|---|
-| R1 (supersedes D-MB1's raw-price clause) | **Multi-buy deal rates live IN the price cells.** D/E for a multi-buy item holds the per-unit deal rate ("2 for $7.00" on $4.00 → 3.50) so the saving is evident in sheet comparisons. The M/N cell keeps the encoded terms (`multi-buy 2/$7.00`) as the deal's source of truth; when the deal ends the next sync overwrites the price normally (self-healing). | All three write paths (sync_prices, update_single_price, add_product_row) via `_multibuy_price`. |
-| R2 (supersedes D-MB3) | **"Any N \| $X" promos are rate-eligible multi-buy deals** — in-store they mean any N units from the same range/brand, so they encode terms and drive rate math like "N for $X". `is_mixed_promo` removed. | Coles live capture now also composes `Any N | $X` as the specials desc when no other promo desc exists. |
-| R3 (extends §8.3/D-SC2) | **Sub-categories: never guess.** Classifier hardened with word boundaries (V Sugarfree ≠ sugar, V Watermelon ≠ water, eggplant ≠ eggs, pineapple ≠ apples); unsure rows land in Col Q `needs review` and surface as **Sub-category reviews** (list 7 in `lists` + the weekly post). The agent MUST ask the user for the label when unsure (SKILL.md contract). | New `_sheet_multibuy_keys`/`_todo_is_multibuy` markers: `(m)` + legend `(m) - multi buy discount` on to-do/list views. |
+| Sheet lookup reply | ≤10s | ONE master read + ONE Local_Deals read; no queue files, no convergence |
+| Live search reply | ≤20s | Existing WW curl_cffi + Coles Scrape.do credit-guarded chain; ≤3/store |
+| Batch correction | ≤10s | One read, writes per verdict, one reply |
+| Wednesday run | ≤30s | Two docx parses + one batch write + two posts |
+| One-list render | ≤5s | Pure read of the two tabs |
+
+## §13 DELETION MANIFEST (explicit charter deliverable)
+
+**Commands (parent `grocery_price_cli.py` + their code paths):**
+`optimize`, `shop`, `prefer`, `recipe`, `rewards`, `map`, `todo`,
+`add-to-list`, `searched-items`, `missed-pricing`, `no-price`, `lists`,
+`unmapped`, `specials-scan`, `update`, `compare` (absorbed by the default
+lookup), `search` (replaced by `live`), standalone `sync` (folded into
+`wednesday`), `live-refresh` remnants, all `backfill-*` one-timers
+(replaced by the migration utilities), `subcategories`.
+
+**Core modules:** `basket_optimizer.py`, `shop` flow, `prefer`/
+`set_preferred` writer, `searched_items.py`, `add_to_list.py` (queue),
+`queue_sync.py`, `missing_items_tracker.py`, halal tier-2 LLM chain +
+`halal_status.json`, the lookup engine's live-fallback/auto-add/ranked-
+pair arms (the engine slims to sheet exact + alias match + UOM-free
+display), `recipe_resolver.py`, `woolworths_discount_usage.json` tracker
+(the DISPLAY discount engine itself STAYS).
+
+**State files (archive copy, then delete):** `add_to_list.json`,
+`searched_items.json`, `searched_item_code_tombstones.json`,
+`unmapped_queue.json`, `delete_candidates.json`,
+`list_action_progress.json`, `unmatched.txt`, `coles_missing.txt`,
+`wool_missing.txt`, `live_api_capture.json`, `live_flush_log.json`,
+`live_snapshots/`, `session_heartbeat.log`, probe/export JSONs in
+`extractors/`. KEPT: `ignored_items.txt` (hidden list),
+`deleted_rows.json` (row archive), `data/local_deals_inbox/`, the Dunya
+catalogue cache, `scrapedo_health.json` (live machinery). Secrets
+(`session_state.json`, `ww_coles_profile/`) are untouched — not part of
+this charter.
+
+**VPS/Telegram:** `/home/ubuntu/scripts/wednesday_reminder.py` + its cron
++ state file; local source `telegram_gateway/wednesday_reminder.py`;
+topic 151 (stays dead — never re-provisioned); the 7-list posting
+ceremony code paths. The local-deals daily-scan cron STAYS.
+
+**Sheet:** Coles/Aldi columns (§3.1); ~80 retired rows → Archive tab.
+
+**Docs (final tidy):** all v2 rebuild artifacts (arch-prompt, plan,
+reports) → `old md/2026-09-v2-rebuild/` at close-out; living docs
+(README, PROJECT-MAP, architecture-spec, parent test.md) updated instead.
+
+Nothing user-owned is deleted without an archive copy (Archive tab,
+`deleted_rows.json`, or `old md/`).
+
+## §14 Explicitly KEPT (do not over-delete)
+
+WW display discount engine (5% + home-brand) · multi-buy rate maths
+(ingest + specials) · Local_Deals machinery in full (§9) · halal
+domain gating by name prefix · sub-category data (col K) for domain
+gating · expire sweep + validity stamps · Scrape.do credit guard ·
+gspread client · UOM module only if still referenced after Round 3
+(else it goes in the final tidy) · `User_Shopping_Lists` +
+`Price_History` tabs · all 1250 passing tests that cover kept code
+(tests of deleted code are deleted with it).
+
+## §15 Future-provider clause (verbatim, per the work order)
+
+"Once the v2 rebuild is fixed, verified, and running, a NEW separate
+session will extend live search to ALDI first, then AMAZON (non-food
+only). The v2 architecture must make this a provider-list addition
+only — no changes to lookup logic, no new state."
+
+Implementation consequence: `live` iterates a provider list
+(`[woolworths, coles]`); adding Aldi/Amazon = one constant + one
+extractor entry. Nothing else may change.
+
+## §16 File boundaries & allowed scopes (for the planning model)
+
+ALLOWED: `grocery_price_cli.py` (parent root) ·
+`grocery-price-tracker/{core,extractors,tests}/` ·
+`grocery-price-tracker/data/` (deletions per §13, archive copies first) ·
+`grocery-price-tracker/{architecture-spec.md,rebuild-plan.md,README.md,PROJECT-MAP.md,test.md}`
+· `old md/2026-09-v2-rebuild/` (archive) ·
+`claw-skills/grocery-price/SKILL.md`, `claw-skills/local-deals/SKILL.md`,
+`claw-skills/claw_skills_easy.md` (regenerate + sync per the standing
+doc-sync rule) · `telegram_gateway/wednesday_reminder.py` (deletion) ·
+VPS sync targets under `/home/ubuntu/openclaw/tasks/ai-tools/` + the
+reminder-cron removal on the VPS.
+
+FORBIDDEN: `.env` and any secret (never print, never commit) ·
+`pc-agent/` · `Lost Battle/` · all sibling tools (budget, pricing,
+digest, image, sketchnote, ai-studio) · `openrouterdiscount/`,
+`my-budget-tracker/` (independent repos) · `.kilo/` (retired) ·
+Google Sheet writes outside the spec'd migration/verbs (full backup
+first — §rebuild-plan Round 1).
+
+## §17 Architect decisions on delegated/open items
+
+1. **Round-1 scope (Q19 delegation):** comment-lifecycle fix ONLY. It
+   lives entirely in Local_Deals machinery that survives the rebuild, so
+   nothing fixed there is later deleted; every round leaves the system
+   functional (the user's stated rule).
+2. **Doc naming:** this file IS the v2 spec (single living doc, always
+   overwritten — never a second `-v2` file in the root). The plan's
+   artifacts archive at close-out.
+3. **`ignore` as a batch verdict**, not a 7th verb (batch accepts
+   done/gone/rename/remove/ignore in one call).
+4. **Wednesday posting targets:** specials → topic 206, list → topic 208
+   (current working setup, minimal ceremony; DM copy optional).
+5. **`update` command dies** — all manual sheet edits happen directly in
+   the Google Sheet UI (the user's stated workflow).
+6. **List rule detail:** `N/A <date>` markers with a keyword present =
+   tracked-but-unavailable, NOT missing (the keyword is the tracked
+   signal); marker-only cells without a keyword cannot occur (markers
+   are only written for keyword-matched rows).
