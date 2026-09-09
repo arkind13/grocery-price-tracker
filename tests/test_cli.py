@@ -631,15 +631,19 @@ class TestCLI(unittest.TestCase):
         """2026-09-02: a fresh persisted Wednesday report prints FIRST
         (rich save/multi-buy detail) ahead of the sheet view."""
         import tempfile as _tf
+        from datetime import datetime as _dt, timedelta as _td
         from grocery_price_cli import _cmd_specials
         from unittest.mock import patch as upatch
 
         with _tf.TemporaryDirectory() as tmp:
             data_dir = Path(tmp) / "data"
             data_dir.mkdir()
+            # ROLLING date (spec §18/A3): a hardcoded date ages out of
+            # the <=7-day freshness window and rots the test.
+            gen = (_dt.now() - _td(days=1)).strftime("%Y-%m-%d")
             (data_dir / "ww_specials_report.txt").write_text(
                 "# Woolworths specials report — generated "
-                "2026-09-02\n🏷️ WOOLWORTHS SPECIALS\n1. Thing 500g\n"
+                f"{gen}\n🏷️ WOOLWORTHS SPECIALS\n1. Thing 500g\n"
                 "   $2.00  ·  save $1.00 (33% off)\n", encoding="utf-8")
             with upatch("grocery_price_cli._TRACKER", Path(tmp)), \
                  upatch("core.specials_reporter.get_active_specials", return_value=[]), \

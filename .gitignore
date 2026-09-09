@@ -278,3 +278,6 @@ data/ww_coles_profile_full/
 # Runtime state (parent-repo modules: forget list + price-unavailable tracker)
 data/forget_list.json
 data/price_unavailable.json
+
+# Full-sheet backup artifacts (tools/sheet_backup.py local fallback)
+backups/

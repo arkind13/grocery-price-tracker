@@ -2766,6 +2766,74 @@ def sweep_expired_specials(worksheet, today: "date | None" = None
     return lines
 
 
+def repair_orphan_comments(worksheet) -> list[str]:
+    """Strip shop-tagged Comments segments whose shop has NO price
+    left in the row (both the permanent AND special cells blank).
+
+    Round-1 (A7): clears the pre-FIX-4 sweep residue (e.g. '[FRU]
+    multi buy 2 for $1.50' on empty cells — Local_Deals rows 115/116).
+    Conservative by design: a NON-NUMERIC offer-text cell counts as a
+    present price (never stripped); untagged free text is preserved
+    verbatim; rows and other columns are never touched. Idempotent —
+    a second run reports nothing.
+
+    Args:
+        worksheet: gspread/Fake worksheet handle for Local_Deals.
+
+    Returns:
+        list[str]: report lines, e.g. "Fruitopia Mt Druitt: Celery
+        /ea — orphan comment '[FRU] multi buy …' removed".
+    """
+    try:
+        grid = worksheet.get_all_values() or []
+    except Exception:  # noqa: BLE001 — missing tab -> nothing to do
+        return []
+    if len(grid) < 3:
+        return []
+    width = len(TAB_COLUMNS) + 1
+    grid = [(list(r) + [""] * width)[:width] for r in grid]
+    names = {k: name for k, name in STORE_COLUMNS}
+    comments_col = _grid_col("comments")
+    lines: list[str] = []
+    changed = False
+    for row in grid[2:]:
+        name = str(row[0]).strip()
+        if not name or name in SECTION_ORDER:
+            continue
+        cell = str(row[comments_col] or "")
+        if not _TAG_RE.search(cell):
+            continue
+        kept: list[str] = []
+        for seg in cell.split(";"):
+            seg = seg.strip()
+            if not seg:
+                continue
+            m = _TAG_RE.match(seg)
+            if m is None:
+                kept.append(seg)            # free text survives
+                continue
+            shop = _shop_key_for_tag(m.group(1))
+            priced = any(
+                col is not None and len(row) > col
+                and str(row[col]).strip()
+                for col in (_perm_column_for(shop),
+                            _special_column_for(shop)))
+            if priced:
+                kept.append(seg)
+            else:
+                lines.append(f"{names.get(shop, shop)}: {name} — "
+                             f"orphan comment '{seg}' removed")
+                changed = True
+        rebuilt = "; ".join(kept)
+        if rebuilt != cell:
+            row[comments_col] = rebuilt
+    if changed:
+        worksheet.clear()
+        worksheet.update(values=grid,
+                         range_name=f"A1:J{len(grid)}")
+    return lines
+
+
 # --- manual pricing entry (permanent / special) --------------------------
 
 _BASE_NAME_RE = re.compile(r"\s*/\s*(kg|ea|each)\s*$", re.I)
@@ -2869,9 +2937,11 @@ def set_store_prices(worksheet, store_key: str, kind: str,
         else:
             old = grid[match][col]
             grid[match][col] = cell
-            if note:
-                grid[match][comments_col] = _merge_comment_cell(
-                    grid[match][comments_col], store_key, note)
+            # R1-A4: the newest entry owns the Comments cell — a plain
+            # reprice (no note) CLEARS this shop's stale segment, same
+            # rule as the ingest merge path (FIX-4).
+            grid[match][comments_col] = _merge_comment_cell(
+                grid[match][comments_col], store_key, note)
             lines.append(
                 f"{shop} {kind}: {display} = {cell}"
                 f" — was {old or 'empty'} [row {match + 1}]")

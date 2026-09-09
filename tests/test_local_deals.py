@@ -1616,3 +1616,122 @@ class TestTabDedupWordOrder(unittest.TestCase):
         lettuce = [r for r in grid if "lettuce" in str(r[0]).lower()]
         self.assertEqual(len(lettuce), 1)
         self.assertEqual(lettuce[0][6], 1.29)
+
+
+class TestCommentLifecycleRound1(unittest.TestCase):
+    """Round-1 audit pins: no path orphans a shop-tagged comment."""
+
+    def test_manual_reprice_without_note_clears_segment(self):
+        # A4: plain --set-special over a multibuy cell -> the [FRU]
+        # promo segment must die with the old price.
+        ws = _v2_ws([
+            ["FRUITS", "", "", "", "", "", "", "", "", ""],
+            ["Carrots /ea", "", "", "", "", "",
+             "0.75 (till 12 Sep)", "", "",
+             "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
+        ])
+        ld.set_store_prices(ws, "fruitopia", "special",
+                            [{"item": "Carrots", "price": 0.60,
+                              "unit": "ea"}])
+        grid = ws.get_all_values()
+        self.assertEqual(str(grid[3][6]), "0.6")
+        self.assertEqual(grid[3][9], "")
+
+    def test_manual_reprice_with_note_replaces_segment(self):
+        ws = _v2_ws([
+            ["FRUITS", "", "", "", "", "", "", "", "", ""],
+            ["Carrots /ea", "", "", "", "", "",
+             "0.75 (till 12 Sep)", "", "",
+             "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
+        ])
+        ld.set_store_prices(ws, "fruitopia", "special",
+                            [{"item": "Carrots", "price": 0.60,
+                              "unit": "ea", "note": "3 for $1.80"}])
+        self.assertEqual(
+            ws.get_all_values()[3][9], "[FRU] 3 for $1.80")
+
+    def test_manual_new_row_note_still_tags_shop(self):
+        ws = _v2_ws([["FRUITS", "", "", "", "", "", "", "", "", ""]])
+        ld.set_store_prices(ws, "fruitopia", "special",
+                            [{"item": "Celery", "price": 1.20,
+                              "unit": "ea", "note": "fresh cut"}])
+        self.assertEqual(
+            ws.get_all_values()[3][9], "[FRU] fresh cut")
+
+    def test_merge_plain_reprice_clears_segment(self):
+        # A2 merge-level pin (FIX-4 was parser-level tested).
+        ws = _v2_ws([
+            ["FRUITS", "", "", "", "", "", "", "", "", ""],
+            ["Carrots /ea", "", "", "", "", "",
+             "0.75 (till 12 Sep)", "", "",
+             "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
+        ])
+        ld.merge_store_tab(ws, "fruitopia", [
+            {"item": "Carrots", "category": "fruits",
+             "price_kind": "single", "price": 0.6, "unit": "ea"}])
+        grid = ws.get_all_values()
+        row = next(r for r in grid if str(r[0]).startswith("Carrots"))
+        self.assertEqual(str(row[6]), "0.6")
+        self.assertEqual(row[9], "")
+
+    def test_merge_dropped_item_keeps_cell_and_comment_together(self):
+        # A3 design pin: a post that no longer lists the item leaves
+        # cell AND comment TOGETHER (board rotation never deletes;
+        # the sweep clears the pair later — test_expired_cell_…).
+        ws = _v2_ws([
+            ["FRUITS", "", "", "", "", "", "", "", "", ""],
+            ["Carrots /ea", "", "", "", "", "",
+             "0.75 (till 12 Sep)", "", "",
+             "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
+        ])
+        ld.merge_store_tab(ws, "fruitopia", [
+            {"item": "Apples", "category": "fruits",
+             "price_kind": "single", "price": 2.5, "unit": "kg"}])
+        row = next(r for r in ws.get_all_values()
+                   if str(r[0]).startswith("Carrots"))
+        self.assertEqual(row[6], "0.75 (till 12 Sep)")
+        self.assertIn("[FRU]", row[9])
+
+    def test_repair_strips_orphan_segments(self):
+        # A7: the live residue shape (rows 115/116) — empty FRU cells.
+        ws = _v2_ws([
+            ["FRUITS", "", "", "", "", "", "", "", "", ""],
+            ["Celery /ea", "", "", "", "", "", "", "", "",
+             "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
+            ["Carrots 1kg Bag /ea", "", "", "", "", "", "", "", "",
+             "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
+        ])
+        lines = ld.repair_orphan_comments(ws)
+        self.assertEqual(len(lines), 2)
+        grid = ws.get_all_values()
+        self.assertEqual(grid[3][9], "")
+        self.assertEqual(grid[4][9], "")
+        self.assertEqual(grid[3][0], "Celery /ea")   # row KEPT
+        self.assertEqual(ld.repair_orphan_comments(ws), [])  # idem.
+
+    def test_repair_keeps_segment_when_shop_priced(self):
+        ws = _v2_ws([
+            ["Carrots /ea", "", "", "", "", 6.50, "", "", "",
+             "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
+        ])
+        self.assertEqual(ld.repair_orphan_comments(ws), [])
+        self.assertIn("[FRU]", ws.get_all_values()[2][9])
+
+    def test_repair_preserves_untagged_text_and_other_shops(self):
+        ws = _v2_ws([
+            ["Carrots /ea", "", "", "", "", 6.50, "", "", "",
+             "[FRU] note; loose text; [MER] orphan note"],
+        ])
+        lines = ld.repair_orphan_comments(ws)
+        self.assertEqual(len(lines), 1)          # only MER stripped
+        self.assertEqual(ws.get_all_values()[2][9],
+                         "[FRU] note; loose text")
+
+    def test_repair_no_tags_writes_nothing(self):
+        ws = _v2_ws([
+            ["FRUITS", "", "", "", "", "", "", "", "", ""],
+            ["Carrots /ea", "", "", "", "", 6.50, "", "", "",
+             "loose text only"],
+        ])
+        self.assertEqual(ld.repair_orphan_comments(ws), [])
+        self.assertEqual(ws.clear_calls, 0)

@@ -575,6 +575,8 @@ class TestDailyScan(unittest.TestCase):
         with tf.TemporaryDirectory() as tmp:
             with patch.object(ld, "SCAN_STATE_PATH",
                               Path(tmp) / "s.json"), \
+                    patch.object(ld, "daily_scan_window",
+                                 return_value=(False, None)), \
                     patch.object(ld, "_run_morning_sweep",
                                  return_value=[]), \
                     patch("extractors.fb_timeline_fetch."
@@ -594,7 +596,9 @@ class TestDailyScan(unittest.TestCase):
                 self.assertIn("fresh1", ignored)
                 self.assertNotIn("fresh1", notified)
                 sent = []
-                with patch.object(ld, "_send_message",
+                with patch.object(ld, "daily_scan_window",
+                                  return_value=(False, None)), \
+                        patch.object(ld, "_send_message",
                                   side_effect=lambda *a, **k:
                                   sent.append(1) or {"ok": True}):
                     ld.run_daily_scan(send=True, force=True)  # quiet
@@ -1381,6 +1385,8 @@ class TestScanWindowsAndCutoff(unittest.TestCase):
         with tf.TemporaryDirectory() as tmp:
             with patch.object(ld, "SCAN_STATE_PATH",
                               Path(tmp) / "s.json"), \
+                    patch.object(ld, "daily_scan_window",
+                                 return_value=(False, None)), \
                     patch.object(ld, "_run_morning_sweep",
                                  return_value=[]), \
                     patch("extractors.fb_timeline_fetch."
@@ -1403,9 +1409,14 @@ class TestScanWindowsAndCutoff(unittest.TestCase):
                 created_offsets["p_old"] = 7200.0
                 ld.run_daily_scan(send=True, force=True)
                 n2 = len(sent)
-                # A post created AFTER the alert: notified.
+                # A post created AFTER the alert: notified. 5s clear
+                # of the boundary — the cutoff is captured at the
+                # previous scan's START, so a small positive 'seconds
+                # ago' offset races the inter-scan gap (1-in-4 flake);
+                # negative offset = created 5s after 'now', always
+                # inside the between-alerts window.
                 fake_fetch.ref = "p_new"
-                created_offsets["p_new"] = 0.05
+                created_offsets["p_new"] = -5.0
                 ld.run_daily_scan(send=True, force=True)
                 n3 = len(sent)
         self.assertEqual(n1, 4)      # backfill: one per store
