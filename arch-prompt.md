@@ -133,7 +133,7 @@ Named operations with hard targets: sheet lookup reply ≤10s; live search
 reply ≤20s; batch correction ≤10s; Wednesday run ≤30s; one-list render
 ≤5s. If a design choice risks a budget, it is the wrong choice.
 
-## ARCHITECT BEHAVIOUR — INTERVIEW FIRST, ASSUME NOTHING
+## ARCHITECT BEHAVIOUR — INTERVIEW FIRST, IN BATCHES, ASSUME NOTHING
 The user has explicitly instructed: ask HUNDREDS of questions with ZERO
 assumptions before writing the architecture. The row-parity model above
 is the user's intent in their words — interrogate every edge case
@@ -142,6 +142,22 @@ per domain, what "count" means, migration of non-halal meat rows, done/
 gone verb grammar, what happens on ingest failures) and only write the
 docs when the user has answered. A wrong assumption here costs another
 rebuild.
+
+BATCHING RULE (mandatory — never dump all questions at once):
+- Ask in themed batches of 5–8 questions maximum, one theme per batch
+  (e.g. batch 1: sheet schema + archive; batch 2: row-parity edge cases;
+  batch 3: list lifecycle + verbs; batch 4: local-deals ingest + halal
+  rules; batch 5: speed budget + Telegram; batch 6: migration + cleanup).
+- WAIT for the user's answers before sending the next batch. Follow-up
+  questions raised by the answers go into the next batch.
+- Each question must be short, concrete, and carry your RECOMMENDED
+  default in parentheses — e.g. "Q7: When a shop's board drops an item,
+  does the parity row survive or leave both tabs? (recommended: survives
+  with a 'stale' flag until the user rules)". The user then confirms or
+  corrects in one word. Recommendations are proposals, NOT assumptions —
+  nothing enters the architecture unconfirmed.
+- Only after every batch is answered do you write the two deliverables.
+  Track open questions in the report so none is silently dropped.
 
 ## Your deliverables
 1. `architecture-spec-v2.md` — target architecture: sheet schema v2,
