@@ -57,6 +57,12 @@ the live tab; before/after diff of the Comments column.
 ## Round 2 — Sheet migration v2 (backup from Round 1 is the net)
 
 **Scope (spec §3/§4/§5):**
+0. Backup freshness check as STEP 0: local JSON backup + VPS offsite
+   copy + the daily 03:17 VPS cron all confirmed present — STOP if any
+   is missing. Every destructive step below is a **USER GATE** in the
+   coder session: printed preview + explicit user confirmation before
+   executing (stay/leave list, halal rename preview, column drop).
+   Mark each gate 'USER GATE' in the work order.
 1. Print the stay/leave list (sub-category rule, Q1) → user confirms
    one time.
 2. Create the `Archive` tab; copy ALL 112 current rows with all 19
