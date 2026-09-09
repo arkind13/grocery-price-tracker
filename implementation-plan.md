@@ -1,342 +1,305 @@
-# Implementation Plan — v2 Round 2: Sheet migration v2 + minimal v2 read path
+# Implementation Plan — v2 Round 3: Command surface v2 + DELETION MANIFEST
 
-- **Date:** 2026-09-09 · **Stage:** 02 Plan → 03 Code
+- **Date:** 2026-09-10 · **Stage:** 02 Plan → 03 Code
 - **Inputs:** `architecture-spec.md` (v2 + §18 A1–A3), `rebuild-plan.md`
-  (Round 2 scope, step-0 gate, USER GATE rule), Round-1 close-out
-  (tracker `933af6e` / parent `5342201`, checker PASS, 1319 green),
-  live sheet probe 2026-09-09 (§0 below).
-- **SCOPE GUARD:** Round 2 ONLY. No verb surface beyond `price`/`list`,
-  no v1 module deletions (dispatch-disable only — deletion is Round 3),
-  no Wednesday v2 (Round 4), no style kit (Round 3; style-lite here).
-  **If reality contradicts the spec at any step: STOP and report —
-  never adapt silently.**
+  (Round 3 scope), Round-2 close-out (tracker `dd3d8dd`/`5bda9ae`,
+  parent `b19fe74`, checker PASS — 139/139 parity ALIGNED, 1361 green
+  0 skipped, `list` = 105 entries).
+- **SCOPE GUARD:** Round 3 ONLY. No Wednesday v2 (Round 4 — Wednesday
+  stays absent exactly as at R2 close: no functional regression), no
+  speed-budget measurement campaign (Round 5), no final tidy (Round 5),
+  no skill polish beyond the interim accuracy rewrite (Round 4).
+  Build verbs FIRST, delete v1 AFTER their replacements pass tests.
+  **If reality contradicts the spec at any step: STOP and report.**
 - **Rule:** this file is overwritten in place each round.
 
-## 0. Ground truth (live probe 2026-09-09) + design consequences
+## 0. Ground truth (R2 close, checker-verified) + consequences
 
-| Fact | Value | Consequence |
-|------|-------|-------------|
-| Products_Master | 113×19; 112 data rows, **all 112 already carry Item_Codes** | Migration assigns codes ONLY to new blank rows |
-| Strict keep rule (Sub_Category ∈ `BUTCHERY_DOMAIN` ∪ `PRODUCE_SUBCATEGORIES`, both importable from `core.local_deals`) | **KEEP 10 / LEAVE 102** | Differs from the "~80 archived" estimate — NOT a spec contradiction: the G1 preview is authoritative, and 4 borderline labels (lettuce, coriander, greek salad ×2 — produce-adjacent but outside the sets) are surfaced as a BORDERLINE section for the user's one-time ruling at the gate |
-| Local_Deals | 133 rows = header + validity row + 2 section titles + **129 item rows (105 with ≥1 shop price)** | Day-one missing list ≤ ~105 entries (spec §18/A1 accepted) |
-| Backup system (Round-1 close) | local `backups/grocery-tracker-backup-2026-09-09.json` + VPS copy + daily 03:17 CEST cron; Google cloud-copy blocked for the SA (403 quota) | S0 verifies AND refreshes all three legs; the pre-migration JSON is the restore net |
-| LD grid writers (`merge_store_tab`, `sweep_expired_specials`, `set_store_prices`, `repair_orphan_comments`, `rebuild_tab`) | all write range `A1:J{n}` and normalize width to `len(TAB_COLUMNS)+1` = 10 | **TRAP:** once col K (Item_Code) exists, every such write TRUNCATES it. Task S5w widens ALL writers to 11 cols / `A1:K{n}` FIRST, with a regression test per writer |
-| Master writers post-migration | Wednesday v1, map/todo/update/sync reference dead columns → dispatch-disabled (S6); `sheets_sync.py` needs NO remap this round | Between R2 and R4 NOTHING writes master D except the user, manually in the sheet — exactly spec §4.2 |
+| Fact | Consequence for Round 3 |
+|------|------------------------|
+| Master 140×13 (139 coded data rows, Item_Code col L idx 11); LD 143×11 (139 items + 2 section rows, code col K idx 10); Archive 113×19; parity ALIGNED | Every write path must PRESERVE positional parity — batch `remove` deletes the same row index on both tabs; ingest appends on BOTH tabs in one operation |
+| Live commands: `local-deals` (all flags), `specials`, `price`, `list`; everything else behind the `RETIRED_V1` intercept (`grocery_price_cli.py:7135`) | D2 removes the intercept together with the retired parsers/handlers |
+| `v2_read.py` (286 lines): parse/read_tabs/lookup_item/missing_list/render_* ; `core/telegram_format.py` = the existing Style Kit (32 tests) | Batch/live/ignored build ON TOP of v2_read; the style kit is EXTENDED, not reinvented |
+| `merge_store_tab` inserts new rows INSIDE section blocks (`core/local_deals.py:2605`), `set_store_prices` likewise (`:2929`) | **Must change to bottom-append on BOTH tabs in one operation** (Q27 alignment + §18/A2 append-only). Mid-tab inserts would make every new local item a parity "middle_insert" hard alert |
+| `item_code_registry.json` (R2) guarantees code uniqueness | New-row code assignment (ingest + batch paths) reuses THIS registry — no new state |
+| Day-one missing list = 105 entries | No batch dry-run against real codes except verify-only `done` (writes nothing) |
 
-**USER GATE protocol (binding):** each gate prints its complete preview,
-then asks exactly `APPLY? (y/n)`. `y` proceeds; anything else aborts
-with ZERO further sheet writes. Gates run in the coder session with the
-user present; none may be skipped, reordered, or batched together.
+**No USER GATES this round** (nothing destructive touches the sheet's
+structure; deletions are git-reversible and archived-first). STOP
+conditions instead: parity audit ≠ ALIGNED after any write verb; any
+grep-clean hit; any suite failure after pruning.
 
-## S0 — Backup freshness gate (STOP-gate; scripted; BEFORE any write)
+## B1 — `live` verb (spec §7/§8; ≤20s)
 
-**Local:**
+**Files:** `grocery-price-tracker/core/v2_live.py` (NEW) + `grocery_price_cli.py` (subparser).
+
+```python
+"""v2 live search (spec §7 'live', §15 future clause). PRICES ONLY.
+This module NEVER receives a worksheet handle — it cannot write."""
+
+LIVE_PROVIDERS = ["woolworths", "coles"]
+# §15: adding ALDI/AMAZON later = one entry here + one extractor
+# mapping in _PROVIDER_FN. Nothing else may change.
+
+def live_search(query: str) -> dict:
+    """{provider: [≤3 × {'name','price','size'}], 'errors': {...}}.
+    Woolworths: extractors.woolworths_extractor no-auth search.
+    Coles: extractors.coles_extractor Scrape.do credit-guarded search
+    (existing chain, unchanged). ≤3 ranked results per store; price =
+    numeric now-price; size = package size or ''."""
+
+def render_live(results: dict, tracked_note: str | None) -> str:
+    """Styled block: per-store compact lines +, when the item is
+    tracked, ONE side-note line with the sheet WW price (from
+    v2_read.lookup_item — callers fetch it, this module stays
+    sheet-free)."""
+```
+
+CLI: `live --item X` (required) → prints render; exit 0 even on a
+store error (error line per store, never silence).
+**Tests (T-set 1):** no-write guarantee (module imports no sheets
+client; test asserts no worksheet arg exists in signatures), ≤3/store
+cap, provider-list iteration order, side-note presence when tracked,
+store-error degradation line.
+
+## B2 — `batch` engine (spec §4/§7; ≤10s)
+
+**Files:** `grocery-price-tracker/core/v2_batch.py` (NEW) + `grocery_price_cli.py` (subparser) + one `v2_read` edit.
+
+```python
+"""v2 batch corrections (spec §4/§7): ONE call, every verdict, one
+per-code reply. No pre-investigation — with one sheet and one list
+there is nothing to investigate."""
+
+def parse_verdicts(text: str) -> list[dict]:
+    """'ABC done; DEF gone; GHI rename halal lamb shoulder; JKL
+    remove; MNO ignore' -> [{'code','verb','arg'}]. rename's arg =
+    free text to the ';' / end. Unknown verbs -> {'code','verb':'?'}."""
+
+def apply_verdicts(verdicts: list[dict]) -> list[str]:
+    """ONE read of both tabs, then per verdict:
+    done   -> VERIFY-ONLY (Q14): master D real price AND keyword G
+              present -> '[CODE] ✓ done — off the list'; else names
+              exactly what is still blank. WRITES NOTHING.
+    gone   -> master D = 'GONE' (Q13). Row kept everywhere.
+    rename -> master A = new name AND LD A = new name when the LD row
+              is named (Q15). Codes/prices untouched.
+    remove -> ARCHIVE FIRST: append both rows to data/deleted_rows.json
+              (source 'v2-batch-remove'), then delete the SAME row
+              index on both tabs (parity preserved, Q16).
+    ignore -> append '[CODE] name' line to data/ignored_items.txt.
+    Unknown code -> '[CODE] ✗ unknown code' — remaining verdicts still
+    execute. One clear+update per tab max; tools/parity_audit.audit
+    after → must be ALIGNED (else raise + report, no partial silent
+    state)."""
+```
+
+`v2_read.missing_list` edit (1 file): load `data/ignored_items.txt`
+codes; exclude ignored codes from the list (hidden per spec §6).
+
+CLI: `batch --verdicts "..."` → prints per-code reply lines.
+**Tests (T-set 2):** each verdict on FakeSheet pairs (incl. GONE
+overwritten by a later real price, rename lands on both tabs, remove
+archives BEFORE deleting, done reports the blank side), unknown code
+isolation, ignored exclusion from `missing_list`, post-batch audit
+ALIGNED, mixed-verdict single call.
+
+## B3 — `ignored` verb
+
+CLI subcommand only: prints `data/ignored_items.txt` (count + lines),
+exit 0 on empty ("ignore list is empty"). No module — one handler.
+
+## B4 — Telegram style kit v2 (spec §11)
+
+**Files:** `core/telegram_format.py` (extend) + restyled renders in
+`core/v2_read.py` (render_lookup/render_list — logic unchanged) and
+the B1/B2 renderers + `tests/test_telegram_format.py` (extend),
+`tests/test_v2_read.py` (update render assertions).
+
+Kit elements (binding): emoji section headers (🟢 Woolworths · 🔪
+butchery · 🍎 fruit shop), bold item names, aligned price columns,
+🏆 winner badge, GONE / 🏷️ multi-buy badges, compact footer (date +
+code legend), hard cap 4000 chars with clean chunk splitting. No
+animation claims — structure + emoji carry the "wow" (§11 constraint).
+`specials` output restyled through the same kit.
+
+## B5 — Ingest pipeline: prefix + parity auto-create (spec §9 changes)
+
+**File:** `grocery-price-tracker/core/local_deals.py` (+ callers in
+`ingest_code`/`_process_store`/`sync_dunya_site`).
+
+1. **Halal prefix (Q17):** at deal normalization, EVERY item from a
+   butchery-source store gets `halal ` (display casing `Halal `) on
+   its name — regardless of item type; fruit shops never prefixed.
+   One helper `_prefix_butcher_deals(store_key, deals)`.
+2. **Bottom-append parity (Q27 + §18/A2):** `merge_store_tab` and
+   `set_store_prices` new-row inserts (anchors `core/local_deals.py`
+   ~2605 and ~2929) change from section-block insert to APPEND AT GRID
+   END. Signature change:
+   `merge_store_tab(worksheet, store_key, deals, valid_until=None,
+   master_ws=None) -> tuple[int, list[str]]` — when `master_ws` is
+   given, the SAME operation appends a blank 13-col master row (name,
+   Item_Code from `item_code_registry.json`, Sub_Category by domain;
+   D/G blank per §4.2) and writes the code into the LD row's col K;
+   returns (rows, new-row report lines). `None` (tests/legacy) skips
+   the master mirror and still reports the rows that WOULD mirror.
+3. **Ingest wiring:** `ingest_code`/`_process_store` pass
+   `master_ws=connect_spreadsheet().worksheet("Products_Master")`.
+   Missing-list routing needs NO code — a blank master row + priced LD
+   row IS a §6 list entry (pure computation, zero new state).
+4. **Dunya site = no new rows (§18/A1):** `sync_dunya_site` unmatched
+   site items are SKIPPED + reported ("not tracked — add via an FB
+   post or a manual entry"), never appended.
+**Tests (T-set 3):** prefix applies to all butchery-post items (incl.
+a non-meat one) and never to fruit shops; bottom-append on both tabs
+in one op (parity ALIGNED after); master row blank on D/G + coded;
+dunya-site unmatched skip + report; matched-row updates unchanged.
+
+## B6 — Interim skill docs (accuracy now; polish is Round 4)
+
+**Files:** `claw-skills/grocery-price/SKILL.md` (rewrite to the 6-verb
+surface: NL routing table — any price question → `price`; "live"/
+"search" → `live`; codes+verdicts → `batch`; "the list" → `list`;
+specials → `specials`; ignore reveal → `ignored`; the
+no-pre-investigation rule verbatim; `local-deals` machinery note);
+`claw-skills/local-deals/SKILL.md` (touch ONLY the halal-prefix rule
+wording); regenerate `claw-skills/claw_skills_easy.md` per the
+standing AGENTS.md doc-sync rule. VPS-sync the three files.
+
+## D1 — Archive copies BEFORE any deletion (state files)
+
 ```bash
 cd "C:/Users/User.DESKTOP-R2G441H/Documents/AI related/grocery-price-tracker"
-"$USERPROFILE/anaconda3/python.exe" tools/sheet_backup.py    # exit 0; today's JSON in backups/
+mkdir -p "old md/2026-09-v2-rebuild/state-archive/data" "old md/2026-09-v2-rebuild/state-archive/extractors"
+cp data/{add_to_list.json,add_to_list_code_tombstones.json,searched_items.json,searched_item_code_tombstones.json,unmapped_queue.json,delete_candidates.json,list_action_progress.json,unmatched.txt,coles_missing.txt,coles_missing_items.json,wool_missing.txt,missed_pricing_ages.json,live_api_capture.json,live_flush_log.json,session_heartbeat.log,forget_list.json,price_unavailable.json,halal_status.json,search_last_results.json,phase9_defect_log.json} "old md/2026-09-v2-rebuild/state-archive/data/" 2>/dev/null
+cp -r data/live_snapshots "old md/2026-09-v2-rebuild/state-archive/data/"
+cp extractors/{probe_results.json,ww_full_export.json,ww_products_export.json} "old md/2026-09-v2-rebuild/state-archive/extractors/" 2>/dev/null
+# plus any probe_*.json the coder's grep finds in extractors/
+cd "old md/2026-09-v2-rebuild/state-archive" && find . -type f -exec sha256sum {} \; > SHA256SUMS.manifest
 ```
+("if present" semantics: `2>/dev/null` skips already-absent names; the
+manifest is the deletion checklist — a file is deleted ONLY if it is
+in the manifest.)
+
+## D2 — Delete retired commands (`grocery_price_cli.py`)
+
+Remove the subparsers + handlers + private helpers for: `compare`,
+`optimize`, `shop`, `prefer`, `recipe`, `search`, `rewards`, `map`,
+`todo`, `add-to-list`, `searched-items`, `missed-pricing`,
+`no-price`, `lists`, `unmapped`, `specials-scan`, `update`, `sync`,
+`wednesday`, `backfill-keywords`, `backfill-sizes`,
+`backfill-subcategories`, `backfill-codes`, `backfill-home-brands`,
+`subcategories`, `live-refresh` — plus the now-dead `RETIRED_V1`
+intercept. Remaining CLI surface: `price`, `list`, `live`, `batch`,
+`specials`, `ignored`, `local-deals`. Verify `--help` lists exactly
+those seven.
+
+## D3 — Delete retired core modules (spec §13 + zero-caller consequences)
+
+DELETE files: `core/basket_optimizer.py`, `core/shop_flow.py`,
+`core/preferences.py`, `core/searched_items.py`, `core/add_to_list.py`
+(queue module), `core/queue_sync.py`, `core/missing_items_tracker.py`,
+`core/recipe_resolver.py`, `core/price_comparator.py`,
+`core/lookup.py`, `core/sheets_sync.py`.
+SLIM `core/halal.py`: delete the tier-2 LLM chain
+(`HALAL_CHECK_MODEL_CHAIN`, the live-verify functions, verdict-cache
+IO); KEEP `is_meat_term`, `HALAL_CHECK_CATEGORIES`, domain sets.
+Manifest-adjacent deletions (justified, flag in the report for the 04
+checker): `price_comparator`/`lookup`/`sheets_sync` have zero callers
+once D2 lands — §13's "slimmed lookup" intent already lives in
+`v2_read` (exact Col A + alias col J).
+KEEP (do not over-delete): `name_matcher.py` (canonical_key used by
+local_deals + migrate_v2), `uom.py` (fate decided Round 5 per §14),
+`extractors/doc_parser.py` (Round-4 dependency), all live extractors,
+`specials_reporter.py`, `telegram_format.py`, `woolworths_discounts.py`
+(display engine), `subcategory.py`, `sheets_client.py`, `v2_read.py`,
+data/{ignored_items.txt, deleted_rows.json, item_code_registry.json,
+local_deals_*, scrapedo_health.json, fb_flyers/, local_deals_inbox/}.
+
+## D4 — Delete the archived state files (only AFTER D1 manifest verifies)
+
+Delete every data/ + extractors/ file present in SHA256SUMS.manifest.
+`data/` keeps: `__init__.py`, `deleted_rows.json`, `ignored_items.txt`,
+`item_code_registry.json`, `local_deals_cron_state.json`,
+`local_deals_first_fire.json`, `local_deals_inbox/`,
+`local_deals_post_log.json`, `local_deals_scan_state.json`,
+`scrapedo_health.json`, `fb_flyers/`, `diagnostics/`,
+`sheets_manager.py`, `session_state.json`, `ww_coles_profile/`
+(secrets — untouched), `test_logs/` (evidence).
+
+## D5 — VPS/Telegram retirement (spec §13)
+
 **Remote VPS:**
 ```bash
-ssh myvps 'docker exec openclaw-core python3 /app/tasks/ai-tools/grocery-price-tracker/tools/sheet_backup.py && ls /home/ubuntu/openclaw/tasks/ai-tools/grocery-price-tracker/backups/'
-ssh myvps 'crontab -l | grep sheet_backup'                   # expect the 03:17 line
+ssh myvps 'crontab -l | grep -v wednesday_reminder | crontab -'
+ssh myvps 'rm -f /home/ubuntu/scripts/wednesday_reminder.py /home/ubuntu/scripts/.wednesday_reminder_state.json /home/ubuntu/scripts/wednesday_reminder.log; crontab -l'
 ```
-**STOP conditions (abort the session, report, no writes):** any exit
-≠ 0; today's JSON absent locally or on the VPS; cron line missing.
-Also confirm the pre-migration artifact
-`grocery-tracker-backup-2026-09-09.json` still exists on both sides at
-close (daily files never replace it).
+(the report records the removed line verbatim for the audit trail).
+**Local parent repo:** `git rm telegram_gateway/wednesday_reminder.py`.
+Topic 151 stays dead — documented, no action. The daily-scan cron AND
+the 03:17 backup cron STAY.
 
-## S1 — Migration tool, preview mode (code only; no writes)
+## T — Tests: add + prune (mandatory, zero-skip)
 
-**File:** `grocery-price-tracker/tools/migrate_v2.py` (NEW). Pure
-grid-in/grid-out helpers (offline-testable); only `main()` touches the
-sheet. CLI: `preview` · `apply-stay-leave` · `apply-columns` ·
-`apply-parity` · `audit`.
+ADD (T-sets 1–3 above +): style-kit tests (~6: header emojis, winner
+badge, GONE badge, 4000-char split, footer legend, specials restyle);
+`ignored` verb smoke; `batch` mixed-run reply ordering.
+PRUNE (deleted code — files removed wholesale unless noted):
+`tests/test_lookup.py`, `tests/test_lookup_uom.py`,
+`tests/test_sheets_sync.py`, `tests/test_comparator.py`,
+`tests/test_searched_items.py`, `tests/test_add_to_list.py`,
+`tests/test_queue_sync.py`, `tests/test_shop_flow.py` (if present —
+grep), `tests/test_cli.py` **prune in place** (drop retired-command
+tests; keep local-deals/specials/price/list/live/batch/ignored cases).
+Full suite must be green with 0 skipped; the coder REPORTS the final
+count (pruning makes a fixed prediction meaningless — green + zero
+skip + reported count is the criterion).
 
-```python
-"""One-shot v2 sheet migration (Round 2). Subcommands:
-  preview           — G1/G2/G3 previews (read-only)
-  apply-stay-leave  — G1 outcome: Archive tab + retire rows
-  apply-columns     — G2 outcome: drop E,F,J,K,L,N
-  apply-parity      — G3 outcome: halal renames + blank master rows +
-                      Local_Deals col K + positional alignment
-  audit             — parity audit via tools/parity_audit.audit
-"""
-KEEP_SETS = (BUTCHERY_DOMAIN, PRODUCE_SUBCATEGORIES)   # core.local_deals
-BORDERLINE = {"lettuce", "coriander", "greek salad"}   # user rules at G1
+## V — Verification battery (all scripted)
 
-def stay_leave(master_grid: list[list]) -> dict:
-    """{'keep': [...], 'leave': [...], 'borderline': [...]} (row dicts
-    w/ row#, name, code, sub_category). Keep iff
-    normalize_subcategory(grid[i][16]) ∈ a KEEP set; BORDERLINE labels
-    listed separately (default: NOT kept unless the user moves them)."""
-
-def build_archive_grid(master_grid: list[list]) -> list[list]:
-    """Verbatim full 19-column copy incl. header (spec §3.4)."""
-
-def drop_columns(master_grid: list[list]) -> list[list]:
-    """Remove 0-based indices [4, 5, 9, 10, 11, 13] (E,F,J,K,L,N).
-    Assert the result header == the 13 headers of spec §3.1 in order;
-    raise (do not write) on any mismatch."""
-
-def plan_halal_renames(ld_grid: list[list]) -> list[tuple[int, str, str]]:
-    """BUTCHERY-section item rows whose base name lacks 'halal'
-    (case-insensitive) → (row_idx, old_name, 'Halal ' + old_name).
-    FRUITS/OTHER rows untouched (spec §5)."""
-
-def plan_new_master_rows(ld_grid: list[list], master_grid_13: list[list],
-                         ) -> list[dict]:
-    """Unpaired LD item rows (no master row whose canonical base name
-    matches — reuse core.local_deals.canonical_key + _base_name) →
-    [{'name': …, 'code': …, 'subcategory': …}]. Name gets the 'Halal '
-    prefix for BUTCHERY-section rows only; subcategory = the item's
-    domain label ('fruit & veg' / the butchery label). Codes: 3 letters
-    A–Z minus I/L/O, unique vs all existing master codes."""
-
-def align_grids(master_grid_13, ld_grid_11) -> tuple[list, list]:
-    """Positional alignment (spec §3.3). Unified order = LD item rows
-    in tab order (LD section rows FRUITS/BUTCHERY/OTHER preserved on
-    the LD side only), then Wool-only master rows appended at the END —
-    each mirrored by a BLANK LD item row (Col A empty, code in col K).
-    Master data row N ↔ LD row N+1; master carries NO section rows."""
-
-def main() -> int    # argparse dispatch; apply-* ask nothing (the
-                     # SESSION owns the gates); every apply verifies
-                     # its own post-state and prints it
-```
-
-**Verify:**
+1. **grep-clean (zero dead references):**
 ```bash
-"$USERPROFILE/anaconda3/python.exe" -m py_compile tools/migrate_v2.py
-"$USERPROFILE/anaconda3/python.exe" -m pytest tests/test_migrate_v2.py -q
-"$USERPROFILE/anaconda3/python.exe" tools/migrate_v2.py preview       # live, read-only
+cd "C:/Users/User.DESKTOP-R2G441H/Documents/AI related"
+grep -rnE "basket_optimizer|shop_flow|preferences|set_preferred|searched_items|add_to_list|queue_sync|missing_items_tracker|recipe_resolver|price_comparator|sheets_sync|RETIRED_V1|from core import lookup|from core.lookup|coles_price|Search_Keyword_Coles|wednesday_reminder|specials-scan|missed-pricing|add-to-list|searched-items|backfill-" \
+  grocery_price_cli.py grocery-price-tracker/core/ grocery-price-tracker/extractors/ grocery-price-tracker/tests/ claw-skills/ | grep -v "old md/" | grep -v "\.pyc"
+# MUST return zero lines (tools/migrate_v2.py doc mentions are allowed ONLY in comments — if any hit is code, fix it; if it is a false positive, list it in the report)
 ```
+2. `python grocery_price_cli.py --help` → exactly 7 subcommands.
+3. Parity: `grocery-price-tracker/tools/migrate_v2.py audit` → ALIGNED.
+4. Live verb battery (timed — budgets: lookup ≤10s, live ≤20s, batch
+   ≤10s, list ≤5s): `price --item "halal beef mince"` · `list` ·
+   `specials --store woolworths` · `live --item "chicken breast"` ·
+   `batch --verdicts "<real-code> done"` (verify-only — writes
+   nothing; pick a code from `list` output) · `ignored`.
+5. Full suite green 0 skipped.
 
-## G1 — Stay/leave (USER GATE) → `apply-stay-leave`
+## A — Close-out + sync
 
-Preview: KEEP (~10, with codes + sub-categories), BORDERLINE (4 rows),
-LEAVE (~102, names only + count). User moves rows between lists at the
-gate; the ruling is recorded verbatim in the session report. **APPLY?
-(y/n)** →
-1. Create `Archive` tab; write the FULL current master grid (113×19).
-2. Delete confirmed-LEAVE rows from Products_Master bottom-up
-   (`delete_rows(i)` in DESCENDING row order so indices hold).
-3. Verify + print: Archive 113×19; master = header + confirmed keeps.
+Suite green → tracker commit (core/v2_live.py, core/v2_batch.py,
+core/v2_read.py, core/local_deals.py, core/telegram_format.py,
+core/halal.py, deletions, tests, plan, state-archive) + push; parent
+commit (`grocery_price_cli.py`, `telegram_gateway/wednesday_reminder.py`
+removal, test.md entry) + push; scp runtime files to the VPS mirror
+(grocery_price_cli.py, core/{v2_live,v2_batch,v2_read,local_deals,
+telegram_format,halal}.py, the three claw-skills files) + md5 verify;
+report three-way sync.
 
-## G2 — Column drop (USER GATE) → `apply-columns`
+## Acceptance criteria (rebuild-plan Round 3)
 
-Preview: the spec §3.1 table mapped onto the live header (old→new
-letters). **APPLY? (y/n)** → `delete_columns(i)` 1-based indices
-**14, 12, 11, 10, 6, 5 — strictly descending (N, L, K, J, F, E)**.
-Verify header equals EXACTLY:
-`Product_Name, Category, Size, Woolworths_Price, Brand_Type,
-Last_Updated, Search_Keyword_Woolworths, Woolworths_Specials,
-Rewards_Points, Keywords, Sub_Category, Item_Code, Preferred`.
-
-## G3 — Parity migration (USER GATE) → `apply-parity`
-
-Preview prints ALL of: halal rename list; new blank master rows with
-codes (~unpaired LD items); Local_Deals col-K append + backfill plan;
-final aligned order (side-by-side counts + first/last 5 pairs).
-**APPLY? (y/n)** → in order:
-1. **S4** renames on Local_Deals (`Halal xxx`, BUTCHERY rows only).
-2. Blank master rows APPENDED at the bottom (13-col row: name,
-   Item_Code, Sub_Category only — D/G stay BLANK; spec §4.2).
-3. LD col K: header `Item_Code` + the paired master code on every item
-   row (existing code for matched rows, the new code for created rows;
-   blank Wool-only LD rows carry their master code too).
-4. **S7** alignment: rewrite both tabs via `align_grids` — one
-   `clear()` + one `update()` per tab (`A1:M{n}` master / `A1:K{n}` LD).
-5. `tools/migrate_v2.py audit` → must print ALIGNED.
-
-## S5w — Widen ALL Local_Deals grid writers to 11 columns (code; run BEFORE any ingest/sweep can fire again)
-
-**File:** `grocery-price-tracker/core/local_deals.py` — mechanical:
-1. `TAB_COLUMNS` (~line 1062): append `("item_code", "Item_Code")` →
-   `len(TAB_COLUMNS) == 10`; every width normalization
-   (`len(TAB_COLUMNS) + 1`) becomes 11 automatically.
-2. Every literal `range_name=f"A1:J{...}"` → `f"A1:K{...}"`
-   (`grep -n 'A1:J' core/local_deals.py` must return ZERO at the end —
-   expect ~5 sites: merge_store_tab, sweep_expired_specials,
-   set_store_prices, repair_orphan_comments, rebuild_tab, plus any the
-   grep finds).
-3. Extend hardcoded blank-row literals (`"", "", …` of length 9/10) by
-   one `""` (grep the 9-`""` literal; the inserted-rows code that uses
-   `[""] * len(TAB_COLUMNS)` scales by itself — verify, don't touch).
-4. `_load_master_rows` remap to the 13-col layout: name 0, category 1,
-   size 2, wool_price 3, subcategory **10**; DROP `coles_price` from
-   the returned dicts and delete the Coles arm of the standout compare
-   (>20% vs raw D only — spec Q20). Grep `coles_price` and `r\[4\]` in
-   the compare chain to catch every reader.
-
-**Verify:**
-```bash
-"$USERPROFILE/anaconda3/python.exe" -m py_compile core/local_deals.py
-grep -n "A1:J" core/local_deals.py          # MUST output nothing
-"$USERPROFILE/anaconda3/python.exe" -m pytest tests/test_local_deals.py tests/test_cli.py -q
-```
-
-## S6 — Dispatch-disable retired v1 commands (one-line notice)
-
-**File:** `grocery_price_cli.py` (parent root). One constant + one
-intercept before the `args.func(args)` call in `main()` (locate the
-dispatch anchor by grepping `args.func`):
-
-```python
-# v2 migration (Round 2): these paths read dead columns. Round 3
-# deletes them; Round 4 rebuilds wednesday. Notice + exit 0.
-RETIRED_V1 = {"compare", "optimize", "shop", "prefer", "recipe",
-              "search", "rewards", "map", "todo", "add-to-list",
-              "searched-items", "missed-pricing", "no-price",
-              "lists", "unmapped", "specials-scan", "update",
-              "sync", "wednesday", "backfill-keywords",
-              "backfill-sizes", "backfill-subcategories",
-              "backfill-codes", "backfill-home-brands",
-              "subcategories", "live-refresh"}
-# in main(), after parse_args, before args.func(args):
-#   if getattr(args, "cmd", "") in RETIRED_V1:
-#       print("[v2] retired by the migration — returns in Round 3/4; "
-#             "the sheet is the source of truth until then")
-#       return 0
-```
-Stays LIVE: `local-deals` (all flags), `specials`, `price`, `list`.
-(Offline module tests of retired commands keep passing — modules are
-untouched; only dispatch changes.)
-
-**Verify:**
-```bash
-"$USERPROFILE/anaconda3/python.exe" grocery_price_cli.py compare --items "milk"   # notice, exit 0
-"$USERPROFILE/anaconda3/python.exe" grocery_price_cli.py local-deals --help       # unchanged
-"$USERPROFILE/anaconda3/python.exe" grocery_price_cli.py specials --store woolworths
-```
-
-## S7s — Keep `specials` alive (read-only remap)
-
-**File:** `grocery-price-tracker/core/specials_reporter.py` — remap to
-the 13-col layout: WW price D (3, unchanged), specials M(12) → **H(7)**,
-rewards O(14) → **I(8)**; delete the Coles specials arm. Update its
-tests' fixtures to the 13-col width (tests/test_specials_flags.py).
-
-**Verify:** `pytest tests/test_specials_flags.py tests/test_telegram_format.py -q` + the live `specials` run above.
-
-## S8 — Minimal v2 read path: `price` + `list`
-
-**File:** `grocery-price-tracker/core/v2_read.py` (NEW):
-
-```python
-"""v2 sheet-only read path (spec §6/§8). ONE master read + ONE
-Local_Deals read per command. Never writes. Never live-searches."""
-
-def read_tabs() -> tuple[list[dict], list[dict]]:
-    """master: {row, name, size, ww_raw, ww_num, keyword, specials,
-    aliases, subcategory, code, gone (bool), na_marker (str|None)};
-    ld: {row, name, prices: {shop_key: (float, 'special'|'permanent')},
-    code} — special-first via core.local_deals.tab_store_price."""
-
-def is_meat_query(query: str) -> bool          # core.halal.is_meat_term
-
-def lookup_item(query: str, master_rows, ld_rows) -> dict:
-    """Exact Col A / alias (col J) match, case-insensitive; a MEAT
-    query resolves only through rows whose name contains 'halal'
-    (spec §5); returns one result dict per the §8 table (tracked /
-    gone / na_marker / missing-with-code / not-tracked / out-of-domain
-    — lookup NEVER raises on a miss)."""
-
-def missing_list(master_rows, ld_rows) -> list[dict]:
-    """§6 rule: local side has ≥1 shop price AND D has no real price
-    AND D != 'GONE' AND keyword col G empty → {code, name, best_local,
-    shops}. Every entry carries its code."""
-
-def render_lookup(result: dict) -> str    # style-LITE plain lines
-def render_list(items: list[dict]) -> str  # '[CODE] name — best $X (shop)' lines + count
-```
-
-**File:** `grocery_price_cli.py` — two new subparsers (`price --item X`
-required; `list`), thin handlers calling `v2_read` + printing the
-render. One sheet read per tab per call (`list` budget ≤5s).
-
-**Verify:**
-```bash
-"$USERPROFILE/anaconda3/python.exe" -m pytest tests/test_v2_read.py -q
-"$USERPROFILE/anaconda3/python.exe" grocery_price_cli.py list
-"$USERPROFILE/anaconda3/python.exe" grocery_price_cli.py price --item "halal beef mince"
-```
-
-## S9 — Parity audit utility (A2 semantics; Round 4 wires it into Wednesday)
-
-**File:** `grocery-price-tracker/tools/parity_audit.py` (NEW):
-
-```python
-def audit(master_grid: list[list], ld_grid: list[list]) -> dict:
-    """{'status': 'aligned' | 'bottom_append' | 'middle_insert',
-    'misses': [row dicts], 'alert': str | None}.
-    Pairs: master data row N (Item_Code col L, idx 11) ↔ LD row N+1
-    (code col K, idx 10). Aligned → silence line. Extra rows at the END
-    of either tab → 'bottom_append' + the rows (Round 4's Wednesday
-    AUTO-MIRRORS those; this round only reports). A code break INSIDE
-    the sequence → 'middle_insert' + alert VERBATIM (spec §18/A2):
-    'row #N was inserted in the middle — move it to the bottom
-    manually and run sync again to copy it over to the other sheet.'"""
-```
-
-**Verify:** `pytest tests/test_parity_audit.py -q` (all three statuses,
-verbatim alert string) + live `tools/migrate_v2.py audit` → ALIGNED.
-
-## S10 — Regression tests (mandatory, zero-skip, offline, grid fixtures)
-
-1. `tests/test_migrate_v2.py` — stay/leave (incl. borderline +
-   blank-subcategory rows), `drop_columns` exact header + index
-   correctness, rename plan touches BUTCHERY only, new-row plan
-   (prefix rule + code uniqueness, no I/L/O), `align_grids` (counts,
-   per-position code pairing, blank-LD-row shape), `apply-*`
-   idempotence on a FakeSheet (second run = zero changes).
-2. `tests/test_local_deals.py` additions — **writer-width regression**
-   (the col-K truncation trap): after EACH of `merge_store_tab`,
-   `sweep_expired_specials`, `set_store_prices`,
-   `repair_orphan_comments` writes, col-K codes survive intact (4
-   tests minimum); standout is WW-only; `_load_master_rows` parses the
-   13-col layout.
-3. `tests/test_v2_read.py` — one test per §8 table row (9 cases) + §6
-   list-rule cases (listed: blank D+G + local price; NOT listed: GONE,
-   keyword-only, price-only, no-local-price) + meat-query halal
-   scoping (plain non-halal meat row invisible to a meat query).
-4. `tests/test_parity_audit.py` — as S9.
-
-**Full suite:** expect **1319 + ~25 new, 0 failed, 0 skipped**:
-```bash
-"$USERPROFILE/anaconda3/python.exe" -m pytest tests/ -q
-```
-
-## S11 — Live acceptance + close-out
-
-1. `tools/migrate_v2.py audit` → ALIGNED (print in the report).
-2. `grocery_price_cli.py list` — eyeball vs the sheet; report the
-   day-one count (expected ≤ ~105, spec §18/A1).
-3. Three spot lookups: one meat term (e.g. `price --item "halal beef
-   mince"`), one F&V, one archived name (expect the not-tracked /
-   out-of-domain class of answer).
-4. Final user eyeball of both tabs (gate-closing look — not a new gate).
-5. Suite green → commits (tracker: tools/, core/, tests/, plan; parent:
-   `grocery_price_cli.py`) → push → scp runtime files
-   (`grocery_price_cli.py`, `core/local_deals.py`, `core/v2_read.py`,
-   `core/specials_reporter.py`, `tools/migrate_v2.py`,
-   `tools/parity_audit.py`) to the VPS mirror → md5-verify → report
-   three-way sync status.
-
-## Acceptance criteria (rebuild-plan Round 2)
-
-1. Parity audit passes — row counts equal (offset +1), every
-   Local_Deals row carries a resolvable code, every §6 list-rule case
-   renders correctly.
-2. Backup net untouched: pre-migration JSON present locally + VPS at
-   close; S0 refreshed all three backup legs before any write.
-3. User confirms G1/G2/G3 previews (rulings recorded in the report).
-4. `price` + `list` answer from the live sheet (`list` ≤5s).
-5. Full suite green, zero skips; three-way sync in sync.
+1. Every verb answers within budget on the live sheet (timed proof in
+   the report).
+2. `batch` executes mixed verdicts in ONE call with per-code replies
+   (live proof: the verify-only `done` run + the offline mixed test).
+3. Zero dead references remain (grep-clean output — empty or
+   itemized false positives only).
+4. `claw-skills` docs regenerated + synced (claw_skills_easy.md
+   updated; md5s match VPS).
+5. Deletions archived-first (SHA256SUMS.manifest committed); suite
+   green, 0 skipped; three-way sync in sync.
 
 ## Rollback
 
-The pre-migration JSON (complete 4-tab grid dump) is the restore
-artifact. Restore is MANUAL by design (spec §3.4 philosophy — a wrong
-automated restore is worse than a slow manual one): rewrite the tabs
-from the JSON; the migration tool ships no `restore` subcommand.
+Code: git revert (both repos). State files: restore from
+`old md/2026-09-v2-rebuild/state-archive/` (sha256-verified). VPS cron:
+re-add the recorded crontab line. No sheet-structure changes occur
+this round — the parity audit after every write verb is the tripwire.
