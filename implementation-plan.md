@@ -539,3 +539,15 @@ report lines (quote them verbatim in the coder report).
 4. Full suite green, zero skips (expect 1262 passed).
 5. Both repos pushed; VPS md5s match local; report ends with the
    three-way sync status (in sync / not, one line).
+
+---
+
+## ADDENDUM (orchestrator corrections, 2026-09-09 — binding, same authority as the plan)
+
+1. **MISSING SCOPE RESTORED — A3 test-hygiene riders (spec §18/A3, rebuild-plan Round 1 item 4).** The plan omitted them. Add as Task 5b (tests/test_cli.py + tests/test_local_deals.py):
+   - (a) `TestCLI::test_specials_leads_with_fresh_report` — the fixture crafts a Wednesday report "generated 2026-09-02", which aged out of the ≤7-day window on Sep 9. Fix: generate the fixture date ROLLING (e.g. `_dt.now() - 1 day`) so the test cannot rot again.
+   - (b) `TestScanWindowsAndCutoff::test_between_alerts_window_enforced` — the final scenario's post is created 0.05s before its scan; when two consecutive `run_daily_scan` calls execute <50ms apart the assertion misses (1-in-4 flake). Fix: widen the offset to 5s.
+   - Acceptance: both tests pass on 10 consecutive suite runs; no other test changes.
+2. **CORRECTED TEST-COUNT EXPECTATIONS (Task 7 / acceptance criterion 4).** The plan's "baseline 1250 → 1262" is stale (round-2 era). Current reality: **1307 collected (1306 passed + 1 failed = the date-rot nit)**. After this round WITH the restored A3 riders: expect **1319 collected, 1319 passed, 0 failed, 0 skipped** (1307 + 9 comment-lifecycle + 3 backup + 2 rider-fixes do not add tests, they fix existing ones... net = 1319 total, all green).
+3. **FakeWorksheet note (Task 5):** `test_repair_no_tags_writes_nothing` asserts `ws.clear_calls == 0` — if the shared `FakeWorksheet` does not track `clear()` calls, add a counter to it (one attribute + one increment); do NOT weaken the assertion.
+4. Everything else in the plan stands as written. The coder follows plan + this addendum; any further deviation = STOP and report.
