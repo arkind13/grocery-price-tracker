@@ -219,6 +219,33 @@ class TestPlanSync(unittest.TestCase):
         plan = self._plan(main=[_item("Woolworths Tomato", 0.6)])
         self.assertFalse(any(w[0] == 4 for w in plan["writes"]))
 
+    def test_specials_only_skips_main_pass(self):
+        """--specials-only (user rule 2026-09-10, weeks between main
+        list cleanups): NO main-docx D writes, NO N/A sweep (manual
+        prices survive), no main-docx unmatched noise; the specials
+        docx still acts (H + deal rate) and deal-end clears still run.
+        """
+        self.master._values[2][3] = "12.50"    # manual D price
+        self.master._values[2][7] = "multi-buy 2/$8.00"  # stale deal
+        plan = plan_sync(
+            self.master._values,
+            [_item("Woolworths Tomato", 0.6)],      # stale main docx
+            [_item("Cheddar Cheese Block", 6.0,
+                   special_desc="2 for $6.00", is_special=True)],
+            TODAY, specials_only=True)
+        writes = {(i, c): v for i, c, v in plan["writes"]}
+        self.assertNotIn((1, 3), writes)       # tomato D untouched
+        self.assertNotIn((2, 3), writes)       # beef mince NOT N/A'd
+        self.assertEqual(plan["na"], [])
+        self.assertEqual(plan["matched"], 0)
+        self.assertEqual(plan["unmatched"], [])  # main noise suppressed
+        self.assertEqual(plan["cleared_h"],
+                         ["Halal Beef Mince 500g"])  # deal-end sweep
+        self.assertEqual(writes.get((2, 7)), "")
+        # the specials docx still acts: rate + H terms
+        self.assertEqual(writes[(3, 3)], "$3.00")
+        self.assertEqual(writes[(3, 7)], "multi-buy 2/$6.00")
+
 
 class TestApplyWrites(unittest.TestCase):
     def test_single_clear_update_and_noop(self):

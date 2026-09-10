@@ -99,7 +99,8 @@ def match_index(master_grid: list[list]) -> dict:
 
 
 def plan_sync(master_grid: list[list], main_items: list,
-              specials_items: list, today: date) -> dict:
+              specials_items: list, today: date,
+              specials_only: bool = False) -> dict:
     """Pure grid-in plan-out (offline-testable). Returns
     {'writes': [(idx, col, value)], 'matched': int, 'na': [names],
     'unavailable': [names], 'multibuy': [names], 'cleared_h': [names],
@@ -122,6 +123,12 @@ def plan_sync(master_grid: list[list], main_items: list,
       main-docx normal price).
     - docx line with NO keyword match -> 'unmatched' report only —
       NEVER a write (no auto-add, §4.2).
+
+    specials_only=True (user rule 2026-09-10, for weeks between main
+    list cleanups): pass 1 (main-docx D writes, unavailable markers,
+    N/A sweep, main-docx unmatched) is SKIPPED entirely — manual D
+    prices survive; only the specials docx acts (H terms, deal rates,
+    deal-end clears).
     """
     from core.multibuy import (effective_unit_rate, encode_multibuy_cell,
                                parse_multibuy)
@@ -141,8 +148,9 @@ def plan_sync(master_grid: list[list], main_items: list,
             unmatched.append(name)
 
     # --- pass 1: the main docx -> D prices / markers -------------
+    # (skipped entirely in specials_only mode)
     matched_main: dict = {}    # grid idx -> item
-    for item in main_items:
+    for item in ([] if specials_only else main_items):
         idx = kw_index.get(_norm(getattr(item, "raw_name", "")))
         if idx is None:
             _note_unmatched(getattr(item, "raw_name", ""))
@@ -160,7 +168,7 @@ def plan_sync(master_grid: list[list], main_items: list,
             unavailable.append(name)
 
     for idx in kw_index.values():
-        if idx in matched_main:
+        if specials_only or idx in matched_main:
             continue
         row = master_grid[idx]
         if _cell(row, PRICE_IDX).upper() == GONE_MARKER:
@@ -344,7 +352,8 @@ def _receipt(tag: str, receipt: dict, thread) -> None:
               f"(failure line above)")
 
 
-def run(dry_run: bool = False, send: bool = True) -> int:
+def run(dry_run: bool = False, send: bool = True,
+        specials_only: bool = False) -> int:
     """Full pipeline: parse -> read both tabs -> parity_step ->
     plan_sync -> apply_writes (skipped in dry-run) -> TWO posts via
     core.local_deals._send_message (skipped in dry-run / send=False;
@@ -352,7 +361,11 @@ def run(dry_run: bool = False, send: bool = True) -> int:
     Prints the receipt line per post ('[telegram] ok message_id=…').
     Console always ends with: matched/unmatched/marker counts + the
     unmatched names + elapsed seconds. Returns 0, or 1 on the
-    middle-insert abort (§18/A2.2)."""
+    middle-insert abort (§18/A2.2).
+
+    specials_only=True skips the main-docx pass (no D writes / no N/A
+    sweep — manual prices survive); the specials docx alone updates
+    H terms, deal rates and deal-end clears."""
     from core.local_deals import TAB_NAME, TELEGRAM_CHAT_ID, \
         _send_message
     from core.sheets_client import _load_env, connect_spreadsheet
@@ -378,7 +391,10 @@ def run(dry_run: bool = False, send: bool = True) -> int:
         return 1
 
     plan = plan_sync(master_grid, main_items, specials_items,
-                     sydney_today())
+                     sydney_today(), specials_only=specials_only)
+    if specials_only:
+        print("[specials-only] main-docx pass SKIPPED — col D "
+              "untouched (no N/A sweep; manual prices survive)")
     if not dry_run:
         apply_writes(master_ws, master_grid, plan["writes"])
 

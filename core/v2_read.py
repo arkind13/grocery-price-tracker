@@ -127,26 +127,62 @@ def _best(prices: dict) -> tuple | None:
     return shop, price, kind
 
 
-_TWIN_STRIP_TOKENS = ("halal", "non", "and")
+_STRIP_TOKENS = ("halal", "non", "and", "compare", "vs", "versus")
+
+
+def _query_tokens(query: str) -> list:
+    """Product tokens of a query: lowercased alphanumeric words minus
+    the halal/non/comparison filler tokens."""
+    return [t for t in re.findall(r"[a-z0-9]+", str(query or "").lower())
+            if t not in _STRIP_TOKENS]
+
+
+def _name_has_all(name_lower: str, tokens: list) -> bool:
+    """Word-boundary-safe 'contains EVERY token' (subcategory.py
+    discipline)."""
+    return all(re.search(rf"\b{re.escape(tok)}\b", name_lower)
+               for tok in tokens)
+
+
+def _pack_kg(text: str) -> float | None:
+    """Pack size in kg parsed from text ('500g' -> 0.5, '(5KG)' -> 5).
+
+    Needs a NUMBER before the unit, so a bare '/kg' price marker never
+    matches. Returns None when no weight is stated."""
+    text = str(text or "").lower()
+    match = re.search(r"(\d+(?:[.,]\d+)?)\s*kgs?\b", text)
+    if match:
+        return float(match.group(1).replace(",", "."))
+    match = re.search(r"(\d+(?:\.\d+)?)\s*g\b", text)
+    if match:
+        return float(match.group(1)) / 1000.0
+    return None
+
+
+def _fmt_kg(kg: float) -> str:
+    """0.5 -> '500g', 5.0 -> '5kg'."""
+    return f"{kg * 1000:.0f}g" if kg < 1 else f"{kg:g}kg"
 
 
 def _non_halal_twin(query: str, master_rows: list) -> list:
     """Plain (non-halal) Woolworths master rows matching a MEAT query.
 
-    Match rule (binding): strip the tokens 'halal'/'non'/'and' from
-    the query; a plain DOMAIN row matches iff its normalized name
-    contains EVERY remaining query token (word-boundary-safe — the
-    subcategory.py discipline), its name does NOT contain 'halal',
-    and it is not the halal row already answering. Returns [{'name',
-    'state': 'priced'|'gone'|'na', 'value': float|str|None}] — the
-    row set the RENDERER shows; no other consumer exists.
+    Match rule (binding): strip the tokens 'halal'/'non'/'and' (+ the
+    comparison fillers 'compare'/'vs'/'versus') from the query; a
+    plain DOMAIN row matches iff its normalized name contains EVERY
+    remaining query token (word-boundary-safe — the subcategory.py
+    discipline), its name does NOT contain 'halal', and it is not the
+    halal row already answering. Returns [{'name', 'state':
+    'priced'|'gone'|'na', 'value': float|str|None, 'kg': float|None}]
+    — the row set the RENDERER shows; no other consumer exists.
 
     Spec §18 A4: reads master_rows ONLY (never Local_Deals — locals
     are always the halal side) and never consults the answering halal
     row's col D. Blank-D plain rows carry no price state → omitted.
+    'kg' = pack size from col C (fallback: the row name) so the
+    renderer can show the per-kg equivalent of a priced twin.
     """
-    tokens = [t for t in re.findall(r"[a-z0-9]+", str(query or "").lower())
-              if t not in _TWIN_STRIP_TOKENS]
+    tokens = _query_tokens(query)
     if not tokens:
         return []
     twins: list = []
@@ -154,19 +190,66 @@ def _non_halal_twin(query: str, master_rows: list) -> list:
         name = str(master["name"] or "").lower()
         if "halal" in name or not _is_domain_row(master):
             continue
-        if not all(re.search(rf"\b{re.escape(tok)}\b", name)
-                   for tok in tokens):
+        if not _name_has_all(name, tokens):
             continue
         if master["gone"]:
             twins.append({"name": master["name"], "state": "gone",
-                          "value": None})
+                          "value": None, "kg": None})
         elif master["na_marker"]:
             twins.append({"name": master["name"], "state": "na",
-                          "value": master["na_marker"]})
+                          "value": master["na_marker"], "kg": None})
         elif master["ww_num"] is not None:
-            twins.append({"name": master["name"], "state": "priced",
-                          "value": master["ww_num"]})
+            twins.append({
+                "name": master["name"], "state": "priced",
+                "value": master["ww_num"],
+                "kg": _pack_kg(master["size"] or master["name"])})
     return twins
+
+
+def _ld_quotes(ld: dict) -> list:
+    """One LD row -> per-shop quote records with unit info.
+
+    The unit marker is the LD NAME suffix (sheet convention): '/kg' =
+    the price IS per kg; '/ea' = per pack (pack size parsed from the
+    name, e.g. '(5KG)'); no suffix = bare pack price. 'per_kg' makes a
+    /kg quote and a 5kg pack comparable (the sheet-wide unit rule)."""
+    name = str(ld["name"] or "")
+    low = name.strip().lower()
+    if low.endswith("/kg"):
+        unit, pack = "kg", None
+    elif low.endswith("/ea"):
+        unit, pack = "ea", _pack_kg(name)
+    else:
+        unit, pack = "", None
+    out: list = []
+    for shop, (price, kind) in sorted(ld["prices"].items()):
+        if unit == "kg":
+            per_kg = price
+        elif unit == "ea" and pack:
+            per_kg = round(price / pack, 2)
+        else:
+            per_kg = None
+        out.append({"shop": shop, "price": price, "kind": kind,
+                    "unit": unit, "pack": pack, "per_kg": per_kg})
+    return out
+
+
+def _quotes_and_best(rows: list) -> tuple:
+    """Quote records for LD rows + the winner across them.
+
+    Winner rule: prefer quotes with a computable $/kg (units compare
+    fairly); fall back to the raw cheapest when none carries a unit."""
+    quotes = [q for ld in rows for q in _ld_quotes(ld)]
+    priced = [q for q in quotes if q["per_kg"] is not None]
+    if priced:
+        best_q = min(priced, key=lambda q: q["per_kg"])
+        label = f"${best_q['per_kg']:.2f}/kg"
+    elif quotes:
+        best_q = min(quotes, key=lambda q: q["price"])
+        label = None
+    else:
+        best_q, label = None, None
+    return quotes, best_q, label
 
 
 def lookup_item(query: str, master_rows, ld_rows) -> dict:
@@ -201,17 +284,29 @@ def lookup_item(query: str, master_rows, ld_rows) -> dict:
     if hit is None and meat:
         # §8 row 3: meat term, no halal master row — fall back to
         # halal-named LOCAL rows (butcher prices + missing-list code).
+        # 2026-09-10 user fix: when halal LD rows match the QUERY
+        # tokens, pool ONLY those — a 'beef mince' answer must never
+        # quote a chicken row. The unfiltered pool survives only as
+        # the last resort so a meat term never answers empty.
+        tokens = _query_tokens(q)
         locals_with = [ld for ld in ld_rows
                        if "halal" in ld["name"].lower() and ld["prices"]]
-        if locals_with:
+        matched = [ld for ld in locals_with
+                   if _name_has_all(str(ld["name"]).lower(), tokens)]
+        pool_rows = matched or locals_with
+        if pool_rows:
             prices: dict = {}
-            for ld in locals_with:
+            for ld in pool_rows:
                 for shop, (price, kind) in ld["prices"].items():
                     prices.setdefault(shop, (price, kind))
-            best = _best(prices)
+            quotes, best_q, best_label = _quotes_and_best(pool_rows)
+            best = ((best_q["shop"], best_q["price"], best_q["kind"])
+                    if best_q else None)
             return {"status": "meat-local-only", "master": None,
                     "local": prices, "best": best,
-                    "code": locals_with[0]["code"],
+                    "best_label": best_label,
+                    "local_quotes": quotes,
+                    "code": pool_rows[0]["code"],
                     "non_halal_twins": twins,
                     "query": q}
 
@@ -219,8 +314,11 @@ def lookup_item(query: str, master_rows, ld_rows) -> dict:
         ld = next((ld for ld in ld_rows
                    if ld["code"] and ld["code"] == hit["code"]), None)
         prices = dict(ld["prices"]) if ld else {}
-        best = _best(prices)
+        quotes, best_q, best_label = _quotes_and_best([ld] if ld else [])
+        best = ((best_q["shop"], best_q["price"], best_q["kind"])
+                if best_q else None)
         base = {"master": hit, "local": prices, "best": best,
+                "best_label": best_label, "local_quotes": quotes,
                 "code": hit["code"], "non_halal_twins": twins,
                 "query": q}
         if hit["gone"]:
@@ -300,20 +398,48 @@ _SHOP_ICONS = {"dunya": "🔪", "dunya_fb": "🔪", "merjan": "🔪",
                "fruitopia": "🍎", "abusalim": "🍎"}
 
 
+def _quote_price_text(q: dict) -> str:
+    """One quote's price text with its unit basis ('$15.99/kg',
+    '$64.99 / 5kg pack = $13.00/kg', '$8.99/ea' or a bare '$8.99')."""
+    if q["unit"] == "kg":
+        return f"${q['price']:.2f}/kg"
+    if q["unit"] == "ea" and q["pack"]:
+        return (f"${q['price']:.2f} / {_fmt_kg(q['pack'])} pack"
+                f" = ${q['per_kg']:.2f}/kg")
+    if q["unit"] == "ea":
+        return f"${q['price']:.2f}/ea"
+    return f"${q['price']:.2f}"
+
+
 def _local_lines(result: dict) -> list:
-    """Aligned per-shop price lines (kit: aligned price columns)."""
+    """Aligned per-shop price lines (kit: aligned price columns).
+    Quote records (local_quotes) carry the sheet's unit markers —
+    '/kg' prices show per kg and '/ea' packs show their per-kg rate —
+    so a /kg quote and a 5kg pack compare fairly on screen."""
     from core.telegram_format import _cells
 
-    entries = sorted(result["local"].items(),
-                     key=lambda kv: kv[1][0])
-    labels = [f"{_SHOP_ICONS.get(shop, '·')} {_shop_label(shop)}"
-              for shop, _ in entries]
-    width = max((_cells(label) for label in labels), default=0)
+    quotes = result.get("local_quotes") or []
+    if quotes:
+        ordered = sorted(quotes, key=lambda q: (
+            q["per_kg"] is None, q["per_kg"] or q["price"], q["price"]))
+        tagged = [(f"{_SHOP_ICONS.get(q['shop'], '·')} "
+                   f"{_shop_label(q['shop'])}",
+                   _quote_price_text(q)
+                   + {"special": " (special)", "permanent": ""}[
+                       q["kind"]])
+                  for q in ordered]
+    else:
+        entries = sorted(result["local"].items(),
+                         key=lambda kv: kv[1][0])
+        tagged = [(f"{_SHOP_ICONS.get(shop, '·')} {_shop_label(shop)}",
+                   f"${price:.2f}"
+                   + {"special": " (special)", "permanent": ""}[kind])
+                  for shop, (price, kind) in entries]
+    width = max((_cells(label) for label, _ in tagged), default=0)
     lines: list = []
-    for label, (shop, (price, kind)) in zip(labels, entries):
+    for label, price_text in tagged:
         pad = " " * max(0, width - _cells(label))
-        tag = {"special": " (special)", "permanent": ""}[kind]
-        lines.append(f"  {label}{pad}  ${price:.2f}{tag}")
+        lines.append(f"  {label}{pad}  {price_text}")
     return lines
 
 
@@ -322,9 +448,12 @@ def _twin_lines(result: dict) -> list:
     EXACT test.md format. A priced twin goes through the EXISTING WW
     display-discount engine (§5); the twin dict carries no brand, so
     home-brand detection runs on the row name alone (the engine's
-    blank-brand rule)."""
-    from core.woolworths_discounts import format_discounted_price, \
-        is_woolworths_home_brand
+    blank-brand rule). A priced twin with a stated pack size also
+    shows its per-kg rate — a 500g Wool pack must never be compared
+    against the butchers' /kg quotes unit-blind (user rule 2026-09-10)."""
+    from core.woolworths_discounts import discounted_woolworths_price, \
+        format_discounted_price, is_woolworths_home_brand, \
+        TEAM_DISCOUNT_ENABLED
 
     lines: list = []
     for twin in result.get("non_halal_twins") or []:
@@ -332,8 +461,13 @@ def _twin_lines(result: dict) -> list:
         if twin["state"] == "priced":
             home = is_woolworths_home_brand(name, "")
             price = format_discounted_price(twin["value"], home)
+            final = (discounted_woolworths_price(twin["value"], home)[
+                "final"] if TEAM_DISCOUNT_ENABLED else twin["value"])
+            per_kg = (f" · {_fmt_kg(twin['kg'])} = "
+                      f"${final / twin['kg']:.2f}/kg"
+                      if twin.get("kg") else "")
             lines.append(f"also at Woolworths (non-halal): {price}"
-                         f" — {name}")
+                         f"{per_kg} — {name}")
         elif twin["state"] == "gone":
             lines.append(f"also at Woolworths (non-halal): GONE"
                          f" — {name}")
@@ -350,8 +484,9 @@ def render_lookup(result: dict) -> str:
     Answer LOGIC is the §8 table — unchanged from Round 2."""
     from core.telegram_format import GONE_BADGE, legend_footer, \
         section_header, winner_line
-    from core.woolworths_discounts import format_discounted_price, \
-        is_woolworths_home_brand
+    from core.woolworths_discounts import discounted_woolworths_price, \
+        format_discounted_price, is_woolworths_home_brand, \
+        TEAM_DISCOUNT_ENABLED
 
     status = result["status"]
     master = result.get("master")
@@ -367,6 +502,15 @@ def render_lookup(result: dict) -> str:
             head += "  🏠"
         lines.append(head)
         ww_price = format_discounted_price(master["ww_num"], home)
+        # per-kg basis for the halal Wool price too — the butchers'
+        # quotes are /kg (user unit rule 2026-09-10)
+        kg = _pack_kg(master["size"] or master["name"])
+        if kg:
+            final = (discounted_woolworths_price(master["ww_num"],
+                                                 home)["final"]
+                     if TEAM_DISCOUNT_ENABLED else master["ww_num"])
+            size_txt = master["size"] or _fmt_kg(kg)
+            ww_price += f" · {size_txt} = ${final / kg:.2f}/kg"
         lines.append(f"  {section_header('Woolworths')}  {ww_price}")
     elif status == "gone":
         lines.append(f"{master['name']}")
@@ -391,7 +535,10 @@ def render_lookup(result: dict) -> str:
     lines.extend(_local_lines(result))
     best = result.get("best")
     if best:
-        lines.append(f"  {winner_line(best[1], _shop_label(best[0]))}")
+        # unit-normalised winner when the quotes carry $/kg, else the
+        # legacy raw-price badge
+        winner = result.get("best_label") or f"${best[1]:.2f}"
+        lines.append(f"  {winner_line(winner, _shop_label(best[0]))}")
     # §18 A4: the non-halal Woolworths twin side — after the local
     # lines + winner, before the code/footer.
     lines.extend(_twin_lines(result))

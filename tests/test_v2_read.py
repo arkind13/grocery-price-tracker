@@ -235,6 +235,7 @@ class TestNonHalalTwin(unittest.TestCase):
     Mince 500g` [GJZ] D=15, brand Home, keyword filled."""
 
     TWIN_LINE = ("also at Woolworths (non-halal): $13.54"
+                 " · 500g = $27.08/kg"
                  " — Woolworths Beef Mince 500g")
 
     def _fixture(self, aug_ww="", extra_master=(), extra_ld=()):
@@ -341,6 +342,77 @@ class TestNonHalalTwin(unittest.TestCase):
             ["query", "master_rows"])
         self.assertNotIn("v2_live", (_PROJECT / "core" / "v2_read.py")
                          .read_text(encoding="utf-8"))
+
+
+class TestUnitAwareQuotes(unittest.TestCase):
+    """2026-09-10 user unit rule: /kg butcher quotes and per-pack Wool
+    prices must convert to a common $/kg basis on screen; the meat
+    fallback pool must never quote a DIFFERENT product's row; and the
+    raw compare phrasing still yields the twin line."""
+
+    def _rows(self):
+        master = [
+            _m("Halal BEEF MINCE (5KG)", "EPJ", sub="butchery"),
+            _m("Halal Beef Mince", "AUG", sub="butchery"),
+            _m("Woolworths Beef Mince 500g", "GJZ", ww="15",
+               size="500g", sub="beef mince", brand="Home"),
+        ]
+        ld = [
+            _l("Halal BEEF MINCE (5KG) /ea", "EPJ",
+               dunya_perm="64.99"),
+            _l("Halal Beef Mince /kg", "AUG", dunya_perm="15.99"),
+        ]
+        return master, ld
+
+    def test_kg_and_ea_quotes_convert(self):
+        master, ld = self._rows()
+        result = lookup_item("beef mince", master, ld)
+        out = render_lookup(result)
+        self.assertIn("$15.99/kg", out)
+        self.assertIn("$64.99 / 5kg pack = $13.00/kg", out)
+        # winner on the $/kg basis, not the raw numbers
+        self.assertIn("🏆 Best local: $13.00/kg — Dunya (site)", out)
+        # cheapest per-kg quote lists first
+        self.assertLess(out.index("$13.00/kg"), out.index("$15.99/kg"))
+
+    def test_ww_halal_price_shows_per_kg(self):
+        master, ld = self._rows()
+        master[1] = _m("Halal Beef Mince", "AUG", ww="$12.99",
+                       size="500g", sub="butchery")
+        out = render_lookup(lookup_item("halal beef mince", master,
+                                        ld))
+        self.assertIn("🟢 Woolworths  $12.34 · 500g = $24.68/kg", out)
+
+    def test_fallback_pool_never_crosses_products(self):
+        """The R4-era bug: 'beef mince' quoted Merjan $13.99 from a
+        CHICKEN row — the pool must filter to the query's product."""
+        master, ld = self._rows()
+        ld.append(_l("Halal Chicken Breast Strips /kg", "AXW",
+                     merjan_perm="13.99"))
+        result = lookup_item("beef mince", master, ld)
+        out = render_lookup(result)
+        self.assertEqual(result["code"], "EPJ")
+        self.assertNotIn("Merjan", out)
+        self.assertNotIn("13.99", out)
+        self.assertNotIn("Chicken", out)
+
+    def test_compare_filler_phrase_still_twin(self):
+        master, ld = self._rows()
+        result = lookup_item("compare halal vs non halal beef mince",
+                             master, ld)
+        out = render_lookup(result)
+        self.assertIn(TestNonHalalTwin.TWIN_LINE, out)
+
+    def test_bare_prices_keep_legacy_render(self):
+        """LD rows without a unit suffix render bare prices and the
+        legacy raw-price winner badge (no /kg invented)."""
+        master = [_m("Halal Lamb Shoulder", "HLS", sub="butchery")]
+        ld = [_l("Halal Lamb Shoulder", "HLS", dunya_perm="12.99")]
+        out = render_lookup(lookup_item("halal lamb shoulder", master,
+                                        ld))
+        self.assertIn("🔪 Dunya (site)", out)
+        self.assertIn("$12.99", out)
+        self.assertNotIn("/kg", out)
 
 
 if __name__ == "__main__":
