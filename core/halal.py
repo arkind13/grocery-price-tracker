@@ -21,11 +21,15 @@ HALAL_CHECK_CATEGORIES = {      # the butchery domain labels (§12.3)
 MEAT_PROTEIN_WORDS = frozenset({
     "meat", "beef", "chicken", "lamb", "mutton", "goat", "veal"})
 MEAT_CUT_WORDS = frozenset({
-    "mince", "minced", "breast", "thigh", "drumstick", "drumsticks",
-    "wing", "wings", "diced", "cubes", "chops", "cutlets", "roast",
-    "kebab", "skewer", "sausage", "sausages", "frankfurt",
-    "frankfurts", "leg", "steak", "shoulder", "brisket", "rib",
-    "ribs", "loin", "shanks", "shank"})
+    "mince", "minced", "breast", "thigh", "thighs", "drumstick",
+    "drumsticks", "wing", "wings", "diced", "cube", "cubes", "chops",
+    "chop", "cutlets", "cutlet", "roast", "kebab", "kebabs", "skewer",
+    "skewers", "sausage", "sausages", "frankfurt", "frankfurts",
+    "leg", "steak", "shoulder", "brisket", "rib", "ribs", "loin",
+    "shanks", "shank", "neck", "necks", "curry", "stirfry", "sliced",
+    "fillet", "fillets", "backstrap", "topside", "tender", "tenders",
+    "strip", "strips", "maryland", "marylands", "burger", "burgers",
+    "blade", "pieces", "piece", "bits", "bits"})
 MEAT_CUT_PHRASES = ("whole bird",)
 PREPARED_EXCLUSIONS = (
     re.compile(r"\bchicken\s+salt\b"),
@@ -59,7 +63,11 @@ def is_meat_term(query: str) -> bool:
     words = set(re.findall(r"[a-z0-9]+", text))
     if not words & MEAT_PROTEIN_WORDS:
         return False
-    if words & MEAT_CUT_WORDS:
+    # Plural-fold for the cut check ("necks" -> "neck", "thighs" ->
+    # "thigh") — the local butchery vocabulary uses both forms.
+    if any(w in MEAT_CUT_WORDS or (w.endswith("s") and w[:-1] in
+                                   MEAT_CUT_WORDS)
+           for w in words):
         return True
     # Bare protein head noun ("lamb", "goat") with no other food words
     return words <= MEAT_PROTEIN_WORDS
