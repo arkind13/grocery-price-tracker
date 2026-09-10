@@ -82,8 +82,9 @@ def parse_ld_row(sheet_row: int, row: list,
         price, kind = tab_store_price(row, shop, today=today)
         if price is not None:
             prices[shop] = (price, kind)
+    comments = str(row[9]).strip() if len(row) > 9 else ""
     return {"row": sheet_row, "name": name, "prices": prices,
-            "code": code}
+            "comments": comments, "code": code}
 
 
 def read_tabs() -> tuple:
@@ -233,8 +234,23 @@ def _ld_quotes(ld: dict) -> list:
         else:
             per_kg = None
         out.append({"shop": shop, "price": price, "kind": kind,
-                    "unit": unit, "pack": pack, "per_kg": per_kg})
+                    "unit": unit, "pack": pack, "per_kg": per_kg,
+                    "note": _shop_note(ld.get("comments", ""), shop)})
     return out
+
+
+def _shop_note(comments: str, shop: str) -> str:
+    """The shop's own Comments segment, tag stripped ('multi buy 2kg
+    for $29.99') — rendered next to that shop's price so multibuy
+    TERMS are visible in the reply, not just '(special)'."""
+    from core.local_deals import _shop_key_for_tag
+    note = ""
+    for seg in str(comments or "").split(";"):
+        seg = seg.strip()
+        m = re.match(r"^\[([A-Za-z]+)\]\s*(.+)$", seg)
+        if m and _shop_key_for_tag(m.group(1).upper()) == shop:
+            note = m.group(2).strip()
+    return note
 
 
 def _quotes_and_best(rows: list) -> tuple:
@@ -429,7 +445,8 @@ def _local_lines(result: dict) -> list:
                    f"{_shop_label(q['shop'])}",
                    _quote_price_text(q)
                    + {"special": " (special)", "permanent": ""}[
-                       q["kind"]])
+                       q["kind"]]
+                   + (f" · {q['note']}" if q.get("note") else ""))
                   for q in ordered]
     else:
         entries = sorted(result["local"].items(),

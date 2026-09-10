@@ -417,3 +417,39 @@ class TestUnitAwareQuotes(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMultibuyTermsInReply(unittest.TestCase):
+    """R5-follow-up: multibuy TERMS ride the quote into the reply —
+    '(special)' alone hid the actual offer (user, 2026-09-11)."""
+
+    LD = {"row": 36, "name": "Halal Lamb Mince /kg",
+          "prices": {"merjan": (15.0, "special"),
+                     "dunya": (15.99, "permanent")},
+          "comments": "[MER] multi buy 2kg for $29.99", "code": "GVJ"}
+
+    def test_quote_carries_shop_note(self):
+        from core.v2_read import _ld_quotes
+        quotes = {q["shop"]: q for q in _ld_quotes(self.LD)}
+        self.assertEqual(quotes["merjan"]["note"],
+                         "multi buy 2kg for $29.99")
+        self.assertEqual(quotes["dunya"]["note"], "")
+
+    def test_render_shows_terms_next_to_price(self):
+        from core.v2_read import _ld_quotes, _local_lines, render_lookup
+        quotes = _ld_quotes(self.LD)
+        result = {"status": "meat-local-only", "master": None,
+                  "local": self.LD["prices"], "best": ("merjan", 15.0,
+                                                       "special"),
+                  "best_label": "$15.00/kg",
+                  "local_quotes": quotes, "code": "GVJ",
+                  "non_halal_twins": [], "query": "halal lamb mince"}
+        text = render_lookup(result)
+        self.assertIn("multi buy 2kg for $29.99", text)
+        self.assertIn("(special)", text)
+
+    def test_no_note_no_render(self):
+        from core.v2_read import _ld_quotes, _local_lines
+        ld = dict(self.LD, comments="")
+        lines = _local_lines({"local_quotes": _ld_quotes(ld)})
+        self.assertFalse(any("multi buy" in ln for ln in lines))
