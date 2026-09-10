@@ -331,7 +331,17 @@ doc-sync rule) · `telegram_gateway/wednesday_reminder.py` (deletion) ·
 VPS sync targets under `/home/ubuntu/openclaw/tasks/ai-tools/` + the
 reminder-cron removal on the VPS.
 
-FORBIDDEN: `.env` and any secret (never print, never commit) ·
+FORBIDDEN — CRITICAL INFRASTRUCTURE (near-miss 2026-09-10, do not
+delete/archive/pause ANY of these; they are load-bearing):
+the GCP project `grocerypriceapp-488202` (hosts the service account
+that is the ONLY writer/reader of the sheet — deleting it killed all
+sheet access within seconds, restored from Google's 30-day window) ·
+the GitHub repos `arkind13/grocery-price-tracker` +
+`arkind13/AI-Development-Environment` (archiving blocks pushes) ·
+the VPS `myvps` + its 03:17 daily sheet-backup cron (doubles as the
+health canary: if the GCP project dies again, THAT cron fails the next
+morning — treat a backup-cron failure as a page, not noise) ·
+`.env` and any secret (never print, never commit) ·
 `pc-agent/` · `Lost Battle/` · all sibling tools (budget, pricing,
 digest, image, sketchnote, ai-studio) · `openrouterdiscount/`,
 `my-budget-tracker/` (independent repos) · `.kilo/` (retired) ·
