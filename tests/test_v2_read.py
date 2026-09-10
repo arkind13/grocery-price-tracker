@@ -445,7 +445,7 @@ class TestMultibuyTermsInReply(unittest.TestCase):
                   "local_quotes": quotes, "code": "GVJ",
                   "non_halal_twins": [], "query": "halal lamb mince"}
         text = render_lookup(result)
-        self.assertIn("multi buy 2kg for $29.99", text)
+        self.assertIn("min order 2kg for $29.99", text)
         self.assertIn("(special)", text)
 
     def test_no_note_no_render(self):

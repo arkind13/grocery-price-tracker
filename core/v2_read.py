@@ -446,7 +446,8 @@ def _local_lines(result: dict) -> list:
                    _quote_price_text(q)
                    + {"special": " (special)", "permanent": ""}[
                        q["kind"]]
-                   + (f" · {q['note']}" if q.get("note") else ""))
+                   + (f" · {__import__('re').sub(r'^multi buy\b', 'min order', q['note'], count=1)}"
+                      if q.get("note") else ""))
                   for q in ordered]
     else:
         entries = sorted(result["local"].items(),
