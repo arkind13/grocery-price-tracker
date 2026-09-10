@@ -32,7 +32,7 @@ out of an order that keeps the system usable.
 | 2 | Sheet migration v2 (gates G1–G3) + `price`/`list` read path + parity audit | 1 d | ✅ **DONE** — user sheet-confirmed; 12 keeps + 127 coded rows, 139/139 parity ALIGNED, `list` = 105 entries, 1361 green / 0 skipped, tracker `5bda9ae` / parent `265e975`, VPS md5-verified | 2026-09-10 |
 | 3 | 6 verbs + batch engine + style kit + deletion manifest | 1.5 d | ✅ **DONE** — 580 green / 0 skipped, grep-clean 0, `--help` = 7 verbs, parity audit ALIGNED + full live verb battery green after the SA restore, tracker `dde0bff` / parent `1ed412b`, VPS md5-verified | 2026-09-10 |
 | 4 | Wednesday v2 + skills rewrite + VPS sync | 1 d | 🔶 **core DONE** — `wednesday` re-added (8-verb surface), suite 599 green / 0 skipped, dry-run verified (4.7s, parity ALIGNED, plan: 5 prices / 7 N/A / 11 deal-end clears), skills + easy-doc synced, VPS 5/5 md5, Telegram battery 5/5 green; **the LIVE Wednesday fire is user-deferred** (user chose "skip it today" at the W4.1 freshness gate — the Sep 4/Sep 2 docx are last week's lists; fire with `grocery_price_cli.py wednesday` once fresh lists are pasted) | 2026-09-10 |
-| 5 | Speed-budget verification + FINAL TIDY | 0.5 d | ⬜ pending | — |
+| 5 | Non-halal twin line (M-items) + speed budget + regression + FINAL TIDY | 0.5 d | 🔶 work order issued (`implementation-plan.md` + compliance table) — **awaiting user approval** | — |
 
 ---
 
@@ -150,8 +150,22 @@ and takes ≤30s; the VPS md5s match local; the reminder cron is gone
 ## Round 5 — Verification + FINAL TIDY
 
 **Scope:**
+0. **FIRST ITEM — non-halal Woolworths twin line in meat lookups**
+   (§18 A4; the USER'S BINDING VERDICTS live in parent `test.md`
+   §"USER VERDICT on the three live phrasing tests (2026-09-10)" —
+   test.md governs over this plan and the spec on any difference).
+   Mandatory items R5-M1…M5 with a checker-graded compliance table:
+   the twin line (display-only, present even when the halal row's
+   price is blank), the non-halal resolution rule (WW master rows
+   ONLY — local shops are always the halal side), the three-way
+   answer, the zero-write/Q11 guarantee, and the SKILL.md line +
+   doc regen. Full task detail: the Round-5 work order
+   (`implementation-plan.md`) — its compliance table is binding on
+   the 04 Checker.
 1. Measure the speed budget (§12) on live paths; any miss = fix before
    close (a budget miss is a wrong design choice, not a tuning note).
+   INCLUDES the R4-deferred timed live Wednesday fire (fresh docx
+   required — user pastes).
 2. Full regression: offline suite + live spot checks (lookup, live,
    list, batch, Wednesday, ingest of a real inbox post).
 3. FINAL TIDY (mandatory): move ALL rebuild artifacts (arch-prompt.md,
@@ -162,8 +176,10 @@ and takes ≤30s; the VPS md5s match local; the reminder cron is gone
 4. Three-way sync closes the round: local commit + GitHub push + VPS
    mirror checksum-verified.
 
-**Acceptance criteria:** every budget target measured and met; suite
-green; root contains only living docs; three-way sync reported in sync.
+**Acceptance criteria:** every budget target measured and met; R5-M1…M5
+satisfied (compliance-table verification); suite green with the
+mandatory beef-mince twin-line test; root contains only living docs;
+three-way sync reported in sync.
 
 **Verification:** this round IS the verification step; the checker (04)
 signs off against this plan's acceptance criteria.
