@@ -7,7 +7,7 @@ import importlib
 
 # §15: adding ALDI/AMAZON later = one entry here + one extractor
 # mapping in _PROVIDER_FN. Nothing else may change.
-LIVE_PROVIDERS = ["woolworths", "coles"]
+LIVE_PROVIDERS = ["woolworths", "coles", "aldi"]
 
 # provider -> "module:function" (resolved lazily per call so the
 # module imports clean and tests can patch the extractor functions).
@@ -15,6 +15,7 @@ _PROVIDER_FN = {
     "woolworths": "extractors.woolworths_extractor:"
                   "fetch_woolworths_search_noauth",
     "coles": "extractors.coles_extractor:fetch_coles_search",
+    "aldi": "extractors.aldi_extractor:fetch_aldi_search",
 }
 
 _RESULTS_PER_STORE = 3      # spec §7: ≤3 compact lines per store
@@ -125,7 +126,8 @@ def render_live(results: dict, tracked_note: str | None) -> str:
     for provider in LIVE_PROVIDERS:
         lines.append(section_header(
             provider.capitalize(),
-            icon="🟢" if provider == "woolworths" else "🔴"))
+            icon="🟢" if provider == "woolworths"
+            else "🔴" if provider == "coles" else "🔵"))
         hits = results.get(provider) or []
         if hits:
             for i, hit in enumerate(hits, 1):

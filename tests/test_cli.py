@@ -1,9 +1,10 @@
-"""v2 CLI tests (Round 3 rewrite; Round 4 re-adds `wednesday`).
+"""v2 CLI tests (Round 3 rewrite; Round 4 re-adds `wednesday`;
+2026-09-11 adds `aldi-specials` as the ninth verb).
 
-The CLI surface is EXACTLY eight verbs: price, list, live, batch,
-specials, ignored, local-deals, wednesday. These tests pin the parser
-surface, the dispatch contract, and each v2 verb's offline behaviour
-(mocked sheet/network — no live calls, no writes).
+The CLI surface is EXACTLY nine verbs: price, list, live, batch,
+specials, ignored, local-deals, wednesday, aldi-specials. These tests
+pin the parser surface, the dispatch contract, and each v2 verb's
+offline behaviour (mocked sheet/network — no live calls, no writes).
 """
 from __future__ import annotations
 import argparse
@@ -25,7 +26,7 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 V2_VERBS = ["price", "list", "live", "batch", "ignored", "specials",
-            "local-deals", "wednesday"]
+            "local-deals", "wednesday", "aldi-specials"]
 
 
 def _capture(fn, *args, **kwargs):

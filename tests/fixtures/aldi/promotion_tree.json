@@ -1,0 +1,22 @@
+{"data": {"promotions": [
+ {"key": "2026-09-09", "title": "Available from Wed 9th September",
+  "onSaleDateFrom": "2026-09-09",
+  "themes": [
+   {"key": "Grocery Specials", "title": "Grocery Specials",
+    "urlSlugText": "grocery-specials"},
+   {"key": "Limited Time Only Meat", "title": "Limited Time Only Meat",
+    "urlSlugText": "limited-time-only-meat"},
+   {"key": "Camping", "title": "Camping", "urlSlugText": "camping"}]},
+ {"key": "2026-09-12", "title": "Available from Sat 12th September",
+  "onSaleDateFrom": "2026-09-12",
+  "themes": [
+   {"key": "Camping", "title": "Camping", "urlSlugText": "camping"},
+   {"key": "Technology and Entertainment",
+    "title": "Technology and Entertainment",
+    "urlSlugText": "technology-and-entertainment"}]},
+ {"key": "2026-09-16", "title": "Available from Wed 16th September",
+  "onSaleDateFrom": "2026-09-16",
+  "themes": [
+   {"key": "Grocery Specials", "title": "Grocery Specials",
+    "urlSlugText": "grocery-specials"}]}
+]}}

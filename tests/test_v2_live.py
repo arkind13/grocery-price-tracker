@@ -56,9 +56,10 @@ class TestNoWriteGuarantee(unittest.TestCase):
 
 class TestSearchSemantics(unittest.TestCase):
     def test_provider_list_order(self):
-        """§15: the provider list IS [woolworths, coles]; adding a
+        """§15: the provider list IS [woolworths, coles, aldi]; adding a
         store later is one entry + one extractor mapping."""
-        self.assertEqual(LIVE_PROVIDERS, ["woolworths", "coles"])
+        self.assertEqual(LIVE_PROVIDERS,
+                         ["woolworths", "coles", "aldi"])
 
     def test_iteration_order_and_shape(self):
         order: list = []
@@ -76,7 +77,9 @@ class TestSearchSemantics(unittest.TestCase):
                    "fetch_woolworths_search_noauth",
                    side_effect=_ww), \
              patch("extractors.coles_extractor.fetch_coles_search",
-                   side_effect=_coles):
+                   side_effect=_coles), \
+             patch("extractors.aldi_extractor.fetch_aldi_search",
+                   return_value=[]):
             results = live_search("chicken breast")
         # iteration order: woolworths ran first
         self.assertEqual(order, ["woolworths", "coles"])
@@ -95,6 +98,8 @@ class TestSearchSemantics(unittest.TestCase):
                    "fetch_woolworths_search_noauth",
                    return_value=items), \
              patch("extractors.coles_extractor.fetch_coles_search",
+                   return_value=[]), \
+             patch("extractors.aldi_extractor.fetch_aldi_search",
                    return_value=[]):
             results = live_search("product")
         self.assertEqual(len(results["woolworths"]), 3)
@@ -107,6 +112,8 @@ class TestSearchSemantics(unittest.TestCase):
                    "fetch_woolworths_search_noauth",
                    return_value=items), \
              patch("extractors.coles_extractor.fetch_coles_search",
+                   return_value=[]), \
+             patch("extractors.aldi_extractor.fetch_aldi_search",
                    return_value=[]):
             results = live_search("chicken breast")
         self.assertEqual(results["woolworths"][0]["name"],
@@ -119,6 +126,8 @@ class TestSearchSemantics(unittest.TestCase):
                    "fetch_woolworths_search_noauth",
                    return_value=items), \
              patch("extractors.coles_extractor.fetch_coles_search",
+                   return_value=[]), \
+             patch("extractors.aldi_extractor.fetch_aldi_search",
                    return_value=[]):
             results = live_search("real product")
         self.assertEqual([h["name"] for h in results["woolworths"]],
@@ -129,12 +138,38 @@ class TestSearchSemantics(unittest.TestCase):
                    "fetch_woolworths_search_noauth",
                    return_value=_items(("Wool Product", 3.0))), \
              patch("extractors.coles_extractor.fetch_coles_search",
-                   side_effect=RuntimeError("breaker open")):
+                   side_effect=RuntimeError("breaker open")), \
+             patch("extractors.aldi_extractor.fetch_aldi_search",
+                   return_value=[]):
             results = live_search("product")
         self.assertEqual(results["errors"],
                          {"coles": "RuntimeError"})
         self.assertEqual(results["coles"], [])
         self.assertEqual(len(results["woolworths"]), 1)
+
+    def test_aldi_provider_ranked_hits(self):
+        """V1: aldi runs third; ≤3 ranked priced lines like the rest."""
+        order: list = []
+
+        def _aldi(query, page_size=10):
+            order.append("aldi")
+            return _items(("Regular Beef Mince 500g", 6.99),
+                          ("3 Star Beef Mince", 11.89),
+                          ("Pork And Beef Mince 500g", 5.69),
+                          ("Beef Mince Family Pack", 19.99),
+                          store="aldi")
+
+        with patch("extractors.woolworths_extractor."
+                   "fetch_woolworths_search_noauth", return_value=[]), \
+             patch("extractors.coles_extractor.fetch_coles_search",
+                   return_value=[]), \
+             patch("extractors.aldi_extractor.fetch_aldi_search",
+                   side_effect=_aldi):
+            results = live_search("beef mince")
+        self.assertEqual(order, ["aldi"])
+        self.assertEqual(len(results["aldi"]), 3)
+        self.assertEqual(results["aldi"][0]["name"],
+                         "3 Star Beef Mince")
 
 
 class TestRender(unittest.TestCase):
@@ -164,6 +199,15 @@ class TestRender(unittest.TestCase):
         out = render_live(results, None)
         self.assertIn("⚠️", out)
         self.assertIn("Coles search unavailable (RuntimeError)", out)
+
+    def test_render_aldi_icon(self):
+        results = {"woolworths": [], "coles": [],
+                   "aldi": [{"name": "Light Milk 2L", "price": 3.39,
+                             "size": "2 L"}],
+                   "errors": {}}
+        out = render_live(results, None)
+        self.assertIn("🔵 Aldi", out)
+        self.assertIn("$3.39", out)
 
 
 if __name__ == "__main__":
