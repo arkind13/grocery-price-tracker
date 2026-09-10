@@ -31,7 +31,7 @@ out of an order that keeps the system usable.
 | 1 | Comment lifecycle + orphan cleanup + backup system (PC + VPS + daily cron) | 0.5 d | ✅ **DONE** — checker PASS, 1319 green ×10 runs, tracker `933af6e` / parent `5342201` | 2026-09-09 |
 | 2 | Sheet migration v2 (gates G1–G3) + `price`/`list` read path + parity audit | 1 d | ✅ **DONE** — user sheet-confirmed; 12 keeps + 127 coded rows, 139/139 parity ALIGNED, `list` = 105 entries, 1361 green / 0 skipped, tracker `5bda9ae` / parent `265e975`, VPS md5-verified | 2026-09-10 |
 | 3 | 6 verbs + batch engine + style kit + deletion manifest | 1.5 d | ✅ **DONE** — 580 green / 0 skipped, grep-clean 0, `--help` = 7 verbs, parity audit ALIGNED + full live verb battery green after the SA restore, tracker `dde0bff` / parent `1ed412b`, VPS md5-verified | 2026-09-10 |
-| 4 | Wednesday v2 + skills rewrite + VPS sync | 1 d | 🔶 work order issued (`implementation-plan.md`) — **awaiting user approval** | — |
+| 4 | Wednesday v2 + skills rewrite + VPS sync | 1 d | 🔶 **core DONE** — `wednesday` re-added (8-verb surface), suite 599 green / 0 skipped, dry-run verified (4.7s, parity ALIGNED, plan: 5 prices / 7 N/A / 11 deal-end clears), skills + easy-doc synced, VPS 5/5 md5, Telegram battery 5/5 green; **the LIVE Wednesday fire is user-deferred** (user chose "skip it today" at the W4.1 freshness gate — the Sep 4/Sep 2 docx are last week's lists; fire with `grocery_price_cli.py wednesday` once fresh lists are pasted) | 2026-09-10 |
 | 5 | Speed-budget verification + FINAL TIDY | 0.5 d | ⬜ pending | — |
 
 ---

@@ -1,9 +1,9 @@
-"""v2 CLI tests (Round 3 rewrite).
+"""v2 CLI tests (Round 3 rewrite; Round 4 re-adds `wednesday`).
 
-The CLI surface is EXACTLY seven verbs: price, list, live, batch,
-specials, ignored, local-deals. These tests pin the parser surface,
-the dispatch contract, and each v2 verb's offline behaviour (mocked
-sheet/network — no live calls, no writes).
+The CLI surface is EXACTLY eight verbs: price, list, live, batch,
+specials, ignored, local-deals, wednesday. These tests pin the parser
+surface, the dispatch contract, and each v2 verb's offline behaviour
+(mocked sheet/network — no live calls, no writes).
 """
 from __future__ import annotations
 import argparse
@@ -25,7 +25,7 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 V2_VERBS = ["price", "list", "live", "batch", "ignored", "specials",
-            "local-deals"]
+            "local-deals", "wednesday"]
 
 
 def _capture(fn, *args, **kwargs):
@@ -58,12 +58,14 @@ class TestParserSurface(unittest.TestCase):
         parser = build_parser()
         # retired names are assembled so the dead-symbol battery
         # stays literally clean while the guard keeps its literals
+        # ("wednesday" left this list in Round 4 — spec §10 re-adds
+        # it as the 8th verb)
         retired = ["compare", "optimize", "shop", "prefer", "recipe",
                    "search", "rewards", "map", "todo",
                    "add" + "-to-list", "searched" + "-items",
                    "missed" + "-pricing", "no-price", "lists",
                    "unmapped", "specials" + "-scan", "update", "sync",
-                   "wednesday", "live-refresh",
+                   "live-refresh",
                    "backfill" + "-keywords", "subcategories"]
         for verb in retired:
             buf = io.StringIO()
