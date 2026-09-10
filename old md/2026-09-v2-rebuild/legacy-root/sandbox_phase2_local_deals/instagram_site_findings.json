@@ -1,0 +1,27 @@
+[
+  {
+    "channel": "instagram",
+    "url": "https://www.instagram.com/merjanbrothers/",
+    "http_status": 200,
+    "login_wall": true,
+    "og_description": "608 Followers, 725 Following, 136 Posts - See Instagram photos and videos from Merjan Brothers Quality Meats (&#064;merjanbrothers)",
+    "captions_found": 0,
+    "caption_samples": [],
+    "image_count": 0,
+    "price_mentions": 3,
+    "ok": false
+  },
+  {
+    "channel": "website",
+    "url": "https://www.fruitopiamtdruitt.com.au/",
+    "http_status": 200,
+    "bytes": 106729,
+    "title": "Fruitopia Mt Druitt",
+    "price_mentions": 1,
+    "price_samples": [
+      "$1"
+    ],
+    "product_links": [],
+    "ok": true
+  }
+]

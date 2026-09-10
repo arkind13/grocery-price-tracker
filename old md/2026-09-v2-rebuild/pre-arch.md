@@ -1,901 +1,615 @@
-# Pre-Arch — Single Input Document for 01 Architect
+# Pre-Arch — Phase 2: Localised Store Specials (Mt Druitt Butchers & Fruit Markets)
 
-- **Date:** 2026-08-29 (rev 2 — user feedback applied, live-lists spec merged)
+- **Date:** 2026-09-05 (all decisions confirmed by user in chat, 2026-09-05)
 - **Author:** 00 Tester Agent
-- **Contents:**
-  - **Part A** — Diagnosis evidence (compare failures, 2026-08-28)
-  - **Part B** — The fixes (final form, per user decisions 2026-08-29)
-  - **Part C** — Live-lists pipeline spec (full content of the former
-    `architecture-spec-live-lists.md`, merged here, with three marked
-    DELTAS from the user)
-- **Original spec file:** moved to `old md/architecture-spec-live-lists.md`
-  — this document supersedes it. Nothing else may be lost: every section,
-  table, and binding decision from that spec exists in Part C.
+- **Supersedes:** nothing — this is a NEW, separate pipeline. The Phase-1
+  live-lists spec moved to `old md/pre-arch-phase1-live-lists-2026-08-29.md`
+  and is untouched by this project.
+- **Sandbox evidence:** `grocery-price-tracker/sandbox_phase2_local_deals/`
+  (test harnesses, findings JSON, downloaded real board photos,
+  `vision_parse_result.json`). Keep this folder out of any production
+  refactor; harnesses are evidence, not shipped code.
 
 ---
 
-# PART A — Diagnosis (what happened on 2026-08-28, 21:51–21:57 UTC)
+## Goal (plain language)
 
-Source: Claw session `3bb9638f-2a9e-402d-a653-3e8fb4248305` on
-myvps + live re-testing inside openclaw-core on 2026-08-29.
+Every **Friday** (and on demand, any day), automatically:
 
-### Exchange 1 — user: "Is garden soil on discount anywhere"
+1. Read the four local shops' **public Facebook pages** and grab the
+   latest price-board photos.
+2. Read the prices off the photos with a vision LLM (strict JSON).
+3. Write ALL this week's deals into a dedicated **`Local_Deals`** tab
+   (wiped and rebuilt weekly; `Products_Master` never touched).
+4. Compare against the **cheaper of the sheet's Woolworths/Coles
+   prices** and send a Friday Telegram alert for items **>20%
+   cheaper**, grouped per store.
+5. Bulk/multi-buy tier offers (5kg bags, boxes) are reported as notes
+   only — they never enter the shopping list or the comparison math.
 
-The agent never ran the grocery CLI. It called `web_search` (provider
-error), then `web_fetch` on woolworths.com.au (Akamai 403) and
-coles.com.au (empty), then told the user it could not pull data. The
-CLI (`compare --items "garden soil"`) succeeded two minutes later.
-→ Routing gap: that phrase is not in the SKILL.md mapping table and no
-hard rule forbids browsing store sites for prices.
+Target stores (all public FB pages, no login required today):
 
-### Exchange 2 — user: "Can you compare coles vs woolworths pricing"
-
-- First CLI attempt died at the agent's 30 s tool timeout (the call
-  needs ~34 s with current Scrape.do settings — see B4).
-- Second attempt returned:
-  `Woolworths $20.90 / Coles $6.60 (was $13.20)` and declared Coles
-  cheaper by $14.30.
-- Verified identities (by re-running the store searches):
-  - Woolworths "$20.90 garden soil" = **3x Gardenmaster hand-tool set**
-    (raw $22.00 → 5% = $20.90, matches the report exactly).
-  - Coles "$6.60 (was $13.20) garden soil" = **Seasol 1.2L liquid
-    garden treatment**.
-  - Neither is soil; the tool set was "compared" against a fertiliser
-    bottle.
-- The agent also labelled the WW price "(sheet price)" — both prices
-  were live (no garden-soil row exists in the sheet); compare output
-  does not label sources, so provenance was invented.
-- Root cause: lookup Step 5 takes the **first live result per store**
-  with no name/size vetting; the report shows only the query name.
-
-### Exchange 3 — user: "Can you give me the name of product in coles"
-
-- `search --product "garden soil"` → `[coles_extractor] Scrape.do
-  returned HTTP 502` (three 502s in a row, 21:55–21:57).
-- The agent then claimed the $6.60 price was "on the sheet" (false)
-  and speculated product names.
-- Key validity: the Scrape.do key is VALID (live call → HTTP 200 the
-  next day); the failure window was transient. Errors print to stderr
-  only, so the outage never appeared in what the user saw.
-
-### Extractor facts verified on 2026-08-29
-
-- Coles search results carry `size` (`1.2L`, `600mL`, `180g`,
-  `1 each`) and sometimes a comparable price (`$30.56/ 1kg`).
-- WW results carry `PackageSize` + `CupString`.
-- → UOM data ALREADY EXISTS; the comparator discards it.
+| Store | FB page id | Kind |
+|---|---|---|
+| Dunya Butchery | `100071472636159` | butchery |
+| Merjan Brothers Quality Meats | `61578274311504` | butchery |
+| Fruitopia Mt Druitt | `100092972080784` | fruits |
+| Abu Salim Fruit Market | `61592534263358` | fruits |
 
 ---
 
-# PART B — The fixes (user-approved final form)
+# PART A — Test evidence (what was run and what happened)
 
-## B1 — UOM comparison rule (user decision, binding)
+## A1 — Test 1: getting the flyer image (harness: `test1_fb_flyer_fetch.py`)
 
-**No per-unit price comparisons anywhere.** The rule is:
+| Approach | Result | Notes |
+|---|---|---|
+| `mbasic.facebook.com` (free, logged-out) | ❌ HTTP 400 | mbasic is retired. The free path is dead. |
+| **Scrape.do** (`render=true`, `geoCode=au`, existing key) | ✅ **HTTP 200, no login wall**, 13 images (Dunya), 15 images (Fruitopia) | Works logged-out TODAY. ~1 credit per page. |
+| ZenRows (`js_render=true`, `ZENROWS_API_KEY` from `.env`) | ❌ HTTP 400 `REQS001` — **"Requests to this domain are forbidden"** | Key is VALID (the error is a domain block, not auth). ZenRows forbids `facebook.com` **and** `m.facebook.com` as targets (both probed). **ZenRows is OUT as an FB fallback — provider-level restriction, not fixable with params.** |
+| Local headed Chrome (Playwright, persistent profile) | Not run — user decision Q10 | Kept as documented fallback ONLY. User will create a separate FB login if strict login is ever enforced (never the personal account). |
 
-1. Both stores stocked the **same item** (same normalised size) →
-   compare, show 🏆 winner normally.
-2. Sizes differ but are **within 20%** (|a−b|/min(a,b) ≤ 0.20, same
-   unit family: volume↔volume, weight↔weight, count↔count) → compare,
-   show both sizes on the line, 🏆 allowed.
-3. Sizes differ by **more than 20%**, or unit families differ, or a
-   size is missing on either side → **NOT comparable.** The item must
-   print, in the user's own wording pattern:
+**CDN rules discovered (must be respected by the implementation):**
 
-```
-1. aluminium foil
-   ⚠️ No matching product — sizes don't compare.
-      Woolworths: Aluminium Foil 10m
-      Coles:      Aluminium Foil 150m
-```
+1. FB image URLs are **signed** (`oh=` covers the exact query string).
+   Modifying ANY param (e.g. stripping `stp=` to get a bigger photo)
+   → HTTP 403. Download the URL **exactly as captured** (only
+   HTML-unescape `&amp;`).
+2. The same photo appears in **multiple renditions** in the page HTML.
+   Rank by the `cstp=mx{W}x{H}` param and keep the LARGEST per photo id
+   (dedupe key: the `NNNNNN_NNN_NNN_n.jpg` basename — note 9-digit ids
+   exist, don't require 10+).
+3. URLs **expire** (`oe=` timestamp, days). Download immediately at
+   fetch time; store the FILE; never store-and-revisit the URL.
+4. Some older posts only expose tiny renditions (11–160 KB thumbs, e.g.
+   `s160x160`) — too small for OCR. Skip images under a size floor
+   (~30 KB) or below ~400 px. ALSO capture `srcset` attributes — they
+   hold larger renditions than `src` alone.
+5. The stores post **photos of their in-shop price boards** (not PDFs
+   or flyers) — one photo = the whole weekly list. This is ideal.
+6. There is no reliable post timestamp in the logged-out HTML → "last
+   3 posts" + validity-date filtering is the freshness mechanism
+   (user decision, Part B4).
 
-   - The item is excluded from totals and can never win a 🏆.
-   - NO $/L, $/kg, $/100mL lines. The comparison "does not stand", so
-     no derived unit price is shown either.
-   - Multipacks parse to totals (`6 x 170g` → 1020 g) before the rule
-     is applied.
-   - `1 each` / count items compare only count-vs-count.
+## A2 — Test 2: vision parsing (harness: `test2_vision_json.py`)
 
-Implementation: new pure module `core/uom.py`
-(`parse_size`, `size_families_match`, `within_20pct`, verdict enum)
-+ tests. No extractor changes needed — the fields already exist.
+**Schema v2 (final, validated):**
 
-## B2 — Result selection (user decision, 2026-08-29: NO hard name filter)
-
-**The B1 UOM rule is the ONLY gate.** There is no hard name-token
-rejection — the user rejected that: it could discard genuine matches
-or fail on spelling errors in the query.
-
-- **Ranking only:** among a store's results, relevance (word overlap
-  between query and product name, tolerant to singular/plural and
-  small typos) decides which result is shown FIRST — it never
-  disqualifies a result.
-- **Gate:** the top-ranked result is used only if B1 passes (same
-  size or within 20%). If it fails, try the next-ranked result; the
-  first one that passes B1 is the price shown. If none passes, the
-  store gets no price and the B1 "No matching product" block prints
-  the closest found product (1 per store, expandable — B3).
-- Spelling errors in the query are absorbed by the store's own search
-  engine (fuzzy) plus the tolerant ranking; the 20% size rule remains
-  the real protection against wrong-product comparisons.
-- Sanity ceiling stays as a tiebreaker only: among B1-passing
-  results, prefer ones within 10× of the other store's per-item
-  price.
-
-## B3 — Show what was actually priced + queue removal option
-
-1. Every compare/search line shows the matched product, size, and
-   source:
-
-```
-1. garden soil
-   🟢 Woolworths  $20.90 — Debco 25L Garden Soil (live)
-   🔴 Coles       $8.40  — Coles 30L Garden Soil (live)
+```json
+{
+  "valid_until": "YYYY-MM-DD" | null,
+  "validity_text": "raw wording from the board" | null,
+  "deals": [{
+    "item": str, "raw_text": str,
+    "price": number > 0,
+    "unit": "kg" | "ea" | "pack",
+    "price_kind": "single" | "multibuy" | "bulk_pack",
+    "multibuy_qty": int|null,        // >=2 only for multibuy
+    "bulk_size": "10kg" | null,      // normalised, only for bulk_pack
+    "category": "fruits" | "butchery" | "other",
+    "notes": str
+  }]
+}
 ```
 
-   - `(sheet)` / `(live)` tag on every store line; SKILL.md relays it
-     verbatim and never calls anything a "sheet price" unless the tag
-     says so. Never guess names when live search is down.
-2. **"No matching product" block shows exactly 1 closest product per
-   store (user decision, 2026-08-29) plus an expand option:**
+Validator + normaliser results (11/11 offline checks):
 
-```
-1. aluminium foil
-   ⚠️ No matching product — sizes don't compare.
-      Woolworths: Aluminium Foil 10m
-      Coles:      Aluminium Foil 150m
-   💬 Reply 'expand' to see more results.
-```
+- bulk labelled `single` → REJECTED (the exact failure mode rule 5
+  guards against)
+- `bulk_size` without a kg/g token ("BIG BOX") → REJECTED
+- **Normaliser:** "10kg BOX" → "10kg" (models echo flyer words into
+  the size; strict-only validation breaks in the field — the
+  normaliser is MANDATORY)
+- multibuy qty<2, string prices, zero prices, bad units → all rejected
+- prose-wrapped JSON rescued; prose without JSON → clean failure
 
-   - `expand` re-runs the search and shows more results per store —
-     **display-only.** Expanded results are NEVER auto-added to the
-     sheet or the searched-items queue.
-3. **Nothing is ever auto-queued (user decision, 2026-08-29).**
-   `compare` / `search` / `expand` results are display-only by
-   default. A product reaches the sheet AND the `searched_items`
-   queue only when the user explicitly points at it — "add item 2",
-   "add the Debco one" → CLI: `search --product "X" --add-item 2`
-   (writes via the existing `add_product_row` path, which feeds
-   Queue 2). This removes the "I forgot to exclude and everything
-   got added" failure mode entirely.
- 4. **Commands are always printed in the output (user request: "make
-    sure those commands are in the output I might not remember").**
-    Every reply that queues something ends with the exact words to
-    undo it, and every queue view ends with the exact words to manage
-    it.
+**Model comparison on the REAL Abu Salim price-board photo
+(12 items incl. three bulk traps: 5kg potato bag, 5kg onion bag, 2kg
+cucumber bag):**
 
- 5. **Removal by unique 5-letter code, not position numbers (user
-    decision, 2026-08-29).** Positional "remove 1" breaks in a long
-    Telegram chat — after 5 messages, or after another search, nobody
-    can be sure which "1" was meant, and two searches' numbers can be
-    mixed up. Instead:
-
-    - Every queued item gets a **unique 5-letter code** (e.g.
-      `APCH`, `MIVOS`), generated consonant-vowel alternating for
-      pronounceability, alphabet A–Z only (no digits, no look-alike
-      letters — exclude `I`, `O` to avoid 1/0 confusion).
-    - **Uniqueness is enforced against the whole queue file**, plus a
-      small tombstone set of codes removed in the last 7 days (so a
-      stale "remove X" can never hit a freshly re-issued code). Each
-      code appears exactly once in the list at any time.
-    - The code is printed **at the end of the product line** wherever
-      the item appears — in the queue confirmation, in
-      `searched-items show`, and in every queued-add confirmation:
-      ```
-      Queued for Wednesday: 'Debco 25L Garden Soil' (Woolworths) [APCH]
-      💬 Reply 'remove APCH' if this isn't the right product.
-      💬 'show searched items' any time to review the queue.
-      ```
-    - Removal works **no matter how many chats have passed** — 10
-      chats later, "remove APCH" still removes that exact item:
-      ```
-      searched-items show                    → list with codes (store, name, size [CODE])
-      searched-items remove --items "APCH"   → removes that item
-      searched-items remove --items "APCH,MIVOS,ROKAD"   → multiple, comma-separated
-      searched-items clear                   → empties the whole queue
-      ```
-    - Codes are case-insensitive (`apch` = `APCH`), spaces around
-      commas are trimmed.
-    - Unknown code → clear error that lists the CURRENT valid codes
-      (so a typo is self-correcting), e.g.
-      `⚠️ Code 'APC' not found. Current queue codes: APCH, MIVOS.`
-    - Codes are stable for the life of the queue entry: shown once at
-      queue time, re-shown by `show`, never changed until removal or
-      the Wednesday flush consumes the entry.
-
-    Removal works any time before Wednesday's flush.
-
-## B4 — Scrape.do: the proper fix (two test rounds, 13/13 success)
-
-**Design goal (user-mandated): the user never sees errors.** Failures
-are absorbed invisibly by a tested call chain; a visible failure
-requires a total Scrape.do outage.
-
-### Round 1 (2026-08-29, 7 calls)
-
-| Test | Settings | Result | Latency |
+| Model | Route | Result | Cost/image |
 |---|---|---|---|
-| T1 | **current code** (`country=au`, fixed session `coles_extractor`, render) | 200, 4 results | **35.4 s** |
-| T2–T6 | `geoCode=au` variants, fresh/no session | 200 ×6, 4 results each | 5.5–12 s |
+| **`glm-5.3-flash`** | **user's `zlm_url` (Z.ai Coding Plan base `https://api.z.ai/api/coding/paas/v4/` + `/chat/completions`, key `zlm_claw`)** | **12/12 deals, 0 schema errors, bulk isolated, categories correct, `finish_reason=stop`** | **$0 — runs on the existing Coding Plan quota** |
+| `google/gemini-2.5-flash` | OpenRouter | 12/12 deals, 0 schema errors, bulk isolated | $0.0025 |
+| `z-ai/glm-5.3-flash` | OpenRouter | 12/12 deals, 0 schema errors, bulk isolated, AU-format validity date extracted (`11/09/2026` → `2026-09-11`) | $0.0006 |
+| `deepseek/deepseek-v4-flash` | OpenRouter | ❌ **NO image support** ("No endpoints found that support image input") — RULED OUT | — |
 
-### Round 2 (2026-08-29, 5 calls)
+**Z.ai coding endpoint gotchas (tested 2026-09-05):** `zlm_url` is a
+BASE URL — a bare POST to it 404s; the client must append
+`/chat/completions`. The pay-as-you-go endpoint
+(`https://api.z.ai/api/paas/v4/chat/completions`) is a DIFFERENT
+account balance and 429s ("Insufficient balance") — the Coding Plan
+base is the one that works with `zlm_claw`.
 
-| Test | Settings | Result | Latency |
-|---|---|---|---|
-| M1 | **NO JS render** (`super=true`, `geoCode=au`, fresh session) | 200, full `__NEXT_DATA__`, 4 results | 7.0 s |
-| M2 | render + `waitForSelector=#__NEXT_DATA__` | 200, 4 results | 5.6 s |
-| M3–M5 | 3 back-to-back calls, fresh session each | 200 ×3, 4 results | 8.3 / 19.7 / 23.8 s |
+**Token-cap + truncation hardening (observed live):** GLM writes
+longer replies than Gemini (verbose `raw_text`) — at `max_tokens=1200`
+the reply truncated mid-JSON on the 12-item board. Requirements:
+`max_tokens >= 2200`, a **truncation-salvage parser** (cut back to the
+last complete deal object, close `"deals"` + root — tested offline),
+and `finish_reason` logged per call.
 
-**Key discovery (M1): Coles embeds the full search results in the
-server-rendered HTML — the JS-render step is unnecessary.** Dropping
-`render=true` removes the slowest, most failure-prone stage of the
-call (and the most expensive per credit).
+**Model decision (user correction 2026-09-05 + test evidence):
+primary = `glm-5.3-flash` via the user's own `zlm_url` Coding Plan
+endpoint (zero marginal cost); fallbacks = `z-ai/glm-5.3-flash`
+(OpenRouter, $0.0006) then `google/gemini-2.5-flash` ($0.0025).
+DeepSeek v4 flash has no vision — ruled out.**
 
-### The binding call recipe (evidence-based)
+**Model-variance edge case (real observation):** on the small Dunya
+meat-board crop, Gemini parsed `Beef $22.99/kg`; GLM returned 0 deals
+on the same file. Borderline/small images can diverge between models
+AND runs. Architecture consequence: a store whose photos yield 0 deals
+must print "no prices found this week" in the report — never silently
+skip; and the size floor from A1.4 keeps sub-OCR images out.
 
-1. **Parameters:** `super=true`, `geoCode=au`, **no `render`**, no
-   fixed `wait`, fresh `session=coles_<utcepoch>_<n>` per call, no
-   `country=` param, client timeout 60 s.
-2. **Silent retry chain:** on 5xx/timeout only → retry with a NEW
-   session id, backoff 3 s then 6 s — **3 attempts total, all
-   invisible to the user.** Three consecutive failures across three
-   different exit IPs is a Scrape.do-wide outage, nothing the client
-   can fix by retrying more. Never retry 401/403.
-3. **If all 3 attempts fail (last resort only):** show the
-   **Woolworths-only answer** (user decision, Q2, 2026-08-29) with
-   one line `⚠️ Coles not checked (unavailable)`. No retry loops, no
-   error dumps, no partial Coles data.
-4. **Circuit breaker** `data/scrapedo_health.json` (credit guard, not
-   user-facing): opens after 3 consecutive failed CHAINS in 10 min →
-   skip Coles calls entirely for 10 min (fail fast to Woolworths-only
-   mode), reset on first success.
-5. **Per-run cap** 40 Scrape.do calls (module constant) per
-   architecture-spec §4.4.
-6. SKILL.md: tool-call timeouts for `compare`/`search`/`recipe` ≥90 s.
+**Weekly cost envelope:** 4 stores × (1 page fetch ≈ 1 Scrape.do
+credit + 1–3 vision calls at $0 on the Coding Plan) → well under 10
+credits and $0.00 vision spend per Friday (worst case, all calls
+falling back to OpenRouter: ≈ $0.01). No new subscriptions.
 
-With 13/13 observed success and 3 rotating-IP attempts per query, the
-expected user-visible failure rate is effectively zero outside a
-provider-wide outage.
+## A3 — Test 3: >20% detection simulation (harness: `test3_discount_sim.py`)
 
-## B5 — Web search is NOT being turned off (clarification)
+Pure offline simulation against realistic `Products_Master` fixtures.
+**11/11 checks passed**, covering:
 
-The rule is narrow: **questions about Woolworths/Coles prices,
-specials, or discounts must go through the grocery CLI** — never
-`web_search`/`web_fetch` on the store sites (they block bots; the CLI
-has proper channels).
+- per-kg flyer price vs implied master $/kg → 25.8% off → **alert**
+- 6.5% gap → no alert
+- same-size multibuy ("2 for $15" of 500g packs) → effective rate
+  $15.00/kg → comparison proceeds with the rate (consistent with the
+  existing `core/multibuy.py` rules)
+- bulk-only price → NEVER a comparison unit; exact tag emitted;
+  basket default stays Woolworths/Coles
+- per-kg deal vs litres row → unit-family gate blocks (mirrors
+  `core/uom.py`)
+- name drift ("Bananas" vs "Bananas 1kg") → matched, alerted
+- unmatched flyer item → informational only
+- $3.00 movement rule: 3 items = $4.55 → extra stop; 2 items = $2.30
+  → one-trip default (mirrors `core/basket_optimizer.DEFAULT_SPLIT_THRESHOLD`
+  semantics: strictly greater)
 
-- Items **not on the sheet** are exactly what the CLI's live search
-  handles: Woolworths public API + Coles via Scrape.do (that is how
-  "garden soil" got live prices at all). Nothing changes for them.
-- Ordinary web search stays ON for everything else (news, recipes,
-  "who delivers…", non-grocery questions).
-- SKILL.md adds the NL mapping "is X on special/discount/cheap
-  anywhere" → `compare --items "X"` and the hard no-browsing rule.
-
-## B6 — Products genuinely not stocked at one store (existing NA commands — preserved)
-
-The mechanism the user asked about **already exists and stays
-unchanged** (verified in `grocery_price_cli.py` lines 115–116,
-2043–2056 + `core/sheets_sync.mark_not_available`):
-
-- During a **resolve wool / resolve coles** session, when an item on
-  the missing list genuinely doesn't exist at that store (e.g. a
-  Woolworths-only product line), reply **`na`**.
-- The agent runs `map wool --na` (or `map coles --na`), which writes
-  literal **`NA`** into the store's keyword column (I/J) AND price
-  column (E/D) for that row.
-- `NA` counts as populated → the row is **permanently excluded from
-  that store's missing list** — it never reappears on future
-  Wednesdays.
-- The session auto-advances to the next missing item.
-- Also available outside a session:
-  `python3 grocery_price_cli.py map coles --na` (applies to the
-  current list position).
-
-This project must NOT alter that behaviour; the missing-list
-generation logic and `--na` path are explicitly out of scope
-(Part C.6 "Must NOT touch"). SKILL.md keeps the "na" NL mapping and
-the session hint text ("Reply `add` …, `na` if not available at this
-store …").
+Extended with the review-response checks (RF1 canonical rows + EC2
+variety guard): **18/18 total checks pass** (11 original + 7 new).
 
 ---
 
-# PART C — Live-lists pipeline spec (merged from architecture-spec-live-lists.md)
+## A4 — Review-response tests (2026-09-05, evidence added post-review)
 
-All content below is the former spec, kept intact. Three user-mandated
-changes are integrated at their natural places and marked
-**DELTA-1/2/3 (user, 2026-08-29)**. Where no DELTA appears, the
-original text stands unchanged.
+| Review point | Test | Result |
+|---|---|---|
+| RF2: root-page HTML truncation / pinned posts | Scrape.do fetch of `facebook.com/<page-id>/photos` | ✅ **HTTP 200 logged-out, 10 images, no login wall** — the photos tab is photo-purified (no text posts, no pinned announcements starving the fetch). ADOPTED as the primary fetch URL; root page stays as fallback (13 images, also worked). |
+| RF3: sequential vision calls vs gateway timeout | `test4_concurrency.py`: 4 single-image calls, sequential vs `ThreadPoolExecutor(4)`; all on the user's Coding Plan | Measured: sequential **50.8s**, concurrent **18.6s (2.7× speedup, no throttling)**, single-call ceiling **25s**. A 12-image sequential worst case WOULD breach 90s — **concurrency is mandatory**. Also observed: one parallel run returned 11 deals + 1 schema error vs 12/0 sequential → run-to-run nondeterminism exists; the validator + "≤2 attempts per image" retry cap is REQUIRED (already in C.1). |
+| EC1: multi-image carousel posts (split boards) | ONE vision call with 2 board images attached | ✅ **24 merged deals, zero duplicate items, correct categories (incl. "other" for Lebanese Bread), 31.4s** — passing a post's images TOGETHER works and cuts the call count to ~1–2 per store. ADOPTED: group images by post; one call per post. |
+| RF1: row duplication without canonical grouping | `test3_discount_sim.py` review checks | ✅ Variety-aware `canonical_key`: "Beef Diced" + "Diced Beef" → ONE row with both stores side by side; "Royal Gala" vs "Pink Lady" → separate rows; bulk packs take no price row. 18/18 checks pass. |
+| EC2: generic produce vs premium variety false alerts | `test3_discount_sim.py` review checks | ✅ Variety guard: generic "Apples" vs "Apples Royal Gala" master → conflict → alert suppressed (tagged "variety differs — verify"); same-variety pairs alert normally; non-variety items unaffected. |
 
-## C.1 Goal (plain language)
+## A5 — Channel & website coverage tests (user follow-ups, 2026-09-05)
 
-Today's Wednesday run depends on two manual steps: copy-pasting saved
-lists from Woolworths and Coles into Word documents, and manually
-adding missing items to the store websites. Both exist because the
-stores block scripts from logged-in areas.
+| Question | Test | Result |
+|---|---|---|
+| Does Scrape.do work on ALL FOUR Facebook pages? | Probed Merjan + Abu Salim (Dunya + Fruitopia already proven) | ✅ **All four: HTTP 200, no login wall** — Dunya 13, Merjan 13, Fruitopia 15, Abu Salim 15 images. Facebook coverage is complete. |
+| Can we also read Instagram (e.g. @merjanbrothers) and dedupe vs FB? | Scrape.do rendered fetch of the IG profile | ❌ **Login-walled** — HTTP 200 but only profile meta (follower counts); zero post captions, zero images. IG is an identity wall. Since the user expects FB and IG content to be identical, **FB-only coverage loses nothing**. No new subscriptions; IG stays out of scope (revisit only if the user ever provides a dedicated account — same rule as FB local-Chrome fallback). |
+| Does any of the four shops have a usable website to build a normal-price catalogue? | Web-search + direct fetch + **user supplied `dunyabutchery.com.au` (missed by search)** | ✅ **DUNYA HAS A FULL SHOP SITE.** `https://www.dunyabutchery.com.au/` — WooCommerce (WordPress) with an **open Store API**: `GET /wp-json/wc/store/v1/products?per_page=50` → HTTP 200, clean JSON (name, price, regular_price, categories), per-kg/per-each units right in the product names ("Diced Beef (per kg) $18.99", "Chicken Skewer (each) $2.99"), plus dedicated **"Bulk Offers & Deals"** and **"Special Offers and Deals"** categories. Catalogue builder = a paginated JSON walk, no HTML parsing, no vision. ⚠️→✅ TLS note: the site's certificate chain fails verification when fetched directly from python — **workaround TESTED (2026-09-05): route the catalogue fetch through Scrape.do** (their proxy terminates TLS with a valid certificate; clean JSON returned, local verification never disabled; costs 1 credit per 4-weekly refresh). The shipped code MUST use the Scrape.do route for this host — never blanket-disable verification. Fruitopia's domain remains an empty shell; Merjan/Abu Salim have directory pages only. |
 
-New reality (verified by hands-on testing 2026-08-28):
+## A6 — Capacity statement (user question: "what is your capacity in scraping?")
 
-- A **visible, real Chrome window** on the user's local PC passes both
-  stores' robot checks (headless is blocked; headed is not).
-- Woolworths' list APIs answer plain script calls fine — the only
-  missing piece is a **live session cookie** (fresh cookie = works;
-  stale cookie = 403; no cookie = 200 but empty).
-- The user reports both stores log them out almost daily. The plan
-  therefore assumes **nothing about session lifetime**: everything
-  that needs login happens inside one short "live window", and
-  everything else queues.
+Per shop per run the pipeline spends: **1 Scrape.do render (~1 credit) + 1–3 vision calls ($0 on the Coding Plan, worst case $0.0025 each on OpenRouter)**. Concretely:
 
-**One live window per Wednesday (plus optional urgent windows) does:**
+| Scale | Credits/run | Vision wall time | Cost |
+|---|---|---|---|
+| 4 shops (today) | ~4–8 | ~20–30s | $0 |
+| 20 shops | ~20–40 | ~1.5–2 min (4 workers) | $0 |
+| 50 shops | ~50–100 | ~4–5 min (4 workers) | $0 (or a few cents if OpenRouter fallback) |
 
-1. Log in to both stores once (user present, 2FA once each).
-2. Fetch all three saved lists with live prices:
-   - Woolworths: **"Price Compare"** and **"Special list (28)"**
-   - Coles: **"Price Compare"**
-3. Sync the sheet, generate the three lists (unmatched / wool missing /
-   coles missing) — exactly as today.
-4. Flush both website-add queues in one batch:
-   - `add_to_list.json` (fed by wool/coles missing "add" actions)
-   - `searched_items.json` (fed by any midweek live-search add)
+The binding constraints are (1) the Scrape.do credit plan — roughly 100–200 credits/month keeps a 20–50 shop weekly run comfortable; (2) runtime scales linearly but stays flat per batch thanks to the 4-worker pool (scale workers up for bigger lists); (3) one vision call per post keeps call count near shop count. **Adding shops is a config row (page id + name + category), not code.**
 
-**Midweek:** searches keep working as today; new items auto-queue on
-`searched_items`. An urgent flush command can run any day (opens a live
-window, user does 2FA if needed, drains both queues at once).
+**Mall/shopping-centre project (DFO Eastern Creek etc.):** acknowledged as a FUTURE, SEPARATE project — same engine pattern (shop directory → per-shop channel → vision → catalogue) generalises to mixed site/IG/FB sources, but it runs on different days/channels and is NOT designed or tested here. Deliberately out of scope for this document.
 
-**DELTA-1 (user, 2026-08-29) — Wednesday order is ADD FIRST, THEN
-COPY.** Inside the Wednesday live window, the flush (step 4) must run
-**before** the fetch (step 2): midweek-searched items must already be
-on the store "Price Compare" lists, so the fetched/copied lists include
-them and the sheet sync prices them in the same run. Phase order in
-C.3.1 below is updated accordingly; the phases remain independently
-fault-tolerant (a failed flush does not stop the fetch, and vice versa).
+# PART B — Binding decisions (user, 2026-09-05 — do not re-litigate)
 
-## C.2 Verified technical foundation (from 2026-08-28 hands-on tests)
+1. **Comparison basis:** like-for-like unit — $/kg vs $/kg, per-piece
+   vs per-piece (meat and produce are per-kg almost always).
+   Bulk/tier offers (5kg bags, boxes) are **reported but never
+   compared or added to the shopping list** — shown with the comment
+   "multi buy Xkg for $Y" (supersedes the earlier "— switch?" tag
+   wording; user format, 2026-09-05).
+2. **Baseline = the cheaper of Woolworths/Coles sheet prices
+   (columns D/E), as-is.** Nothing live on the Friday run unless the
+   user specifically asks. (The sheet's own multibuy-rate handling is
+   a Phase-1 concern; Friday compares against the plain sheet cell.)
+3. **Alert boundary: strictly >20%** (exactly 20.0% → no alert), on
+   the like-for-like unit basis. The `Local_Deals` tab itself holds NO
+   discount data — discounts exist only in the Telegram report,
+   computed against the master sheet when the product exists there.
+4. **FB access chain: Scrape.do primary → local headed Chrome
+   (last resort, separate FB login, never the personal one).**
+   ZenRows is EXCLUDED — its standard plan forbids facebook.com as a
+   target (REQS001, probed on both www. and m. hosts, 2026-09-05;
+   the `ZENROWS_API_KEY` itself is valid and stays in use for the
+   existing `scraping_api` Coles work). No local-Chrome testing now
+   (user decision Q10) — all pages are public today. No new
+   subscriptions.
+5. **Freshness: take the last 3 posts** per store, extract the
+   board's printed validity date, **drop expired boards**, parse the
+   valid ones. If NO board carries a date → parse the last 3 images
+   by default.
+6. **Friday report is grouped per store** — "Abu Salim deals: 1…2…3…;
+   Fruitopia deals: 1…2…3…" etc. Every deal/Note is tagged with its
+   store.
+7. **ALL parsed items are added to the `Local_Deals` tab** (matched or
+   not). Layout: **Col A = product name; Cols B–E = one column per
+   store** (Dunya, Merjan, Fruitopia, Abu Salim). Page classified
+   into **Fruits and Butchery sections**. **Every Friday the tab is
+   wiped and rebuilt from the current week's catalogues only** — new
+   products get new lines; **no history kept anywhere**.
+8. **Model: `glm-5.3-flash` via the user's own Z.ai Coding Plan
+   endpoint (`zlm_url` + `zlm_claw` from `.env`), OpenRouter
+   (`z-ai/glm-5.3-flash`, then `google/gemini-2.5-flash`) as
+   fallbacks.** DeepSeek v4 flash has no vision (tested, ruled out).
+9. **On-demand runs:** a Claw skill (e.g. `local-deals`) must let the
+   user run the whole report ANY day ("run the local deals report"),
+   not just Fridays. Friday stays the scheduled cadence.
+10. **Friday = TWO Telegram posts (user, 2026-09-05):** Post 1 =
+    STANDOUT items only — the >20%-cheaper-than-master-sheet alerts.
+    Post 2 = the FULL catalogue of everything listed on the shops'
+    boards that week, regardless of master-sheet matches.
+11. **Comment discipline (user, 2026-09-05):** plain unit-price items
+    carry NO note. The "normal price unavailable" note appears ONLY
+    on multi-buy items. Every multi-buy item carries the comment
+    "multi buy Xkg for $Y" (+ the same-store site price when a site
+    catalogue exists in future).
+12. **Local multi-buys NEVER enter the shopping-list maths (user,
+    2026-09-05)** — deliberately the OPPOSITE of the Coles/Woolworths
+    rule (a 2-for is buyable; a 5kg minimum is not, unless the user
+    chooses it). The shopping list uses unit prices only and prints
+    the note "this item is on multi buy offer at <store> — min
+    purchase Xkg for $Y". The Friday POST shows the special multi-buy
+    price.
+13. **Price column (user delegates, tester decision, 2026-09-05):**
+    show the FB board's per-unit price; for multi-buy rows show the
+    multi-buy total in the price cell with the derived per-unit rate
+    and terms in the comment ("multi buy 5kg for $54 — $10.80/kg").
+    **Dunya rows additionally carry the same-store site unit price in
+    the comment** ("normal site price $X/kg") whenever the item exists
+    in the Dunya website catalogue — enabling the truest discount
+    check: FB special vs the same shop's normal price.
+14. **Website catalogues (user supplied Dunya's site, 2026-09-05):
+    ACTIVE for Dunya only.** `dunyabutchery.com.au` (WooCommerce,
+    open Store API at `/wp-json/wc/store/v1/products`, paginated JSON;
+    includes "Bulk Offers & Deals" + "Special Offers and Deals"
+    categories). Refresh **every 4 weeks** (user decision). The
+    module is written generically so future shops with sites plug in
+    as config. Fruitopia's shell site and the Westfield directory
+    pages are not usable.
+15. **Instagram: out of scope (tested, 2026-09-05)** — login-walled
+    logged-out; FB content is expected to match IG, so FB-only
+    coverage stands. No new subscriptions; revisit only if the user
+    later provides a dedicated account (same policy as the FB
+    local-Chrome fallback).
 
-| Test | Result |
+---
+
+# PART C — Proposed architecture (for 01 Architect to plan)
+
+## C.1 Friday pipeline (one command, e.g. `python grocery_price_cli.py local-deals`)
+
+```
+For each store (4):
+  1. FETCH   Scrape.do render of the PHOTOS TAB
+             https://www.facebook.com/<page-id>/photos
+             (tested logged-out: 200, 10 images, no login wall —
+             photo-purified, immune to pinned text posts; the root
+             page is the fallback URL, also tested working).
+             Collect scontent URLs + srcset.
+  2. PICK    last 3 posts' images; dedupe by photo id; largest
+             rendition per photo; drop sub-size-floor images;
+             GROUP IMAGES BY POST (a carousel post's 2–3 images are
+             one weekly board, EC1).
+  3. VISION  glm-5.3-flash on the user's Coding Plan (zlm_url;
+             fallbacks z-ai/glm-5.3-flash then gemini-2.5-flash on
+             OpenRouter) with schema v2 prompt. ONE CALL PER POST
+             with that post's images attached together (tested:
+             2 images -> 24 merged deals, no duplicates, EC1),
+             max_tokens >= 2200, truncation salvage on.
+             Parse + validate (normaliser included). Boards with
+             valid_until in the past are dropped; no dates anywhere
+             → keep all 3.
+  4. MERGE   all valid deals per store → this week's catalogue.
+  4b. SITE   (Dunya only today) walk the WooCommerce Store API
+             (`/wp-json/wc/store/v1/products`, paginated, every 4
+             weeks or on run if stale) → normal-price catalogue used
+             for the comment column and the same-store discount check.
+             FETCHED VIA SCRAPE.DO (tested: the site's certificate
+             chain fails direct python fetches; Scrape.do terminates
+             TLS with a valid cert — clean JSON, nothing disabled).
+Then:
+  5. SHEET   wipe `Local_Deals`; rebuild: Fruits section, Butchery
+             section, (Other if any); Col A = CANONICAL product names
+             (variety-aware grouping, C.4 — equivalent items across
+             stores share ONE row so B–E show the cross-store
+             comparison), Cols B–E = store price cells (blank when
+             that store doesn't have it; bulk cells carry the tag
+             text).
+  6. MATCH   each deal vs Products_Master (reuse name_matcher /
+             lookup semantics; uom family gate; like-for-like basis;
+             VARIETY GUARD on produce, C.4/EC2).
+  7. ALERT   discount vs cheaper of D/E; strictly >20% → alert.
+  8. NOTIFY  Telegram report (C.3), grouped per store, alerts
+             highlighted, bulk notes tagged, $3.00 rule applied to
+             any extra-stop recommendation.
+```
+
+**Concurrency (review RF3, measured):** stores are processed
+CONCURRENTLY with `ThreadPoolExecutor(max_workers=4)`. Measured on
+the Coding Plan: sequential 4 calls = 50.8s (a 12-image sequential
+worst case would breach a 90–180s gateway timeout); concurrent =
+**18.6s, 2.7× speedup, no provider throttling**; single-call ceiling
+25–31s (multi-image). The whole vision stage therefore fits any
+sane tool-call timeout. The skill (C.6) still documents ≥90 s
+timeouts. Vision calls per Friday: ~4–8 (per POST, not per image).
+
+Attempt caps (mirror Phase-1 discipline): page fetch ≤3 attempts with
+fresh sessions (5xx/timeout only, never 401/403); vision ≤2 attempts
+per POST (model fallback counts as attempt 2 — REQUIRED: one parallel
+run returned 11 deals + 1 schema error vs 12/0 sequential, so
+run-to-run nondeterminism is real and only validation+retry catches
+it); no unlimited retries anywhere; per-run Scrape.do cap unchanged
+(40) — Friday uses ≤8.
+
+## C.2 `Local_Deals` tab layout (binding: B7)
+
+```
+        A                B (Dunya)   C (Merjan)  D (Fruitopia)  E (Abu Salim)
+1   FRUITS
+2   Apples Royal Gala /kg                         $3.20          $2.99
+3   Bananas /kg                                                  $2.90
+4   Potatoes 5kg bag  [note: bulk 5kg $2.99]                     $2.99
+5   BUTCHERY
+6   Beef Diced /kg    $12.99      $13.50
+7   ...
+```
+
+- Row 1 of each section is the section header (FRUITS / BUTCHERY;
+  add OTHER below if vision ever classifies outside the two).
+- Store names header row above the columns (frozen row recommended).
+- **Canonical rows (review RF1, tested):** Col A holds a CANONICAL
+  product name; equivalent items across stores share ONE row —
+  "Beef Diced" (Dunya) and "Diced Beef" (Merjan) must land on the
+  same row so B–E show the comparison side by side. Grouping key is
+  VARIETY-AWARE: "Royal Gala" and "Pink Lady" stay on separate rows;
+  generic flyer items never merge with a varietied row. Canonical
+  resolution reuses `core/name_matcher.py` semantics (with
+  `core/subcategory.py` as the taxonomy reference); the sandbox
+  token-overlap + variety-token key in `test3_discount_sim.py` is
+  the reference behaviour. NEEDS_REVIEW-style rows (ambiguous merge)
+  surface in the Telegram report rather than silently guessing.
+- Bulk-only items appear as a row with the note text in that store's
+  cell: `[Multi-buy: <Store> has 5kg for $2.99 — switch?]` and NEVER
+  in the Telegram alerts/comparison.
+- The whole tab is **rewritten every run** (idempotent; running
+  Saturday just rebuilds the same view). No history columns, no
+  discount columns, no Last_Updated columns.
+- `Products_Master` is untouched (only READ for matching).
+
+## C.3 Friday Telegram output (binding: B2, B3, B6, B10–B13)
+
+**Two posts, per the user:**
+
+**Post 1 — STANDOUT DEALS** (only items >20% below the master sheet):
+
+```
+🚨 LOCAL STANDOUTS — Fri 2026-09-11 (Mt Druitt)
+
+DUNYA BUTCHERY
+ • Beef Diced — $12.99/kg  (26% < Woolworths $17.50/kg)
+
+FRUITOPIA MT DRUITT
+ • Apples Royal Gala — $3.20/kg  (29% < Woolworths $4.50/kg)
+```
+
+**Post 2 — FULL BOARD** (every catalogue item that week, grouped per
+store, master-sheet matches annotated, bulk items with comments):
+
+```
+🛒 LOCAL DEALS — Fri 2026-09-11 (Mt Druitt)
+
+ABU SALIM FRUIT MARKET
+ 1. Pink Lady Apples — $2.99/kg  (also 21% < Coles)
+ 2. Tomatoes — $2.99/kg
+ 3. Washed Potato 5kg bag — $2.99
+    [multi buy 5kg for $2.99 — normal price unavailable]
+
+FRUITOPIA MT DRUITT
+ 1. Bananas — $2.90/kg
+ 2. ...
+
+DUNYA BUTCHERY
+ 1. Beef Diced — $12.99/kg  (normal site price $18.99/kg — save 31%)
+ 2. Bulk Beef Box — $89.90
+    [multi buy 10kg for $89.90 — approx $8.99/kg — normal price unavailable]
+
+⚠️ No prices found this week: Merjan Brothers (no new board)
+```
+
+- Plain unit-price lines carry NO notes unless the same-store site
+  catalogue adds the "normal site price $X — save Y%" comment
+  (Dunya only today, user B14).
+- Multi-buy lines: multi-buy total in the price position + derived
+  per-unit and terms in the comment; "normal price unavailable"
+  appended only when no site catalogue exists (today: always for the
+  four shops).
+- Alerts (>20% vs master) appear ONLY in Post 1; Post 2 may note the
+  cross-store comparison inline but the standout list is Post 1's job.
+- Stores with zero parseable prices get the ⚠️ line — never silence
+  (model-variance edge case, A2).
+- **Shopping-list rule (B12):** the local multi-buy minimum NEVER
+  feeds the "is the extra stop worth it" maths; unit prices only,
+  with the note "this item is on multi buy offer at <store> — min
+  purchase Xkg for $Y". ($3.00 rule unchanged, strictly greater.)
+
+**Telegram delivery & the 4096-character budget (review catch,
+2026-09-05):** Telegram rejects any message over 4096 chars, and
+Post 2 (full boards, 4 stores × 10–15 items + notes) WILL exceed it.
+Delivery rules (architect must enforce):
+1. **Post 2 is sent as ONE MESSAGE PER STORE** — four clean messages,
+   each headed by the store name. Natural boundaries, no mid-block
+   cuts (10–15 items ≈ 600–900 chars per store, far under budget).
+2. Safety net: if any single store block ever exceeds 4000 chars
+   (e.g. a 40-item board), split at LINE boundaries (never mid-line)
+   with a "(continued)" marker — reuse the gateway's existing
+   `send_chunked` plumbing (`telegram_gateway/handlers.py`,
+   MAX_MESSAGE_CHARS = 4096) rather than inventing a new sender, but
+   the store-first split is the primary strategy; the hard 4096
+   slice is the last resort only.
+3. Post 1 (standouts) is small by definition; single message.
+4. Every chunk carries the store header when a store block splits,
+   so no item floats without context.
+5. The Friday run must NEVER let Telegram's API return 400
+   (message too long): length-check every message before sending.
+
+## C.4 Matching & normalisation (architect to spec, reuse over reinvent)
+
+- Product-name matching against Products_Master: reuse
+  `core/name_matcher.py` / `core/lookup.py` semantics (ranking only,
+  no hard rejection — Phase-1 decision B2). Fallback token-overlap
+  (the sandbox stand-in) must NOT ship.
+- Unit basis: flyer `kg` vs master size via `core/uom.parse_size`
+  (weight family), $/kg vs $/kg; `ea`/count only vs count rows; the
+  20%-size UOM gate still applies where pack sizes are compared.
+- Per-kg comparisons are ALLOWED here (scoped exception to Phase-1 B1,
+  user-approved): both sides are per-kg — it is not the forbidden
+  cross-basis derivation. Never cross weight↔volume↔count.
+- Multibuy (same standard pack): effective rate total/qty — same
+  math as `core/multibuy.py`; the Telegram line shows the rate + the
+  2+ note.
+- Cross-store product alignment inside `Local_Deals` (which flyer
+  items share one row) uses the SAME variety-aware canonical key as
+  the tab (C.2, review RF1 — tested): word-order-insensitive tokens,
+  unit/stopword stripping, variety qualifiers REQUIRED in the key
+  when present ("Beef Diced" == "Diced Beef"; "Royal Gala" never
+  merges with "Pink Lady"). Over-merging different varieties is the
+  forbidden failure; equivalent-item splitting defeats the B–E
+  layout — both are covered by the 18/18 check matrix.
+- **Variety guard (review EC2, tested):** before emitting a >20%
+  alert, compare variety qualifiers between the flyer item and the
+  master row. Generic flyer item ("Apples") vs varietied master row
+  ("Apples Royal Gala") → conflict → NO alert; the line prints with
+  a "variety differs — verify" tag instead. Same variety, both
+  generic, or non-variety items (meat cuts) → alert logic unchanged.
+
+## C.5 Secrets & config (all from `.env` — never hardcode/print)
+
+| Variable | Use |
 |---|---|
-| WW search API via curl_cffi, no login | ✅ HTTP 200 (already in use) |
-| WW `/apis/ui/mylists` + stale cookie | ❌ 403 (Akamai blacklists stale cookies) |
-| WW `/apis/ui/mylists` + no cookie | ✅ 200 with empty list — **Akamai is not the wall; identity is** |
-| Coles search via Scrape.do (`super=true`, `geoCode=au`) | ✅ works |
-| Coles saved-list page rendered via Scrape.do / ZenRows (not logged in) | ⚠️ page renders, no data — list is private; login required |
-| WW + Coles pages in **headless** Chrome | ❌ blocked / empty shells |
-| WW + Coles pages in **headed** real Chrome, local residential AU IP | ✅ **HTTP 200 both** |
-| Scrape.do `setCookies` forwarding syntax | ✅ validated via echo test |
+| `SCRAPEDO_API_KEY` | FB page fetch (primary) |
+| `zlm_url` + `zlm_claw` | vision calls — Z.ai Coding Plan base URL + key (EXACT variable names; `zlm_url` is a BASE url, client appends `/chat/completions`) |
+| `OPENROUTER_API_KEY` | vision fallbacks (`z-ai/glm-5.3-flash`, `google/gemini-2.5-flash`) |
+| Telegram creds (existing) | Friday report (new topic/thread id needed — user creates a `local-deals` topic, supplies the thread id, same pattern as Phase-1 decision 24) |
+| `ZENROWS_API_KEY` | NOT used for FB (domain-forbidden, REQS001) — untouched for existing Coles use |
 
-**Conclusion:** the only reliable login environment is a visible real
-Chrome on the user's local machine. All authenticated work must
-therefore happen inside that window (page-context API calls inherit
-the session and all security tokens automatically — safer than
-replaying cookies in external tools).
+Model names and the FB page-id table live as module constants, not
+in `.env`.
 
-## C.3 Components
+## C.6 Skill + schedule (binding: B9)
 
-### C.3.1 `session_refresh.py` (NEW — the live window driver)
+- New Claw skill `claw-skills/local-deals/SKILL.md` mapping natural
+  language ("local deals", "butcher specials", "fruit market deals")
+  → `python grocery_price_cli.py local-deals`. Include ≥90 s
+  tool-call timeout guidance (vision calls are slow) and the
+  no-browsing rule (FB goes through the CLI chain only, never
+  web_fetch on facebook.com).
+- **MANDATORY (repo rule 04):** after ANY change to
+  `claw-skills/`, regenerate `python skills_doc.py`, verify
+  `python skills_doc.py --check` prints OK, commit BOTH
+  `SKILL.md` and `claw-skills/claw_skills_easy.md`, and scp-sync
+  BOTH to the VPS path with md5 verification. An unsynced skill is
+  an incomplete change.
+- Schedule: **Friday 05:00 Australia/Sydney** (user decision,
+  2026-09-05 — report is ready when the user wakes up; implement as
+  a cron in UTC on the VPS accounting for AEST/AEDT, i.e. Fri
+  19:00/18:00 UTC respectively — the architect picks the exact cron
+  expression and documents the DST behaviour). On-demand runs
+  rebuild the same tab and re-send the report any day.
 
-One script, three phases, run in a visible Chrome window using a
-**dedicated persistent Playwright profile** (survives restarts; keeps
-"remember this device" trust; never used for daily browsing):
-
-```
-python grocery_price_cli.py live-refresh [--flush-only] [--fetch-only]
-```
-
-**Phase A — establish session (skipped automatically if still valid):**
-1. Launch headed Chrome with the persistent profile; inject last saved
-   cookies if present.
-2. Open Woolworths → detect login state (call `/apis/ui/mylists` from
-   page context; non-empty `Response` = logged in). If not logged in:
-   fill email/password from `.env` (Chrome may also offer saved
-   passwords), pause with a console message "Complete 2FA in the
-   window…", wait for the redirect, verify.
-3. Same for Coles (login state check via the customer/list API; exact
-   check endpoint captured in discovery, C.3.4).
-4. Export all cookies + the login timestamp to
-   `data/session_state.json` (never printed, never committed).
-
-**Phase B — flush queues (DELTA-1 order: flush BEFORE fetch; see
-C.3.3).** `--fetch-only` skips this phase.
-
-**Phase C — fetch lists.** `--flush-only` skips this phase.
-5. Woolworths: enumerate `/apis/ui/mylists` from page context;
-   exact-match names "Price Compare" and "Special list (28)" (list
-   available names on mismatch). Fetch items per list via the
-   list-items API; batch product details where the API requires it.
-   Save raw snapshots to `data/live_snapshots/YYYY-MM-DD_ww_<list>.json`.
-6. Coles: navigate to the saved-list URL (existing `COLES_LIST_URL`)
-   OR call the list API from page context — whichever discovery
-   (C.3.4) confirms; capture the product JSON (Next.js data or API
-   response). Snapshot to
-   `data/live_snapshots/YYYY-MM-DD_coles_PriceCompare.json`.
-7. Convert snapshots to `ProductItem` lists (WW specials data is
-   richer than the docx markers: `IsOnSpecial` / `WasPrice` /
-   `SavingsAmount` come straight from the API).
-
-**DELTA-2 (user, 2026-08-29) — Pagination: fetch ALL pages of every
-list, both stores.** Lists longer than one page must be walked to the
-end before the snapshot is considered complete:
-
-- **Woolworths:** the list-items API is paged (page offset / hasMore
-  cursor — exact shape confirmed during first-run discovery). Loop
-  `while hasMore` (or until a page returns fewer items than the page
-  size), appending every page's items to the same snapshot. Safety
-  cap: 30 pages per list; hitting the cap logs a loud warning with
-  the item count fetched so far.
-- **Coles:** the saved-list page/API paginates similarly (Next.js
-  query param or API cursor — capture during discovery). Same loop,
-  same 30-page cap.
-- After fetch, log per list: `WW 'Price Compare': 4 pages, 118 items`
-  so short counts are visible immediately.
-- The snapshot converter must deduplicate by product id across pages
-  (stores sometimes repeat boundary items).
-
-Then close the browser. Phase order (A → flush → fetch) guarantees the
-fetched lists include everything the flush just added, while each
-phase remains independently fault-tolerant; one failing phase never
-aborts the others.
-
-### C.3.2 Wednesday wiring — `wednesday --source live` (NEW flag)
-
-`grocery_price_cli.py wednesday` gains `--source live|docx`
-(**default `docx` — the current method stays the default**):
-
-- `--source live`: instead of parsing `.docx` files, steps 1–2 read
-  the snapshots produced by `live-refresh` (which `wednesday --source
-  live` invokes first, unless snapshots from today already exist).
-  Everything after step 2 — match, sync, unmatched/missing generation,
-  scp, Telegram — is the existing, unchanged pipeline.
-- The specials Telegram report (step 8) uses the live "Special list
-  (28)" snapshot instead of `Woolworths_Specials.docx` (richer, no
-  paste step).
-- `--source docx`: byte-for-byte today's behaviour. **Revert = simply
-  not passing the flag.**
-
-### C.3.3 Website-add queues and the flush
-
-**Queue 1 — `add_to_list.json` (EXISTS, behaviour unchanged):**
-fed by wool/coles missing `add` actions; price written immediately,
-keyword intentionally left empty (user's deliberate loop — the item
-must resurface in next week's unmatched list; **this loop is preserved
-exactly**).
-
-**Queue 2 — `searched_items.json` (NEW):**
-- Fed automatically wherever a live-search result becomes a new sheet
-  row (the `add_product_row` path used by `map unmatched --add` and
-  live-search adds). Entry:
-  ```json
-  {"store": "woolworths", "keyword": "<exact store product name>",
-   "store_product_id": "<WW ArticleId / Coles product id, captured at
-                         search time — makes the flush immune to re-search
-                         drift>", "generic_name": "<Col A>",
-   "code": "<unique 5-letter removal code, e.g. APCH — see B3.5>",
-   "added_at": "..."}
-  ```
-- Dup guard: store + normalized generic name (same rule as
-  add_to_list).
-- Code assignment at queue time: unique vs the whole file + the
-  7-day tombstone set (B3.5).
-- File lives beside add_to_list.json; same atomic-write pattern.
-
-**DELTA-3 (user, 2026-08-29) — queue is reviewable/removable before
-Wednesday; NOTHING is ever auto-queued; removal is by unique
-5-letter code.** New subcommand (see B3):
-
-```
-searched-items show
-searched-items remove --items "APCH"           (or "APCH,MIVOS" — comma-separated)
-searched-items clear
-```
-
-- `show` prints the queue: store · exact product name · size ·
-  `[CODE]`. Offline-safe.
-- Every queued item carries a unique 5-letter code (B3.5) — removal
-  works after any number of intervening chats and can never be mixed
-  up between searches. Unknown codes produce a self-correcting error
-  listing current codes.
-- `remove` deletes the given code(s) (validated all-or-nothing, same
-  UX as `add-to-list done`), then re-prints the remainder.
-- `clear` empties the queue (asks the Claw agent to confirm first per
-  SKILL.md confirm-before-mutate rule).
-- **Explicit-add-only (user decision, 2026-08-29):** the queue is fed
-  ONLY by an explicit user action — `map --add` during a resolve
-  session, or the new `search --product "X" --add-item N` after a
-  compare/search/expand. Plain `compare`/`search`/`expand` results
-  are display-only and never touch the sheet or the queue. This
-  removes the "I forgot to exclude and everything got added" failure
-  mode.
-- Every output that queues or lists queue items prints the exact
-  management words ("Reply 'remove APCH' …", "'show searched
-  items'"), so the user never has to remember commands (user
-  request).
-- Removal works any time before the Wednesday flush; after a
-  successful flush the entry is gone anyway.
-
-**The flush (`live-refresh` Phase B, also runnable alone):**
-1. Load both queues; group by store; target list = the store's
-   **"Price Compare"** list (never the Specials list).
-2. Add each item via the captured add-to-list API, called **from the
-   logged-in page context** (tokens/CSRF come along automatically).
-   Throttle: ~1 item per 1.5 s + small jitter (a 40-item burst must
-   look human, not machine-gun).
-3. Per-item result is logged to `data/live_flush_log.json`. Successes
-   are removed from the queue; failures stay with a retry count and a
-   human-readable reason.
-4. `add-to-list show/done` keeps working unchanged (manual fallback
-   and confirmation view).
-5. **No keyword (Col I/J) writes, ever, from the flush** — the item
-   resurfaces via next week's fetch → unmatched → user maps it.
-   Exactly the user's designed loop, minus the website clicking.
-
-**Urgent midweek flush:** `python grocery_price_cli.py live-refresh
---flush-only` — opens a live window; if the saved session is still
-valid it flushes with zero prompts, otherwise one 2FA per store.
-Drains BOTH queues at once (per user: "all added at once if more than
-1 items").
-
-### C.3.4 One-time discovery (built into the first run)
-
-The add-to-list API calls for both stores and the exact Coles
-list-data path are not publicly documented. First run of
-`live-refresh` therefore includes a guided discovery mode (also
-re-runnable via `live-refresh --recapture`):
-
-- The script turns on network recording, prints "Add ONE item to your
-  Price Compare list in the open window…", watches the network call
-  the browser makes, and saves the method/URL/body shape to
-  `data/live_api_capture.json`.
-- Repeat once per store (WW + Coles). Two minutes, once ever. WW's
-  endpoint shape is partially known from public reverse-engineering;
-  the capture confirms or corrects it. Coles is captured fresh.
-- **DELTA-2 addition:** discovery ALSO captures the pagination shape
-  of each list endpoint (page param name, page size, hasMore/nextPage
-  field, total-count field) for both stores, so C.3.1 Phase C can
-  walk every page from week one.
-
-### C.3.5 Session heartbeat (measurement only, no behaviour)
-
-After each refresh, a tiny background check (curl_cffi with saved
-cookies; 1 request per store, a few times a day via the same cron
-that already exists for reminders) logs "session alive/dead" to
-`data/session_heartbeat.log`. Purpose: replace guesswork about session
-lifetime with data (the open question from this week's discussion). It
-never triggers logins or purchases of anything; it only informs the
-user via the Wednesday report ("WW session lasted 6 days this week").
-
-## C.4 Failure handling & budget guards (user-mandated)
-
-**Prime rule: nothing ever retries unlimited.** Every network action
-has a hard attempt cap, every failure produces exact names + a manual
-path forward, and no failure can silently consume scraping credits.
-
-### C.4.1 Attempt caps per run
-
-| Action | Max attempts per run | On exhaustion |
-|---|---|---|
-| Page load (login page, list page) | 2 | Store marked failed |
-| Login wait (2FA pause) | No retries — waits up to 3 min for the user, then aborts | Store marked failed |
-| List fetch API call (in-page) | 1 per **page**, pages walked in order (DELTA-2) | Store marked failed |
-| Add-to-list item (flush) | 1 (+1 extra ONLY for a transient network error, never for 401/403) | Item stays queued |
-| Scrape.do search (existing search/map flows) | 3 total attempts, fresh session each, 3 s/6 s backoff, silent (B4); global per-run cap below | Woolworths-only display + one ⚠️ line |
-
-### C.4.2 Wednesday fetch failure → clean stop + manual instructions
-
-- **All-or-nothing:** if ANY store's fetch fails (login refused, page
-  blocked, no data), live mode aborts **before any sheet write** — the
-  sync never runs on partial data.
-- The stop message names the failed store and reason, then prints the
-  exact manual steps: *"Live fetch failed for <store> (<reason>).
-  Manual method: paste your lists into the Word docs as before and run
-  `wednesday` (no flag) — everything else is unchanged."*
-- The manual (docx) method is permanently available: it is the DEFAULT
-  mode and is never modified or removed by this project.
-- Any snapshots that DID succeed stay on disk — nothing is lost, and
-  the manual run is not affected by them.
-- Non-zero exit code; the Telegram summary (if sent) states
-  "LIVE FETCH FAILED — manual method required".
-
-### C.4.3 Flush failure → exact names + user's choice
-
-- Flush processes items one by one; **one item's failure never stops
-  the others** (except session death, below).
-- After the flush, the report prints **the exact store product names**
-  of every failed item, grouped by store, with the failure reason.
-- Failed items stay queued automatically ("add them back to try
-  another time" is the default behaviour — no action needed).
-- **3-strike rule:** an item that fails 3 flushes is parked — still
-  listed in every future flush report as "needs manual attention",
-  never auto-dropped, never retried forever.
-- **Session death mid-flush** (401/403 on any add): abort the
-  remaining flush immediately (no hammering a dead session), report
-  which items were added and which remain queued.
-
-### C.4.4 Scrape.do credit guards
-
-- The authenticated paths — list fetch, flush, heartbeat — **never use
-  Scrape.do**. They run in the user's own browser or via curl_cffi
-  with saved cookies: zero credits by design. **No Scrape.do fallback
-  may ever be added to these paths** (binding).
-- Heartbeat Coles check is curl_cffi best-effort; if blocked, it logs
-  "unknown" — it must NOT fall back to Scrape.do.
-- Defensive global cap on the existing Scrape.do search flows: a
-  per-run request limit (module constant, default 40) — exceeding it
-  stops the flow with a clear message instead of burning credits in a
-  loop.
-- **B4 addition (2026-08-29, tested):** `geoCode=au`, **no JS
-  render**, fresh session per request, silent 3-attempt retry chain +
-  circuit breaker (`data/scrapedo_health.json`) + per-run cap; on
-  total failure show Woolworths-only with one ⚠️ line.
-
-## C.5 The user's Wednesday, before vs after
-
-| Step | Today | After |
-|---|---|---|
-| Copy lists into Word docs | Manual, both stores | **Gone** |
-| Run pipeline | `wednesday` (reads docx) | `wednesday --source live` (opens Chrome; 2FA ×1–2) |
-| Review unmatched (forget/add) | Telegram/local map flow | Unchanged |
-| Review wool/coles missing (add) | Unchanged + remember website items | Unchanged; items queue on add_to_list |
-| Add queued items to store websites | Manual clicking on both sites | `live-refresh --flush-only` (usually no 2FA); on Wednesdays the flush runs FIRST, then lists are copied (DELTA-1) |
-| Midweek "I want item X now" | Search only; item never reaches store list | Search auto-queues (reviewable via `searched-items show/remove`, DELTA-3); optional urgent flush |
-
-## C.6 File boundaries (allowed scope for 01 Plan / 02/03)
+## C.7 File boundaries
 
 **May create:**
 
 | File | Purpose |
 |---|---|
-| `grocery-price-tracker/extractors/session_refresh.py` | Live-window driver: login, cookie export, in-page fetch (all pages), discovery capture |
-| `grocery-price-tracker/extractors/live_list_fetch.py` | Snapshot → ProductItem conversion (WW + Coles, dedup across pages) |
-| `grocery-price-tracker/core/searched_items.py` | Queue 2 module (mirror of `add_to_list.py`: atomic IO, dup guard, render, remove-by-code/clear, 5-letter code generator with uniqueness + tombstones) |
-| `grocery-price-tracker/core/uom.py` | Size parser + 20% rule verdicts (B1) |
-| `grocery-price-tracker/tests/test_searched_items.py` | Queue module tests (incl. remove/clear) |
-| `grocery-price-tracker/tests/test_uom.py` | UOM parser + verdict tests |
-| `grocery-price-tracker/tests/test_lookup_uom.py` | Selection/ranking + UOM-gate tests (no network) |
-| `grocery-price-tracker/data/live_api_capture.json` | Discovery output incl. pagination shapes (runtime, gitignored) |
-| `grocery-price-tracker/data/live_snapshots/` | Weekly raw list snapshots (runtime, gitignored) |
-| `grocery-price-tracker/data/scrapedo_health.json` | Circuit-breaker state (runtime, gitignored) |
+| `grocery-price-tracker/extractors/fb_flyer_fetch.py` | Scrape.do→local-Chrome chain; rendition selection; download (evidence: `test1_fb_flyer_fetch.py`) |
+| `grocery-price-tracker/extractors/shop_site_catalogue.py` | generic shop-website catalogue walker (Dunya WooCommerce Store API today; **fetched via Scrape.do — tested, the direct TLS fetch fails**; paginated JSON; 4-weekly refresh; evidence: `probe_dunya_api.py`, `test6_dunya_via_scrapedo.py`) |
+| `grocery-price-tracker/core/flyer_vision.py` | vision call + schema v2 validator + normaliser (evidence: `test2_vision_json.py`) |
+| `grocery-price-tracker/core/local_deals.py` | merge, sheet rebuild (wipe+write), matching, >20% detection, $3.00 rule (evidence: `test3_discount_sim.py`) |
+| `grocery-price-tracker/tests/test_fb_fetch.py`, `test_flyer_vision.py`, `test_local_deals.py` | offline tests mirroring the sandbox check matrices (mocked transports; NO network in tests) |
+| `claw-skills/local-deals/SKILL.md` | on-demand skill (with mandatory doc-sync workflow, C.6) |
 
-**May edit (surgical only):**
+**May edit (surgical):**
 
 | File | Change |
 |---|---|
-| `grocery_price_cli.py` | ① `live-refresh` subcommand (flags `--flush-only` / `--fetch-only` / `--recapture`). ② `wednesday --source live\|docx` (default docx) — input swap in steps 1–2 + specials source in step 8 ONLY. ③ One hook: queue-on-add in the `add_product_row` live-search path (explicit adds only). ④ `searched-items` subcommand (show/remove/clear). ⑤ Compare report: identity/provenance/UOM verdict lines + 1-per-store found-block + expand (B1–B3). ⑥ `search --add-item N` explicit-add flag |
-| `grocery-price-tracker/core/lookup.py` | Step 5 candidate selection: tolerant ranking + UOM gate (B2) — Steps 1–4 matching semantics unchanged |
-| `grocery-price-tracker/core/price_comparator.py` | `BasketItem` matched name/size/source fields + report changes (B1/B3); non-comparable items excluded from totals |
-| `grocery-price-tracker/extractors/coles_extractor.py` | Scrape.do recipe: `geoCode=au`, NO render, fresh session per call, silent 3-attempt retry chain, circuit breaker, per-run cap (B4) — search path only |
-| `grocery-price-tracker/tests/test_cli.py`, `test_comparator.py`, `test_lookup.py` | Tests for all the above (mocked, no network) |
-| `claw-skills/grocery-price/SKILL.md` | New command rows + NL routing (live refresh, flush, searched-items, remove; "on discount anywhere"; ≥90 s timeouts; no-browsing hard rule; relay provenance tags verbatim) |
-| `grocery-price-tracker/README.md` | Document live mode, searched-items queue, revert instructions |
+| `grocery_price_cli.py` | new `local-deals` subcommand (+ `--stores`, `--dry-run` flags) |
+| `core/sheets_client.py` (tab-access helpers only) | add/`ensure` the `Local_Deals` tab — no changes to Products_Master paths |
 
-**Must NOT touch:** `core/sheets_sync.py`, `core/lookup.py` Steps 1–4
-matching semantics (only Step 5 selection changes), `core/name_matcher.py`,
-`core/add_to_list.py` behaviour, `core/missing_items_tracker.py`,
-the docx parsers (they remain the default path), `telegram_gateway/`,
-any `.docx` file, `.env`, the missing-list generation logic, and the
-add_to_list keyword-Empty design.
+**Must NOT touch:** `Products_Master` write paths, `core/uom.py`
+(reuse as-is), `core/multibuy.py` (reuse as-is),
+`core/basket_optimizer.py` constants (reuse `$3.00`),
+`extractors/session_refresh.py` (Phase 1), the Wednesday pipeline,
+`.env`, any `.docx`.
 
-**Revert guarantee:** default `docx` mode; all new code in new files;
-`--source live` is opt-in; deleting/ignoring new files restores today's
-behaviour byte-for-byte. Git tag before implementation marks the
-pre-trial state.
+## C.8 Test plan skeleton (01 Plan expands; all offline/mocked)
 
-## C.7 Trial-week protocol (user-mandated safety)
+1. Fetch chain: mocked Scrape.do 200 → URLs captured intact
+   (target URL = `/photos` tab, root-page fallback);
+   5xx → (retry, fresh session) → local-Chrome fallback marker;
+   401/403 never retried; per-run caps.
+2. Rendition picker: multi-rendition dedupe; 9-digit photo ids;
+   size-floor skip; HTML-unescape only (signed-URL rule);
+   **images grouped by post for the vision stage (EC1)**.
+3. Vision validator: the 11 sandbox checks (bulk-labelled-single,
+   normaliser, date format, category enum, prose handling) plus the
+   truncation-salvage checks (test_salvage.py) and finish_reason
+   logging.
+4. Freshness: expired `valid_until` → dropped; all-null dates → all
+   3 kept; >3 posts → exactly last 3.
+5. Sheet rebuild: wipe+write idempotency; section headers; bulk
+   note cells; Products_Master never written (assert-by-grep).
+6. Detection: the 18-check matrix (11 original + RF1 canonical-row
+   grouping + EC2 variety guard) incl. strictly->20% boundary
+   (20.0 no / 20.1 yes) and $3.00 strictly-greater semantics.
+7. Report: per-store grouping, per-item store tags, bulk tags exact
+    wording, "no prices found" line, sub-$3 note, "variety differs —
+    verify" tag on suppressed variety-conflict pairs. **Delivery
+    sizing: Post 2 renders one message per store; a mocked oversized
+    store block splits at LINE boundaries with the store header
+    repeated; no message ever exceeds 4096 chars (test with a 40-item
+    fixture); every message length-checked before send.**
+8. Concurrency: ThreadPoolExecutor(4) processes stores in parallel;
+   mocked-clock test asserts the vision stage wall time is bounded
+   by the slowest POST (not the sum) and ≤4 workers are used.
+9. Skill file exists; `skills_doc.py --check` OK (rule 04).
+10. Site-catalogue fetch (Dunya) goes through the Scrape.do route
+    (mocked transport test), and an assert-by-grep test proves NO
+    shipped code disables certificate verification (`verify=False`
+    exists only in sandbox evidence, never in `core/`/`extractors/`).
 
-1. **Day 0:** implementation lands; git tag `pre-live-trial`. First
-   `live-refresh` run WITH the user present (discovery capture happens
-   here, incl. pagination shapes).
-2. **Wednesday 1:** run `wednesday --source live` (flush runs FIRST —
-   DELTA-1; verify the freshly flushed items appear in the fetched
-   lists). Then run the old docx flow in parallel (paste as usual, run
-   plain `wednesday`) and compare the two sync reports — item counts
-   and prices must match.
-3. **During the week:** normal searches; verify searched_items queue
-   accumulates; remove a wrong item via `searched-items remove`; run
-   one urgent `live-refresh --flush-only`; verify items appear on the
-   actual store lists (next fetch / store website).
-4. **Wednesday 2:** repeat live run; check heartbeat log for real
-   session lifetimes; confirm multi-page lists fetch completely
-   (DELTA-2 — compare item counts against the store website's list
-   count).
-5. **Decision:** keep live mode (flip default via one config line) or
-   revert (stop passing the flag). Either way nothing is lost.
+---
 
-**Failure criteria (auto-revert):** live fetch returns unusable data
-twice, or the flush damages a store list (wrong items) once. The
-queues and docx mode make any failure non-destructive.
+# PART D — Open items (user actions, none block planning)
 
-## C.8 Test plan (01 Plan will expand)
-
-1. `searched_items` module: mirror of the shipped add_to_list test
-   matrix (atomic IO, dup guard, render, remove-on-flush semantics)
-   **plus remove-by-code/clear tests (DELTA-3)** and code-generator
-   tests: 5 letters, A–Z minus I/O, uniqueness against queue +
-   tombstones, tombstone expiry at 7 days, case-insensitive removal,
-   comma-separated multi-remove, unknown-code error listing current
-   codes.
-2. `uom.py`: parse (`25L`, `600mL`, `180g`, `1 each`, `6 x 170g`),
-   family matching, 20% boundary (exactly 20% = comparable; 20.1% =
-   not), verdicts.
-3. Lookup Step 5 selection: **ranking only, no name rejection**
-   (B2) — top-ranked result used when UOM rule passes; next-ranked
-   tried on UOM failure; "none passes" path prints the 1-per-store
-   found-block — all mocked, no network. (The Seasol/hand-tool cases
-   must be caught by the UOM gate or shown in the found-block, never
-   silently priced.)
-4. Comparator: identity/provenance lines render; non-comparable items
-   excluded from totals and 🏆; the B1 wording block prints exactly.
-5. `--source` flag routing: docx default untouched; live mode reads
-   snapshots; missing snapshots → clear error, docx NOT silently used.
-6. Queue hook: live-search add → exactly one queued entry; non-live
-   adds and wool/coles missing adds do NOT feed searched_items.
-7. Flush logic (mocked API): success removal, failure retention +
-   retry count, throttling pace, per-store grouping, "Price
-   Compare"-only targeting.
-8. Snapshot conversion: WW specials fields → ProductItem specials
-   semantics (IsOnSpecial/WasPrice/SavingsAmount); Coles JSON →
-   ProductItem (reuse existing `_parse_search_result` shape);
-   **multi-page dedup (DELTA-2)**.
-9. Pagination walker (mocked APIs): loops until hasMore=false; stops
-   at 30-page cap with warning; boundary-item dedup.
-10. No test may hit the network or real stores.
-11. Failure modes (mocked): any store's fetch failure aborts live mode
-    BEFORE any sheet write; stop message names the store/reason and
-    the manual docx instructions; successful snapshots preserved.
-12. Flush failure handling: failed items retained with reason +
-    attempt count; exact names in the report; 3-strike park;
-    session-death abort leaves remaining items queued; one failure
-    never blocks other items.
-13. Credit guard: per-run Scrape.do cap stops the flow with a
-    message; circuit breaker opens after 3 consecutive failures and
-    fails fast; fetch/flush/heartbeat code paths contain no Scrape.do
-    calls (assert-by-grep test).
-14. Scrape.do request builder unit test: asserts `geoCode=au`, **no
-    `render` param**, unique session id per call, no `country=` param;
-    retry chain issues exactly 3 attempts with 3 fresh session ids on
-    5xx, stops after 3, never retries 401/403 (mocked transport).
-15. Explicit-add-only: plain `compare`/`search`/`expand` never call
-    `add_product_row` or touch searched_items; `search --add-item 2`
-    and `map --add` do (mocked sheet).
-16. Found-block rendering: exactly 1 closest product per store, the
-    "Reply 'expand'" line, and queue-management words printed in
-    every queueing output (including the `[CODE]` at the end of
-    every queued product line).
-
-## C.9 Decisions already made (binding — do not re-litigate)
-
-1. Batch-over-interactive: weekly (plus urgent) one-shot flushes; no
-   daily login attempts. (User decision, 2026-08-28.)
-2. Old method stays default; live mode is opt-in via flag for the
-   whole trial week. (User-mandated revert capability.)
-3. Two queues, one flush: `add_to_list.json` (unchanged) +
-   `searched_items.json` (new); flush drains both; targets each
-   store's "Price Compare" list only.
-4. **No Col I/J keyword writes from the flush** — the
-   resurface-through-unmatched loop is intentional and preserved.
-5. Adds run from the logged-in page context (not replayed cookies) for
-   maximum token compatibility.
-6. WW lists: "Price Compare" + "Special list (28)"; Coles: "Price
-   Compare". Exact names confirmed at runtime by enumeration; mismatch
-   prints available names instead of guessing.
-7. Session lifetime is treated as unknown; heartbeat measures it; no
-   behaviour depends on it.
-8. Cost target: $0/month new spend. Scrape.do unchanged (search only);
-   no ZenRows role.
-9. **No unlimited retries anywhere** (C.4.1 attempt caps). Wednesday
-   fetch failure = clean stop before any sheet write + exact manual
-   docx instructions; the manual method is permanently the default and
-   is never removed. (User-mandated, 2026-08-28.)
-10. **Flush failures report exact item names**; failed items stay
-    queued for a later flush by default, or the user adds them
-    manually and clears them; 3-strike park rule; session death aborts
-    immediately. (User-mandated, 2026-08-28.)
-11. **Authenticated paths are Scrape.do-free** — list fetch, flush, and
-    heartbeat can never consume credits; global per-run cap protects
-    the existing search flows.
-12. **UOM rule (user-mandated, 2026-08-29):** same size or within 20%
-    → comparable; anything else → "No matching product" block with the
-    two found products named; NO per-unit price comparisons, ever.
-13. **Wednesday order (user-mandated, 2026-08-29):** flush queues
-    FIRST, then fetch/copy the lists, so searched items are on the
-    store lists before they are read.
-14. **Pagination (user-mandated, 2026-08-29):** every list is fetched
-    from ALL pages on both stores, never just the first page.
-15. **Searched-items queue is reviewable (user-mandated, 2026-08-29):**
-    `searched-items show/remove/clear` lets the user drop wrong
-    products any time before Wednesday.
-16. **Scrape.do recipe (tested, 2026-08-29, 13/13 success):**
-    `geoCode=au`, **no JS render** (results are server-rendered),
-    fresh session id per call, silent 3-attempt retry chain with fresh
-    sessions + 3 s/6 s backoff on 5xx/timeout, per-run cap of 40,
-    circuit breaker as credit guard, ≥90 s tool timeouts in SKILL.md.
-    User-visible failure only on a total Scrape.do outage → then
-    Woolworths-only display with one ⚠️ line (user decision, Q2).
-17. **No hard name filter (user decision, 2026-08-29):** the UOM 20%
-    rule is the ONLY comparability gate; name relevance ranks results
-    (typo-tolerant) and never rejects them.
-18. **Found-block: 1 closest product per store + `expand` (user
-    decision, 2026-08-29):** expanded results are display-only;
-    NOTHING from compare/search/expand is auto-queued — a product
-    joins the sheet + searched_items queue ONLY on an explicit
-    "add item N" / `map --add`.
-19. **Commands are always printed in the output (user decision,
-    2026-08-29):** every queueing output and queue view prints the
-    exact undo/management phrases so nothing must be remembered.
-21. **Removal by unique 5-letter code (user decision, 2026-08-29):**
-    every queued item carries a unique 5-letter code (A–Z, no I/O,
-    unique across the queue + 7-day tombstones), shown at the end of
-    the product line; "remove APCH" / "remove APCH,MIVOS" works after
-    any number of intervening chats and can never be mixed up between
-    searches; unknown codes produce a self-correcting error listing
-    current codes.
- 20. **NA commands preserved (verified existing):** during resolve
-     wool/coles sessions, replying `na` (`map wool|coles --na`) writes
-     `NA` to the store keyword + price columns and permanently removes
-     the item from that store's missing list. Behaviour unchanged,
-     out of scope for modification (B6).
- 22. **Correction to decision 21 (user, 2026-08-30):** queue codes are
-     **3 letters** (as built: A-Z minus I/O, no repeated letter, 7-day
-     tombstones). The "5-letter" wording in decision 21 is superseded —
-     do NOT change the implemented 3-letter codes.
- 23. **Compare must print the add reminder too (user decision,
-     2026-08-30):** every `compare` result that displays a live product
-     ends with the same reminder line `search` already prints
-     ("💬 Reply 'add item N' to queue a result for Wednesday.") — the
-     user will forget the keywords otherwise. Decision 18 (nothing
-     auto-queues) is unchanged; this is display-only.
- 24. **Telegram topic split for Wednesday output (user decision,
-     2026-08-30):** two NEW topics in the existing Claw Command Centre
-     supergroup: `specials-wool` (receives the Wednesday specials
-     report) and one further topic (name at implementation, e.g.
-     `weekly-lists`) receiving the three resolve lists (unmatched,
-     wool missing, coles missing). The USER creates both topics
-     manually in Telegram and supplies the thread IDs to the coder —
-     no automated topic creation. The existing `grocery-sync-sheet`
-     topic (thread 151) is RETIRED: code stops posting to it.
-     MANUAL ITEM (user does after cutover): delete the "Grocery: Sync
-     & Sheet" topic in Telegram. Thread IDs land in
-     `telegram_gateway/topics.py`, `TELEGRAM_TOPICS.md`, and the CLI
-     `_TELEGRAM_THREAD_ID` routing constants.
- 25. **Specials flags in sheet columns M/N (user decision, 2026-08-30):**
-     every Wednesday sync populates the specials columns — M
-     (Woolworths) and N (Coles) — with exactly three values, never
-     prices: `no` (not on specials), `discount` (price reduction),
-     `multi-buy`. Items added through the resolve flows (map --add,
-     search --add-item, missing-list adds) get the same flag written
-     alongside the price. Verified marker formats (probed from the
-     real docx files, 2026-08-30):
-     - Woolworths: `Save $X` → discount; `2 for $X` → multi-buy
-       (both already handled by `specials_parser`).
-     - Coles: `Save $X` or `Was $X` → discount; `Any 2 | $9` →
-       multi-buy — **NEW pattern, not parsed anywhere yet** (Coles
-       also prints a `SPECIAL` flag line above the product).
-     Precedence rule: an `Any N | $X` marker wins → multi-buy; else
-     Save/Was → discount; else → no.
- 26. **Discovery recording must be finished (verified gap, 2026-08-30):**
-     the one-time training is scaffolded (prompt "Add ONE item to your
-     Price Compare list in the open window ({store})…", hard refusal
-     to flush without a capture — error names `live-refresh
-     --recapture` — and `--recapture` to re-train), BUT the real
-     browser driver (`_LocalDriver`) has NO `capture_add_to_list`
-     implementation — only injected test drivers do, so a real
-     discovery run currently records `discovery: failed`. The coder
-     MUST implement the real recording: a network listener in the page
-     context that captures the add-to-list request (method, URL, body
-     shape) while the user adds ONE item manually. Pagination needs
-     NO training and NO user input — the fetch walks all pages
-     automatically (30-page cap; binding decision 14).
- 27. **User-facing discovery status (follows from 26):** the live-window
-     summary must clearly print per store whether discovery was
-     `captured` (trained) or `failed` (not trained, flush impossible
-     until retrained), and the flush-failure message must keep naming
-     the exact recovery command (`live-refresh --recapture`). The user
-     never has to remember training state — the system always says
-     what is missing and what to run.
-
-### PROPOSED — awaiting user confirmation (NOT binding yet)
-
-- **Umbrella command:** one main grocery command with subcommands
-  (e.g. `grocery compare`, `grocery search`, …) plus a `lists`
-  subcommand showing all queues in one view (unmatched, wool missing,
-  coles missing, to-do/add_to_list, searched). Mentioned 2026-08-30;
-  the user has NOT yet confirmed — confirm before the architect
-  plans it.
+1. **Telegram topic**: create a `local-deals` topic in the existing
+   supergroup and give the thread id to the coder (Phase-1 pattern).
+2. **ZenRows**: confirmed OUT for Facebook (REQS001 domain block on
+   both www. and m. hosts; key valid — keep it for the existing
+   `scraping_api` usage). FB fallback = local headed Chrome with a
+   dedicated FB login if ever needed.
+3. **Vision model routing** (binding, tested): primary
+   `glm-5.3-flash` on the user's Z.ai Coding Plan (`zlm_url` +
+   `zlm_claw`) — zero marginal cost; fallbacks via OpenRouter.
+4. **Friday cron: 05:00 Australia/Sydney** (user decision) — VPS
+   cron must be expressed in UTC with DST handling documented.
+5. Local headed Chrome FB mode stays UNTESTED by design (user
+   decision Q10) — document as last-resort fallback requiring a
+   dedicated FB login.
+6. **Mall/shopping-centre scraping (DFO Eastern Creek and similar):
+   FUTURE SEPARATE PROJECT** — same engine, different shops/days/
+   channels, mixed website/Instagram/Facebook sources; not designed,
+   scoped, or tested in this document (user, 2026-09-05).

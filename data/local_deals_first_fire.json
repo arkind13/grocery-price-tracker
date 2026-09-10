@@ -1,0 +1,21 @@
+{
+  "fired_at": "2026-09-05T18:56:02+10:00",
+  "route": "dm",
+  "messages": [
+    {
+      "message_id": 1201,
+      "thread_id": null,
+      "chars": 28
+    },
+    {
+      "message_id": 1202,
+      "thread_id": null,
+      "chars": 243
+    },
+    {
+      "message_id": 1203,
+      "thread_id": null,
+      "chars": 46
+    }
+  ]
+}

@@ -1,0 +1,156 @@
+{
+  "provider": "zai",
+  "model": "glm-5.3-flash",
+  "image": "793000563_974519488990445_958412622832487626_n.jpg",
+  "usage": {
+    "completion_tokens": 1050,
+    "completion_tokens_details": {
+      "reasoning_tokens": 321
+    },
+    "prompt_tokens": 808,
+    "prompt_tokens_details": {
+      "cached_tokens": 768
+    },
+    "total_tokens": 1858,
+    "finish_reason": "stop"
+  },
+  "schema_errors": [],
+  "valid_until": null,
+  "validity_text": null,
+  "deals": [
+    {
+      "item": "Washed Potato 5kg Bag",
+      "raw_text": "WASHED POTATO 5KG BAG $2.99",
+      "price": 2.99,
+      "unit": "pack",
+      "price_kind": "bulk_pack",
+      "multibuy_qty": null,
+      "bulk_size": "5kg",
+      "category": "fruits",
+      "notes": ""
+    },
+    {
+      "item": "Brown Onion 5kg",
+      "raw_text": "BROWN ONION 5KG $2.99",
+      "price": 2.99,
+      "unit": "pack",
+      "price_kind": "bulk_pack",
+      "multibuy_qty": null,
+      "bulk_size": "5kg",
+      "category": "fruits",
+      "notes": ""
+    },
+    {
+      "item": "Eggplant",
+      "raw_text": "EGGPLANT $2.99 PER KG",
+      "price": 2.99,
+      "unit": "kg",
+      "price_kind": "single",
+      "multibuy_qty": null,
+      "bulk_size": null,
+      "category": "fruits",
+      "notes": ""
+    },
+    {
+      "item": "Cauliflower",
+      "raw_text": "CAULIFLOWER $1.99 EACH",
+      "price": 1.99,
+      "unit": "ea",
+      "price_kind": "single",
+      "multibuy_qty": null,
+      "bulk_size": null,
+      "category": "fruits",
+      "notes": ""
+    },
+    {
+      "item": "Tomato",
+      "raw_text": "TOMATO $2.99 PER KG",
+      "price": 2.99,
+      "unit": "kg",
+      "price_kind": "single",
+      "multibuy_qty": null,
+      "bulk_size": null,
+      "category": "fruits",
+      "notes": ""
+    },
+    {
+      "item": "Yellow Capsicum",
+      "raw_text": "YELLOW CAPSICUM $2.99 PER KG",
+      "price": 2.99,
+      "unit": "kg",
+      "price_kind": "single",
+      "multibuy_qty": null,
+      "bulk_size": null,
+      "category": "fruits",
+      "notes": ""
+    },
+    {
+      "item": "Lebanese Zucchini",
+      "raw_text": "LEBANESE ZUCHINI $3.99 PER KG",
+      "price": 3.99,
+      "unit": "kg",
+      "price_kind": "single",
+      "multibuy_qty": null,
+      "bulk_size": null,
+      "category": "fruits",
+      "notes": ""
+    },
+    {
+      "item": "2kg Lebanese Cucumber Bag",
+      "raw_text": "2KG LEBANESE CUCUMBER BAG $2.99 2KG BAG",
+      "price": 2.99,
+      "unit": "pack",
+      "price_kind": "bulk_pack",
+      "multibuy_qty": null,
+      "bulk_size": "2kg",
+      "category": "fruits",
+      "notes": ""
+    },
+    {
+      "item": "Packham Pears",
+      "raw_text": "PACKHAM PEARS $2.99 PER KG",
+      "price": 2.99,
+      "unit": "kg",
+      "price_kind": "single",
+      "multibuy_qty": null,
+      "bulk_size": null,
+      "category": "fruits",
+      "notes": ""
+    },
+    {
+      "item": "Pink Lady Apples",
+      "raw_text": "PINK LADY APPLES $2.99 PER KG",
+      "price": 2.99,
+      "unit": "kg",
+      "price_kind": "single",
+      "multibuy_qty": null,
+      "bulk_size": null,
+      "category": "fruits",
+      "notes": ""
+    },
+    {
+      "item": "Strawberry",
+      "raw_text": "STRAWBERRY $1.80 EACH",
+      "price": 1.8,
+      "unit": "ea",
+      "price_kind": "single",
+      "multibuy_qty": null,
+      "bulk_size": null,
+      "category": "fruits",
+      "notes": "Driscoll's punnet shown"
+    },
+    {
+      "item": "R2E2 Mango",
+      "raw_text": "R2E2 MANGO $6.99 PER KG",
+      "price": 6.99,
+      "unit": "kg",
+      "price_kind": "single",
+      "multibuy_qty": null,
+      "bulk_size": null,
+      "category": "fruits",
+      "notes": ""
+    }
+  ],
+  "ground_truth_failures": [],
+  "ground_truth_hits": "0/6"
+}

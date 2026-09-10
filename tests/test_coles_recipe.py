@@ -352,7 +352,8 @@ class TestParseAndWrappers(ColesRecipeTestCase):
 
 
 class TestB4RetryTightening(ColesRecipeTestCase):
-    """B4/WP2: retry on 5xx/timeout ONLY; 4xx fails after ONE attempt."""
+    """B4/WP2: retry on transient errors (5xx/timeout/404); other 4xx
+    fails after ONE attempt."""
 
     def _run_status(self, responses):
         seq = iter(responses)
@@ -363,11 +364,27 @@ class TestB4RetryTightening(ColesRecipeTestCase):
             _items, status = ce._search_via_scrapedo_status("milk")
             return status
 
-    def test_404_not_retried(self):
-        status = self._run_status([FakeResponse(404, "")])
+    def test_404_retried_with_new_session_then_succeeds(self):
+        """404 is transient at Coles (2026-09-01): retry new session."""
+        ok = FakeResponse(200, next_data_html([make_product()]))
+        mock = self.http_mock(side_effect=[FakeResponse(404, ""), ok])
+        items, status = ce.fetch_coles_search_status("milk")
+        self.assertEqual(status, "ok")
+        self.assertEqual(len(items), 1)
+        self.assertEqual(mock.call_count, 2)
+        sessions = [c.kwargs["params"]["session"]
+                    for c in mock.call_args_list]
+        self.assertNotEqual(sessions[0], sessions[1])
+        self.assertEqual(self.sleeps, [3])
+
+    def test_404_all_attempts_fail_unavailable(self):
+        """Three 404s exhaust the chain exactly like 5xx."""
+        mock = self.http_mock(side_effect=lambda *a, **k: FakeResponse(404))
+        items, status = ce.fetch_coles_search_status("milk")
         self.assertEqual(status, "unavailable")
-        self.assertEqual(ce._calls_this_run, 1)
-        self.assertEqual(self.sleeps, [])
+        self.assertEqual(items, [])
+        self.assertEqual(mock.call_count, 3)
+        self.assertEqual(self.sleeps, [3, 6])
 
     def test_429_not_retried(self):
         status = self._run_status([FakeResponse(429, "")])
