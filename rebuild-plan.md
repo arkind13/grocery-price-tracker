@@ -31,7 +31,7 @@ out of an order that keeps the system usable.
 | 1 | Comment lifecycle + orphan cleanup + backup system (PC + VPS + daily cron) | 0.5 d | ✅ **DONE** — checker PASS, 1319 green ×10 runs, tracker `933af6e` / parent `5342201` | 2026-09-09 |
 | 2 | Sheet migration v2 (gates G1–G3) + `price`/`list` read path + parity audit | 1 d | ✅ **DONE** — user sheet-confirmed; 12 keeps + 127 coded rows, 139/139 parity ALIGNED, `list` = 105 entries, 1361 green / 0 skipped, tracker `5bda9ae` / parent `265e975`, VPS md5-verified | 2026-09-10 |
 | 3 | 6 verbs + batch engine + style kit + deletion manifest | 1.5 d | ✅ **DONE** — 580 green / 0 skipped, grep-clean 0, `--help` = 7 verbs, parity audit ALIGNED + full live verb battery green after the SA restore, tracker `dde0bff` / parent `1ed412b`, VPS md5-verified | 2026-09-10 |
-| 4 | Wednesday v2 + skills rewrite + VPS sync | 1 d | ⬜ pending | — |
+| 4 | Wednesday v2 + skills rewrite + VPS sync | 1 d | 🔶 work order issued (`implementation-plan.md`) — **awaiting user approval** | — |
 | 5 | Speed-budget verification + FINAL TIDY | 0.5 d | ⬜ pending | — |
 
 ---
@@ -135,8 +135,10 @@ zero references remain to deleted commands/files (grep-clean);
    routing + the no-pre-investigation rule; touch `local-deals/SKILL.md`
    only where the prefix rule changed wording.
 3. VPS sync (scp + checksum): CLI, core/extractors, skills; container
-   needs no restart (live bind mount); remove the reminder cron + VPS
-   script; run the faithful Telegram test via `openclaw.mjs agent`.
+   needs no restart (live bind mount); ~~remove the reminder cron + VPS
+   script~~ (**already executed in Round 3 D5** — R4 is verify-only:
+   `crontab -l` proof it stays gone); run the faithful Telegram test
+   via `openclaw.mjs agent`.
 
 **Acceptance criteria:** a dry Wednesday run posts exactly two messages
 and takes ≤30s; the VPS md5s match local; the reminder cron is gone
