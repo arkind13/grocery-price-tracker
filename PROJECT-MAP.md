@@ -16,7 +16,7 @@ Telegram.
 | You type | You get |
 |----------|---------|
 | "price of halal beef mince" (or just the item) | Woolworths price + every local shop's price + 🏆 winner. Meat items also show the non-halal Woolworths twin ("also at Woolworths (non-halal): $13.54 — …") |
-| "live beef mince" | Fresh web search, Woolworths + Coles, 3 prices each. Prices only — nothing is ever added |
+| "live beef mince" | Fresh web search, Woolworths + Coles + Aldi, 3 prices each. Prices only — nothing is ever added |
 | "list" | The ONE list: local items you haven't tracked at Woolies yet, each with a code |
 | "specials" | Woolworths specials from the sheet |
 | "AUG done; EPJ gone; XYZ rename halal lamb shoulder" | One call, all verdicts executed, per-code replies |
@@ -73,15 +73,19 @@ Woolworths twin.
 3. 14 seconds later: prices synced, specials in topic 206, the ONE
    list in topic 208. Anything you didn't match shows up with a code
    so you can fix it in one message.
+4. Wednesdays + Saturdays at ~5 AM (Sydney): the VPS cron posts the
+   whole day's Aldi Special Buys drop, theme-grouped, to topic 206 —
+   no human step.
 
 ## Where things live
 
 - **Google Sheet** — the memory (Products_Master + Local_Deals +
   Archive + history tabs).
 - **Local PC** — runs Wednesday (reads the .docx files) and the test
-  suite (614 green).
-- **VPS** — runs the Telegram bot (sheet lookups, live search, batch)
-  and the twice-daily FB detector + the 03:17 backup canary.
+  suite (646 green).
+- **VPS** — runs the Telegram bot (sheet lookups, live search, batch),
+  the twice-daily FB detector + the 03:17 backup canary, and the
+  Wed/Sat 5 AM Aldi Special Buys cron.
 - **`old md/`** — the entire v1 system, the quality campaign (22
   defects found & fixed), and the v2 rebuild artifacts. History only.
 
@@ -93,9 +97,8 @@ failing is your smoke alarm — check it the same day.
 
 ## Future (each a small, separate project)
 
-1. **Aldi** in the live search (public site — easy provider addition).
-2. **Amazon** in the live search (non-food only).
-3. **Weekly catalogue digest** — Coles/Woolworths catalogues parsed
+1. **Amazon** in the live search (non-food only).
+2. **Weekly catalogue digest** — Coles/Woolworths catalogues parsed
    into one Telegram specials message.
 4. **Location-flavoured specials** — "oranges on special at Fruit
    World, 2 steps from Woolworths" (Google Places + shop scrapes + LLM

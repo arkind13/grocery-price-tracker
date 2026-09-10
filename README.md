@@ -11,18 +11,22 @@ deleted in the v2 rebuild. What remains is measured: **price lookup
 5s · live search 17s · batch correction 5s · list 4.5s · Wednesday run
 14s** — all inside their hard budgets.
 
-## The 8 commands
+## The 9 commands
 
 | Command | What it does | Budget |
 |---------|--------------|--------|
 | `<item>` / "price of X" | Sheet-only lookup: Woolworths display price (5% team discount + home-brand extra) + every local shop's price + 🏆 winner. Meat lookups also carry the non-halal Woolworths twin line | ≤10s |
-| `live <item>` | Direct web search Woolworths + Coles (Aldi/Amazon future). ≤3 prices per store. PRICES ONLY — never adds items, never codes. Sheet row shown as a side note if tracked | ≤20s |
+| `live <item>` | Direct web search Woolworths + Coles + Aldi (Amazon future). ≤3 prices per store. PRICES ONLY — never adds items, never codes. Sheet row shown as a side note if tracked | ≤20s |
 | `list` | The ONE list: local items whose Woolworths side is blank (no price + no keyword). Fresh from the sheet, every entry coded | ≤5s |
 | `specials` | Woolworths specials from the sheet (multi-buy deal rates + discounts) | ≤10s |
 | `batch <codes+verdicts>` | ONE call: `ABC done; DEF gone; GHI rename halal lamb shoulder; JKL remove; MNO ignore`. Per-code replies. The agent never pre-investigates | ≤10s |
 | `ignored` | Reveals the hidden ignore list | ≤10s |
 | `wednesday` | THE weekly run: Woolworths.docx → overwrite prices; specials docx → deal rates; parity check; specials message (topic 206) + the ONE list (topic 208). `--specials-only` skips the main pass | ≤30s |
 | `local-deals …` | Local-shop machinery: twice-daily FB post detector, inbox ingest (image→vision / text→parser), Dunya site sync, expire sweep, set-permanent/special | — |
+
+Scheduled alongside these: `aldi-specials` (cron `8 * * * *`, self-gated
+to Wed/Sat 05:xx Sydney, once per date) — posts the whole day's Aldi
+Special Buys drop, theme-grouped, to the specials topic (206).
 
 ## The sheet
 
@@ -92,18 +96,16 @@ Google Drive cloud copies are impossible for the service account
 
 - Anaconda python (`anaconda3/python.exe`) — the default python3.13
   lacks curl_cffi.
-- Tests: `anaconda3/python.exe -m pytest tests/ -q` → **614 passed,
+- Tests: `anaconda3/python.exe -m pytest tests/ -q` → **646 passed,
   0 skipped**. Every behavioral rule has a pinned regression test; the
   suite must stay fully green (no xfails, no skips).
 
 ## Future projects (in order, each a fresh session)
 
-1. **Aldi live search** — public site, no anti-bot; a provider-list
-   addition to the `live` verb, nothing else changes.
-2. **Amazon live search** — non-food items only.
-3. **Weekly catalogue digest** — target the Coles/Woolworths catalogues
+1. **Amazon live search** — non-food items only.
+2. **Weekly catalogue digest** — target the Coles/Woolworths catalogues
    directly and post the special items as one Telegram message.
-4. **Longer arc** — location-aware specials ("oranges on special at
+3. **Longer arc** — location-aware specials ("oranges on special at
    Fruit World, 2 steps from Woolworths"): Google Places proximity +
    shop-site scrapes + LLM phrasing, all VPS-side.
 
