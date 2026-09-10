@@ -19,8 +19,12 @@ The Woolworths saved-list layout is three lines per special::
 """
 from __future__ import annotations
 
+import os
 import re
+import sys
 from typing import Optional
+
+from extractors.models import ProductItem
 
 # SAVE marker uses a non-breaking space (\xa0) in the saved-list layout:
 # ``SAVE\xa0$1.53``.
@@ -179,3 +183,156 @@ def classify_special(is_special: bool, special_desc: str) -> str:
     if WAS_RE.search(desc) or SAVE_RE.search(desc) or is_special:
         return "discount"
     return "no"
+
+
+# ============================================================================
+# Section D: the saved "Special list" panel docx (2026-09-10 user fix)
+# ============================================================================
+#
+# The saved specials PAGE renders one panel per product, and out-of-stock
+# panels carry NO price line at all — doc_parser.parse_docx's strict
+# name->price adjacency drops those items (8 of the user's 33) and never
+# sees SAVE badges that render above the name or below the cart buttons.
+# This walker parses the panel structure directly.
+
+_NAME_SIZE_RE = re.compile(
+    r"\d+\s?(?:g|kg|mL|L|pack|pk|pks|pc|pcs)\b", re.IGNORECASE
+)
+_PRICE_ONLY_RE = re.compile(r"^\$?\d+(?:\.\d{1,2})?$")
+_BADGE_HINT_RE = re.compile(
+    r"(save|\bfor\s*\$|was\s*\$|any\s+\d+\s*\||bonus)", re.IGNORECASE
+)
+_ANY_NUMBER_WORDS = ("quantity", "toggle", "cart", "dropdown")
+
+
+def _is_specials_name_line(text: str, ignore_fn) -> bool:
+    """A product-name line: carries a size token, no '$', not page
+    furniture (doc_parser's ignore list + the panel's own controls)."""
+    t = text.strip()
+    if not t or "$" in t or len(t) < 7:
+        return False
+    if not _NAME_SIZE_RE.search(t):
+        return False
+    low = t.lower()
+    if any(word in low for word in _ANY_NUMBER_WORDS):
+        return False
+    return not ignore_fn(t)
+
+
+def _clean_ws(text: str) -> str:
+    """Collapse \xa0 and repeated whitespace to single spaces."""
+    return " ".join(str(text).split())
+
+
+def parse_specials_docx(file_path: str,
+                        store: str = "woolworths") -> list:
+    """Parse the saved Woolworths 'Special list' panel docx.
+
+    Segment the page into product blocks by NAME lines, take each
+    block's first pure price line (out-of-stock panels have none ->
+    price None), and attribute badge lines (SAVE / N for / Was /
+    Any N | $X / bonus):
+
+    1. a badge directly after a block's NAME line -> that item
+       (the Essano case: out-of-stock, badge under the name);
+    2. else a badge followed by the NEXT block's name -> that item
+       (the panel-boundary cases: badge renders above the following
+       product's name — Weet-Bix / Air Wick);
+    3. else -> the surrounding block's item (2-for / bonus below the
+       unit-price line — Eclipse / Farmers Union).
+
+    Every parsed item is returned in page order with ``is_special``
+    set from its badges (the document IS the saved specials list; the
+    Telegram report shows all items either way).
+    """
+    try:
+        from docx import Document
+    except ImportError:
+        print(
+            "[specials_parser] python-docx not installed. "
+            "Install with: pip install python-docx",
+            file=sys.stderr,
+        )
+        return []
+
+    from extractors.doc_parser import (
+        _detect_brand, _detect_category, _extract_size, _is_ignore_line,
+    )
+
+    if not os.path.isfile(file_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
+
+    doc = Document(file_path)
+    lines = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+    name_idx = [i for i, ln in enumerate(lines)
+                if _is_specials_name_line(ln, _is_ignore_line)]
+    if not name_idx:
+        return []
+
+    # per-item badge lines (raw), keyed by block position
+    item_badges: dict = {pos: [] for pos in range(len(name_idx))}
+    for pos, i in enumerate(name_idx):
+        end = name_idx[pos + 1] if pos + 1 < len(name_idx) else len(lines)
+        block = lines[i + 1:end]
+        for j, ln in enumerate(block):
+            if _PRICE_ONLY_RE.match(ln) or not _BADGE_HINT_RE.search(ln):
+                continue
+            low = ln.lower()
+            if ("you pay" in low or "you save" in low
+                    or "save up to" in low):
+                continue               # cost-summary furniture
+            if not (SAVE_RE.search(ln) or FOR_RE.search(ln)
+                    or WAS_RE.search(ln) or ANY_RE.search(ln)
+                    or "bonus" in low):
+                continue               # hint word without a real marker
+            if j == 0 or _is_specials_name_line(block[j - 1],
+                                                 _is_ignore_line):
+                target = pos                       # (1) under our name
+            else:
+                nxt = block[j + 1] if j + 1 < len(block) else None
+                if nxt is None or _is_specials_name_line(
+                        nxt, _is_ignore_line):
+                    target = pos + 1               # (2) next panel
+                else:                              # (3) this panel
+                    target = pos
+            if target < len(name_idx):
+                item_badges[target].append(_clean_ws(ln))
+
+    items: list = []
+    for pos, i in enumerate(name_idx):
+        end = name_idx[pos + 1] if pos + 1 < len(name_idx) else len(lines)
+        name = lines[i]
+        price = None
+        for ln in lines[i + 1:end]:
+            if _PRICE_ONLY_RE.match(ln):
+                price = float(ln.lstrip("$").replace(",", "."))
+                break
+        badges = item_badges.get(pos) or []
+        descs: list = []
+        for badge in badges:
+            save_m = SAVE_RE.search(badge)
+            for_m = FOR_RE.search(badge)
+            if save_m:
+                save_amt = float(save_m.group(1))
+                if price:
+                    original = price + save_amt
+                    pct = (save_amt / original * 100.0) if original else 0
+                    descs.append(f"save ${save_amt:.2f} ({pct:.0f}% off)")
+                else:
+                    descs.append(f"save ${save_amt:.2f}")
+            elif for_m:
+                descs.append(
+                    f"{int(for_m.group(1))} for ${float(for_m.group(2)):.2f}")
+            else:
+                descs.append(badge)          # bonus / Was / Any kept as-is
+        items.append(ProductItem(
+            store=store,
+            raw_name=name,
+            price=price,
+            category=_detect_category(name),
+            size=_extract_size(name),
+            brand=_detect_brand(name),
+            is_special=bool(descs),
+            special_desc=" + ".join(descs),
+        ))
+    return items

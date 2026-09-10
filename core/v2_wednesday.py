@@ -66,7 +66,8 @@ def parse_inputs() -> tuple[list, list]:
     """
     from pathlib import Path
 
-    from extractors.doc_parser import parse_docx, parse_docx_cache
+    from extractors.doc_parser import parse_docx_cache
+    from extractors.specials_parser import parse_specials_docx
 
     main_items = parse_docx_cache("woolworths")
 
@@ -77,8 +78,8 @@ def parse_inputs() -> tuple[list, list]:
         specials_path = Path.cwd() / "Woolworths_Specials.docx"
     if specials_path.is_file():
         try:
-            specials_items = parse_docx(str(specials_path),
-                                        store="woolworths")
+            specials_items = parse_specials_docx(str(specials_path),
+                                                 store="woolworths")
         except FileNotFoundError:
             specials_items = []
     return main_items, specials_items
@@ -331,6 +332,56 @@ def parity_step(master_grid: list[list], ld_grid: list[list],
     return "\n".join(lines)
 
 
+def render_docx_specials_section(items: list) -> str:
+    """The PASTED specials list as a Telegram section — every parsed
+    item, tracked or not, GROUPED BY DEAL TYPE (2026-09-10 user rule:
+    the report must show BOTH the discounted items AND the multi-buy
+    deals, explicitly). Grouping uses the D25 vocabulary
+    (classify_special): multi-buy / discount / no terms in the paste.
+    """
+    from extractors.specials_parser import classify_special
+
+    if not items:
+        return ""
+    multibuy: list = []
+    discounted: list = []
+    plain: list = []
+    for item in items:
+        desc = (getattr(item, "special_desc", "") or "").strip()
+        cls = classify_special(bool(desc), desc)
+        if cls == "multi-buy":
+            multibuy.append(item)
+        elif cls == "discount":
+            discounted.append(item)
+        else:
+            plain.append(item)
+
+    def _line(n: int, item) -> str:
+        price = getattr(item, "price", None)
+        desc = (getattr(item, "special_desc", "") or "").strip()
+        line = f"  {n}. {item.raw_name}"
+        line += f" — ${price:.2f}" if price else \
+            " — no price shown (out of stock?)"
+        if desc:
+            line += f" · {desc}"
+        return line
+
+    lines = [f"🏷️ FROM YOUR PASTED SPECIALS LIST ({len(items)})"]
+    if multibuy:
+        lines.append("📦 MULTI-BUY DEALS")
+        lines.extend(_line(n, it)
+                     for n, it in enumerate(multibuy, 1))
+    if discounted:
+        lines.append("💰 DISCOUNTED")
+        lines.extend(_line(n, it)
+                     for n, it in enumerate(discounted, 1))
+    if plain:
+        lines.append("🗒️ ALSO ON YOUR LIST (no deal terms in the paste)")
+        lines.extend(_line(n, it)
+                     for n, it in enumerate(plain, 1))
+    return "\n".join(lines)
+
+
 def render_specials_post(worksheet=None) -> str:
     """Specials Telegram post: specials_reporter data + style kit —
     ONE fresh master read of col H + D (post-write in live runs)."""
@@ -402,10 +453,26 @@ def run(dry_run: bool = False, send: bool = True,
         bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
         specials_topic, lists_topic = _topics()
         post = render_specials_post(master_ws)
-        _receipt("specials", _send_message(bot_token, TELEGRAM_CHAT_ID,
-                                           post,
-                                           thread_id=specials_topic),
-                 specials_topic)
+        docx_section = render_docx_specials_section(specials_items)
+        if docx_section:
+            post = post.rstrip() + "\n\n" + docx_section
+        # persist for the `specials` verb's "Latest Wednesday report"
+        # view (fresh < 7 days)
+        try:
+            from pathlib import Path
+            report_path = (Path(__file__).resolve().parent.parent
+                           / "data" / "ww_specials_report.txt")
+            report_path.write_text(
+                f"# generated {sydney_today().isoformat()}\n{post}\n",
+                encoding="utf-8")
+        except OSError:
+            pass  # report persistence is best-effort, never block
+        for chunk in split_message(post):
+            _receipt("specials",
+                     _send_message(bot_token, TELEGRAM_CHAT_ID,
+                                   chunk,
+                                   thread_id=specials_topic),
+                     specials_topic)
         master, ld = read_tabs()
         list_text = render_list(missing_list(master, ld))
         for chunk in split_message(list_text):
