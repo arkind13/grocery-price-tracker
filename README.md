@@ -852,6 +852,38 @@ Each of these is ONE constant edit — no other code changes:
 
 **Aldi:** No live extractor — Aldi prices are sheet-only (`—` in compare tables).
 
+### Future providers — ALDI, then AMAZON (design note for that session)
+
+Spec §15: a NEW separate session AFTER v2 closes extends `live` to ALDI
+first, then AMAZON — a provider-list addition only (no lookup-logic
+changes, no new state). The seam is `core/v2_live.py`
+(`LIVE_PROVIDERS` + `_PROVIDER_FN`); each provider entry may carry a
+`serves(query)` gate (~3-line loop hook in `live_search`).
+
+**ALDI:** no gate — always serves, like Woolworths/Coles.
+
+**AMAZON: NON-FOOD only (user rule 2026-09-10).** The gate is a
+deterministic word list — NO LLM (speed budget, determinism):
+
+- `FOOD_WORDS`: user-curated ~100 food words (chips, ice cream,
+  yoghurt, cheese, …) as a CODE CONSTANT in the gate module — NOT a
+  sheet tab (`v2_live.py` is deliberately sheet-free; constants are
+  testable, version-controlled, one-line to extend). Precedents: the
+  32-brand list in `woolworths_discounts.py`, `MEAT_PROTEIN_WORDS` in
+  `halal.py`.
+- Amazon is SKIPPED iff the query matches `FOOD_WORDS` OR resolves to
+  a master sheet row (`v2_read.lookup_item`) OR confidently matches
+  the food taxonomy (`subcategory.classify_subcategory`, not "needs
+  review") OR is a meat term (`halal.is_meat_term`). Matching is
+  plural-folded + word-boundary-safe (the `subcategory.py`
+  discipline: "V Sugarfree" is not "sugar").
+- Woolworths/Coles/Aldi are ALWAYS queried — the list only vetoes
+  Amazon.
+- Unknown queries → Amazon INCLUDED (fail open). An untracked food
+  word missing from the list shows up once as Amazon noise → add one
+  line. The sheet ALONE is not sufficient (user example: "smiths
+  potato chips" is untracked food — must route Wool/Coles/Aldi only).
+
 ---
 
 ## Telegram Gateway
