@@ -118,20 +118,24 @@ class TestDocxSpecialsSection(unittest.TestCase):
             self._item("Choc Biscuits 200g", 4.0, "2 for $7.00"),
             self._item("Yoghurt Pouch 150g", 1.9,
                        "save $1.30 (41% off)"),
-            self._item("Strawberries 250g", 3.0),
+            self._item("Strawberries 250g", 3.0),          # plain:
             self._item("Mist Toner 120mL", None, "save $7.20"),
         ])
-        self.assertIn("📦 MULTI-BUY DEALS", out)
+        # DEALS ONLY — both deal types, no plain items, animated groups
+        self.assertIn("📦 MULTI-BUY", out)
         self.assertIn("💰 DISCOUNTED", out)
-        self.assertIn("ALSO ON YOUR LIST", out)
-        # grouping is per deal type
-        self.assertLess(out.index("2 for $7.00"),
-                        out.index("save $1.30"))
-        self.assertIn("Strawberries 250g — $3.00", out)
-        self.assertIn("no price shown", out)
+        self.assertNotIn("ALSO ON YOUR LIST", out)
+        self.assertNotIn("Strawberries", out)              # plain gone
+        self.assertIn("2 for $7.00 (= $3.50 each)", out)   # per-unit
+        self.assertIn("✂️ save $7.20", out)                # no price yet
+        self.assertLess(out.index("MULTI-BUY"), out.index("DISCOUNTED"))
+        self.assertIn("3 DEALS", out)
 
-    def test_empty_items_no_section(self):
-        self.assertEqual(render_docx_specials_section([]), "")
+    def test_no_deals_no_section(self):
+        out = render_docx_specials_section([
+            self._item("Strawberries 250g", 3.0),          # plain only
+        ])
+        self.assertEqual(out, "")                          # no section
 
 
 if __name__ == "__main__":

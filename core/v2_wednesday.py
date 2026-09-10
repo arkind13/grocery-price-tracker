@@ -333,19 +333,17 @@ def parity_step(master_grid: list[list], ld_grid: list[list],
 
 
 def render_docx_specials_section(items: list) -> str:
-    """The PASTED specials list as a Telegram section — every parsed
-    item, tracked or not, GROUPED BY DEAL TYPE (2026-09-10 user rule:
-    the report must show BOTH the discounted items AND the multi-buy
-    deals, explicitly). Grouping uses the D25 vocabulary
-    (classify_special): multi-buy / discount / no terms in the paste.
-    """
+    """The PASTED specials list as a Telegram section — DEALS ONLY
+    (2026-09-10 user rule: never show plain items; both deal types
+    get their own animated group). Grouping uses the D25 vocabulary
+    (classify_special): multi-buy / discount; everything else is
+    skipped. Multi-buy entries also show the per-unit rate."""
+    from core.multibuy import effective_unit_rate, parse_multibuy
     from extractors.specials_parser import classify_special
+    from core.sydney_time import sydney_today
 
-    if not items:
-        return ""
     multibuy: list = []
     discounted: list = []
-    plain: list = []
     for item in items:
         desc = (getattr(item, "special_desc", "") or "").strip()
         cls = classify_special(bool(desc), desc)
@@ -353,32 +351,39 @@ def render_docx_specials_section(items: list) -> str:
             multibuy.append(item)
         elif cls == "discount":
             discounted.append(item)
-        else:
-            plain.append(item)
+    total = len(multibuy) + len(discounted)
+    if not total:
+        return ""
 
-    def _line(n: int, item) -> str:
+    def _entry(n: int, item) -> list:
         price = getattr(item, "price", None)
         desc = (getattr(item, "special_desc", "") or "").strip()
-        line = f"  {n}. {item.raw_name}"
-        line += f" — ${price:.2f}" if price else \
-            " — no price shown (out of stock?)"
+        if price:
+            detail = f"   💵 ${price:.2f}"
+        else:
+            detail = "   🚫 out of stock"
         if desc:
-            line += f" · {desc}"
-        return line
+            terms = parse_multibuy(desc)
+            if terms:
+                qty, bundle = terms
+                detail += (f" · 🎁 {desc} "
+                           f"(= ${effective_unit_rate(qty, bundle):.2f} each)")
+            else:
+                detail += f" · ✂️ {desc}"
+        return [f"  {n}. {item.raw_name}", detail]
 
-    lines = [f"🏷️ FROM YOUR PASTED SPECIALS LIST ({len(items)})"]
+    lines = [f"🏷️ WOOLWORTHS SPECIALS — {total} DEALS 🛒"]
     if multibuy:
-        lines.append("📦 MULTI-BUY DEALS")
-        lines.extend(_line(n, it)
-                     for n, it in enumerate(multibuy, 1))
+        lines += ["", "📦 MULTI-BUY — buy in bulk & save",
+                  "─" * 28]
+        for n, item in enumerate(multibuy, 1):
+            lines.extend(_entry(n, item))
     if discounted:
-        lines.append("💰 DISCOUNTED")
-        lines.extend(_line(n, it)
-                     for n, it in enumerate(discounted, 1))
-    if plain:
-        lines.append("🗒️ ALSO ON YOUR LIST (no deal terms in the paste)")
-        lines.extend(_line(n, it)
-                     for n, it in enumerate(plain, 1))
+        lines += ["", "💰 DISCOUNTED", "─" * 28]
+        for n, item in enumerate(discounted, 1):
+            lines.extend(_entry(n, item))
+    lines += ["", f"📊 {total} deals found in your specials list"
+              f" · ⏱️ {sydney_today().isoformat()}"]
     return "\n".join(lines)
 
 
@@ -420,6 +425,7 @@ def run(dry_run: bool = False, send: bool = True,
     from core.local_deals import TAB_NAME, TELEGRAM_CHAT_ID, \
         _send_message
     from core.sheets_client import _load_env, connect_spreadsheet
+    from core.specials_reporter import get_active_specials
     from core.sydney_time import sydney_today
     from core.telegram_format import split_message
     from core.v2_read import missing_list, read_tabs, render_list
@@ -452,10 +458,17 @@ def run(dry_run: bool = False, send: bool = True,
     if send and not dry_run:
         bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
         specials_topic, lists_topic = _topics()
-        post = render_specials_post(master_ws)
+        # sheet-tracked specials first — but never a bare "No active
+        # specials." above the pasted list's deals (user fix)
         docx_section = render_docx_specials_section(specials_items)
+        sheet_deals = get_active_specials(store="woolworths",
+                                          worksheet=master_ws)
+        parts: list = []
+        if sheet_deals:
+            parts.append(render_specials_post(master_ws).rstrip())
         if docx_section:
-            post = post.rstrip() + "\n\n" + docx_section
+            parts.append(docx_section)
+        post = "\n\n".join(parts) if parts else "No active specials."
         # persist for the `specials` verb's "Latest Wednesday report"
         # view (fresh < 7 days)
         try:
