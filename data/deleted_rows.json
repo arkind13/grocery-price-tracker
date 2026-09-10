@@ -1,54 +1,134 @@
 [
-  {
-    "deleted_at": "2026-09-08T08:21:26",
-    "source": "manual-purge",
-    "row_index": 112,
-    "row": [
-      "Mozzarella Cheese Sticks 235g 10 Pack",
-      "",
-      "235g 10 Pack",
-      "",
-      "GONE",
-      "",
-      "",
-      "2026-09-07 19:45",
-      "Keith's Foods Mozzarella Cheese Sticks 235g 10 Pack",
-      "NA",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "cheese sticks",
-      "KFS",
-      "P"
-    ]
-  },
-  {
-    "deleted_at": "2026-09-08T08:24:24",
-    "source": "gone-verdict",
-    "row_index": 115,
-    "row": [
-      "ZZTEST T4 Mechanism Product 250g",
-      "",
-      "250g",
-      "NA",
-      "GONE",
-      "",
-      "",
-      "2026-09-08 08:23",
-      "NA",
-      "ZZTEST Coles Keyword 250g",
-      "",
-      "",
-      "no",
-      "",
-      "",
-      "zztest t4",
-      "needs review",
-      "GHC",
-      ""
-    ]
-  }
+ {
+  "deleted_at": "2026-09-08T08:21:26",
+  "source": "manual-purge",
+  "row_index": 112,
+  "row": [
+   "Mozzarella Cheese Sticks 235g 10 Pack",
+   "",
+   "235g 10 Pack",
+   "",
+   "GONE",
+   "",
+   "",
+   "2026-09-07 19:45",
+   "Keith's Foods Mozzarella Cheese Sticks 235g 10 Pack",
+   "NA",
+   "",
+   "",
+   "",
+   "",
+   "",
+   "",
+   "cheese sticks",
+   "KFS",
+   "P"
+  ]
+ },
+ {
+  "deleted_at": "2026-09-08T08:24:24",
+  "source": "gone-verdict",
+  "row_index": 115,
+  "row": [
+   "ZZTEST T4 Mechanism Product 250g",
+   "",
+   "250g",
+   "NA",
+   "GONE",
+   "",
+   "",
+   "2026-09-08 08:23",
+   "NA",
+   "ZZTEST Coles Keyword 250g",
+   "",
+   "",
+   "no",
+   "",
+   "",
+   "zztest t4",
+   "needs review",
+   "GHC",
+   ""
+  ]
+ },
+ {
+  "deleted_at": "2026-09-11T09:20:00+10:00",
+  "source": "v2-dedupe",
+  "row_index": 141,
+  "side": "master",
+  "row": [
+   "Halal Lamb Necks /kg",
+   "",
+   "",
+   "",
+   "",
+   "",
+   "",
+   "",
+   "",
+   "",
+   "butchery",
+   "MHC",
+   ""
+  ]
+ },
+ {
+  "deleted_at": "2026-09-11T09:20:00+10:00",
+  "source": "v2-dedupe",
+  "row_index": 102,
+  "side": "master",
+  "row": [
+   "Halal Lamb Curry",
+   "",
+   "",
+   "",
+   "",
+   "",
+   "",
+   "",
+   "",
+   "",
+   "butchery",
+   "ZGK",
+   ""
+  ]
+ },
+ {
+  "deleted_at": "2026-09-11T09:20:00+10:00",
+  "source": "v2-dedupe",
+  "row_index": 144,
+  "side": "ld",
+  "row": [
+   "Halal Lamb Necks /kg",
+   "",
+   "",
+   "",
+   "15.00 (till 13 Sep)",
+   "",
+   "",
+   "",
+   "",
+   "[MER] multi buy 2kg for $29.99",
+   "MHC"
+  ]
+ },
+ {
+  "deleted_at": "2026-09-11T09:20:00+10:00",
+  "source": "v2-dedupe",
+  "row_index": 104,
+  "side": "ld",
+  "row": [
+   "Halal Lamb Curry",
+   "",
+   "",
+   "",
+   "27.99 (till 11 Sep)",
+   "",
+   "",
+   "",
+   "",
+   "",
+   "ZGK"
+  ]
+ }
 ]

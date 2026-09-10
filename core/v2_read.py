@@ -140,8 +140,11 @@ def _query_tokens(query: str) -> list:
 def _name_has_all(name_lower: str, tokens: list) -> bool:
     """Word-boundary-safe 'contains EVERY token' (subcategory.py
     discipline)."""
-    return all(re.search(rf"\b{re.escape(tok)}\b", name_lower)
-               for tok in tokens)
+    for tok in tokens:
+        base = tok[:-1] if tok.endswith("s") and len(tok) > 2 else tok
+        if not re.search(rf"\b{re.escape(base)}s?\b", name_lower):
+            return False
+    return True
 
 
 def _pack_kg(text: str) -> float | None:
