@@ -32,9 +32,8 @@ The local machine (Windows + Anaconda) is the development workspace; the VPS (Do
 grocery-price-tracker/                      ← ULTIMATE PROJECT ROOT (this folder)
 ├── README.md                              ← this file
 ├── PROJECT-MAP.md                         ← plain-language map of every list/command/flow (update with every change)
-├── architecture-spec.md                   ← architecture spec
-├── implementation-plan.md                 ← implementation plan (§7 = test matrices)
-├── test.md                                ← test execution log (every round)
+├── architecture-spec.md                   ← architecture spec (v2, IMPLEMENTED + CLOSED)
+├── old md/2026-09-v2-rebuild/             ← archived rebuild artifacts (work orders, plans, round logs)
 ├── __init__.py                            ← package marker
 ├── app.py                                 ← Streamlit app (legacy UI, mostly superseded by headless CLI)
 ├── local_sync.py                           ← legacy rapidfuzz-based sync (superseded by lookup engine)
@@ -48,11 +47,11 @@ grocery-price-tracker/                      ← ULTIMATE PROJECT ROOT (this fold
 ├── .git/                                   ← nested git repo (Phase 9 work)
 ├── .pytest_cache/  .streamlit/             ← caches (gitignored)
 │
-├── core/                                   ← core library (lookup, sheets, comparator)
-├── extractors/                             ← Woolworths/Coles/Aldi live extractors + doc parser
+├── core/                                   ← core library (v2_read/v2_live/v2_batch/v2_wednesday, local_deals, halal, subcategory, discounts)
+├── extractors/                             ← Woolworths/Coles live extractors + doc/specials parsers + FB fetchers
 ├── components/                             ← (reserved, currently empty)
-├── data/                                   ← runtime state (unmatched lists, progress, queues)
-├── tests/                                  ← 500+ tests (lookup, live search, sync, comparator, cli, uom, queues, live window)
+├── data/                                   ← runtime state (inbox, scan state, post log, ignored items)
+├── tests/                                  ← 605 tests (read path, twin line, batch, parity, wednesday, local deals, discounts)
 │
 ├── Aldi.docx  Coles.docx  Woolworths.docx ← saved-list source files (pasted by user, parsed by doc_parser)
 ├── Woolworths_Specials.docx                ← specials source file
@@ -89,7 +88,7 @@ grocery-price-tracker/                      ← ULTIMATE PROJECT ROOT (this fold
 │  ┌─────────────────────────────────────────────────────────────┐ │
 │  │  Docker: ai-studio-app (Next.js) + ai-studio-db (Postgres 16)│ │
 │  └─────────────────────────────────────────────────────────────┘ │
-│  /home/ubuntu/scripts/wednesday_reminder.py  (cron, every 5 min) │
+│  cron: 03:17 sheet_backup.py (canary) + hourly local-deals scan  │
 └──────────────────────────┬───────────────────────────────────────┘
                            │ scp / tar sync (NOT git pull — branches diverged)
                            ▼
@@ -107,11 +106,7 @@ grocery-price-tracker/                      ← ULTIMATE PROJECT ROOT (this fold
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-### How everything works — visual map (2026-08-31)
-
-The same architecture, rendered. Colors: blue = VPS, amber = local
-machine, green = Telegram topics, purple = cloud (sheet/GitHub),
-red = the protected store sites.
+### How everything works — visual map (v2, 2026-09-10)
 
 ```mermaid
 flowchart TB
@@ -119,105 +114,86 @@ flowchart TB
 
     subgraph TG["💬 Telegram — Claw Command Center (supergroup)"]
         direction TB
-        DM["📩 User DM<br/>summaries · reminders · specials"]
-        WEEKLY["📋 weekly-lists — 208<br/>Wednesday summary + resolve lists"]
+        DM["📩 User DM<br/>lookup / live / batch replies"]
+        WEEKLY["📋 weekly-lists — 208<br/>the ONE missing list (Wednesday)"]
         SPECIALS["🏷️ specials-wool — 206<br/>Woolworths specials report"]
-        RETIRED["🚫 151 grocery-sync-sheet<br/>RETIRED — nothing posts here"]
     end
 
     subgraph VPS["🖥️ VPS 169.58.107.0 — docker: openclaw-core"]
-        CLAW["🤖 Claw agent (OpenClaw)<br/>grocery-price skill — ALL WW/Coles<br/>price questions route to the CLI (B5)"]
-        GW["📨 telegram_gateway<br/>handlers · topics · allowlist"]
-        CRON["⏰ wednesday_reminder.py<br/>cron — Wed 05:00 Sydney"]
+        CLAW["🤖 Claw agent (OpenClaw)<br/>grocery-price skill — ALL price questions<br/>route to the CLI (no pre-investigation)"]
+        CRON["⏰ cron: 03:17 sheet_backup canary<br/>+ hourly local-deals daily-scan"]
     end
 
-    subgraph LOCAL["💻 Local Windows machine (Anaconda) — pipeline runs here"]
-        CLI["🛒 grocery_price_cli.py<br/>compare · search · recipe · specials · map<br/>sync · wednesday · live-refresh · topics-check"]
+    subgraph LOCAL["💻 Local Windows machine (Anaconda)"]
+        CLI["🛒 grocery_price_cli.py — 8 verbs<br/>price · list · live · batch · ignored<br/>specials · local-deals · wednesday"]
         subgraph CORE["core/ — brain"]
-            LOOKUP["lookup.py<br/>exact → alias → partial → live"]
-            UOM["uom.py — 20% size gate<br/>(no per-unit prices, ever)"]
-            COMP["price_comparator.py<br/>provenance lines · found-blocks · 🏆"]
-            SYNC["sheets_sync.py<br/>batch · update_single_price<br/>add_product_row"]
+            READ["v2_read.py<br/>lookup + ONE list + 🏆<br/>non-halal twin line"]
+            LIVE["v2_live.py<br/>WW + Coles web search<br/>prices only"]
+            BATCH["v2_batch.py<br/>done/gone/rename/remove/ignore"]
+            WED["v2_wednesday.py<br/>docx → col D/G/H sync<br/>parity → 2 posts"]
+            LD["local_deals.py<br/>4 shops · permanent+special<br/>ingest · sweep · codes"]
+            HALAL["halal.py · subcategory.py<br/>meat gate · never guess"]
             DISC["woolworths_discounts.py<br/>5% + home-brand 5%<br/>(display-only)"]
-            QUEUES["searched_items.py · add_to_list.py<br/>3-letter codes · 7-day tombstones"]
         end
-        subgraph EXT["extractors/ — muscle"]
-            WWX["woolworths_extractor<br/>curl_cffi Chrome-131<br/>impersonation"]
-            COLES["coles_extractor<br/>Scrape.do + credit guard<br/>retries 5xx/timeout ONLY (B4)"]
-            WIN["session_refresh — live window<br/>real Chrome · login · flush · snapshots<br/>discovery capture · per-store isolation"]
-            LLF["live_list_fetch<br/>snapshot loader + completeness gate"]
-            DOCP["doc_parser · specials_parser<br/>.docx lists · Was $X · Any-N · SPECIAL"]
+        subgraph EXT["extractors/ + tools/"]
+            DOCP["doc_parser · specials_parser<br/>multibuy — the docx chain"]
+            FB["fb_flyer_fetch · flyer_vision<br/>shop_site_catalogue"]
+            TOOLS["migrate_v2 audit · parity_audit<br/>sheet_backup"]
         end
-        DATA["🗂️ data/ — runtime state<br/>searched_items · add_to_list<br/>live_snapshots/ · scrapedo_health"]
+        DATA["🗂️ data/ — runtime state<br/>local_deals_inbox/ · scan state<br/>post log · ignored_items.txt"]
     end
 
-    SHEET["📊 Google Sheet — master price DB<br/>A name · D/E/F prices (multi-buy = deal rate) · I/J/K keywords<br/>M/N no · discount · multi-buy · O rewards · P aliases"]
-    STORES["🏬 woolworths.com.au · coles.com.au<br/>Akamai/Incapsula protected"]
-    GH["🐙 GitHub — arkind13/AI-Development-Environment"]
+    SHEET["📊 Google Sheet — THE source of truth<br/>Products_Master 13 cols (A name · D WW price · G keyword · H specials · L code)<br/>Local_Deals 11 cols (permanent+special per shop · K code)<br/>parity: every master row mirrors by Item_Code"]
+    STORES["🏬 woolworths.com.au · coles.com.au<br/>(live verb only)"]
+    GH["🐙 GitHub — arkind13/grocery-price-tracker + parent repo"]
 
     USER -->|"asks in chat"| CLAW
-    CLAW -->|"skill → CLI commands<br/>(sheet mode, in container)"| CLI
-    CRON -->|"Wed reminder"| DM
-    CRON -->|"reminder copy"| WEEKLY
-    GW -->|"done ack"| WEEKLY
-    CLI -->|"compare / search /<br/>recipe answers"| DM
-    CLI -->|"summary + resolve lists<br/>(chunked ≤ 4000 chars)"| WEEKLY
-    CLI -->|"specials report"| SPECIALS
-    CLI --> LOOKUP
-    CLI --> SYNC
-    CLI --> QUEUES
-    LOOKUP --> UOM
-    LOOKUP --> COMP
-    DISC --> COMP
-    SYNC <-->|"read + write"| SHEET
-    CLI -->|"live search"| WWX
-    CLI -->|"live search"| COLES
-    CLI -->|"--source live"| WIN
-    WIN -->|"per-page snapshots"| DATA
-    LLF <--> DATA
-    DOCP -->|"docx mode"| SYNC
-    QUEUES -->|"drained by flush"| WIN
-    WWX -->|"HTTPS APIs"| STORES
-    COLES -->|"via Scrape.do proxy"| STORES
-    WIN -->|"logged-in real Chrome"| STORES
-    DATA <-->|"scp — queue pull / list push"| VPS
-    LOCAL -.->|"git push"| GH
+    CLAW -->|"skill → CLI (in container)"| DM
+    CRON -->|"backup fails = page"| DM
+    CLI --> READ
+    CLI --> LIVE
+    CLI --> BATCH
+    CLI --> WED
+    CLI --> LD
+    DISC --> READ
+    READ <-->|"read + [CODE] replies"| SHEET
+    WED <-->|"col D/G/H writes + parity"| SHEET
+    LD <-->|"ingest / sweep / set-*"| SHEET
+    WED -->|"specials → 206"| SPECIALS
+    WED -->|"ONE list → 208"| WEEKLY
+    LIVE -->|"prices only"| STORES
+    FB -->|"vision parse"| LD
+    LOCAL -.->|"git push + scp mirror"| GH
 
     classDef vps fill:#e8f0fe,stroke:#1a73e8,color:#202124
     classDef local fill:#fef7e0,stroke:#f9ab00,color:#202124
     classDef tg fill:#e6f4ea,stroke:#34a853,color:#202124
     classDef cloud fill:#f3e8fd,stroke:#a142f4,color:#202124
     classDef store fill:#fce8e6,stroke:#d93025,color:#202124
-    class CLAW,GW,CRON vps
-    class CLI,LOOKUP,UOM,COMP,SYNC,DISC,QUEUES,WWX,COLES,WIN,LLF,DOCP,DATA local
-    class DM,WEEKLY,SPECIALS,RETIRED tg
+    class CLAW,CRON vps
+    class CLI,READ,LIVE,BATCH,WED,LD,HALAL,DISC,DOCP,FB,TOOLS,DATA local
+    class DM,WEEKLY,SPECIALS tg
     class SHEET,GH cloud
     class STORES store
 ```
 
-And the Wednesday rhythm — the weekly loop that produces everything above:
+And the Wednesday rhythm — the ONE weekly write path:
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant C as ⏰ VPS cron
     participant U as 👤 User
-    participant L as 💻 Local CLI
-    participant S as 🏬 WW + Coles
+    participant L as 💻 Local CLI (wednesday)
     participant G as 📊 Google Sheet
     participant T as 💬 Telegram
 
-    C->>T: Wed 05:00 reminder → DM + weekly-lists (208)
-    U->>L: wednesday --source live
-    L->>L: pull queues from VPS (scp)
-    L->>S: live window — login once (2FA wait)
-    L->>S: flush searched-items + add-to-list queues
-    L->>S: fetch every Price-Compare list page → snapshots
-    L->>L: completeness gate — clean stop before any write
-    L->>G: sync snapshot prices + specials flags (M/N vocabulary)
-    L->>T: summary + resolve lists → DM + weekly-lists (208)
-    L->>T: WW specials report → DM + specials-wool (206)
-    Note over U,L: Step 0 (both modes): pull + union-merge VPS queues,<br/>show them first, push back identical<br/>docx fallback — paste lists into the .docx files,<br/>then run plain wednesday and add queued<br/>items to the store lists manually
+    U->>L: paste fresh Woolworths.docx + Woolworths_Specials.docx
+    L->>L: parse docx (doc_parser → specials_parser → multibuy)
+    L->>G: match keyword col G → write col D (absent = N/A <date>, GONE survives,<br/>deal rates into D + terms into H, deal-end clears H)
+    L->>G: parity step — ALIGNED / bottom-append auto-mirror /<br/>middle-insert verbatim ABORT (nothing written)
+    L->>T: specials → topic 206
+    L->>T: the ONE missing list → topic 208 (4000-char chunks)
+    Note over U,L: ≤30s total · --dry-run plans only · the ONLY sheet writer besides<br/>batch/remove, ingest, and manual edits in the Sheet UI
 ```
 
 ---
@@ -368,489 +344,241 @@ docker logs openclaw-core --tail 50                            # recent logs
 
 ---
 
-## Grocery Price Tracker (flagship tool)
+## Grocery Price Tracker (flagship tool) — v2
 
-The most complex tool. Tracks Australian supermarket prices (Woolworths, Coles, Aldi) by maintaining a Google Sheet of canonical products and periodically syncing live prices.
+The v2 tracker is SHEET-FIRST: one Google Sheet (the `Products_Master`
+tab + the `Local_Deals` tab) is the single source of truth, maintained
+by an 8-verb headless CLI. The v2 rebuild ran as five time-boxed rounds
+(2026-09-09 → 2026-09-10) and is CLOSED — round history, work orders and
+test logs live in [`old md/2026-09-v2-rebuild/`](old%20md/2026-09-v2-rebuild/).
 
-### Entry point
+### Entry point — the 8-verb CLI
 
-**`grocery_price_cli.py`** — headless CLI (lives in the parent `AI related\` folder, see [migration section](#code-currently-outside-this-folder-pending-migration)). Subcommands:
+**`grocery_price_cli.py`** (lives in the parent `AI related\` folder).
+On the VPS the Claw agent runs it inside the container:
 
-| Subcommand | Args | What it does |
-|------------|------|--------------|
-| `compare` | `--items` (req) `[--mode auto\|sheet\|live]` `[--team-discount]` `[--extra-discount FLOAT]` | Basket comparison; `--mode auto` = sheet-first then live fallback. Both-live items pass the UOM 20% size gate; non-comparable items render as a found-block and are excluded from totals |
-| `optimize` | `--items` (req) `[--min-saving FLOAT]` (default 3.00) `[--team-discount\|--no-team-discount]` `[--mode auto\|sheet\|live]` `[--confirm CODES\|all\|none]` | Smart Basket: prices the list from the SHEET first, then classifies the rest — items already queued on the searched/to-do lists are reported as no action needed; items with a close substitute on the sheet use that substitute's price read-only (labelled); only the remaining gaps print as a 🔎 confirmation list (A = Coles missing, B = Woolworths missing, C = no pricing, each with a 3-letter code) — nothing is live-searched or written until you confirm with `optimize --confirm <codes\|all\|none>`. Not-on-sheet codes may carry `+add` to ALSO become a new row + searched-list entry; without `+add` they are compared only. A/B and existing-row codes get the live PRICE written into their existing sheet row. **If that side still has a stale keyword (its price was "N/A \<date\>"), the wrong keyword is CLEARED from the sheet and the correct product goes on the TO-DO list** — so you verify the website shopping list; adding the right item there (and confirming via `add-to-list done`) restores the keyword and the weekly Wednesday refresh. If the side has NO keyword, only the price is written and the item stays flagged on the wool/coles missing list until you resolve it via the normal map flow. The final plan recommends ONE Woolworths trip or a per-item split as numbered buy lists (full product names, (sheet)/(live)/(sub) labels, per-store 💵 subtotals, 💰 total savings). Refuses <5 items (stderr + exit 2, points to `compare`). Savings counted item vs item — Σ per-item price gaps, offsets never cancel; a split needs savings strictly above the threshold; ties and sub-threshold movement default to Woolworths. |
-| `search` | `--product` (req) `[--expand]` `[--add-item N]` `[--unit UNIT]` `[--allow-duplicate]` | Pure live search (Woolworths API + Coles Scrape.do recipe); no sheet, never writes. ≤3 ranked results per store (8 with `--expand`); `--add-item N` = explicit add of the Nth result (sheet row with EMPTY keyword col + searched-items queue); `--unit` supplies the unit when the result has none. **One-line rule v2 (2026-09-02):** an add that is the SAME product as an existing row updates that row's price + alias instead of creating a second line, and is NOT queued (already tracked). Same product = matching descriptive words (order/brand-prefix/punctuation-insensitive) regardless of pack wording ("5 pack" vs "70g") or unit family (g vs mL); the ONLY keep-apart reason is the same unit with a different amount beyond the 20% tolerance (200g vs 400g, 1L vs 2L — 33g vs 35g still matches). `--allow-duplicate` is the explicit "2 different products" override |
-| `specials` | `[--store woolworths\|coles\|all]` | Active specials (sheet Mode B + Woolworths saved-list Mode A) |
-| `rewards` | `[--store ...]` | Reads rewards column (O); prints "not populated" when empty |
-| `recipe` | `--name` `--ingredients` | Wraps `compare_basket(mode="auto")` for recipe ingredients |
-| `update` | `--product` `--store` `--price` `[--dry-run]` | Writes a single price to the sheet |
-| `sync` | `[--force]` `[--dry-run]` | Extract → match → batch sheet write + queue summary. **Overwrite semantics (2026-09-02):** listed items with an unusable price (0/blank) get `unavailable <date>`; mapped rows absent from a provided store list get `N/A <date>` — stale prices never linger. The embedded date anchors no-price week aging and survives marker rewrites until a real price returns; a store whose list wasn't parsed is never marked |
-| `specials-scan` | `[--min-savings INT]` `[--store woolworths]` | Tier 2 site-wide scan → Tier 1 saved-list |
-| `unmapped` | — | Reads `data/unmapped_queue.json`; offline-safe |
-| `map` | `unmatched\|wool\|coles\|status` + flags | One-item-at-a-time list resolution (non-interactive). **2026-09-03:** a full resolution (`--pick/--na/--keyword/--forget`, unmatched exact-link `--add`) also removes the item's line from its work-list `.txt` immediately (header count kept honest; progress index stays aligned) — no more stale mid-week counts |
-| `lists` | `[--full]` | **THE 7 USER-FACING LISTS — LIVE counts (2026-09-03; list 7 added 2026-09-05).** Lists 1-3 + 6-7 from one fresh sheet read (Unmatched = debt minus ignored minus keyword-exists; wool/coles missing = keyword cols I/J with `NA` counting as populated); list 4 = the to-do queue (multi-buy items marked `(m)` + legend); list 5 = ignored file (COUNT only — names with `--full`); list 6 = **Missed pricing** (FIXABLE: keyword present + price unusable + not GONE; DELETE-PENDING: both stores unusable, GONE included); list 7 = **Sub-category reviews** — rows carrying the literal `needs review` Col Q marker (the classifier never guessed them; the user decides the label). Missing-list counts annotate `(N pending website adds)` (handshake, not dupes) and `(N also in missed pricing)` for cross-list rows. `--full` prints names with ⏳/⚠ markers. NEVER counts the Wednesday `.txt` snapshots (the root cause of the 2026-09-03 stale-counts incident). Sheet failure → "unavailable" + verbatim error, exit 0 |
-| `todo` | `show` / `done --items "1,HUY"` / `gone --items "1,HUY"` | **The ONE website-add queue (2026-09-03).** add-to-list entries only (the searched queue is RETIRED) — Coles then Woolworths, continuous numbering, `[CODE]` per entry. `done` (numbers and/or codes, all-or-nothing) removes entries AND writes the remembered exact store name as the row's store keyword. **`gone`:** the item is verified unavailable at that store — the keyword is LEFT ALONE, the literal `GONE` is written into the store's price cell (D/E), and the entry is removed from the queue (same selection as `done`). **Wednesday Step 3c tallies the queue with the sheet** after the sync and auto-clears entries whose row now carries the keyword — the UPDATED to-do list posts FIRST in Telegram |
-| `missed-pricing` | `show` (default) / `gone --items "1,ABC"` / `[--purge]` `[--dry-run]` | List #6 on demand: **GROUPED under WOOLWORTHS / COLES / BOTH STORES headers with a deterministic 3-letter code per entry (2026-09-03)** — FIXABLE rows (keyword present + that store's price unusable, not GONE) under their store header, DELETE-PENDING rows (both stores dead) under BOTH STORES. **`gone` (2026-09-03, same rule as the to-do):** the keyword is LEFT ALONE, the failing store's price cell is stamped GONE, and the item leaves the list; a delete-pending selection is stamped at both stores and its row is DELETED immediately (archived to `data/deleted_rows.json`, source `gone-verdict`). `--purge` deletes ALL delete-pending rows NOW (explicit user action; archived; ledger strikes cleared); `--dry-run` previews the purge. A returning real price clears a GONE cell (item resurrected) |
-| `add-to-list` | `show` / `done` | **ALIAS of the `todo` queue (2026-09-03)** — same numbering, same done semantics (always writes the keyword) |
-| `searched-items` | — | **RETIRED (2026-09-03)** — the searched queue is gone; any invocation prints the retirement notice + the to-do view. The core module (`core/searched_items.py`) is kept as dormant legacy |
-| `no-price` | — | **ALIAS of `missed-pricing` (2026-09-03)** — prints the full report (one-store failures included). The old both-dead-only view is gone |
-| `live-refresh` | `[--flush-only]` `[--fetch-only]` `[--recapture]` | **RETIRED (2026-09-02) — SHELVED, not deleted.** Was: LOCAL Windows only (headed Chrome): login → flush queues → fetch lists → snapshots. The store-bot war was lost (~16 h; Akamai + Chrome 136 profile security). Code + tests kept for a future breakthrough; do NOT rebuild the failed approaches — see `lostbattle.md`. The agent never runs this. |
-| `wednesday` | `[--source docx]` (live RETIRED 2026-09-02 — refused at dispatch; see `lostbattle.md`) `[--dry-run]` `[--no-scp]` `[--no-telegram]` `[--no-prompt]` | Full pipeline. **STARTS WITH THE TO-DO LIST (2026-09-03 user flow):** Step 0 pulls + union-merges + pushes back the queue, then prints the to-do list — add those items on the store website lists, re-paste the docx lists, type `done` (auto-skips with no TTY / `--no-prompt`). Then: parse lists → **Step 1c auto-heal** links exact sheet names (writing keywords) → match/sync prices → **Step 3b two-strike dead-row auto-delete:** both-dead rows deleted only when a PREVIOUS run saw them dead (`data/delete_candidates.json`; deletions archived to `data/deleted_rows.json`) → **Step 3c TO-DO TALLY:** to-do entries whose sheet row now carries the keyword are cleared, and the UPDATED to-do list prints → resolve lists + scp → Telegram post (to-do FIRST, then unmatched, wool/coles missing, **missed pricing** — GROUPED Woolworths / Coles / Both-stores headers with per-item codes + updated week counts, then forgotten as a COUNT) → specials report → **Step 9** mirrors the queue back to the VPS. **Docx is the ONLY live source** — the live window was retired after the lost store-bot war; the manual website adds during the pause replace the flush |
-| `backfill-keywords` | — | Backfill Col P keywords from existing data |
-| `backfill-sizes` | `[--dry-run]` | One-time Col C (size) backfill parsed from Col A/I/J names; fills only blank cells, never overwrites |
-| `shop` | `--items "…"` / `--answers "1=2; 2=coles"` / `--status` / `--undo CODE` / `--abort` | **Shopping-list flow v2 (2026-09-07):** one batched questions message (preferred picks, store of a supplied name, live-search confirms, label checks), then the final list. Untracked items AUTO-ADD the top live match (price + new row + to-do entry; `--undo CODE` reverses). Keywords are NEVER written directly — `todo done` writes them after the website add (B2/B3) |
-| `prefer` | `--code ABC` / `--pick N` | Standalone "X is my usual" (outside a shop run): sets the Preferred (P) row for a sub-category |
-| `subcategories` | — | Lists sub-category labels + live row counts |
-| `backfill-subcategories` | `[--dry-run]` | One-time Col Q backfill; classifier-confident labels only, else "needs review"; never overwrites |
-| `backfill-codes` | `[--dry-run]` | One-time Col R Item-Code backfill; unique permanent codes; idempotent |
+```bash
+docker exec openclaw-core python3 /app/tasks/ai-tools/grocery_price_cli.py price --item "halal beef mince"
+```
 
-> **Routing rule (critical):** `compare X in/at woolworths and coles` must always route to `compare --items "X"` (sheet-first), NEVER `search` (live-only). The `grocery-price/SKILL.md` enforces this.
+| Verb | Args | What it does (speed budget) |
+|------|------|------------------------------|
+| `price` | `--item "X"` (req) | Sheet-only lookup (≤10s): 🟢 Woolworths display price + every local shop price (special-first) + 🏆 winner. Handles GONE / `N/A <date>` / missing-list / aliases; meat queries are halal-scoped AND carry the non-halal twin line (below). NEVER live-searches, NEVER writes. |
+| `list` | — | The ONE missing list (≤5s): every item with a local price but no Woolworths price and no keyword, `[CODE]` per entry. The ignore list is HIDDEN (`ignored` reveals it). |
+| `live` | `--item "X"` (req) | Web search (≤20s), Woolworths + Coles, ≤3 prices per store, **prices only** — never adds items, never writes, never queues. One side-note line when the item is tracked. Exit 0 even when a store errors (⚠️ line per store). The ONLY path that touches the web. |
+| `batch` | `--verdicts "ABC done; DEF gone; …"` (req) | ONE call (≤10s), one reply per code. `done` = VERIFY-ONLY (confirms the row or names what is still blank — writes nothing); `gone` = GONE at Woolworths, row kept; `rename` = new name on both tabs, code+prices untouched; `remove` = archives both rows to `data/deleted_rows.json` then deletes on both tabs; `ignore` = hides from the list. Unknown codes answer `[CODE] ✗ unknown code`; remaining verdicts still execute. |
+| `ignored` | — | Reveals the hidden ignore list (count + lines). |
+| `specials` | `[--store woolworths\|coles\|all]` | Active specials from the sheet (col H terms + col D deal rates) + the latest Wednesday report when fresh. |
+| `local-deals` | `--daily-scan` `--ingest CODE` `--ignore CODE` `--dunya-site` `--set-permanent` `--set-special` `--expire-sweep` `--stores` `--dry-run` `--no-telegram` | The local-shops machinery (below) — its own skill (`local-deals`). |
+| `wednesday` | `[--dry-run]` `[--no-telegram]` | The weekly Woolworths price run (below), ≤30s. |
 
-> **Smart Basket (B2, 2026-09):** `optimize` is the weekly-shop planner — use it for 5+ item lists. Sheet prices first, then the rest is classified: items already queued on the searched/to-do lists are reported as *no action needed* (Wednesday handles them); items with a close substitute on the sheet use that substitute's price **read-only** (labelled `(sub)` with its full name, never written); the remaining gaps are listed for confirmation (A/B/C groups with codes) before any live search. Confirming A/B and existing-row codes writes only the missing PRICE into the row (the keyword — and the weekly Wednesday refresh — come from resolving it via `map`); not-on-sheet items are compared only unless you reply with `+add` (then new row + searched-list entry). It answers "one trip or split?": when item-vs-item movement (Σ per-item gaps, counted item by item so offsets never cancel) is ≤ the $3 threshold it says one Woolworths shop (with a note at the bottom — Coles prices aren't shown for that trip); above it, exactly which items at which store as numbered buy lists. Close calls (ties, sub-threshold movement) default to Woolworths; if Woolworths can't price everything it says a split is forced. `--min-saving` overrides the threshold.
+Every retired v1 verb (compare, optimize, search, sync, map, todo,
+shop, prefer, recipe, rewards, update, lists, missed-pricing,
+add-to-list, searched-items, no-price, live-refresh, backfill-*) is
+GONE — the guard test `tests/test_cli.py` rejects them. History:
+[`old md/2026-09-v2-rebuild/`](old%20md/2026-09-v2-rebuild/).
 
-> **Col C contract (units always visible):** Col C is the unit column; every add path fills it (real size or the literal `unit unavailable`); blank = legacy — displays as ` · ⚠️ unit unavailable` everywhere. `search --add-item` and `map --add` accept `--unit UNIT` for one-shot runs when no unit can be resolved (interactive sessions ask once instead).
+### The v2 sheet model + parity
 
-> **Weekly add-to-list loop:** a wool/coles `map --add` writes the price AND queues the item on `add_to_list` (remembering the EXACT store name + a 3-letter code). Later, on the store website, add the queued items to your shopping list, then run `add-to-list done` (by number or code) — this clears the reminder AND writes the exact store name as the row's store keyword, so the next Wednesday sync matches + price-syncs the item immediately (2026-09-02).
+**`Products_Master`** (13 columns): A Product_Name · B Category ·
+C Size · D Woolworths_Price · E Brand_Type (literal `Home` marks
+home-brand) · F Last_Updated · G Search_Keyword_Woolworths ·
+H Woolworths_Specials (incl. `multi-buy 2/$6.00` terms) · I
+Rewards_Points · J Keywords (aliases, `|`-separated) · K Sub_Category ·
+L Item_Code · M Preferred.
 
-> **Live lists + no gaps (2026-09-03):** all user-facing counts come from `lists` — one fresh sheet read + live queue files, never the Wednesday `.txt` snapshots. The to-do queue is the ONE reminder queue (the searched queue is RETIRED); every price-without-keyword path leaves a to-do entry, `done` ALWAYS writes the keyword, and the Wednesday tally (Step 3c) clears entries once they are on the sheet. Missed pricing captures every keyword-present price failure (one-store included) with two exits: fix the keyword or the `gone` verdict (keyword kept, price cell GONE); both-dead rows enter the guarded two-strike deletion pipeline. Legacy commands (`add-to-list`, `searched-items`, `no-price`) alias or point to the new views so any instruction set reports the same truth. All state lives in host bind mounts on the VPS — container restarts/recreates change nothing.
+**`Local_Deals`** (11 columns): A Product_Name · per shop a PERMANENT
+and a SPECIAL price column (Dunya, Merjan, Fruitopia, Abu Salim) · one
+shared shop-tagged Comments column · K Item_Code. Special cells carry
+their own ` (till 12 Sep)` stamp; row 2 is the per-shop "Prices valid
+until" summary row; FRUITS / BUTCHERY / OTHER section rows structure
+the tab.
 
-> **Explicit-add-only + UOM gate (2026-08):** nothing is ever auto-queued. Plain `compare`/`search`/`expand` never write; the only live→sheet routes are `search --add-item N` and `map unmatched --add` (both leave the store keyword column EMPTY). A live item enters a comparison only via a UOM-passing pair (`core/uom.py`: same measurement family, within 20% size, no per-unit prices ever) or when the other store is unavailable (Woolworths-only answer + one ⚠️ line). Coles search runs through a credit-guard (3-attempt silent retry, 40/call-run cap, 10-min circuit breaker in `data/scrapedo_health.json`).
+- **Q11 separation:** halal and non-halal rows stay SEPARATE — never
+  paired, merged, or renamed by code (the non-halal twin line below is
+  display-only).
+- **Parity model:** every master row mirrors to a `Local_Deals` row
+  under the SAME permanent 3-letter Item_Code (A–Z minus I/L/O). The
+  audit (`tools/migrate_v2.py audit`) has three outcomes: **ALIGNED**
+  (silence), **bottom-append miss** (auto-repaired during the run —
+  the row is mirrored to the other tab, code stamped on BOTH sides),
+  and **middle-insert** (HARD ALERT, nothing written; the user moves
+  the row to the bottom and re-runs). New rows always go at the BOTTOM
+  of both tabs.
+- Every reply cites its `[CODE]`; verdicts always reference codes.
 
-> **One-line rule (2026-09-02):** every explicit add for a product that is already on the sheet lands on the EXISTING row — the price is updated there and the query is saved as a Col P alias; nothing is queued (already tracked). "Same product" ignores word order, store-brand prefixes, punctuation, and pack wording (`5 pack` vs `70g` are ONE product); the only keep-apart reason is the same unit with a different amount beyond the 20% tolerance (200g vs 400g, 1L vs 2L — 33g vs 35g still matches). `search --allow-duplicate` is the explicit "these are 2 different products" override. Exact-name duplicates are always refused.
+### The ONE list
 
-### Core library (`core/`)
+`list` = every coded row whose local side has ≥1 shop price while col
+D has no real price AND col G has no keyword. `N/A <date>` WITH a
+keyword = tracked-but-unavailable (NOT missing); GONE rows are
+excluded; ignored codes are hidden. `N/A`-without-keyword rows ARE
+missing (the keyword is the tracked signal).
 
-| File | Purpose |
-|------|---------|
-| `lookup.py` | **Lookup engine** — query resolution chain: exact sheet match (Col A / store keywords I/J/K) → Col P alias two-pass → partial candidates → live search (ranked per store, UOM-gated pair selection, display-only). `LookupIndex` builds `_exact` and `_alias_exact` indices; `LookupEngine` orchestrates the chain; `rank_live_results` / `select_live_pair` implement the tolerant ranking + 20% size gate. |
-| `uom.py` | **Unit-of-measure gate** — parses package sizes (25L → 25000 mL, multipacks to totals), compares within families only, 20% tolerance band. Pure stdlib; the sole gate on both-live comparisons. |
-| `sheets_client.py` | Shared headless Google Sheets connection (via `GROCERY_SERVICE_ACCOUNT_JSON` + `GROCERY_SPREADSHEET_ID` env vars) |
-| `sheets_sync.py` | Batch sync (overwrite semantics: listed-but-priceless → `unavailable <date>`, mapped-but-absent → `N/A <date>`, anchor dates preserved, store-not-provided immunity), `update_single_price`, `add_product_row` (exact-dup guard + one-line-rule merge + `_append_alias`), range-width-aware row writes |
-| `price_comparator.py` | Dual-mode basket comparator; in `auto` mode uses the lookup engine via `_gather_lookup_prices()`. Every store line carries identity + provenance (`— name size (sheet|live)`); non-comparable items render the found-block and are excluded from totals |
-| `searched_items.py` | Queue-2 (explicit Wednesday adds): 3-letter codes (A–Z minus I/O, no repeated letter), dup-guarded adds, all-or-nothing code removal, 7-day code tombstones, `drain_from_parsed` (Step 1b auto-clear). Mirror of `add_to_list.py` |
-| `queue_sync.py` | Wednesday Step 0 queue convergence local↔VPS: union merge by (store, normalised name), earliest added_at wins, blank-field backfill, code-collision regeneration, tombstone union (Claw-side removals never resurrect), atomic JSON IO |
-| `name_matcher.py` | Exact keyword matcher for the sync path (Col I/J/K) + duplicate-detection helpers (`similarity_tokens`, `token_set_ratio`, `split_name_size`, `is_same_product` — the one-line-rule engine) |
-| `recipe_resolver.py` | Sheet exact → partial → live search resolver for recipe ingredients |
-| `specials_reporter.py` | Reads specials/rewards columns from the sheet |
-| `missing_items_tracker.py` | Cross-store missing-items diff |
-| `woolworths_discounts.py` | Always-on 5% Woolworths display discount + extra 5% home-brand engine; 32-brand home-brand list; monthly extra-discount tracker |
-| `schema_upgrade.py` | Idempotent column audit (adds columns M/N/O/P if missing) |
-| `list_names.py` | Pinned saved-list name constants |
-| `env_probe.py` | Env var verification |
-| `auth0_*.py`, `curl_cffi_*.py`, `scrapedo_*.py`, `scraping_login.py`, `stealth_login_test.py` | Auth/login experiments (Playwright, Auth0, Scrape.do, curl_cffi impersonation) — mostly legacy/superseded by the no-login approach |
-| `check_scrapedo.py`, `check_settings.py`, `diagnose_cookie.py`, `extract_chrome_cookies.py`, `login_attempts.py`, `query_mylists.py`, `scan_*.py`, `test_search_noauth.py`, `trace_oidc.py` | Diagnostic/probe utilities |
+### Meat lookups: halal scoping + the non-halal twin line (spec §18 A4)
 
-### Extractors (`extractors/`)
+Raw meat/poultry queries (`core/halal.py::is_meat_term` — protein+cut;
+"chicken salt"/"beef stock" are never meat) resolve through a
+halal-scoped view: **local shops are always the halal side** (all four
+local shops are halal sources), and a plain (non-halal) Woolworths
+master row never answers a meat query directly. Instead, EVERY meat
+answer carries the plain Woolworths twin as a DISPLAY-ONLY line:
 
-| File | Purpose |
-|------|---------|
-| `woolworths_extractor.py` | Woolworths API client: saved lists (`/apis/ui/mylists`), list items, product detail, search (no-login via curl_cffi Chrome 131 impersonation in Phase 9.2) |
-| `coles_extractor.py` | Coles client: Scrape.do GET → parse `__NEXT_DATA__` → `pageProps.searchResults.results`; credit-guarded search chain (3-attempt silent retry with fresh sessions, 40-call per-run cap, 10-min circuit breaker, never retries 401/403); `.docx` fallback for saved lists |
-| `live_list_fetch.py` | Offline snapshot loader for the Wednesday live path: reads `data/live_snapshots/YYYY-MM-DD_*` files, converts to ProductItems (id dedup, multipage-safe), `validate_complete()` all-or-nothing gate. No network. |
-| `session_refresh.py` | Live-window orchestrator (LOCAL only): Phase A login (headed Chrome + persistent profile + 2FA wait) → Phase B throttled queue flush (session-death abort, 3-strike park) → Phase C paginated list fetch (30-page cap) → snapshots. Plus API-discovery capture and the cookie-only heartbeat probe. Playwright imported lazily. |
-| `doc_parser.py` | Parses `Woolworths.docx` / `Coles.docx` / `Aldi.docx` / `Woolworths_Specials.docx` into `ProductItem` lists (headless, via python-docx) |
-| `session_manager.py` | Coles auth session management |
-| `auth_manager.py` | Playwright auto-login auth manager (2FA, compulsory logout) — superseded by no-login approach |
-| `hub.py` | Extractor hub/router |
-| `models.py` | Shared data models (`ProductItem`, etc.) |
-| `probe_supermarkets.py` | Supermarket endpoint probe utility |
-| `probe_results.json`, `ww_full_export.json`, `ww_products_export.json` | Probe/export data snapshots |
+```
+also at Woolworths (non-halal): $13.54 — Woolworths Beef Mince 500g
+```
 
-### Data (`data/`)
+- Populated for every meat query shape: the halal name, the plain meat
+  term, and the exact plain-row name (before the twin line, that
+  priced row was unreachable even by its exact name).
+- The twin price goes through the SAME display-discount engine as
+  every Woolworths price (e.g. $15 home-brand → $13.54); GONE and
+  `N/A <date>` twins render their state; blank-D twins are omitted.
+- The line appears even when the halal row's price cell is still
+  blank — the non-halal side shows immediately.
+- The twin read touches master rows ONLY (never Local_Deals), writes
+  NOTHING, adds no verb/state/live-fallback. "non halal" in any
+  phrasing resolves ONLY to plain non-halal Woolworths master rows.
 
-Runtime state files (not in git; synced between local↔VPS):
+### Wednesday v2 — the weekly Woolworths run (≤30s)
 
-| File | Purpose |
-|------|---------|
-| `unmatched.txt` / `coles_missing.txt` / `wool_missing.txt` | Items not matched during sync (resolved via `map`) |
-| `unmapped_queue.json` | JSON queue for unmapped items |
-| `list_action_progress.json` | `map` session progress (resume indices) |
-| `ignored_items.txt` | Permanently-excluded junk items (`map --forget`) |
-| `add_to_list.json` | Manual website-add queue (fed by wool/coles `map --add`; drained by `add-to-list done`) |
-| `searched_items.json` / `searched_item_code_tombstones.json` | Queue-2 (explicit Wednesday adds via `search --add-item` / `map unmatched --add`; drained by the live-window flush or Wednesday Step 1b list-match; removed codes tombstoned 7 days; converged local↔VPS at every Wednesday Step 0) |
-| `forget_list.json` / `price_unavailable.json` | Runtime state from parent-repo Plan B modules (forgotten items; price-unavailable tracker) |
-| `session_state.json` / `ww_coles_profile/` | **Secrets** — live-window cookies + browser profile (gitignored, never committed, never printed) |
-| `live_snapshots/` | `YYYY-MM-DD_<store>_<list>.json` list snapshots written by the live window, read by `wednesday --source live` |
-| `live_api_capture.json` | Discovered add-to-list API + pagination shape per store |
-| `live_flush_log.json` | Per-item flush results (status/reason/attempts; rotated at ~1 MB) |
-| `scrapedo_health.json` | Scrape.do circuit-breaker state |
-| `session_heartbeat.log` | Cookie-only liveness probe log (alive/dead/unknown) |
-| `sheets_manager.py` | Sheet-state management helper |
-| `phase9_defect_log.json` | Phase 9 defect tracking |
-| `woolworths_discount_usage.json` | Discount usage tracking |
-| `diagnostics/` | Diagnostic snapshots |
+Inputs: the user pastes the two Woolworths docx into the tracker root —
+`Woolworths.docx` (the saved list) and `Woolworths_Specials.docx`.
+Then, on the LOCAL PC:
 
-### Tests (`tests/`)
+```powershell
+& "$env:USERPROFILE\anaconda3\python.exe" ..\grocery_price_cli.py wednesday --dry-run   # plan only, writes nothing
+& "$env:USERPROFILE\anaconda3\python.exe" ..\grocery_price_cli.py wednesday             # real run, ≤30 s
+```
 
-| File | Scenarios |
-|------|-----------|
-| `test_lookup.py` | 19 GROUP A lookup state-machine scenarios |
-| `test_lookup_uom.py` | 19 UOM-gate Step-5 tests: ranking, pair selection, single-store/unavailable routing, Steps 1–4 golden regression |
-| `test_uom.py` | 24 size-parse + comparability gate tests |
-| `test_searched_items.py` | 40 Queue-2 tests: codes, tombstones, atomic IO, render, Wednesday Step-1b drain (auto-clear of items found on the store lists) |
-| `test_queue_sync.py` | 17 queue-convergence tests: union merge (local↔VPS), earliest-added_at identity, field backfill, code-collision regeneration, tombstone union + removal-not-resurrected, file IO |
-| `test_coles_recipe.py` | 24 Scrape.do credit-guard tests: params, retry chain, breaker, cap, probes |
-| `test_live_window.py` | 48 live-window tests: snapshot loader (F), flush engine + pagination + heartbeat (W) |
-| `test_live_search.py` | 13 GROUP B Woolworths+Coles mocked integration tests |
-| `test_sheets_sync.py` | 77 tests: `add_product_row` (incl. `Home` Col G marker), `mark_not_available`, `set_store_keyword`, Col I/J/K, duplicate guard, one-line-rule merge (pack-vs-weight, 33g/35g tolerance), sync overwrite semantics (`N/A`/`unavailable` markers, anchor preservation, store-not-provided immunity) |
-| `test_name_matcher.py` | 25 Col P two-pass lookup tests |
-| `test_comparator.py` | 53 live-search + always-on discount comparison + UOM report tests |
-| `test_cli.py` | 122 search/map/compare/discount-surface/backfill/live-routing tests + no-price helpers (price-less cell detection, week buckets, categorized report lines) |
-| `test_woolworths_discounts.py` | 30 always-on WW discount tests: 32-brand detection, compounding math, engine, tracker guard |
-| `test_extractors.py` | 31 extractor unit tests |
-| `test_add_to_list.py` | 22 manual website-add queue tests (module + CLI + size contract) |
-| `test_specials_flags.py` | 25 specials vocabulary/flag write tests (D25) |
-| `test_telegram_format.py` | 32 Telegram Style Kit tests |
-| `test_sheets_conn.py` | offline sheets-connection smoke file (0 collected; network-dependent) |
+The run: parses the docx (doc_parser → specials_parser → multibuy
+chain) → matches each line to the sheet's keyword column (G) → writes
+Woolworths prices (col D; absent items get `N/A <date>`; GONE rows
+survive; multi-buy deal rates go into D with the terms in H; when a
+deal ends H is cleared and D reverts to the shelf price) → runs the
+parity step (ALIGNED / bottom-append auto-mirror / middle-insert
+verbatim abort) → posts EXACTLY two Telegram messages: specials →
+topic 206, the ONE missing list → topic 208 (long lists arrive as
+4000-char chunks, all in 208). `--dry-run` plans and writes nothing.
 
-**Total: 621 tests passing, 0 failed** (2026-09-02: round 1 +20
-queue-sync/dup-guard, round 2 +17 one-line-rule/drain, round 3 +13
-same-product-v2/no-price, round 4 +16 overwrite-semantics tests —
-555 → 621 after the 2026-08-29 repair of the 8 stale Phase-1 failures
-and subsequent suite growth. See `test.md` for every round. Testing
-runs locally — the VPS/container has no pytest.)
+### Backup canary (critical infrastructure)
 
-### Google Sheet schema
-
-The tracker reads/writes a Google Sheet (`GROCERY_SPREADSHEET_ID = 16INuFvOUVUY37onpVhdC7_ShLr6bQYg4OGpFPXZT9oM`). Key columns:
-
-| Col | Header | Purpose |
-|-----|--------|---------|
-| A | Generic Name | Canonical product name (exact-match target) |
-| D/E/F | Woolworths/Coles/Aldi price | D/E hold live prices — since 2026-09-05 a multi-buy item's price cell carries the per-unit DEAL rate ("2 for $7.00" on $4.00 → 3.50; "Any 2" deals count too), so sheet comparisons show the saving; when the deal ends the next sync writes the normal shelf price again. F stays raw. Since 2026-09-02 D/E can also hold overwrite markers: `N/A YYYY-MM-DD` (mapped row absent from that store's list) or `unavailable YYYY-MM-DD` (listed but no usable price) — the embedded date anchors no-price week aging and survives marker rewrites until a real price returns |
-| G | Brand | Brand name; literal `Home` marks Woolworths home-brand rows (drives the extra home-brand discount) |
-| I/J/K | Store keywords | Exact-match keywords for sync path (Wool/Coles/Aldi) |
-| M/N/O | Specials/rewards flags | Multi-buy cells carry the deal terms (`multi-buy 2/$6.00`, incl. "Any N" deals) |
-| P | Keywords | Alias list (delimiter-separated; two-pass lookup target) |
-| Q | Sub_Category | Granular cluster (bread, shredded cheese, eggs); "needs review" marker |
-| R | Item_Code | Permanent 3-letter row ID, A–Z minus I/L/O, no repeats |
-| S | Preferred | "P" flag; at most one per sub-category; set only via prefer |
+`tools/sheet_backup.py` backs up every tab to JSON (Drive copy when
+quota allows + a verified LOCAL fallback), checked by tab dimensions.
+The VPS cron `17 3 * * *` runs it daily — that cron doubles as the
+health CANARY: if the GCP service-account project dies again, this
+cron fails the next morning. Treat a backup-cron failure as a page,
+not noise. Backups: `backups/` (local) + the VPS offsite copy.
 
 ### Woolworths always-on display discounts
 
-Every Woolworths price **shown to the user** (compare, search, recipe,
-specials, specials-scan, rewards, map/lookup prints, Wednesday specials
-report) is automatically discounted at display time:
-
-- **5% off every Woolworths price**, plus an **additional 5% off Woolworths
-  home-brand items** (compounds to ≈9.75%; discount math in
-  `core/woolworths_discounts.py`, history note in
-  [`architecture-spec.md`](architecture-spec.md) §"Replaces" — the original
-  spec archive `architecture-spec-woolworths-discounts.md` is no longer on
-  disk).
-- Prices are printed PLAIN (e.g. `$3.61`) — the team discount is never
-  shown as a "(was $x)" suffix. A `(was $x)` suffix appears ONLY when the
-  store itself reports the item on special with a WasPrice.
-- The Google Sheet always stores **raw** prices — discounts are display-only.
-- Home-brand detection and the 32-brand list (Apollo, Balnea, … Woolworths)
-  live in `core/woolworths_discounts.py`. The sheet's Col G `Home` marker is
-  also recognised.
-- When new rows are added (`add_product_row`), a home-brand item's Brand cell
-  (Col G) is written as `Home` automatically. `backfill-home-brands` can
-  normalise existing rows.
-- Coles/Aldi prices are never discounted. The monthly `--extra-discount`
-  flag is a separate, unchanged mechanism.
+Every Woolworths price **shown to the user** (`price`, `live`
+side-notes, `specials`, the twin line, the Wednesday report) is
+automatically discounted at display time: **5% off every Woolworths
+price**, plus an **additional 5% off home-brand items** (compounds to
+≈9.75%; math + the 32-brand home-brand list in
+`core/woolworths_discounts.py`). Prices print PLAIN (`$3.61`) — a
+`(was $x)` suffix appears ONLY for a genuine store WasPrice. The sheet
+always stores RAW prices — discounts are display-only.
 
 ### Woolworths team discount — ONE-LINE on/off switch
-
-The entire team discount is controlled by a single constant at the top of
-`core/woolworths_discounts.py`:
 
 ```python
 TEAM_DISCOUNT_ENABLED = True   # False = show original raw Woolworths prices
 ```
 
-| Value | Behaviour |
-|-------|-----------|
-| `True` (default) | All WW prices **displayed** with the team discount (5% + 5% home-brand extra). |
-| `False` | EVERY surface automatically reverts to the **original raw Woolworths price** — compare, search, recipe, specials, specials-scan, rewards, map/lookup, the Wednesday report, and cheapest-store math. No other code changes needed. |
+One constant at the top of `core/woolworths_discounts.py`; `False`
+reverts EVERY surface to raw prices with no other code change. Sync
+the one file to the VPS after toggling (no Docker restart needed).
 
-Example for the same item (home-brand fetta, sheet price $4.00):
+### Multi-buy pricing
 
-```
-TEAM_DISCOUNT_ENABLED = True    🟢 Woolworths  $3.61
-TEAM_DISCOUNT_ENABLED = False   🟢 Woolworths  $4.00
-```
+"2 for $7.00" promos carry real per-unit rates (`core/multibuy.py`:
+rate = bundle total / qty). The Wednesday run writes the DEAL RATE
+into col D (so sheet comparisons show the saving) with the bundle
+terms in col H; when the deal ends H is cleared and D reverts to the
+shelf price. Displayed deal-derived prices carry the mandatory
+`🏷️ 2 for $6.00  [Note: must purchase 2+ units to receive this price]`
+note. "Any N | $X" deals count exactly like "N for $X".
 
-**How to toggle:**
+### Local deals — the four Mt Druitt shops
 
-1. Edit the one line in `grocery-price-tracker/core/woolworths_discounts.py`.
-2. Local use: nothing more — every CLI run picks it up immediately.
-3. Production (VPS): sync the one file — no Docker restart needed (the CLI
-   runs fresh each call and the folder is a live bind-mount):
+`local-deals` reads the public Facebook boards of Dunya Butchery,
+Merjan Brothers Quality Meats, Fruitopia Mt Druitt and Abu Salim
+Fruit Market, plus the dunyabutchery.com.au site API:
 
-   ```powershell
-   scp core\woolworths_discounts.py myvps:/home/ubuntu/openclaw/tasks/ai-tools/grocery-price-tracker/core/woolworths_discounts.py
-   ```
+- **Detector:** the VPS cron (`7 * * * *`, firing in the 05:00 and
+  15:00 Sydney windows) reports new posts since the previous alert —
+  each with a timestamped inbox code (`FRU0709260507` = Fruitopia,
+  alerted 07 Sep 26 05:07). `--ignore CODE` retires a post.
+- **Ingest:** save the post's file into the code's inbox folder
+  (`data/local_deals_inbox/<CODE>/`) and run
+  `grocery_price_cli.py local-deals --ingest CODE` (text files parse
+  directly; images go through the vision chain — GLM → OpenRouter
+  fallbacks, 2-attempt cap). Butchery items land halal-prefixed; an
+  item matching no master row is AUTO-CREATED as a blank coded master
+  row bottom-appended on BOTH tabs (parity auto-mirror). Merge is
+  idempotent per post; several posts listing the same item → newest
+  price wins; other shops' columns are never wiped.
+- **Manual entries:** `--set-permanent <shop> <item> <price>` /
+  `--set-special … [--till "12 September"] [--note "multi buy 2 for
+  $15"]`; `--expire-sweep` clears stamped-out special cells (rows
+  kept); `--dunya-site` syncs the Dunya column from the site API
+  (`--refresh-catalogue` bypasses the 28-day cache).
+- **Reads:** `price`/`list` take each shop's SPECIAL price first
+  (expired cells skipped) and fall back to PERMANENT; one row can
+  answer for several shops. Domain-gated: butcheries compare only
+  against meat rows, fruit shops only against fruit & veg — and local
+  prices are ALWAYS the halal side of a meat comparison.
 
-**Per-call override (works regardless of the switch):**
-`compare`/`recipe` accept `--team-discount` / `--no-team-discount` to force
-discounts on/off for a single call without touching the switch (their
-default is to follow `TEAM_DISCOUNT_ENABLED`).
+### Halal rules (v2)
 
-### Multi-buy pricing (2026-09-04, price-cell rule 2026-09-05)
-
-"2 for $6.00" promos carry real per-unit rates, applied everywhere a
-price is compared or shown:
-
-- **Price cells hold the deal rate (user rule 2026-09-05):** a
-  multi-buy item's D/E price IS the per-unit deal rate — "2 for
-  $7.00" on a $4.00 item writes 3.50 — so the saving is evident in
-  every sheet comparison. The bundle terms stay the source of truth
-  in the specials cell; when the deal ends the next sync overwrites
-  the price normally.
-- **Rate math:** `rate = bundle total / qty` (`core/multibuy.py`):
-  2 for $6.00 → $3.00 per unit. Totals, cheapest-store math, and WW
-  display discounts all compute from the effective rate (§7.3).
-- **Mandatory note:** whenever a displayed price is multi-buy-derived,
-  the tag `🏷️ 2 for $6.00  [Note: must purchase 2+ units to receive
-  this price]` and a totals footnote are shown.
-- **Sheet cells (M/N):** ALL multi-buy promos are stored WITH terms
-  as `multi-buy 2/$6.00`; the bare legacy `multi-buy` marker is
-  refreshed by the next sync that sees the item.
-- **"Any N | $X" deals count (user rule 2026-09-05, D-MB3 retired):**
-  in-store they mean any N units from the same range/brand, so they
-  are rate-eligible multi-buy prices exactly like "N for $X".
-- **List marks:** to-do/list views mark deal items with `(m)` and a
-  bottom legend `(m) - multi buy discount` (no per-item clutter).
-- **Live degradation (D-MB2):** when a store payload carries no
-  multi-buy data (or, for Woolworths, the keys are unverified), live
-  paths fall back to normal pricing; the docx/sheet paths carry
-  multi-buy alone. Promo fields are never invented.
-
-### Sub-categories: never guess (user rule 2026-09-05)
-
-New products are classified against the taxonomy
-(`core/subcategory.py`, word-boundary safe — "V Sugarfree" is not
-sugar, "V Watermelon" is not water, "eggplant" is not eggs). When no
-rule matches confidently, the row's Col Q gets the literal
-`needs review` marker and the item surfaces on the **Sub-category
-reviews** list (list 7 in `lists`, plus the weekly Telegram post) —
-the agent asks the user for the right label; nothing is ever guessed.
-
-### Shopping list & preferences (2026-09-04)
-
-`shop --items "eggs, apples, bread"` (v2, 2026-09-07) runs a whole shopping list through ONE batched questions message
-against your stored preferences — full flow in
-[PROJECT-MAP.md](PROJECT-MAP.md) §6F. The preference state machine:
-
-- **S4 — preferred known:** the sub-category's Preferred (P) row is
-  compared automatically.
-- **S1 — no preference yet:** the CLI asks ONE numbered question
-  (full names + 3-letter codes) and saves a pending run.
-- **S0 — not tracked:** you get a keyword suggestion for the normal
-  `search --add-item` flow instead.
-- **S5 — specific variant requested:** you get the comparison plus a
-  switch/keep warning; "keep" writes nothing.
-- **S3 — answer:** `prefer --code ABC` (or `--pick N`) sets P and
-  finishes the halted run (24h window).
-
-`prefer` is the ONLY writer of the Preferred column — ingestion never
-auto-sets P, and the Wednesday sync never touches it. Note:
-`Item_Code` (Col R) is a DIFFERENT namespace from the to-do queue
-codes — `prefer ABC` and `todo done ABC` never collide.
-
-### Local deals — Mt Druitt shops (Friday run RETIRED 2026-09-07)
-
-`local-deals` reads the public Facebook price boards of four local
-shops — Dunya Butchery, Merjan Brothers Quality Meats, Fruitopia Mt
-Druitt, Abu Salim Fruit Market — and turns them into a Telegram
-report plus a `Local_Deals` sheet tab:
-
-1. **Fetch:** Scrape.do renders each shop's Facebook photos tab
-   (logged-out, AU exit node). Signed CDN URLs are downloaded exactly
-   as captured (only `&amp;` is unescaped). Per-run Scrape.do cap: 40
-   credits.
-2. **Vision:** ONE vision call per post (all photos attached) parses
-   the board into strict-JSON deals. Model chain: GLM (zlm endpoint)
-   → OpenRouter GLM → OpenRouter Gemini, hard 2-attempt cap per post.
-3. **Freshness:** boards with a printed end date in the past are
-   dropped; undated boards are kept.
-4. **Tab write (layout v2, 2026-09-07):** the `Local_Deals` tab gives
-   every shop a PERMANENT pricing column (no validity) and a SPECIAL
-   column (validity-stamped cells), plus one shared shop-tagged
-   Comments column. A run rebuilds ONLY its shops' special columns —
-   permanent cells, other shops' specials and other shops' comment
-   segments are preserved (fetch failures and `--stores` subsets
-   never wipe data). Equivalent in-domain items share one row
-   (word-order-insensitive, variety-aware); multi-buy/bulk notes are
-   shop-tagged into Comments while a comparable numeric rate stays in
-   the shop's special column.
-5. **Domain-gated compare:** butcheries compare ONLY against raw
-   meat/chicken master rows; fruit shops ONLY against fruit & veg
-   rows. Out-of-domain items are recorded and shown but never
-   compared. Alerts fire strictly above a 20% saving; variety
-   conflicts (generic vs "Royal Gala") print "variety differs —
-   verify" instead of alerting. Bulk/multi-buy never enter the maths.
-6. **Telegram:** Post 1 = standouts (with the "Extra stop worth it"
-   line when one store saves > $3.00); Post 2 = every shop's full
-   board in natural order. No message ever exceeds 4000 chars.
-
-Subcommands: `local-deals` (flags: `--stores`, `--dry-run`,
-`--no-telegram`, `--refresh-catalogue`, `--provision-topic`,
-`--daily-scan`, `--ingest CODE`, `--ignore CODE`, `--dunya-site`,
-`--set-permanent`, `--set-special`, `--expire-sweep`)
-and `backfill-halal-check` (below). **The Friday cron run is RETIRED
-(2026-09-07)** — the daily FB lists supersede it; `--friday-gate`
-only prints a retirement notice. Every Telegram message prints a
-secret-free receipt line (`[telegram] ok message_id=…`) for auditing.
-
-### Permanent + special pricing columns (2026-09-07)
-
-`Local_Deals` layout v2 (10 columns): per shop a PERMANENT column and
-a SPECIAL column, then one shared Comments column.
-
-- **Validity stamps:** special cells carry ` (till 12 Sep)` — the
-  per-cell date is AUTHORITATIVE; tab row 2 keeps a per-shop summary
-  stamp ("valid until Sat 12 Sep") for readability only. Permanent
-  cells never carry validity.
-- **Expiry sweep:** `sweep_expired_specials` clears every special
-  cell whose stamp date has passed (rows are KEPT — only the cell is
-  cleared; undated specials stay until the shop's next post replaces
-  them; expired row-2 stamps are cleared too). It runs automatically
-  inside the 05:00 daily-scan window (removals ride the heartbeat or
-  first alert message) and on demand via `local-deals
-  --expire-sweep`.
-- **Manual pricing entries (chat phrases):**
-  - "update permanent pricing for fruitopia - carrots @ 6.50/kg" →
-    `local-deals --set-permanent fruitopia carrots 6.50/kg`
-  - `local-deals --set-special merjan 'beef mince' 8.99/kg --till
-    "12 September" --note 'multi buy 2 for $15'` — optional till +
-    shop-tagged note. Items match by canonical name (the Col A unit
-    suffix is ignored); unknown items append a row in the shop's
-    domain section. Permanent = no stamp; special = stamped and
-    swept. Dunya manual entries are written AS SENT (no site
-    re-check); `--dunya-site` still overwrites.
-- **Special-first reads:** `tab_store_price` (used by the halal
-  tier-3 butcher reader) takes the SPECIAL price first — skipping
-  expired cells even before the sweep runs — and falls back to the
-  PERMANENT price; non-numeric offer text never enters the maths.
-  One row can answer for several shops, each named in the result.
-
-### Twice-daily new-post detector + inbox flow (2026-09-06)
-
-Cookies for Facebook are banned (Woolworths/Coles browser-login
-lesson). Instead, a twice-daily cron detector (hourly cron tick; the
-scan itself fires only 05:00-05:59 and 15:00-15:59 Sydney, once per
-window) renders each public page logged out and reports every post
-made since the previous alert (up to 3 per store — a missed window
-never silently drops a middle post):
-
-- Every notification carries a timestamped inbox code (user rule
-  2026-09-07) — 3-letter shop (FRU = Fruitopia, MER = Merjan,
-  DUN = Dunya, ABS = Abu Salim) + ddmmyy + HHMM of the ALERT (Sydney
-  time the message is sent, NOT the post's own time), e.g.
-  `FRU0709260507` = Fruitopia alerted 07 Sep 26, 05:07 — plus the
-  posted time and the validity date parsed from the post text.
-  Same-minute collisions take a `_2`/`_3` suffix; pre-2026-09-07
-  alerts with plain FRUT/MERJ/DUNY/ABSA codes still resolve.
-- To process a post: save its picture or text into the code's inbox
-  folder on the PC (full path in the alert, e.g.
-  `C:\Users\User.DESKTOP-R2G441H\Documents\AI related\grocery-price-tracker\data\local_deals_inbox\<CODE>`)
-  and ask the local agent to ingest it (it runs
-  `grocery_price_cli.py local-deals --ingest CODE` from the workspace
-  — the PC has all needed secrets). Files forwarded into the Telegram
-  topic land in the VPS inbox and are ingested there instead. The
-  file NAME is free — only the extension matters (`.txt`/`.md` → text
-  parser, no vision; `.jpg`/`.png`/`.webp` → vision). A text copy of
-  a post is the preferred, fastest and most reliable path (Fruitopia
-  posts text + photo — the text file alone is enough). Ingest
-  UPDATES the `Local_Deals` tab for that store only (merge — other
-  stores' rows are never wiped; when several posts list the same
-  item the NEWEST post's price wins), the summary INCLUDES the >20%
-  standout check vs the master sheet, and each file keeps its OWN
-  validity period (alert, summary and post log). Every special cell
-  carries its own post's ` (till d Mon)` stamp; tab row 2 is a
-  "Prices valid until" summary row — one stamp per shop column,
-  refreshed at every ingest (newest dated post wins); the Dunya site
-  column is n/a because site prices are always live.
-- `local-deals --ignore CODE` retires a notified post permanently.
-- First-ever scan of a shop reports only posts from the last
-  `backfill_days` (3) days; older pages stay quiet.
-
-### Dunya site sync (2026-09-06)
-
-`local-deals --dunya-site` syncs the `Local_Deals` tab straight from
-dunyabutchery.com.au (WooCommerce Store API via Scrape.do; prices are
-minor units → converted to dollars). It builds/updates the Dunya
-column only (merge — never touches the other stores) and reports
-on-offer items (site sale price vs regular price) plus any price
-changes since the previous sync. `--refresh-catalogue` bypasses the
-28-day cache.
-
-Secrets used: `SCRAPEDO_API_KEY`, `zlm_url`/`zlm_claw`,
-`OPENROUTER_API_KEY`, `TELEGRAM_CLAW_BOT`,
-`TELEGRAM_LOCAL_DEALS_TOPIC_ID` (set automatically by
-`--provision-topic`).
-
-### Halal rules (2026-09-05)
-
-Raw meat/chicken queries are **halal-by-default**:
-
-- Generic terms ("chicken breast", "lamb") resolve through a halal-
-  scoped view of the sheet: non-marked meat rows become invisible.
-  Prepared foods ("chicken salt", "beef stock") are never treated as
-  meat terms.
-- A positive `halal` marker lives in Col P (Keywords) — manual marks
-  and LLM-verified marks are EQUAL. A product whose name contains
-  "halal" is treated as marked.
-- The 3-tier fallback chain: sheet → live search restricted to halal
-  products (each top candidate verified by an LLM web check; >= 0.8
-  confidence auto-adds the row, <= 20 checks per run, 90-day verdict
-  cache in `data/halal_status.json`) → the Local_Deals butchery tab
-  ("🔪 Local butcher (halal): …", special price first per shop, each
-  pricing shop named) → a clean "not available this
-  week" message. Negatives NEVER touch the sheet — they live only in
-  the ledger.
-- The shopping list (`shop`/`optimize`) runs a halal gate:
-  non-marked rows in auto-checked sub-categories are EXCLUDED with
-  the note `excluded (non-halal — database only)`; unverified rows
-  fail safe as `halal unverified — verify manually`.
-- Halal rows in an auto-checked sub-category are always Preferred
-  (single-writer `set_preferred` refuses a non-halal P while a halal
-  sibling exists).
+The halal marker IS the name prefix (a row whose name contains
+"halal" is halal; Q12) — there is no LLM verification chain, no
+verdict cache, no ledger. `is_meat_term` (protein+cut vocabulary +
+prepared-food exclusions) gates meat queries into the halal-scoped
+lookup; the butchery domain labels are
+`core/halal.py::HALAL_CHECK_CATEGORIES` (imported by local_deals as
+`BUTCHERY_DOMAIN`). Meat answers carry the local butcher prices (🔪)
+plus the non-halal Woolworths twin line (above).
 
 #### Extension points (add shops / widen domains)
 
-Each of these is ONE constant edit — no other code changes:
+Each is ONE constant edit:
 
-1. `BUTCHERY_DOMAIN` / `PRODUCE_SUBCATEGORIES` + `FRUITSHOP_COARSE`
-   in `grocery-price-tracker/core/local_deals.py` — add a
-   sub-category label to widen what a butchery/fruit shop may be
-   compared against (e.g. move "chicken schnitzel" in). Note: after
-   S23 `BUTCHERY_DOMAIN` is imported from
-   `core/halal.py::HALAL_CHECK_CATEGORIES` — edit THAT set.
-2. `HALAL_CHECK_CATEGORIES` in
-   `grocery-price-tracker/core/halal.py` — add a category to the
-   automatic halal checks.
-3. `MEAT_PROTEIN_WORDS` / `MEAT_CUT_WORDS` /
-   `PREPARED_EXCLUSIONS` in `grocery-price-tracker/core/halal.py`
-   (`is_meat_term`) — add query words (e.g. fish names).
-4. `_RULE_DEFS` in `grocery-price-tracker/core/subcategory.py` — add
-   taxonomy rules so new item kinds classify.
-5. `STORES` in
-   `grocery-price-tracker/extractors/fb_flyer_fetch.py` — add a shop
-   (plus its tab column in `core/local_deals.py::STORE_COLUMNS`).
-6. `STORE_SITES` in
-   `grocery-price-tracker/extractors/shop_site_catalogue.py` — add a
-   shop website (WooCommerce Store API).
+1. `HALAL_CHECK_CATEGORIES` in `core/halal.py` — widen the butchery
+   comparison domain.
+2. `MEAT_PROTEIN_WORDS` / `MEAT_CUT_WORDS` / `PREPARED_EXCLUSIONS`
+   in `core/halal.py` (`is_meat_term`) — add query words.
+3. `_RULE_DEFS` in `core/subcategory.py` — add taxonomy rules.
+4. `STORES` in `extractors/fb_flyer_fetch.py` + the tab columns in
+   `core/local_deals.py::STORE_COLUMNS` — add a shop.
+5. `STORE_SITES` in `extractors/shop_site_catalogue.py` — add a shop
+   website (WooCommerce Store API).
 
-### Live APIs used
+### Sub-categories: never guess (user rule)
 
-**Woolworths** (no login required in Phase 9.2):
-- Lists: `GET /apis/ui/mylists`
-- List items: `GET /apis/ui/mylists/{id}`
-- Product detail: `GET /apis/ui/product/detail/{ArticleId}`
-- Search: `GET /apis/ui/Search/products?searchTerm=X` (curl_cffi Chrome 131 impersonation)
-- Key fields: `DisplayName`, `Price`, `IsOnSpecial`, `WasPrice`, `Brand`, `PackageSize`, `CupString`
+New products classify against the taxonomy (`core/subcategory.py`,
+word-boundary safe — "V Sugarfree" is not sugar, "eggplant" is not
+eggs). No confident rule → the row carries the literal
+`needs review` marker; the user decides the label — nothing is ever
+guessed by code.
 
-**Coles** (Scrape.do bypass for Incapsula WAF):
-- Search: Scrape.do GET search page → parse `__NEXT_DATA__` → `pageProps.searchResults.results`
-- List: `Coles.docx` fallback (python-docx)
-- Key fields: `name`, `brand`, `size`, `pricing.now`, `pricing.was`, `pricing.onlineSpecial`
+### Tests
 
-**Aldi:** No live extractor — Aldi prices are sheet-only (`—` in compare tables).
+`tests/` — **605 tests green / 0 skipped** (2026-09-10, Round 5
+close; offline, no network). Coverage: the §8 lookup semantics +
+non-halal twin line, the missing-list rule, batch/ingest/parity,
+Wednesday (parse→sync→parity→posts), local deals, multibuy, halal
+gate, subcategory, discounts, Telegram formatting, sheet backup.
+Testing runs LOCALLY — the VPS/container has no pytest.
+
+### Live APIs used (the `live` verb only)
+
+**Woolworths:** `GET /apis/ui/Search/products?searchTerm=X`
+(no-login, curl_cffi Chrome impersonation). **Coles:** Scrape.do GET →
+parse `__NEXT_DATA__` → `pageProps.searchResults.results`. Prices
+only — the `live` verb never writes or queues.
 
 ### Future providers — ALDI, then AMAZON (design note for that session)
 
@@ -888,7 +616,7 @@ deterministic word list — NO LLM (speed budget, determinism):
 
 ## Telegram Gateway
 
-**`telegram_gateway/`** — a Python Telegram bot framework (separate from the OpenClaw gateway). Lives in the parent folder (pending migration). Provides budget-sheets integration, command review, and the Wednesday grocery-sync reminder cron.
+**`telegram_gateway/`** — a Python Telegram bot framework (separate from the OpenClaw gateway). Lives in the parent folder (pending migration). Provides budget-sheets integration and command review. (The old Wednesday reminder cron was removed in the v2 rebuild.)
 
 | File | Purpose |
 |------|---------|
@@ -899,22 +627,18 @@ deterministic word list — NO LLM (speed budget, determinism):
 | `allowlist.py` | Allowed-user enforcement |
 | `topics.py` | Telegram forum-topic routing (Claw Command Center supergroup) |
 | `runner.py` | Bot runner entrypoint |
-| `wednesday_reminder.py` | One-shot Wednesday grocery-sync reminder sender (deployed to `/home/ubuntu/scripts/` on VPS, cron every 5 min) |
+| `wednesday_reminder.py` | RETIRED with its cron (2026-09-10, v2 Round 3/5) — no reminder exists any more |
 | `health_check.py` | Bot health check |
 | `command_review_registry.md` | Command review documentation |
 | `.env.example` | Environment template |
 
-### Wednesday Reminder (VPS cron)
+### Wednesday Reminder (VPS cron) — REMOVED (2026-09-10)
 
-Deployed outside the git tree (`/home/ubuntu/scripts/`) to avoid git-pull clobbering:
-
-- **Cron:** `*/5 * * * * /usr/bin/python3 /home/ubuntu/scripts/wednesday_reminder.py >> .../wednesday_reminder.log 2>&1`
-- **Self-gating:** Sydney time Wed 05:00–05:30 AEST/AEDT (DST-correct via `zoneinfo`; VPS host tz is Europe/Berlin but doesn't affect delivery)
-- **Delivery:** user DM + `weekly-lists` topic (thread 208 in the Claw
-  Command Center supergroup; the old `grocery-sync-sheet` topic 151 is
-  RETIRED — D24, nothing posts to it)
-- **Test:** `ssh myvps 'python3 /home/ubuntu/scripts/wednesday_reminder.py --test'`
-- **Status:** `... --status` (prints Sydney now, last sent, next fire)
+The Wednesday reminder cron was retired in the v2 rebuild (Round 3):
+`wednesday_reminder.py` is gone from `/home/ubuntu/scripts/` and no
+reminder cron remains (`crontab -l` verified). The weekly run no longer
+needs a reminder — `grocery_price_cli.py wednesday` fires when the user
+pastes the fresh docx (see the tracker's "Wednesday v2" section).
 
 ---
 
@@ -1075,17 +799,17 @@ count as 2 cells (`_cells()`).
 ### Edit → test locally → sync to VPS
 
 ```powershell
-# 1. Edit code locally in this folder (e.g., core/lookup.py)
+# 1. Edit code locally in this folder (e.g., core/v2_read.py)
 # 2. Test locally with Anaconda Python:
-$env:PYTHONIOENCODING="utf-8"
-& "$env:USERPROFILE\anaconda3\python.exe" ..\grocery_price_cli.py compare --items "green capsicum"
+& "$env:USERPROFILE\anaconda3\python.exe" -m pytest tests/ -q
+& "$env:USERPROFILE\anaconda3\python.exe" ..\grocery_price_cli.py price --item "halal beef mince"
 
 # 3. Sync changed files to VPS (scp — branches diverged, so not git pull):
-scp core\lookup.py myvps:/home/ubuntu/openclaw/tasks/ai-tools/grocery-price-tracker/core/lookup.py
+scp core\v2_read.py myvps:/home/ubuntu/openclaw/tasks/ai-tools/grocery-price-tracker/core/v2_read.py
 
 # 4. Verify md5 matches:
-Get-FileHash core\lookup.py -Algorithm MD5
-ssh myvps 'md5sum /home/ubuntu/openclaw/tasks/ai-tools/grocery-price-tracker/core/lookup.py'
+Get-FileHash core\v2_read.py -Algorithm MD5
+ssh myvps 'md5sum /home/ubuntu/openclaw/tasks/ai-tools/grocery-price-tracker/core/v2_read.py'
 ```
 
 ### Bulk sync (tar, excludes data/secrets/cache)
@@ -1116,46 +840,28 @@ ssh myvps 'cd /home/ubuntu/openclaw/tasks/ai-tools/grocery-price-tracker && tar 
 ssh myvps 'docker restart openclaw-core; sleep 30; docker ps --format "{{.Names}} {{.Status}}"'
 ```
 
-### Run the full Telegram test (3 queries)
+### Run the full Telegram test
 
 ```bash
 # Via the OpenClaw agent CLI (faithful end-to-end path, delivers reply to Telegram):
-ssh myvps 'docker exec openclaw-core node /app/openclaw.mjs agent --channel telegram --to 1594431983 --message "compare green capsicum in woolworths and coles" --deliver'
+ssh myvps 'docker exec openclaw-core node /app/openclaw.mjs agent --channel telegram --to 1594431983 --message "how much is halal beef mince" --deliver'
 ```
 
-### Wednesday grocery-sync pipeline (local)
+### Wednesday v2 run (local, weekly)
 
 ```powershell
-# Run it — it shows the queue FIRST and waits:
-& "$env:USERPROFILE\anaconda3\python.exe" ..\grocery_price_cli.py wednesday
+# Paste the fresh Woolworths.docx + Woolworths_Specials.docx into this folder first, then:
+& "$env:USERPROFILE\anaconda3\python.exe" ..\grocery_price_cli.py wednesday --dry-run   # plan only, writes nothing
+& "$env:USERPROFILE\anaconda3\python.exe" ..\grocery_price_cli.py wednesday             # real run, ≤30 s
 ```
 
-The docx flow, in order:
-
-1. **Step 0** — pulls the queues from the VPS, union-merges them with the
-   local copies (nothing lost on either side), pushes the merged files
-   back, and prints the searched + to-do queues.
-2. **Pause** (real terminal only) — you add the queued items to the store
-   website lists, paste the updated lists into `Woolworths.docx` /
-   `Coles.docx` (specials into `Woolworths_Specials.docx`), then type
-   `done`. `--no-prompt` skips the wait; non-terminal callers (Claw/CI)
-   skip it automatically.
-3. **Steps 1–1b** — parses the docx lists, then auto-clears every queued
-   item that now appears on its store's list (proof it was added).
-4. **Steps 2–3** — matches against the sheet and OVERWRITES every price:
-   found → real price; listed-but-priceless → `unavailable <date>`;
-   mapped-but-absent → `N/A <date>` (stale prices never linger).
-5. **Steps 4–7** — builds the resolve lists, scps them to the VPS, posts
-   the summary + **seven lists** to the weekly-lists topic (unmatched,
-   wool/coles missing, no-price items with category + weeks, to-do,
-   searched, forgotten).
-6. **Step 8** — Woolworths specials report → DM + specials-wool topic.
-7. **Step 9** — mirrors the queues back to the VPS so consumption and
-   removals propagate.
-
-Flags: `--dry-run` (parse+match+report only, no writes), `--no-scp`,
-`--no-telegram`, `--no-prompt`, `--source live` (browser window flow —
-flush + fetch snapshots instead of the manual pause; completeness-gated).
+The run writes Woolworths prices (col D, keyword col G; absent items
+get `N/A <date>`; GONE survives; multi-buy deal rates into D + terms
+into H), runs the parity step (bottom-append auto-mirrors;
+middle-insert aborts loudly), then posts EXACTLY two messages:
+specials → topic 206, the ONE missing list → topic 208. If it prints
+the middle-insert alert, move that row to the BOTTOM of its tab and
+re-run — nothing was written.
 
 ---
 

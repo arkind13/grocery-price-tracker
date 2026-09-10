@@ -2,11 +2,15 @@
 
 - **Date:** 2026-09-09
 - **Stage:** 01 Architect (this doc) → 02 Plan → 03 Code → 04 Architect Checker
-- **Status:** Interview COMPLETE — 27 questions across 7 themed batches, all
-  answered by the user (decision log §2). READY FOR 02 PLAN. Coding is
-  forbidden until the user approves `rebuild-plan.md`.
+- **Status:** IMPLEMENTED + CLOSED (2026-09-10). All five rebuild rounds
+  executed and verified (Round 5 close: 605 green / 0 skipped, speed
+  budgets met, parity ALIGNED, three-way sync). Rebuild history — work
+  orders, round plans, round test logs — archived in
+  `old md/2026-09-v2-rebuild/`. This spec + README + PROJECT-MAP are the
+  living docs; §18 A4 (non-halal twin line) is implemented per the
+  user's binding verdicts.
 - **Inputs:** `arch-prompt.md` (the work order — supersedes fuzzy-matching
-  assumptions), `README.md`, `PROJECT-MAP.md`,
+  assumptions; archived), `README.md`, `PROJECT-MAP.md`,
   `old md/2026-09-quality-round/` (22-defect history), live sheet probe
   2026-09-09 (112 master rows; Local_Deals 133×10; orphan `[FRU]` comments
   confirmed on rows 115/116).

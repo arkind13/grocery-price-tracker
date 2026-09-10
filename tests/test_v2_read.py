@@ -2,6 +2,8 @@
 list-rule cases, and meat-query halal scoping. Offline (parsed-row
 dicts; no network, no writes)."""
 from __future__ import annotations
+import copy
+import inspect
 import sys
 import unittest
 from pathlib import Path
@@ -12,8 +14,8 @@ if str(_PROJECT) not in sys.path:
     sys.path.insert(0, str(_PROJECT))
 
 from core.v2_read import (                         # noqa: E402
-    lookup_item, missing_list, parse_ld_row, parse_master_row,
-    render_list, render_lookup,
+    _non_halal_twin, lookup_item, missing_list, parse_ld_row,
+    parse_master_row, render_list, render_lookup,
 )
 
 MASTER_HEADER = ["Product_Name", "Category", "Size",
@@ -224,6 +226,121 @@ class TestRender(unittest.TestCase):
         self.assertIn("[LST] Listed — best $9.20 (Dunya (site))", out)
         self.assertIn("1 item(s)", out)
         self.assertIn("empty", render_list([]))
+
+
+class TestNonHalalTwin(unittest.TestCase):
+    """§18 A4 / R5-M1…M5 — the display-only non-halal Woolworths twin
+    line in meat lookups. Fixture = test.md Evidence rows VERBATIM:
+    row 92 `Halal Beef Mince` [AUG] D blank; row 139 `Woolworths Beef
+    Mince 500g` [GJZ] D=15, brand Home, keyword filled."""
+
+    TWIN_LINE = ("also at Woolworths (non-halal): $13.54"
+                 " — Woolworths Beef Mince 500g")
+
+    def _fixture(self, aug_ww="", extra_master=(), extra_ld=()):
+        master = [
+            _m("Halal Beef Mince", "AUG", ww=aug_ww, sub="butchery"),
+            _m("Woolworths Beef Mince 500g", "GJZ", ww="15",
+               keyword="Woolworths Beef Mince 500g", sub="beef mince",
+               brand="Home"),
+        ]
+        ld = [_l("Halal Beef Mince", "AUG", dunya_perm="15.99")]
+        return master + list(extra_master), ld + list(extra_ld)
+
+    def test_beef_mince_fixture_twin_line_all_three_sides(self):
+        """Mandatory M1/M3 test (AUG priced $12.99 like the R4 live
+        proof): ONE answer = 🟢 WW halal (discounted) + local butcher
+        + 🏆 + the twin line naming GJZ."""
+        master, ld = self._fixture(aug_ww="$12.99")
+        out = render_lookup(lookup_item("halal beef mince", master,
+                                        ld))
+        self.assertIn("$12.34", out)          # 🟢 halal, 5% display cut
+        self.assertIn("Dunya", out)           # 🔪 local butcher side
+        self.assertIn("🏆", out)              # winner badge
+        self.assertIn(self.TWIN_LINE, out)    # $15 Home → $13.54
+
+    def test_twin_line_when_halal_price_blank(self):
+        """M1 constraint 3: the twin shows immediately even with the
+        halal row's D blank (the real-sheet state)."""
+        master, ld = self._fixture(aug_ww="")
+        for q in ("halal beef mince", "beef mince"):
+            out = render_lookup(lookup_item(q, master, ld))
+            self.assertIn(self.TWIN_LINE, out)
+
+    def test_exact_plain_name_query_carries_twin(self):
+        """The exact plain-row name (unreachable before the fix) gets
+        the halal-scoped answer + the twin line."""
+        master, ld = self._fixture()
+        result = lookup_item("Woolworths Beef Mince 500g", master, ld)
+        self.assertIsNone(result["master"])   # halal scope unchanged
+        out = render_lookup(result)
+        self.assertIn("missing list [AUG]", out)
+        self.assertIn(self.TWIN_LINE, out)
+
+    def test_non_halal_side_never_local(self):
+        """M2: twins come from master rows ONLY — an LD decoy sharing
+        the twin's name/code never becomes the non-halal side."""
+        master, ld = self._fixture(extra_ld=[
+            _l("Woolworths Beef Mince 500g", "GJZ",
+               merjan_perm="99.99")])
+        result = lookup_item("beef mince", master, ld)
+        master_names = {m["name"] for m in master}
+        names = [t["name"] for t in result["non_halal_twins"]]
+        self.assertEqual(names, ["Woolworths Beef Mince 500g"])
+        for name in names:
+            self.assertIn(name, master_names)
+        out = render_lookup(result)
+        twin_lines = [ln for ln in out.splitlines()
+                      if "non-halal" in ln]
+        self.assertEqual(twin_lines, [self.TWIN_LINE])  # $99.99 decoy
+        self.assertIn("Dunya", out)                     # halal side only
+        self.assertNotIn("99.99", out)
+
+    def test_twin_row_states(self):
+        """TW2 states: priced / GONE / N-A render their lines; blank-D
+        plain rows are omitted entirely."""
+        master, ld = self._fixture(extra_master=[
+            _m("Beef Diced", "BD1", ww="GONE", sub="butchery"),
+            _m("Beef Ribs", "BR2", ww="N/A 2026-09-08",
+               sub="butchery"),
+            _m("Beef Strips", "BS3", ww="", sub="butchery"),
+        ])
+        result = lookup_item("beef", master, ld)
+        states = {t["name"]: (t["state"], t["value"])
+                  for t in result["non_halal_twins"]}
+        self.assertEqual(states["Woolworths Beef Mince 500g"],
+                         ("priced", 15.0))
+        self.assertEqual(states["Beef Diced"], ("gone", None))
+        self.assertEqual(states["Beef Ribs"], ("na", "N/A 2026-09-08"))
+        self.assertNotIn("Beef Strips", states)
+        out = render_lookup(result)
+        self.assertIn(self.TWIN_LINE, out)
+        self.assertIn("also at Woolworths (non-halal): GONE"
+                      " — Beef Diced", out)
+        self.assertIn("also at Woolworths (non-halal): unavailable"
+                      " (N/A 2026-09-08) — Beef Ribs", out)
+        self.assertNotIn("Beef Strips", out)
+
+    def test_lookup_zero_writes_q11_intact(self):
+        """M4: the lookup+render battery mutates nothing (Q11 rows stay
+        separate and untouched), the twin path accepts no worksheet
+        handle, and no live fallback exists in the read module."""
+        master, ld = self._fixture()
+        master_before = copy.deepcopy(master)
+        ld_before = copy.deepcopy(ld)
+        for q in ("beef mince", "halal beef mince",
+                  "Woolworths Beef Mince 500g"):
+            render_lookup(lookup_item(q, master, ld))
+        self.assertEqual(master, master_before)
+        self.assertEqual(ld, ld_before)
+        self.assertEqual(
+            list(inspect.signature(lookup_item).parameters),
+            ["query", "master_rows", "ld_rows"])
+        self.assertEqual(
+            list(inspect.signature(_non_halal_twin).parameters),
+            ["query", "master_rows"])
+        self.assertNotIn("v2_live", (_PROJECT / "core" / "v2_read.py")
+                         .read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

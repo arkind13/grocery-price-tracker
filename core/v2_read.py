@@ -2,6 +2,8 @@
 Local_Deals read per command. Never writes. Never live-searches."""
 from __future__ import annotations
 
+import re
+
 from pathlib import Path
 
 from core.halal import is_meat_term
@@ -125,6 +127,48 @@ def _best(prices: dict) -> tuple | None:
     return shop, price, kind
 
 
+_TWIN_STRIP_TOKENS = ("halal", "non", "and")
+
+
+def _non_halal_twin(query: str, master_rows: list) -> list:
+    """Plain (non-halal) Woolworths master rows matching a MEAT query.
+
+    Match rule (binding): strip the tokens 'halal'/'non'/'and' from
+    the query; a plain DOMAIN row matches iff its normalized name
+    contains EVERY remaining query token (word-boundary-safe — the
+    subcategory.py discipline), its name does NOT contain 'halal',
+    and it is not the halal row already answering. Returns [{'name',
+    'state': 'priced'|'gone'|'na', 'value': float|str|None}] — the
+    row set the RENDERER shows; no other consumer exists.
+
+    Spec §18 A4: reads master_rows ONLY (never Local_Deals — locals
+    are always the halal side) and never consults the answering halal
+    row's col D. Blank-D plain rows carry no price state → omitted.
+    """
+    tokens = [t for t in re.findall(r"[a-z0-9]+", str(query or "").lower())
+              if t not in _TWIN_STRIP_TOKENS]
+    if not tokens:
+        return []
+    twins: list = []
+    for master in master_rows:
+        name = str(master["name"] or "").lower()
+        if "halal" in name or not _is_domain_row(master):
+            continue
+        if not all(re.search(rf"\b{re.escape(tok)}\b", name)
+                   for tok in tokens):
+            continue
+        if master["gone"]:
+            twins.append({"name": master["name"], "state": "gone",
+                          "value": None})
+        elif master["na_marker"]:
+            twins.append({"name": master["name"], "state": "na",
+                          "value": master["na_marker"]})
+        elif master["ww_num"] is not None:
+            twins.append({"name": master["name"], "state": "priced",
+                          "value": master["ww_num"]})
+    return twins
+
+
 def lookup_item(query: str, master_rows, ld_rows) -> dict:
     """Sheet-only lookup per the §8 table. NEVER raises on a miss.
 
@@ -134,6 +178,7 @@ def lookup_item(query: str, master_rows, ld_rows) -> dict:
     q = str(query or "").strip()
     ql = q.lower()
     meat = is_meat_query(q)
+    twins = _non_halal_twin(q, master_rows) if meat else []
 
     def _matches(name: str) -> bool:
         low = name.lower()
@@ -167,6 +212,7 @@ def lookup_item(query: str, master_rows, ld_rows) -> dict:
             return {"status": "meat-local-only", "master": None,
                     "local": prices, "best": best,
                     "code": locals_with[0]["code"],
+                    "non_halal_twins": twins,
                     "query": q}
 
     if hit is not None:
@@ -175,7 +221,8 @@ def lookup_item(query: str, master_rows, ld_rows) -> dict:
         prices = dict(ld["prices"]) if ld else {}
         best = _best(prices)
         base = {"master": hit, "local": prices, "best": best,
-                "code": hit["code"], "query": q}
+                "code": hit["code"], "non_halal_twins": twins,
+                "query": q}
         if hit["gone"]:
             base["status"] = "gone"
         elif hit["na_marker"]:
@@ -191,7 +238,8 @@ def lookup_item(query: str, master_rows, ld_rows) -> dict:
         return base
 
     return {"status": "not-tracked", "master": None, "local": {},
-            "best": None, "code": "", "query": q}
+            "best": None, "code": "", "non_halal_twins": twins,
+            "query": q}
 
 
 def ignored_codes(path=None) -> set:
@@ -269,6 +317,32 @@ def _local_lines(result: dict) -> list:
     return lines
 
 
+def _twin_lines(result: dict) -> list:
+    """Non-halal twin display lines (spec §18 A4) — one per twin, the
+    EXACT test.md format. A priced twin goes through the EXISTING WW
+    display-discount engine (§5); the twin dict carries no brand, so
+    home-brand detection runs on the row name alone (the engine's
+    blank-brand rule)."""
+    from core.woolworths_discounts import format_discounted_price, \
+        is_woolworths_home_brand
+
+    lines: list = []
+    for twin in result.get("non_halal_twins") or []:
+        name = twin["name"]
+        if twin["state"] == "priced":
+            home = is_woolworths_home_brand(name, "")
+            price = format_discounted_price(twin["value"], home)
+            lines.append(f"also at Woolworths (non-halal): {price}"
+                         f" — {name}")
+        elif twin["state"] == "gone":
+            lines.append(f"also at Woolworths (non-halal): GONE"
+                         f" — {name}")
+        else:
+            lines.append(f"also at Woolworths (non-halal): unavailable"
+                         f" ({twin['value']}) — {name}")
+    return lines
+
+
 def render_lookup(result: dict) -> str:
     """Style-Kit v2 block (spec §11): emoji section headers, the item
     name on its own (bold-by-structure) line, aligned price columns,
@@ -318,6 +392,9 @@ def render_lookup(result: dict) -> str:
     best = result.get("best")
     if best:
         lines.append(f"  {winner_line(best[1], _shop_label(best[0]))}")
+    # §18 A4: the non-halal Woolworths twin side — after the local
+    # lines + winner, before the code/footer.
+    lines.extend(_twin_lines(result))
     code = result.get("code")
     if code and status in ("tracked", "gone", "na"):
         lines.append(f"  [{code}]")
