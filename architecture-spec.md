@@ -401,3 +401,33 @@ fixture to a rolling date; (b) de-flake the scan-window timing test
 (larger offset). Plain-language: two tests were badly written (one
 depended on today's date, one on computer speed) — they fail randomly
 and mask real failures; Round 1 fixes both.
+
+**A4 — non-halal Woolworths twin line in meat lookups (user-approved
+2026-09-10, from Round-4 live battery + user verdicts; implemented in
+Round 5, FIRST item of its work order):**
+Proven live: every meat query is halal-scoped, so a plain (non-halal)
+priced master row is unreachable even by its exact name
+(`price --item "beef mince"` → halal fallback only; the priced
+`Woolworths Beef Mince 500g` [GJZ] row never shows). Required:
+- Fix lives in `core/v2_read.lookup_item` (non-halal twin read) +
+  `render_lookup` (display line) + ONE explanatory line in
+  `claw-skills/grocery-price/SKILL.md`. Skill/routing alone cannot fix
+  it (proven).
+- When a MEAT-term lookup answers, the reply ALSO carries a
+  DISPLAY-ONLY line for the plain non-halal Woolworths twin row, e.g.
+  `also at Woolworths (non-halal): $15.00 — Woolworths Beef Mince 500g`
+  — giving ONE answer with the three-way comparison: Woolworths
+  non-halal vs local butcher prices vs Woolworths halal.
+- Binding constraints: Q11 separation STAYS (never paired/merged/
+  renamed); the twin line is DISPLAY-ONLY (zero writes, no new state,
+  no new verb, no live fallback); it appears whenever a plain meat
+  master row exists for the query — regardless of whether the halal
+  row has a Wool price yet; LOCAL DEALS ARE NEVER THE NON-HALAL SIDE
+  (all four local shops are halal sources — a local price is always
+  the halal side); "non halal" resolves ONLY to plain non-halal
+  Woolworths master rows.
+- Acceptance (Round 5 checker): `price --item "beef mince"` and the
+  halal variant both show the twin line when a plain meat row exists;
+  with a priced halal row present, ONE answer carries all three sides;
+  no sheet writes from the lookup path; parity audit ALIGNED; suite
+  green with a new test pinning the twin line (beef-mince fixture).
