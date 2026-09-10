@@ -92,3 +92,55 @@ human time = zero.
   "min order 2kg for $29.99" next to the per-kg rate (2026-09-11).
 - Meat vocabulary incl. curry/stirfry/necks + plural-fold matching;
   the Lamb Necks / Lamb Curry duplicates merged; parity ALIGNED.
+
+## SCENARIO MATRIX (user mandate 2026-09-11 — every row must be designed, tested, and answered in the Telegram reply; no silent paths)
+
+**Notification redesign (the morning/afternoon messages change):**
+The detector's current message ("save the image into the inbox folder…")
+is RETIRED. The new flow has TWO entry paths and ONE digest:
+- **Instant path**: you save image(s)/text into the watch-folder →
+  ingested within minutes → the summary posts immediately.
+- **Sweep path**: the 05:00/15:00 detector now AUTO-INGESTS every new
+  post itself (vision + merge + parity) — it no longer asks you to save
+  anything. **The word "done" disappears from detector messages
+  entirely** (it remains ONLY as a batch verb for the missing-list
+  lifecycle, which is a different feature).
+- Either way, you receive ONE combined digest per window covering ALL
+  new posts: per shop — items, prices, "min order …" multibuy terms,
+  per-item validity, standout comparisons vs Woolworths, and any
+  QUESTIONS (below). No separate "go save/do" step exists.
+
+| # | Scenario | Behavior (must be built + tested) |
+|---|----------|-----------------------------------|
+| S1 | Multiple images = ONE post (today's Merjan: 3 images) | All images under ONE code, ONE ingest pass, ONE merge — never 3 separate summaries |
+| S2 | Multiple DIFFERENT posts from the same shop in a day | Each post = own code + own validity stamps; newest post's price wins on merge; the digest groups them by shop in post order |
+| S3 | Multiple shops post in the same window | ONE combined digest, sections per shop; ingests are per-code |
+| S4 | Expiry date printed on the board | Per-item/per-cell stamp as parsed; row-2 shop stamp = latest remaining date (R2-6 rule) |
+| S5 | **Expiry date NOT known** | The item still ingests (undated, per current rule) AND the digest ASKS you one question: "Merjan: no end date on this board — reply with the date, or 'open' to leave it undated". Your reply re-stamps via the existing set-date path. The ask appears in EVERY digest until answered |
+| S6 | **Multiple expiry dates in ONE post** (item-level dates) | Per-item/per-cell stamps — each item keeps its OWN till date; the digest lists each item with its own date; the shop's row-2 stamp shows the LATEST remaining (never one date for all) |
+| S7 | Same item, same shop, posted twice in a day (price change) | Newest post's price wins on merge; one row; digest shows the change ("was $X → now $Y") |
+| S8 | Same item at TWO shops | ONE item row, both shop columns filled (parity model §4.5) — the digest shows both prices + winner. Never two rows for a cross-shop duplicate (the ID-2 guard covers this) |
+| S9 | Same item, TWO pack presentations (5kg pack vs /kg — the Goat Curry case) | Separate rows BY DESIGN (different pack = different product line); a meat/F&V lookup shows BOTH with per-kg normalisation (verified live: Merjan $15/kg vs Dunya $18/kg) |
+| S10 | Vision cannot read an image (blur/quality) | NO partial writes. Digest flags: "image unreadable — forward a clearer version or reply with the items as text". The code stays pending, retried on the next better file |
+| S11 | Post with no prices (announcement/notice) | Detected, ingested as zero-item, digest says "notice only — no prices"; no tab writes |
+| S12 | Butchery posts a non-food item (charcoal etc.) | Still ingested with the halal prefix (Q17: all butchery items, regardless of type) |
+| S13 | Watch-folder file pushed while a sweep ingest is running | Watcher queues (single-instance lock); files wait; ingests serialise — never two writers |
+| S14 | Same file saved twice (or by both paths) | File-hash dedupe: one ingest, one summary |
+| S15 | Network/VPS down when you drop a file | Files queue in the folder until push succeeds; nothing lost, nothing duplicated |
+| S16 | Post in a language/script the vision chain mishandles | Same as S10 — flag, ask, never write guesses |
+
+## Detector message wording (v2, replaces the retired text)
+
+> 🔍 **Sweep 05:00** — Merjan: 3 new items (2 with min-order deals, best
+> $11.00/kg) · Fruitopia: notice only, no prices · 1 question needs you:
+> Merjan board has no end date — reply with the date or "open".
+
+No "save the image", no "done", no instructions to act — the digest IS
+the action, and questions are the only thing you ever need to answer.
+The watch-folder is for instant results outside the sweep windows.
+
+## Open questions for the user (answer before coding — planner collects more)
+
+1. S5 phrasing: is "reply with the date or 'open'" the interaction you want?
+2. Should the sweep digest post to the local-deals topic only, or ALSO your DM?
+3. S7: do you want "was $X → now $Y" change lines in the digest, or final prices only?
