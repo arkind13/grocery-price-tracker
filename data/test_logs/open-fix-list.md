@@ -4,7 +4,19 @@ Carry-over rule: every cycle's CHECK appends its classified defects
 here; the next FIX phase works EXACTLY this list, each item with a
 regression test, then strikes the line with proof.
 
-## OPEN (non-blocking)
+## OPEN
+
+0. **[INGEST, P1 — new 2026-09-12] "N KG <item> $X" board tiles can
+   write the PACK TOTAL into /kg special cells.** The 2026-09-11
+   08:06 Merjan ingest polluted 14 cells (e.g. "2 KG LAMB MINCE
+   $29.99" → cell 29.99 instead of 15.00/kg + terms) and invented 2
+   tile-less specials (diced 34.99, lamb curry 27.99). DATA
+   corrected by hand 2026-09-12 against the archived boards (proof:
+   `cycle-3/merjan-corrections.md`) — but the PARSER defect remains:
+   next weekend's board will re-pollute. FIX: repro the tile text
+   through the deal-text/vision parse chain, normalise "N kg … $X"
+   to per-kg + terms before the cell write, regression-test all three
+   board layouts (combined grid / chicken view / meat view).
 
 1. **[GW agent-layer, observed-not-failing]** On open "compare …"
    phrasings the gateway agent prefers live web enrichment over the

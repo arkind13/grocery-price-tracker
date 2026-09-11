@@ -1,0 +1,22 @@
+Here's what's on special right now:
+
+**Merjan — till Sun 13 Sep**
+- Chicken breast 5kg — $34.99 (≈$7/kg) 🔥
+- Whole chicken — $6 ea (s9, 2/$11.99) · $7 ea (s14, 5/$34.99)
+- Wings / drumettes / drumsticks — $4/kg (5kg $19.99)
+- Maryland $7/kg · chicken mince $9/kg · mid-wings $9/kg
+- Thighs $11/kg · tenders $11/kg
+- Lamb mince $15 · sliced lamb neck $15 · lamb ribs $15 — 2kg/$29.99
+- Grilling chops $17/kg (2kg $33.99) · lamb curry $27.99/kg
+- Beef curry $10/kg (5kg $49.99) · goat curry $15/kg (2kg $29.99)
+- BBQ blade steak $16/kg · sausages $15/kg — 2kg deals
+- Povi masima bucket $49.99
+
+**Fruitopia — till Sat 12 Sep** (new board today)
+- Jap pumpkin $0.99/kg · fennel $0.99/kg · snake beans $0.99/kg
+- Artichoke 99c · cos lettuce 99c
+- Navel oranges $1.50/kg · cara cara oranges $1.50/kg
+- Bananas $2.99/kg · coriander big bunch $3.99
+- Mashing potato 1.5kg $1.99 · spinach/buk choy $4.99 · barhi dates $19.99/kg
+
+⚠️ Heads up: the sheet's Merjan cells got partly polluted sometime today — a few now show **pack totals as per-kg prices** (e.g. drumette "19.99", lamb mince "29.99", beef curry "49.99"). I've quoted the correct per-kg prices above (they all cross-check against the pack terms). Want me to run a repair pass with `--set-special` to restore the proper cells + stamps?
