@@ -224,6 +224,19 @@ class TestRealisticForms(unittest.TestCase):
         self.assertEqual(res["status"], "not-tracked")
         self.assertEqual(res["code"], "")
 
+    def test_single_token_strict_winner_answers(self):
+        # 'halal drumsticks' folds to one token with two candidates:
+        # the /kg row (diff 1) strictly beats the 5kg pack (diff 2)
+        # -> answer the /kg row, never guess, never stay bare
+        master = [
+            _m("Halal Drumstick", "VCK"),
+            _m("Halal Drumsticks – (5kg)", "RPG"),
+        ]
+        ld = [_l("Halal Drumstick", "VCK", merjan="4")]
+        res = lookup_item("halal drumsticks", master, ld)
+        self.assertEqual(res["code"], "VCK")
+        self.assertEqual(res["status"], "missing")
+
 
 class TestUnfilteredPoolHonesty(unittest.TestCase):
     """run-2 D2 half-b: the last-resort pool (2026-09-10 user fix: a

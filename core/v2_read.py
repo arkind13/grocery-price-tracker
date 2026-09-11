@@ -426,16 +426,25 @@ def _plain_master_hit(tokens: list, master_rows: list):
 def _domain_master_hit(tokens: list, master_rows: list):
     """Order-free, plural-folded master-row match for NON-meat
     queries ('Cauliflowers' → 'Cauliflower', 'Choko' → 'Chokos',
-    'R2E2 Mango' → 'Mango R2E2'). Needs ≥2 product tokens, or a
-    UNIQUE single-token candidate — a bare generic word ('apple')
-    with many candidates stays unanswered rather than guessing."""
+    'R2E2 Mango' → 'Mango R2E2'). A bare single word answers only
+    when a candidate wins STRICTLY (a tie between two different
+    products — 'apples' across Pink Lady / Granny Smith — stays
+    unanswered rather than guessing); 'halal drumsticks' folds to
+    one token whose closest row (the /kg VCK row, not the 5kg pack)
+    wins by the normal min-diff ranking."""
     if not tokens:
         return None
     candidates = [m for m in master_rows
                   if _is_domain_row(m)
                   and _name_has_all(str(m["name"] or "").lower(), tokens)]
-    if len(tokens) < 2 and len(candidates) != 1:
+    if not candidates:
         return None
+    if len(tokens) < 2 and len(candidates) > 1:
+        qstems = {_fold(t) for t in tokens}
+        diffs = sorted(len(_stems(str(m["name"] or "")) - qstems)
+                       for m in candidates)
+        if diffs[0] == diffs[1]:
+            return None
     return _best_token_row(candidates, tokens)
 
 
