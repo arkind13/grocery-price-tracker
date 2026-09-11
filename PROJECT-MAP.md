@@ -71,12 +71,13 @@ Woolworths twin.
    "min order …" pack terms, per-item validity, standout comparisons
    vs Woolworths, and any QUESTIONS (an undated board asks for its
    end date — reply with the date or `open`; a shop-less watch-folder
-   drop asks which shop). Same-day re-posts show "was $X → now $Y".
-   Outside the sweep windows, save a post's images/text into the PC
-   watch-folder (`Desktop\shop-posts`, or a shop subfolder like
-   `shop-posts\Merjan\` to pin the shop) — the watcher pushes them to
-   the VPS and the digest arrives within minutes. The digest IS the
-   action; questions are the only thing you ever answer.
+   drop asks which shop). Same-day re-posts: the newest price simply
+   wins (final prices only). Outside the sweep windows, save a
+   post's images/text into the PC watch-folder (`Desktop\shop-posts`)
+   — the four shop subfolders are created for you (Dunya / Merjan /
+   Fruitopia / Abu Salim); the watcher pushes them to the VPS and
+   the digest arrives within minutes. The digest IS the action;
+   questions are the only thing you ever answer.
 2. Wednesday: paste your Woolworths list into `Woolworths.docx` and
    the specials into `Woolworths_Specials.docx`, run `wednesday`.
 3. 14 seconds later: prices synced, specials in topic 206, the ONE

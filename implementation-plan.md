@@ -20,8 +20,18 @@
   Woolworths/Coles/Aldi provider work, no v2_read/lookup changes
   beyond keeping comment formats compatible. M-items AI-M1…AI-M7 are
   BINDING; on any contradiction: STOP and report.
-- **Carried proposals (unanswered user questions — one-word
-  correctable later, spec-internal defaults used):**
+- **ANSWERED 2026-09-11 (user, this session — supersedes the
+  spec text where they diverge):**
+  - **P1 (S5 ask):** CONFIRMED as built — date-or-'open'.
+  - **P2 (digest target):** CONFIRMED as built — local-deals topic
+    only.
+  - **P3 (S7):** CHANGED — **final price only**; the digest never
+    shows 'was $X → now $Y' change lines (the spec's S7 wording is
+    superseded by this answer; newest-wins merge unchanged).
+  - **P4 (shop resolution):** CONFIRMED subfolder-pins + ask-on-
+    root, PLUS the watcher pre-creates the four shop subfolders.
+- **Carried proposals (pre-answer record, kept for history —
+  spec-internal defaults used at build time):**
   - **P1 (S5 ask):** "reply with the date, or 'open' to leave it
     undated" — spec's own wording (S5 row + message example).
   - **P2 (digest target):** local-deals topic only — spec pipeline

@@ -38,15 +38,16 @@ without you:
   (one vision call per post, all its images together), merges per
   shop (newest post's price wins), and posts ONE combined digest to
   the local-deals topic: per shop — items, prices, `min order …`
-  pack terms, per-item validity, `was $X → now $Y` changes, standout
-  comparisons vs Woolworths, and any QUESTIONS. Detector messages
-  never say "done" and never ask you to save anything.
+  pack terms, per-item validity, standout comparisons vs
+  Woolworths, and any QUESTIONS (final prices only — user answer
+  2026-09-11). Detector messages never say "done" and never ask you
+  to save anything.
 - **Instant path**: the PC watch-folder daemon
   (`tools/inbox_watcher.py`, auto-started at logon by
   `tools/install_inbox_watcher.ps1`) watches `Desktop\shop-posts` —
-  drop images/text there (or into a shop subfolder
-  `shop-posts\Merjan\` to pin the shop) and the digest arrives within
-  minutes. A burst of files forms ONE post (90s settle window); the
+  the four shop subfolders (Dunya / Merjan / Fruitopia / Abu Salim)
+  are created for you; drop images/text into one and the digest
+  arrives within minutes. A burst of files forms ONE post (90s settle window); the
   same file twice = one ingest (sha256 dedupe); network down = files
   queue until the push succeeds (60s retry); single-instance lock —
   never two writers.
