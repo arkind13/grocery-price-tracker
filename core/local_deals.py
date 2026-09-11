@@ -272,7 +272,8 @@ def _sweep_auto_ingest(new_posts: list, window_label: str,
     post unreadable in the digest. S11: no-price posts record as
     notices. S5: undated boards open the expiry question (repeats in
     every digest until answered). S2/S7: per-shop merge, newest
-    post's price wins, changes shown as 'was $X -> now $Y'.
+    post's price wins; the digest shows the FINAL price only (user
+    answer 2026-09-11).
     """
     from extractors.fb_flyer_fetch import FLYERS_DIR
     from core.sheets_client import connect_spreadsheet
@@ -351,8 +352,6 @@ def _sweep_auto_ingest(new_posts: list, window_label: str,
         store = entry["store"]
         try:
             worksheet = ensure_local_deals_tab(spreadsheet)
-            sp_col = _special_column_for(key)
-            before = _norm_grid(worksheet.get_all_values() or [])
             newest_valid = next(
                 (c.get("valid_until") for c in entry["deals"]
                  if c.get("valid_until")), None)
@@ -362,43 +361,6 @@ def _sweep_auto_ingest(new_posts: list, window_label: str,
                 list(reversed(entry["deals"])),
                 valid_until=newest_valid,
                 master_ws=spreadsheet.worksheet(MASTER_TAB))
-            after = _norm_grid(worksheet.get_all_values() or [])
-            if sp_col is not None:
-                changes: dict[str, float] = {}
-                # S7 'was' priority: the OLDER same-window post's
-                # price when the item repeats (the change the user
-                # saw posted), else the sheet value the merge
-                # replaced.
-                older_post: dict[str, float] = {}
-                for c in reversed(entry["deals"]):   # merge order
-                    older_post.setdefault(_display_name(c),
-                                          c.get("price"))
-                for c in reversed(entry["deals"]):
-                    display = _display_name(c)
-                    i_new = _reuse_match_index(after, display)
-                    new = _numeric_price(
-                        after[i_new][sp_col]
-                        if i_new is not None
-                        and len(after[i_new]) > sp_col else None)
-                    was = older_post.get(display)
-                    if was is not None and new is not None \
-                            and abs(float(was) - new) >= 0.01:
-                        changes.setdefault(display,
-                                           round(float(was), 2))
-                        continue
-                    i_old = _reuse_match_index(before, display)
-                    if i_old is None or i_new is None:
-                        continue
-                    old = _numeric_price(
-                        before[i_old][sp_col]
-                        if len(before[i_old]) > sp_col else "")
-                    if old is not None and new is not None \
-                            and abs(new - old) >= 0.01:
-                        changes.setdefault(display, old)
-                for p in entry["posts"]:
-                    for i in p.get("items") or []:
-                        if i["name"] in changes:
-                            i["was"] = changes[i["name"]]
         except Exception as exc:  # noqa: BLE001 — flag, never silent
             print(f"[daily-scan] {key}: sheet write failed "
                   f"({exc.__class__.__name__})")
@@ -1065,14 +1027,13 @@ def _norm_grid(grid: list) -> list[list]:
     return [(list(r) + [""] * width)[:width] for r in grid]
 
 
-def _digest_items(converted: list[dict],
-                  changes: dict | None = None) -> list[dict]:
+def _digest_items(converted: list[dict]) -> list[dict]:
     """Digest item records from vision-schema deals: price text with
-    unit, 'min order …' terms, per-item till date, and the previous
-    price when a re-post moved it (S7 'was $X -> now $Y')."""
+    unit, 'min order …' terms, per-item till date. S7 (user answer
+    2026-09-11): FINAL PRICE ONLY — the digest never shows 'was $X'
+    change lines."""
     from core.multibuy import effective_unit_rate
     from core.uom import FAMILY_WEIGHT, parse_size
-    changes = changes or {}
     items: list[dict] = []
     for c in converted:
         kind = c.get("price_kind")
@@ -1110,7 +1071,7 @@ def _digest_items(converted: list[dict],
             "terms": terms,
             "till": (f"{c['valid_until']:%a %d %b}"
                      if c.get("valid_until") else None),
-            "was": changes.get(display), "per_kg": per_kg})
+            "per_kg": per_kg})
     return items
 
 
@@ -1289,7 +1250,6 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
         print("[ingest] dry-run: sheet write + summary skipped")
         return 0
 
-    changes: dict[str, float] = {}    # display name -> previous price
     standout_block: list[str] = []
     if all_vision_deals:
         from core.sheets_client import connect_spreadsheet
@@ -1299,11 +1259,6 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
         # "dunya_fb"); the site column is --dunya-site's.
         col_store = ("dunya_fb" if store["key"] == "dunya"
                      else store["key"])
-        # S7 (user directive 2026-09-11): snapshot the shop's cells
-        # before the merge so the digest can show 'was $X -> now $Y'
-        # when a same-day re-post moves a price.
-        sp_col = _special_column_for(store["key"])
-        before_grid = _norm_grid(worksheet.get_all_values() or [])
         # Files are newest-first; reversed so the NEWEST post's deal
         # wins when two posts list the same item (older posts never
         # overwrite fresher prices on the sheet). Validity stays per
@@ -1322,35 +1277,6 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
               f"headers)")
         for line in new_rows:
             print(f"   + {line}")
-        after_grid = _norm_grid(worksheet.get_all_values() or [])
-        if sp_col is not None:
-            # S7 'was' priority: the OLDER same-window post's price
-            # when the item repeats, else the replaced sheet value.
-            older_post: dict[str, float] = {}
-            for c in reversed(all_vision_deals):    # merge order
-                older_post.setdefault(_display_name(c),
-                                      c.get("price"))
-            for c in reversed(all_vision_deals):
-                display = _display_name(c)
-                i_new = _reuse_match_index(after_grid, display)
-                new = _numeric_price(
-                    after_grid[i_new][sp_col]
-                    if i_new is not None
-                    and len(after_grid[i_new]) > sp_col else None)
-                was = older_post.get(display)
-                if was is not None and new is not None \
-                        and abs(float(was) - new) >= 0.01:
-                    changes.setdefault(display, round(float(was), 2))
-                    continue
-                i_old = _reuse_match_index(before_grid, display)
-                if i_old is None or i_new is None:
-                    continue
-                old = _numeric_price(
-                    before_grid[i_old][sp_col]
-                    if len(before_grid[i_old]) > sp_col else "")
-                if old is not None and new is not None \
-                        and abs(new - old) >= 0.01:
-                    changes.setdefault(display, old)
 
         # Standout check vs the master sheet — the SAME >20% machinery
         # as the Friday/on-demand report (user rule 2026-09-07: the
@@ -1397,12 +1323,12 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
             print(f"[ingest] {b['file']} — expiry question asked")
 
     # The ONE digest for this ingest (instant path): items, terms,
-    # per-item validity, changes, notices, unreadable flags,
-    # standouts, and every open question.
+    # per-item validity, notices, unreadable flags, standouts, and
+    # every open question (final prices only).
     posts = [{
         "code": code, "file": b["file"],
         "valid_txt": b["valid_txt"],
-        "items": _digest_items(b.get("converted") or [], changes),
+        "items": _digest_items(b.get("converted") or []),
         "notice_only": False, "unreadable": False,
     } for b in batches]
     posts += [{"code": code, "file": n["file"], "valid_txt": "",
@@ -2720,8 +2646,6 @@ def _render_window_digest(sections: list[dict], questions: list[dict],
                     line += f" (min order {i['terms']})"
                 if i.get("till"):
                     line += f" · till {i['till']}"
-                if i.get("was") is not None:
-                    line += f" — was {_money(i['was'])}"
                 lines.append(line)
         blocks.append("\n".join(lines))
 
@@ -3245,6 +3169,14 @@ def _reuse_match_index(grid: list, name: str) -> int | None:
             return i                          # layer 1: exact reuse
         row_tokens = _reuse_tokens(row_name)
         if not incoming or not row_tokens:
+            continue
+        # S9 enforced: pack presentations stay separate. If either
+        # side carries a size token ('5kg'), BOTH must carry the SAME
+        # size — a pack deal never merges into a /kg row (or vice
+        # versa); it becomes its own coded row.
+        inc_sizes = {t for t in incoming if SIZE_RE.fullmatch(t)}
+        row_sizes = {t for t in row_tokens if SIZE_RE.fullmatch(t)}
+        if (inc_sizes or row_sizes) and inc_sizes != row_sizes:
             continue
         smaller, larger = sorted((incoming, row_tokens),
                                  key=len)

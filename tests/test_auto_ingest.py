@@ -474,16 +474,16 @@ class TestWindowDigest(unittest.TestCase):
                     {"name": "Halal Lamb Necks /kg",
                      "price_text": "$11.00/kg",
                      "terms": "3kg for $32.99",
-                     "till": "Sat 12 Sep", "was": 12.99,
-                     "per_kg": 11.0},
+                     "till": "Sat 12 Sep", "per_kg": 11.0},
                     {"name": "Halal Beef Curry /kg",
                      "price_text": "$12.99/kg", "terms": None,
-                     "till": None, "was": None, "per_kg": 12.99}],
+                     "till": None, "per_kg": 12.99}],
                 "notice_only": False, "unreadable": False}]}]
 
     def test_digest_format_spec_example(self):
         """Header wording per the spec example; items carry prices,
-        'min order …' terms, per-item validity, and the S7 change."""
+        'min order …' terms, per-item validity. S7 (user answer
+        2026-09-11): FINAL PRICE ONLY — no 'was $X' change line."""
         msgs = ld._render_window_digest(
             self._sections(), [], "Sweep 05:00")
         self.assertEqual(len(msgs), 1)
@@ -491,8 +491,8 @@ class TestWindowDigest(unittest.TestCase):
                       "(1 with min-order deals, best $11.00/kg)",
                       msgs[0])
         self.assertIn("• Halal Lamb Necks /kg — $11.00/kg "
-                      "(min order 3kg for $32.99) · till Sat 12 Sep"
-                      " — was $12.99", msgs[0])
+                      "(min order 3kg for $32.99) · till Sat 12 Sep",
+                      msgs[0])
         self.assertIn("🔪 Merjan Brothers Quality Meats", msgs[0])
 
     def test_digest_no_done_word(self):
@@ -637,7 +637,9 @@ class TestSweepAutoIngest(unittest.TestCase):
                    if "Lamb Necks" in str(r[0]))
         self.assertEqual(ld._numeric_price(row[MER_SP]),
                          11.99)     # newest post wins
-        self.assertIn("was $12.99", sent[0])     # S7 change line
+        # S7 user answer 2026-09-11: final price only, no change line
+        self.assertNotIn("was $", sent[0])
+        self.assertIn("$11.99/kg", sent[0])
 
     def test_vision_unreadable_no_writes_flagged(self):
         """S10/S16: vision failure -> NO partial writes, the digest
@@ -807,6 +809,27 @@ class TestInboxWatcher(unittest.TestCase):
             old = time.time() - (iw.LOCK_STALE_S + 60)
             os.utime(lock, (old, old))
             self.assertTrue(iw.acquire_lock(root))
+
+    def test_watcher_creates_shop_folders(self):
+        """User answer 2026-09-11: the four shop subfolders are
+        pre-created (idempotent) so the user only ever drops into
+        them."""
+        with tempfile.TemporaryDirectory() as tmp:
+            from tools import inbox_watcher as iw
+            root = Path(tmp) / "shop-posts"
+            made = iw.ensure_shop_folders(root)
+            self.assertEqual(
+                sorted(f.name for f in made),
+                ["Abu Salim", "Dunya", "Fruitopia", "Merjan"])
+            self.assertEqual(iw.ensure_shop_folders(root), [])
+            for name in ("Dunya", "Merjan", "Fruitopia",
+                         "Abu Salim"):
+                self.assertTrue((root / name).is_dir())
+                self.assertEqual(
+                    iw._shop_code_for(name),
+                    {"Dunya": "DUN", "Merjan": "MER",
+                     "Fruitopia": "FRU",
+                     "Abu Salim": "ABS"}[name])
 
     def test_watcher_unknown_shop_folder_ignored(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -54,6 +54,10 @@ SHOP_CODES = {"dunya": "DUN", "dun": "DUN", "dunya butchery": "DUN",
               "merjan brothers": "MER",
               "fruitopia": "FRU", "fru": "FRU",
               "abusalim": "ABS", "abs": "ABS", "abu salim": "ABS"}
+# Pre-created on every start (user answer 2026-09-11: 'subfolder but
+# create the subfolder for those 4 shops pls') — the user only ever
+# drops into them.
+SHOP_SUBFOLDERS = ("Dunya", "Merjan", "Fruitopia", "Abu Salim")
 
 VPS_ALIAS = os.getenv("INBOX_WATCHER_VPS", "myvps")
 REMOTE_BASE = os.getenv(
@@ -115,6 +119,19 @@ def _shop_code_for(folder_name: str) -> str | None:
     """Folder name -> shop code letters (None = unknown folder)."""
     return SHOP_CODES.get(" ".join(
         str(folder_name or "").lower().split()))
+
+
+def ensure_shop_folders(root: Path) -> list[Path]:
+    """Create the four shop subfolders under the watch root (user
+    answer 2026-09-11) — idempotent; returns the ones it created."""
+    root.mkdir(parents=True, exist_ok=True)
+    made: list[Path] = []
+    for name in SHOP_SUBFOLDERS:
+        folder = root / name
+        if not folder.exists():
+            folder.mkdir(parents=True, exist_ok=True)
+            made.append(folder)
+    return made
 
 
 def scan_batches(root: Path, settle_s: int = DEFAULT_SETTLE_S,
@@ -258,6 +275,10 @@ def main(argv: list[str] | None = None) -> int:
     if not acquire_lock(root):
         print("[watcher] another instance holds the lock — exiting")
         return 0
+    made = ensure_shop_folders(root)
+    if made:
+        print(f"[watcher] shop folders created: "
+              f"{', '.join(f.name for f in made)}")
     print(f"[watcher] watching {root} (settle {args.settle}s)")
     try:
         while True:
