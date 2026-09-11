@@ -3233,25 +3233,42 @@ def _reuse_match_index(grid: list, name: str) -> int | None:
         return first != "Prices valid until"
 
     incoming = _reuse_tokens(_base_name(name))
-    in_body, in_sizes = _split(incoming)
-    best: tuple[int, int] | None = None      # (-overlap, row_index)
+    SIZE_RE = re.compile(r"\d+(?:[.,]\d+)?kg\b")
+    incoming_id = {t for t in incoming if not SIZE_RE.fullmatch(t)}
+    best_pack: tuple[int, int] | None = None   # (-overlap, row)
+    best_id: tuple[int, int] | None = None
     for i in range(1, len(grid)):
         if not _item_row(i):
             continue
         row_name = _base_name(grid[i][0])
         if canonical_key(row_name) == canonical_key(_base_name(name)):
             return i                          # layer 1: exact reuse
-        row_body, row_sizes = _split(_reuse_tokens(row_name))
-        if in_sizes != row_sizes:
-            continue                          # S9: presentations apart
-        smaller, larger = sorted((in_body, row_body), key=len)
-        if len(smaller) < 2 or not smaller.issubset(larger):
-            continue                          # layer 2 containment
-        overlap = len(smaller)
-        cand = (-overlap, i)
-        if best is None or cand < best:
-            best = cand
-    return None if best is None else best[1]
+        row_tokens = _reuse_tokens(row_name)
+        if not incoming or not row_tokens:
+            continue
+        smaller, larger = sorted((incoming, row_tokens),
+                                 key=len)
+        pack_hit = len(smaller) >= 2 and smaller.issubset(larger)
+        row_id = {t for t in row_tokens if not SIZE_RE.fullmatch(t)}
+        smaller_id, larger_id = sorted((incoming_id, row_id),
+                                       key=len)
+        id_hit = (len(incoming_id) >= 2 and len(smaller_id) >= 2
+                  and smaller_id.issubset(larger_id))
+        if pack_hit:
+            overlap = len(smaller)
+            cand = (-overlap, i)
+            if best_pack is None or cand < best_pack:
+                best_pack = cand
+        if id_hit:
+            overlap = len(incoming_id & row_id)
+            cand = (-overlap, i)
+            if best_id is None or cand < best_id:
+                best_id = cand
+    if best_pack is not None:
+        return best_pack[1]               # pack-aware reuse wins
+    if best_id is not None:
+        return best_id[1]                 # identity-only reuse
+    return None
 
 
 def merge_store_tab(worksheet, store_key: str, deals: list[dict],
