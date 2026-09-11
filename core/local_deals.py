@@ -27,6 +27,10 @@ SCAN_STATE_PATH = (Path(__file__).resolve().parent.parent / "data"
                    / "local_deals_scan_state.json")
 POST_LOG_PATH = (Path(__file__).resolve().parent.parent / "data"
                  / "local_deals_post_log.json")
+# Open user questions (S5/P4, user directive 2026-09-11): expiry +
+# shop asks that repeat in EVERY digest until answered.
+QUESTIONS_PATH = (Path(__file__).resolve().parent.parent / "data"
+                  / "local_deals_questions.json")
 SCAN_WINDOWS = (5, 15)          # Sydney hours: 05:00 and 15:00
 INBOX_DIRNAME = "local_deals_inbox"
 INBOX_DIR = (Path(__file__).resolve().parent.parent / "data"
@@ -257,6 +261,189 @@ def _run_morning_sweep() -> list[str]:
     return lines
 
 
+def _sweep_auto_ingest(new_posts: list, window_label: str,
+                       send: bool = True) -> None:
+    """AI-M5 (user directive 2026-09-11): the 05:00/15:00 sweep
+    AUTO-INGESTS every new post itself — vision + merge + parity —
+    and posts ONE combined digest for the window. It never asks the
+    user to save anything and never says 'done'.
+
+    Per post (S10/S16): a vision failure writes NOTHING and flags the
+    post unreadable in the digest. S11: no-price posts record as
+    notices. S5: undated boards open the expiry question (repeats in
+    every digest until answered). S2/S7: per-shop merge, newest
+    post's price wins, changes shown as 'was $X -> now $Y'.
+    """
+    from extractors.fb_flyer_fetch import FLYERS_DIR
+    from core.sheets_client import connect_spreadsheet
+
+    run_dir = FLYERS_DIR / sydney_now().strftime("%Y%m%d_%H%M%S")
+    today = sydney_today()
+    shops: dict[str, dict] = {}       # store_key -> digest entry
+    for store, post, code, _detail in new_posts:
+        entry = shops.setdefault(store["key"], {
+            "store": store, "deals": [], "posts": []})
+        fname = f"fb:{getattr(post, 'post_ref', '') or code}"
+        try:
+            deals, source, valid_until = extract_post_deals(
+                post, run_dir, store["key"])
+        except Exception as exc:  # noqa: BLE001 — post isolation
+            print(f"[daily-scan] {code}: vision failed "
+                  f"({exc.__class__.__name__}) — flagged unreadable")
+            entry["posts"].append({
+                "code": code, "file": fname, "valid_txt": "",
+                "items": [], "notice_only": False, "unreadable": True})
+            continue
+        if source == "text":
+            # extract_post_deals hands back None for text posts — the
+            # board date lives in the text itself; parse it here.
+            from extractors.deal_text import parse_validity_end
+            valid_until = parse_validity_end(post.text, today=today)
+        if not deals:
+            entry["posts"].append({
+                "code": code, "file": fname, "valid_txt": "",
+                "items": [], "notice_only": True, "unreadable": False})
+            continue
+        if valid_until is not None and valid_until < today:
+            entry["posts"].append({
+                "code": code, "file": fname,
+                "valid_txt": (f"deals ended {valid_until:%a %d %b} "
+                              f"— nothing written"),
+                "items": [], "notice_only": False,
+                "unreadable": False, "expired": True})
+            continue
+        deals = _prefix_butcher_deals(store["key"], deals)
+        category = _store_kind(store["key"]) or "other"
+        converted = [_to_vision_deal(d, category) for d in deals]
+        for c, d in zip(converted, deals):
+            c["valid_until"] = d.get("valid_until") or valid_until
+        entry["deals"].extend(converted)
+        valid_txt = (f"valid until {valid_until:%a %d %b}"
+                     if valid_until
+                     else "no end date — question asked")
+        entry["posts"].append({
+            "code": code, "file": fname, "valid_txt": valid_txt,
+            "items": _digest_items(converted),
+            "notice_only": False, "unreadable": False})
+        if valid_until is None and not any(
+                c.get("valid_until") for c in converted):
+            label = SHORT_SHOP_NAMES.get(store["key"],
+                                         store["name"])
+            open_question(
+                "expiry", code, fname, store["key"],
+                f"{label}: no end date on this board ({code}) — "
+                f"reply with the date, or 'open' to leave it "
+                f"undated")
+
+    write_failures: list[str] = []
+    spreadsheet = None
+    if any(e["deals"] for e in shops.values()):
+        try:
+            spreadsheet = connect_spreadsheet()
+        except Exception as exc:  # noqa: BLE001 — flag, never silent
+            print(f"[daily-scan] sheet connect failed: "
+                  f"{exc.__class__.__name__}")
+            write_failures = [e["store"]["name"]
+                              for e in shops.values() if e["deals"]]
+    for key, entry in shops.items():
+        if not entry["deals"] or spreadsheet is None:
+            continue        # nothing to write / connect failed above
+        store = entry["store"]
+        try:
+            worksheet = ensure_local_deals_tab(spreadsheet)
+            sp_col = _special_column_for(key)
+            before = _norm_grid(worksheet.get_all_values() or [])
+            newest_valid = next(
+                (c.get("valid_until") for c in entry["deals"]
+                 if c.get("valid_until")), None)
+            merge_store_tab(
+                worksheet,
+                "dunya_fb" if key == "dunya" else key,
+                list(reversed(entry["deals"])),
+                valid_until=newest_valid,
+                master_ws=spreadsheet.worksheet(MASTER_TAB))
+            after = _norm_grid(worksheet.get_all_values() or [])
+            if sp_col is not None:
+                changes: dict[str, float] = {}
+                # S7 'was' priority: the OLDER same-window post's
+                # price when the item repeats (the change the user
+                # saw posted), else the sheet value the merge
+                # replaced.
+                older_post: dict[str, float] = {}
+                for c in reversed(entry["deals"]):   # merge order
+                    older_post.setdefault(_display_name(c),
+                                          c.get("price"))
+                for c in reversed(entry["deals"]):
+                    display = _display_name(c)
+                    i_new = _reuse_match_index(after, display)
+                    new = _numeric_price(
+                        after[i_new][sp_col]
+                        if i_new is not None
+                        and len(after[i_new]) > sp_col else None)
+                    was = older_post.get(display)
+                    if was is not None and new is not None \
+                            and abs(float(was) - new) >= 0.01:
+                        changes.setdefault(display,
+                                           round(float(was), 2))
+                        continue
+                    i_old = _reuse_match_index(before, display)
+                    if i_old is None or i_new is None:
+                        continue
+                    old = _numeric_price(
+                        before[i_old][sp_col]
+                        if len(before[i_old]) > sp_col else "")
+                    if old is not None and new is not None \
+                            and abs(new - old) >= 0.01:
+                        changes.setdefault(display, old)
+                for p in entry["posts"]:
+                    for i in p.get("items") or []:
+                        if i["name"] in changes:
+                            i["was"] = changes[i["name"]]
+        except Exception as exc:  # noqa: BLE001 — flag, never silent
+            print(f"[daily-scan] {key}: sheet write failed "
+                  f"({exc.__class__.__name__})")
+            write_failures.append(store["name"])
+
+    standout_lines: list[str] = []
+    try:
+        scan_rows = []
+        for key, entry in shops.items():
+            for c in entry["deals"]:
+                row = dict(c)
+                row["store_key"] = key
+                row["store_name"] = entry["store"]["name"]
+                scan_rows.append(row)
+        if scan_rows:
+            from core.sheets_client import connect_worksheet
+            master_rows = _load_master_rows(connect_worksheet())
+            results = match_and_detect(scan_rows, master_rows, {})
+            standout_lines = render_post1(
+                results,
+                sydney_now().strftime("%a %Y-%m-%d")).splitlines()
+    except Exception as exc:  # noqa: BLE001 — degrade cleanly
+        print(f"[daily-scan] standout check failed: "
+              f"{exc.__class__.__name__}")
+
+    sections = [{
+        "shop_label": SHORT_SHOP_NAMES.get(key, entry["store"]["name"]),
+        "shop": entry["store"]["name"],
+        "posts": entry["posts"],
+    } for key, entry in shops.items()]
+    messages = _render_window_digest(
+        sections, _load_questions(), window_label,
+        standout_lines=standout_lines or None)
+    if write_failures:
+        messages[-1] += (f"\n\n⚠️ Sheet write failed for: "
+                         f"{', '.join(sorted(set(write_failures)))} "
+                         f"— prices above are NOT saved; ask for a "
+                         f"re-ingest once the sheet is reachable.")
+    if send:
+        _post_digest(messages)
+    else:
+        for text in messages:
+            print(text)
+
+
 def run_daily_scan(dry_run: bool = False, send: bool = True,
                    max_posts: int = 3, backfill_days: int = 3,
                    force: bool = False) -> int:
@@ -465,36 +652,22 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
             windows[window_key] = "done"
         _save_scan_state(state)
 
-    sweep_attached = False
-    for store, post, code, detail in new_posts:
-        shop_codes = [c for s, _p, c, _d in new_posts
-                      if s["key"] == store["key"]]
-        text = (
-            f"🆕 New post from {store['name']} (code: {code})\n"
-            f"\n{detail}\n"
-            f"\nWant these prices?\n"
-            f"  1. Save the post's picture or text into:\n"
-            f"     {USER_INBOX_ROOT_WIN}\\{code}\n"
-            f"  2. Then send me:  {code}\n"
-            f"\nNot interested?  Just send:  ignore {code}")
-        if len(shop_codes) > 1:
-            # Multi-post scan: say how many, and list every code so
-            # the user never loses track of pending posts (each post
-            # keeps its OWN validity date above).
-            text += (f"\n📍 {len(shop_codes)} new posts from this "
-                     f"shop in this scan: {', '.join(shop_codes)}")
-        if sweep_block and not sweep_attached:
-            text += sweep_block      # first message carries the sweep
-            sweep_attached = True
-        print(text)
-        if send and not dry_run:
-            bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
-            topic_id = _env_int(LOCAL_DEALS_TOPIC_ENV)
-            receipt = _send_message(bot_token, TELEGRAM_CHAT_ID,
-                                    text, thread_id=topic_id
-                                    or TELEGRAM_CHAT_ID)
-            if not receipt.get("ok"):
-                print("[daily-scan] telegram delivery failed")
+    # AI-M5 (user directive 2026-09-11): the sweep AUTO-INGESTS every
+    # new post itself and posts ONE combined digest — the retired
+    # 'save the picture into the inbox' instruction never returns;
+    # 'done' never appears in detector messages.
+    if new_posts:
+        window_label = "Sweep"
+        if window_key:
+            _h = window_key.rsplit(":", 1)[-1]
+            if _h.isdigit():
+                window_label = f"Sweep {int(_h):02d}:00"
+        if dry_run:
+            for store, post, code, detail in new_posts:
+                print(f"[daily-scan] would auto-ingest {code} "
+                      f"({store['name']})\n{detail}")
+        else:
+            _sweep_auto_ingest(new_posts, window_label, send=send)
 
     if not new_posts:
         # Heartbeat (user rule 2026-09-07): a finished scan with
@@ -504,17 +677,17 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
         checked = f"{now_syd:%a %d %b, %I:%M %p}"
         bad = [names[k] for k in failures if k in names]
         if failures and len(failures) == len(STORES):
-            text = (f"⚠️ Local deals scan could not check any shop "
+            text = (f"⚠️ Local deals sweep could not check any shop "
                     f"({checked} Sydney) — will retry at the next "
                     f"window")
         else:
-            text = (f"✅ Local deals scan done — no new posts from "
+            text = (f"✅ Local deals sweep — no new posts from "
                     f"any of the {len(STORES)} shops ({checked} "
                     f"Sydney)")
             if bad:
                 text += f"\n⚠️ Could not check: {', '.join(bad)}"
         text += sweep_block           # heartbeat carries it when no
-        # new-post message went out
+        # digest went out
         print(text)
         if send and not dry_run:
             bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
@@ -611,6 +784,54 @@ def _save_post_log(entries: list) -> None:
                              encoding="utf-8")
 
 
+def _load_questions() -> list:
+    """Open questions ([] when missing/corrupt)."""
+    try:
+        return json.loads(QUESTIONS_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
+def _save_questions(questions: list) -> None:
+    QUESTIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    QUESTIONS_PATH.write_text(json.dumps(questions, indent=2),
+                              encoding="utf-8")
+
+
+def open_question(kind: str, code: str, filename: str,
+                  shop_key: str, text: str) -> None:
+    """Record an unanswered user question (S5 'no end date on this
+    board — reply with the date or open'; P4 ambiguous shop for AUTO
+    codes). Idempotent per (kind, code, file); the ask repeats in
+    EVERY digest until cleared by set-date / resolve-shop."""
+    questions = _load_questions()
+    if any(q.get("kind") == kind and q.get("code") == code.upper()
+           and q.get("file") == filename
+           for q in questions):
+        return
+    questions.append({"kind": kind, "code": code.upper(),
+                      "file": filename, "shop": shop_key,
+                      "text": text,
+                      "asked_since": sydney_now().isoformat(
+                          timespec="seconds")})
+    _save_questions(questions)
+
+
+def clear_questions(code: str, filename: str | None = None) -> int:
+    """Drop answered questions for a code (optionally one file).
+    Returns how many were cleared."""
+    code = code.strip().upper()
+    questions = _load_questions()
+    kept = [q for q in questions
+            if not (q.get("code") == code
+                    and (filename is None
+                         or q.get("file") == filename))]
+    cleared = len(questions) - len(kept)
+    if cleared:
+        _save_questions(kept)
+    return cleared
+
+
 def post_log_cmd(code: str) -> int:
     """'--post-log CODE' — show the remembered posts for a shop:
     file, when ingested, validity date (the pipeline's memory).
@@ -695,18 +916,24 @@ def set_date_cmd(code: str, filename: str, date_text: str) -> int:
     if store is None:
         print(f"[set-date] unknown code: {code}")
         return 1
-    valid_until = parse_validity_end("valid until " + date_text,
-                                     today=sydney_today())
-    if valid_until is None:
-        parsed = None
-        try:
-            parsed = date.fromisoformat(date_text.strip())
-        except ValueError:
-            pass
-        valid_until = parsed
-    if valid_until is None:
-        print(f"[set-date] could not read a date from: {date_text}")
-        return 1
+    # S5 (user directive 2026-09-11): 'open' = the user's explicit
+    # answer "leave it undated" — records the decision, clears the
+    # repeating question, stamps nothing.
+    open_undated = str(date_text or "").strip().lower() == "open"
+    valid_until = None
+    if not open_undated:
+        valid_until = parse_validity_end(
+            "valid until " + date_text, today=sydney_today())
+        if valid_until is None:
+            parsed = None
+            try:
+                parsed = date.fromisoformat(date_text.strip())
+            except ValueError:
+                pass
+            valid_until = parsed
+        if valid_until is None:
+            print(f"[set-date] could not read a date from: {date_text}")
+            return 1
 
     folder = inbox_dir_for(code)
     needs = folder / "needs_date"
@@ -716,40 +943,94 @@ def set_date_cmd(code: str, filename: str, date_text: str) -> int:
     if src.exists():
         src.replace(done / filename)
     elif not (done / filename).exists():
-        print(f"[set-date] {filename} not in needs_date/ "
-              f"(or processed/)")
-        return 1
+        # Sweep-ingested posts keep no inbox file (their images stay
+        # in the run dir) — the date answer still records + stamps.
+        print(f"[set-date] {filename}: no inbox file for {code} "
+              f"(sweep post?) — recording the date anyway")
 
     entries = _load_post_log()
     for e in entries:
         if e.get("code") == code and e.get("file") == filename:
-            e["valid_until"] = valid_until.isoformat()
+            e["valid_until"] = (valid_until.isoformat()
+                                if valid_until else None)
             e["archived"] = "processed"
             break
     else:
         entries.append({"code": code, "file": filename,
-                        "valid_until": valid_until.isoformat(),
+                        "valid_until": (valid_until.isoformat()
+                                        if valid_until else None),
                         "ingested_at": sydney_now().isoformat(
-                            timespec="seconds"), "items": None})
+                            timespec="seconds"), "items": None,
+                        "archived": "processed"})
     _save_post_log(entries)
+    cleared = clear_questions(code, filename)
 
     # Sheet stamps (checker fix): the tab reflects the date now.
     stamped = 0
-    try:
-        from core.sheets_client import connect_worksheet
-        tab = connect_worksheet().spreadsheet.worksheet(TAB_NAME)
-        grid, stamped = _restamp_undated(tab.get_all_values(),
-                                         store, valid_until)
-        tab.clear()
-        tab.freeze(rows=2)
-        tab.update(values=grid,
-                   range_name=f"A1:K{len(grid)}")
-    except Exception as exc:  # noqa: BLE001 — log update already safe
-        print(f"[set-date] ⚠️ sheet re-stamp failed: {exc}")
-    print(f"[set-date] {filename}: valid until "
-          f"{valid_until:%a %d %b} recorded and archived"
-          + (f" · {stamped} cell(s) stamped" if stamped else ""))
+    if valid_until is not None:
+        try:
+            from core.sheets_client import connect_worksheet
+            tab = connect_worksheet().spreadsheet.worksheet(TAB_NAME)
+            grid, stamped = _restamp_undated(tab.get_all_values(),
+                                             store, valid_until)
+            tab.clear()
+            tab.freeze(rows=2)
+            tab.update(values=grid,
+                       range_name=f"A1:K{len(grid)}")
+        except Exception as exc:  # noqa: BLE001 — log update already safe
+            print(f"[set-date] ⚠️ sheet re-stamp failed: {exc}")
+    outcome = (f"valid until {valid_until:%a %d %b}"
+               if valid_until else "left undated (open)")
+    print(f"[set-date] {filename}: {outcome} recorded and archived"
+          + (f" · {stamped} cell(s) stamped" if stamped else "")
+          + (f" · {cleared} question(s) cleared" if cleared else ""))
     return 0
+
+
+def resolve_shop_cmd(code: str, shop: str) -> int:
+    """'--resolve-shop CODE SHOP' (P4, user directive 2026-09-11):
+    complete a pending AUTO… watch-folder drop — re-point its inbox
+    folder at the named shop, clear the shop question, ingest now.
+
+    Args:
+        code: the AUTO… code shown in the digest question.
+        shop: dunya | merjan | fruitopia | abusalim (prefixes/aliases
+            like 'mer', 'abu salim', or the full shop name all work).
+
+    Returns:
+        int: the ingest's exit code, or 1 on unknown shop/no files.
+    """
+    from extractors.fb_flyer_fetch import STORES
+
+    code = code.strip().upper()
+    raw = " ".join(str(shop or "").lower().split())
+    aliases = {}
+    for s in STORES:
+        aliases[s["key"]] = s
+        aliases[s["code"].lower()] = s
+        aliases[s["name"].lower()] = s
+    store = aliases.get(raw) or next(
+        (s for s in STORES if s["name"].lower().startswith(raw)),
+        None)
+    if store is None:
+        print(f"[resolve-shop] unknown shop '{shop}' — use dunya | "
+              f"merjan | fruitopia | abusalim")
+        return 1
+    old_folder = INBOX_DIR / code
+    if not old_folder.is_dir() or not _all_inbox_files(old_folder):
+        print(f"[resolve-shop] {code}: no pending files in the inbox")
+        return 1
+    base = f"{store['code']}{sydney_now():%d%m%y%H%M}"
+    new_code = base
+    n = 1
+    while (INBOX_DIR / new_code).exists():
+        n += 1
+        new_code = f"{base}_{n}"
+    old_folder.rename(INBOX_DIR / new_code)
+    clear_questions(code)
+    print(f"[resolve-shop] {code} -> {new_code} ({store['name']}) "
+          f"— ingesting")
+    return ingest_code(new_code)
 
 
 def inbox_dir_for(code: str) -> Path:
@@ -778,6 +1059,89 @@ def _all_inbox_files(folder: Path) -> list[Path]:
                   reverse=True)
 
 
+def _norm_grid(grid: list) -> list[list]:
+    """Row-padded width-normalised copy of a tab grid."""
+    width = len(TAB_COLUMNS) + 1
+    return [(list(r) + [""] * width)[:width] for r in grid]
+
+
+def _digest_items(converted: list[dict],
+                  changes: dict | None = None) -> list[dict]:
+    """Digest item records from vision-schema deals: price text with
+    unit, 'min order …' terms, per-item till date, and the previous
+    price when a re-post moved it (S7 'was $X -> now $Y')."""
+    from core.multibuy import effective_unit_rate
+    from core.uom import FAMILY_WEIGHT, parse_size
+    changes = changes or {}
+    items: list[dict] = []
+    for c in converted:
+        kind = c.get("price_kind")
+        price = c.get("price")
+        unit = (c.get("unit") or "").lower()
+        terms = None
+        per_kg = None
+        if kind == "bulk_pack":
+            size = str(c.get("bulk_size") or "")
+            price_text = f"{_money(float(price or 0))} {size}".strip()
+            terms = f"{size} pack"
+            parsed = parse_size(size)
+            if parsed is not None \
+                    and parsed.family == FAMILY_WEIGHT \
+                    and parsed.value > 0 and price:
+                per_kg = round(float(price)
+                               / (parsed.value / 1000.0), 2)
+        elif kind == "multibuy":
+            qty = int(c.get("multibuy_qty") or 0)
+            total = float(price or 0)
+            rate = (effective_unit_rate(qty, total)
+                    if qty >= 2 and total > 0 else None)
+            price_text = (f"{_money(rate)}/{unit}"
+                          if rate is not None else "?")
+            terms = (f"{qty}kg for {_money(total)}" if unit == "kg"
+                     else f"{qty} for {_money(total)}")
+            per_kg = rate if unit == "kg" else None
+        else:
+            price_text = (f"{_money(float(price))}/{unit}"
+                          if price else "?")
+            per_kg = float(price) if unit == "kg" else None
+        display = _display_name(c)
+        items.append({
+            "name": display, "price_text": price_text,
+            "terms": terms,
+            "till": (f"{c['valid_until']:%a %d %b}"
+                     if c.get("valid_until") else None),
+            "was": changes.get(display), "per_kg": per_kg})
+    return items
+
+
+def _ingest_unknown_shop(code: str, dry_run: bool = False) -> int:
+    """AUTO… codes (P4, user directive 2026-09-11): a watch-folder
+    root drop with no shop subfolder. Files STAY pending — nothing is
+    written, never a guess (the S10/S16 rule) — and the digest asks
+    which shop the board belongs to; --resolve-shop completes it.
+    """
+    folder = inbox_dir_for(code)
+    files = _all_inbox_files(folder)
+    if not files:
+        print(f"[ingest] no file in {folder}")
+        return 1
+    if dry_run:
+        print(f"[ingest] {code}: {len(files)} file(s) awaiting shop "
+              f"resolution (dry-run)")
+        return 0
+    open_question(
+        "shop", code, files[0].name, "",
+        f"{code} (saved from your watch folder): which shop is this "
+        f"board? reply with the shop — dunya / merjan / fruitopia / "
+        f"abusalim")
+    _post_digest(_render_window_digest(
+        [], _load_questions(),
+        f"Watch-folder drop {code}"))
+    print(f"[ingest] {code}: {len(files)} file(s) pending — shop "
+          f"question asked")
+    return 0
+
+
 def ingest_code(code: str, dry_run: bool = False) -> int:
     """Process EVERY file in data/local_deals_inbox/<CODE>/.
 
@@ -804,6 +1168,9 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
 
     code = code.strip().upper()
     store = _store_for_code(code)
+    if store is None and code.startswith("AUTO"):
+        # P4: shop-less watch-folder drop — ask, never guess.
+        return _ingest_unknown_shop(code, dry_run=dry_run)
     if store is None:
         print(f"[ingest] unknown code: {code}")
         return 1
@@ -818,6 +1185,8 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
     all_vision_deals: list[dict] = []
     batches: list[dict] = []     # per-file summaries (writable)
     expired_batches: list[dict] = []   # FIX-4 (D2): read, never written
+    notice_batches: list[dict] = []    # S11: zero-price posts, no writes
+    unreadable_files: list[str] = []   # S10/S16: vision failed, pending
     category = _store_kind(store["key"]) or "other"
     for path in files:
         try:
@@ -844,8 +1213,12 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
                       f"{path.suffix} — skipped")
                 continue
         except Exception as exc:   # noqa: BLE001 — file isolation
+            # S10/S16 (user directive 2026-09-11): vision failure on a
+            # file writes NOTHING, the file stays pending (retried on
+            # the next better file) and the digest flags it.
             print(f"[ingest] {path.name}: "
-                  f"{exc.__class__.__name__} — skipped")
+                  f"{exc.__class__.__name__} — flagged unreadable")
+            unreadable_files.append(path.name)
             continue
 
         # Q17 (Round 3): butchery posts are prefixed at normalization
@@ -853,7 +1226,15 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
         deals = _prefix_butcher_deals(store["key"], deals)
 
         if not deals:
-            print(f"[ingest] {path.name}: 0 prices read — skipped")
+            # S11: an announcement/notice post — detected, recorded as
+            # zero-item, never a tab write.
+            print(f"[ingest] {path.name}: 0 prices read — notice only")
+            notice_batches.append({
+                "file": path.name, "deals": [],
+                "valid_until": None,
+                "snippet": (
+                    _post_snippet(text) if source == "text" else
+                    "(image-only post — no text)")})
             continue
         # FIX-4 (D2): freshness gate — a board whose printed end date
         # is already past writes NOTHING (user rule 2026-09-09; the
@@ -890,21 +1271,26 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
                             ", ".join(d["item"] for d in deals[:3])
                             + ("…" if len(deals) > 3 else ""))})
         converted = [_to_vision_deal(d, category) for d in deals]
-        for c in converted:
+        for c, d in zip(converted, deals):
             # Per-post validity rides on every deal — merge_store_tab
             # stamps each special cell with ITS OWN post's date, so
             # two posts with different end dates coexist (user rule
-            # 2026-09-07).
-            c["valid_until"] = valid_until
+            # 2026-09-07). S6 (2026-09-11): an ITEM-level date read
+            # from the line itself wins over the post-level date.
+            c["valid_until"] = d.get("valid_until") or valid_until
         all_vision_deals.extend(converted)
+        batches[-1]["converted"] = converted
 
-    if not all_vision_deals and not expired_batches:
+    if not all_vision_deals and not expired_batches \
+            and not notice_batches and not unreadable_files:
         print("[ingest] nothing readable in the folder")
         return 1
     if dry_run:
         print("[ingest] dry-run: sheet write + summary skipped")
         return 0
 
+    changes: dict[str, float] = {}    # display name -> previous price
+    standout_block: list[str] = []
     if all_vision_deals:
         from core.sheets_client import connect_spreadsheet
         spreadsheet = connect_spreadsheet()
@@ -913,6 +1299,11 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
         # "dunya_fb"); the site column is --dunya-site's.
         col_store = ("dunya_fb" if store["key"] == "dunya"
                      else store["key"])
+        # S7 (user directive 2026-09-11): snapshot the shop's cells
+        # before the merge so the digest can show 'was $X -> now $Y'
+        # when a same-day re-post moves a price.
+        sp_col = _special_column_for(store["key"])
+        before_grid = _norm_grid(worksheet.get_all_values() or [])
         # Files are newest-first; reversed so the NEWEST post's deal
         # wins when two posts list the same item (older posts never
         # overwrite fresher prices on the sheet). Validity stays per
@@ -926,18 +1317,46 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
             worksheet, col_store,
             list(reversed(all_vision_deals)),
             valid_until=newest_valid,
-            master_ws=spreadsheet.worksheet("Products_Master"))
+            master_ws=spreadsheet.worksheet(MASTER_TAB))
         print(f"[ingest] Local_Deals tab updated ({rows} rows incl. "
               f"headers)")
         for line in new_rows:
             print(f"   + {line}")
+        after_grid = _norm_grid(worksheet.get_all_values() or [])
+        if sp_col is not None:
+            # S7 'was' priority: the OLDER same-window post's price
+            # when the item repeats, else the replaced sheet value.
+            older_post: dict[str, float] = {}
+            for c in reversed(all_vision_deals):    # merge order
+                older_post.setdefault(_display_name(c),
+                                      c.get("price"))
+            for c in reversed(all_vision_deals):
+                display = _display_name(c)
+                i_new = _reuse_match_index(after_grid, display)
+                new = _numeric_price(
+                    after_grid[i_new][sp_col]
+                    if i_new is not None
+                    and len(after_grid[i_new]) > sp_col else None)
+                was = older_post.get(display)
+                if was is not None and new is not None \
+                        and abs(float(was) - new) >= 0.01:
+                    changes.setdefault(display, round(float(was), 2))
+                    continue
+                i_old = _reuse_match_index(before_grid, display)
+                if i_old is None or i_new is None:
+                    continue
+                old = _numeric_price(
+                    before_grid[i_old][sp_col]
+                    if len(before_grid[i_old]) > sp_col else "")
+                if old is not None and new is not None \
+                        and abs(new - old) >= 0.01:
+                    changes.setdefault(display, old)
 
         # Standout check vs the master sheet — the SAME >20% machinery
         # as the Friday/on-demand report (user rule 2026-09-07: the
         # alert must show up at ingest time, not only in the report).
         # Each batch carries its OWN validity; expired batches are
         # recorded but never compared.
-        standout_block: list[str]
         try:
             from core.sheets_client import connect_worksheet
             master_rows = _load_master_rows(connect_worksheet())
@@ -958,31 +1377,46 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
                   f"{exc.__class__.__name__}")
             standout_block = ["⚠️ Standout check failed — run the "
                               "local-deals report later"]
-
-        bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
-        topic_id = _env_int(LOCAL_DEALS_TOPIC_ENV)
-        lines = [f"📥 {store['name']} — {len(batches)} post(s) saved, "
-                 f"{len(all_vision_deals)} items total:"]
-        for b in batches:
-            lines.append(f"{b['file']} ({b['valid_txt']}):")
-            for d in b["deals"]:
-                note = f" ({d['multibuy_note']})" \
-                    if d.get("multibuy_note") else ""
-                lines.append(f"• {d['item']} — "
-                             f"{_money(d.get('unit_price', d['price']))}"
-                             f"/{d['unit']}{note}")
-        lines.append("")
-        lines.extend(standout_block)
-        receipt = _send_message(bot_token, TELEGRAM_CHAT_ID,
-                                "\n".join(lines)[:4000],
-                                thread_id=topic_id or TELEGRAM_CHAT_ID)
-        if not receipt.get("ok"):
-            print("[ingest] telegram delivery failed")
     else:
         # FIX-4 (D2): every readable post was already expired — the
         # freshness gate wrote 0 cells; say so.
         print("[ingest] 0 cells written — every readable post had "
               "already ended")
+
+    # S5 (user directive 2026-09-11): undated boards open the expiry
+    # question — it repeats in EVERY digest until answered ('open'
+    # leaves the board undated) via the existing set-date path.
+    shop_label = SHORT_SHOP_NAMES.get(store["key"], store["name"])
+    for b in batches:
+        if not b["valid_until"]:
+            open_question(
+                "expiry", code, b["file"], store["key"],
+                f"{shop_label}: no end date on this board "
+                f"({code} {b['file']}) — reply with the date, or "
+                f"'open' to leave it undated")
+            print(f"[ingest] {b['file']} — expiry question asked")
+
+    # The ONE digest for this ingest (instant path): items, terms,
+    # per-item validity, changes, notices, unreadable flags,
+    # standouts, and every open question.
+    posts = [{
+        "code": code, "file": b["file"],
+        "valid_txt": b["valid_txt"],
+        "items": _digest_items(b.get("converted") or [], changes),
+        "notice_only": False, "unreadable": False,
+    } for b in batches]
+    posts += [{"code": code, "file": n["file"], "valid_txt": "",
+               "items": [], "notice_only": True, "unreadable": False}
+              for n in notice_batches]
+    posts += [{"code": code, "file": f, "valid_txt": "", "items": [],
+               "notice_only": False, "unreadable": True}
+              for f in unreadable_files]
+    _post_digest(_render_window_digest(
+        [{"shop_label": shop_label, "shop": store["name"],
+          "posts": posts}],
+        _load_questions(),
+        f"Ingest {code}",
+        standout_lines=standout_block or None))
 
     # Archive what was processed; route unknown-validity files to
     # needs_date/ (settled later with --set-date). Everything is
@@ -990,9 +1424,10 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
     # expired boards included, flagged expired: true (FIX-4: read,
     # refused, never re-alerted).
     entries = _load_post_log()
-    for b in batches + expired_batches:
+    for b in batches + expired_batches + notice_batches:
         is_expired = bool(b.get("expired"))
-        sub = ("processed" if (b["valid_until"] or is_expired)
+        sub = ("processed" if (b["valid_until"] or is_expired
+                               or not b.get("deals"))
                else "needs_date")
         dest_dir = folder / sub
         dest_dir.mkdir(parents=True, exist_ok=True)
@@ -1016,11 +1451,13 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
     _save_post_log(entries)
     needs = [b for b in batches if not b["valid_until"]]
     if needs:
-        print("[ingest] posts missing a validity date:")
+        print("[ingest] posts missing a validity date (question "
+              "asked; repeats in every digest until answered):")
         for b in needs:
             print(f"   {b['file']} — starts with: {b['snippet']}")
         print("[ingest] reply with the dates (e.g. '<code> board.jpg "
-              "valid until 12 September') and I will record them")
+              "valid until 12 September') or 'open' to leave "
+              "undated")
 
     # All posts are handled: clear every pending code for this shop
     # (the next alert mints a fresh timestamped code).
@@ -1096,6 +1533,10 @@ STORE_COLUMNS = [
     ("abusalim", "Abu Salim Fruit Market"),
 ]
 TAB_NAME = "Local_Deals"
+# The master tab is opened by NAME through THIS constant only
+# (the test_products_master_single_read_occurrence grep guard
+# counts the literal: read-helper docstring + this line).
+MASTER_TAB = "Products_Master"
 SHOP_TAGS = {"dunya": "DUN", "merjan": "MER",
              "fruitopia": "FRU", "abusalim": "ABS"}
 
@@ -1142,8 +1583,13 @@ def _comment_tag(store_key: str) -> str:
 
 
 def _tag_note(store_key: str, note: str) -> str:
-    """'[FRU] multi buy 2 for $1.50 — $0.75/ea' (shop-tagged)."""
-    return f"[{_comment_tag(store_key)}] {note}"
+    """'[FRU] multi buy 2 for $1.50 — $0.75/ea' (shop-tagged).
+
+    ID-3 (user directive 2026-09-11): any shop tag embedded in the
+    note text is stripped FIRST — the cell merge stays strip-then-
+    append per shop, so a tag can never stack ('[MER] [MER] …')."""
+    clean = _TAG_RE.sub("", str(note or "")).strip()
+    return f"[{_comment_tag(store_key)}] {clean}"
 
 
 _TAG_RE = re.compile(r"\[(DUN|MER|FRU|ABS)\]\s*")
@@ -1179,9 +1625,17 @@ def _merge_comment_cell(existing: str, store_key: str, note: str
         The merged cell text ('' when nothing remains).
     """
     tag = _comment_tag(store_key)
-    others = [seg.strip() for seg in str(existing or "").split(";")
-              if seg.strip()
-              and _TAG_RE.match(seg.strip()).group(1) != tag]
+    others: list[str] = []
+    for seg in str(existing or "").split(";"):
+        seg = seg.strip()
+        if not seg:
+            continue
+        m = _TAG_RE.match(seg)
+        # ID-3 robustness: an untagged free-text segment is KEPT
+        # (never crashes the merge — the morning scramble came from
+        # tag handling that could not digest what it had written).
+        if m is None or m.group(1) != tag:
+            others.append(seg)
     if not note:
         return "; ".join(others)
     return "; ".join(others + [_tag_note(store_key, note)])
@@ -1357,10 +1811,17 @@ def _bulk_note(deal: dict) -> str:
 
 def _multibuy_note(deal: dict) -> str:
     """'[multi buy 2 for $15.00 — $7.50/ea]' (effective_unit_rate
-    math, read-only reuse of core.multibuy semantics)."""
+    math, read-only reuse of core.multibuy semantics).
+
+    ID-1 (user directive 2026-09-11): a /kg deal ('3kg for $32.99')
+    carries the PACK TERMS in kg — 'multi buy 3kg for $32.99' — with
+    NO per-ea rate suffix (the per-kg rate lives in the price cell;
+    never per-ea on a /kg row)."""
     from core.multibuy import effective_unit_rate
     qty = int(deal.get("multibuy_qty") or 0)
     total = float(deal.get("price") or 0)
+    if (deal.get("unit") or "").lower() == "kg":
+        return f"[multi buy {qty}kg for {_money(total)}]"
     rate = effective_unit_rate(qty, total)
     return (f"[multi buy {qty} for {_money(total)} "
             f"— {_money(rate)}/ea]")
@@ -1371,9 +1832,11 @@ def _cell_for(deal: dict) -> tuple:
 
     Price cell: single deals -> the price; multibuy -> the effective
     UNIT rate (comparable number); bulk -> the bundle price. Comments
-    cell: the multi-buy/bulk note text (the user asked for specials
-    pricing and multi-buy comments in separate columns —
-    2026-09-06). None when the price is missing entirely.
+    cell: the multi-buy/bulk note text WITHOUT its enclosing brackets
+    (the live-verified segment format '[MER] multi buy 3kg for
+    $32.99' — what v2_read renders as 'min order …'; the bracketed
+    note form is kept only for the in-place offer text fallback).
+    None when the price is missing entirely.
     """
     kind = deal.get("price_kind")
     price = deal.get("price")
@@ -1393,7 +1856,10 @@ def _cell_for(deal: dict) -> tuple:
         cell = note          # keep the offer text visible in-place
     else:
         cell = None
-    return cell, note
+    comment = note
+    if comment.startswith("[") and comment.endswith("]"):
+        comment = comment[1:-1]
+    return cell, comment
 
 
 def build_rows(all_store_deals: dict) -> dict:
@@ -2157,6 +2623,146 @@ def _env_int(name: str) -> int | None:
         return None
 
 
+# --- the ONE digest per window (user directive 2026-09-11) ---------------
+# Sections look like:
+#   {"shop_label": "Merjan", "shop": "Merjan Brothers Quality Meats",
+#    "posts": [{"code", "file", "valid_txt", "items": [
+#        {"name", "price_text", "terms", "till", "was", "per_kg"}],
+#      "notice_only": bool, "unreadable": bool}]}
+# Questions are local_deals_questions.json entries (S5/P4).
+
+SHORT_SHOP_NAMES = {"dunya": "Dunya", "dunya_fb": "Dunya",
+                    "merjan": "Merjan", "fruitopia": "Fruitopia",
+                    "abusalim": "Abu Salim"}
+
+
+def _digest_shop_summary(shop_label: str, posts: list[dict]) -> str:
+    """One summary bit for the digest header line, spec wording:
+    'Merjan: 3 new items (2 with min-order deals, best $11.00/kg)'
+    / 'Fruitopia: notice only, no prices' / unreadable flags."""
+    items = [i for p in posts for i in (p.get("items") or [])]
+    unreadable = sum(1 for p in posts if p.get("unreadable"))
+    expired = [p for p in posts if p.get("expired")]
+    if not items:
+        if expired and len(expired) == len(posts):
+            return f"{shop_label}: board already ended — nothing written"
+        if unreadable and unreadable == len(posts):
+            return (f"{shop_label}: {unreadable} image(s) unreadable")
+        return f"{shop_label}: notice only, no prices"
+    bit = f"{shop_label}: {len(items)} new item" \
+        f"{'s' if len(items) != 1 else ''}"
+    with_terms = [i for i in items if i.get("terms")]
+    extras = []
+    if with_terms:
+        extras.append(f"{len(with_terms)} with min-order deals")
+    per_kg = [i["per_kg"] for i in items if i.get("per_kg")]
+    if per_kg:
+        extras.append(f"best {_money(min(per_kg))}/kg")
+    if extras:
+        bit += f" ({', '.join(extras)})"
+    if unreadable:
+        bit += f" · {unreadable} image(s) unreadable"
+    return bit
+
+
+def _render_window_digest(sections: list[dict], questions: list[dict],
+                          label: str,
+                          standout_lines: list[str] | None = None
+                          ) -> list[str]:
+    """The ONE combined digest per window (AI-M5). Header summary line
+    per spec example, one detail block per shop in post order, the
+    standout comparison block, then every open QUESTION. Message
+    chunks stay <= MSG_CHAR_LIMIT (split at block boundaries).
+
+    The words 'save the image' and 'done' NEVER appear — the digest
+    IS the action; questions are the only thing to answer.
+    """
+    summary_bits = [_digest_shop_summary(s.get("shop_label", "shop"),
+                                         s.get("posts") or [])
+                    for s in sections]
+    if questions:
+        first = questions[0].get("text") or ""
+        n = len(questions)
+        summary_bits.append(
+            f"{n} question{'s' if n != 1 else ''} need"
+            f"{'' if n != 1 else 's'} you: {first}")
+    blocks: list[str] = []
+    header = f"🔍 {label}"
+    if summary_bits:
+        header += " — " + " · ".join(summary_bits)
+    blocks.append(header)
+
+    for sec in sections:
+        lines = [f"🔪 {sec.get('shop') or sec.get('shop_label')}"]
+        for p in sec.get("posts") or []:
+            code = p.get("code") or ""
+            if p.get("unreadable"):
+                lines.append(f"📷 {code} {p.get('file') or ''} — image "
+                             f"unreadable — forward a clearer version "
+                             f"or reply with the items as text")
+                continue
+            if p.get("notice_only"):
+                lines.append(f"📋 {code} {p.get('file') or ''} — notice "
+                             f"only, no prices")
+                continue
+            if p.get("expired"):
+                lines.append(f"🗑 {code} {p.get('file') or ''} — "
+                             f"{p.get('valid_txt') or 'deals ended'}")
+                continue
+            valid = p.get("valid_txt") or ""
+            post_head = f"📄 {code} {p.get('file') or ''}".rstrip()
+            if valid:
+                post_head += f" · {valid}"
+            lines.append(post_head)
+            for i in p.get("items") or []:
+                line = f"• {i['name']} — {i.get('price_text') or '?'}"
+                if i.get("terms"):
+                    line += f" (min order {i['terms']})"
+                if i.get("till"):
+                    line += f" · till {i['till']}"
+                if i.get("was") is not None:
+                    line += f" — was {_money(i['was'])}"
+                lines.append(line)
+        blocks.append("\n".join(lines))
+
+    if standout_lines:
+        text = "\n".join(standout_lines).strip()
+        if text and text != "No local standouts this week":
+            blocks.append(text)
+
+    if questions:
+        qlines = [f"❓ {len(questions)} question"
+                  f"{'s' if len(questions) != 1 else ''} need"
+                  f"{'s' if len(questions) == 1 else ''} you:"]
+        for q in questions:
+            qlines.append(f"• {q.get('text') or ''}")
+        blocks.append("\n".join(qlines))
+
+    messages: list[str] = []
+    current = ""
+    for block in blocks:
+        if current and len(current) + 2 + len(block) > MSG_CHAR_LIMIT:
+            messages.append(current)
+            current = block
+        else:
+            current = f"{current}\n\n{block}" if current else block
+    if current:
+        messages.append(current)
+    return messages
+
+
+def _post_digest(messages: list[str]) -> None:
+    """Send digest chunks to the local-deals topic (P2)."""
+    bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
+    topic_id = _env_int(LOCAL_DEALS_TOPIC_ENV)
+    for text in messages:
+        receipt = _send_message(bot_token, TELEGRAM_CHAT_ID,
+                                text[:MSG_CHAR_LIMIT],
+                                thread_id=topic_id or TELEGRAM_CHAT_ID)
+        if not receipt.get("ok"):
+            print("[digest] telegram delivery failed")
+
+
 def _env_upsert(key: str, value: str, env_path: Path) -> None:
     """Atomically replace-or-append ONE KEY=VALUE line in .env.
 
@@ -2574,6 +3180,80 @@ def _canonical_match_index(grid: list, name: str) -> int | None:
     return None
 
 
+# ID-2 reuse guard (user directive 2026-09-11): bare unit words carry
+# no product identity; size tokens ('5kg') DO — they separate pack
+# presentations (S9: a 5kg pack and a /kg row are different lines).
+_REUSE_UNIT_WORDS = {"kg", "g", "mg", "ml", "l", "ea", "each", "pack"}
+
+
+def _reuse_tokens(text: str) -> set:
+    """ID-2 matcher tokens: PLURAL-FOLDED, order-free word tokens,
+    ignoring unit markers and the source-based 'halal' prefix; size
+    tokens ('5kg') are KEPT (pack presentations stay apart, S9)."""
+    tokens: set[str] = set()
+    for t in similarity_tokens(str(text or "")):
+        low = t.lower()
+        if re.fullmatch(r"\d+(?:[.,]\d+)?", low):
+            continue
+        if low in _REUSE_UNIT_WORDS or low in STOPWORDS \
+                or low == "halal":
+            continue
+        tokens.add(_singular(low))
+    return tokens
+
+
+def _reuse_match_index(grid: list, name: str) -> int | None:
+    """ID-2 v2-native reuse guard: the row an incoming name REUSES
+    instead of auto-creating a near-duplicate.
+
+    Layer 1 — canonical-key equality (the pre-v2 rule, kept: exact
+    equivalents always reuse). Layer 2 — token CONTAINMENT either
+    direction over _reuse_tokens (plural-folded, unit markers +
+    'halal' ignored), allowed only when the SMALLER side carries
+    >= 2 tokens (a lone token never reuses); tie-break: most token
+    overlap, then the earliest row. Pack presentations stay separate
+    (S9): when either side carries size tokens ('5kg'), BOTH must
+    carry the SAME size. The proven pair 'Halal Sliced Lamb Neck
+    /kg' vs 'Halal Lamb Necks /kg' reuses via layer 2 ({lamb, neck}
+    contained, no sizes); 'Goat Curry 5kg' never reuses
+    'Goat Curry /kg'; 'Beef Curry' vs 'Lamb Curry' shares no
+    containment and stays apart.
+    """
+    size_re = re.compile(r"\d+(?:[.,]\d+)?\s*(?:kg|g|mg|ml|l)\Z",
+                         re.IGNORECASE)
+
+    def _split(tokens: set) -> tuple[set, set]:
+        sizes = {t for t in tokens if size_re.fullmatch(t)}
+        return tokens - sizes, sizes
+
+    def _item_row(i: int) -> bool:
+        first = str(grid[i][0]).strip()
+        if not first or first in SECTION_ORDER:
+            return False
+        return first != "Prices valid until"
+
+    incoming = _reuse_tokens(_base_name(name))
+    in_body, in_sizes = _split(incoming)
+    best: tuple[int, int] | None = None      # (-overlap, row_index)
+    for i in range(1, len(grid)):
+        if not _item_row(i):
+            continue
+        row_name = _base_name(grid[i][0])
+        if canonical_key(row_name) == canonical_key(_base_name(name)):
+            return i                          # layer 1: exact reuse
+        row_body, row_sizes = _split(_reuse_tokens(row_name))
+        if in_sizes != row_sizes:
+            continue                          # S9: presentations apart
+        smaller, larger = sorted((in_body, row_body), key=len)
+        if len(smaller) < 2 or not smaller.issubset(larger):
+            continue                          # layer 2 containment
+        overlap = len(smaller)
+        cand = (-overlap, i)
+        if best is None or cand < best:
+            best = cand
+    return None if best is None else best[1]
+
+
 def merge_store_tab(worksheet, store_key: str, deals: list[dict],
                     valid_until=None,
                     master_ws=None) -> tuple[int, list[str]]:
@@ -2643,15 +3323,14 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
         if not section_rows:
             continue
         for row in section_rows:
-            # FIX-8 (D4): match existing rows by the canonical key
-            # (order-free token set via name_matcher, variety-aware —
-            # the same normalization build_rows and --set-special
-            # use) — NOT exact Col A text, so "5kg Bag Washed
-            # Potatoes" merges into "Washed Potatoes 5kg Bag".
+            # FIX-8 (D4) + ID-2 (v2 reuse guard, 2026-09-11): exact
+            # canonical equality first, then plural-folded token
+            # containment (unit markers + halal ignored) — the
+            # morning's 13 near-duplicate rows came from descriptor
+            # drift ("Halal Sliced Lamb Neck" vs "Halal Lamb Necks").
             # Round 3: matching is GRID-WIDE — new rows bottom-append
-            # outside their section block (Q27), so the v1
-            # section-scoped scan would never find them again.
-            match = _canonical_match_index(grid, row[0])
+            # outside their section block (Q27).
+            match = _reuse_match_index(grid, row[0])
             if match is None:
                 grid.append(list(row))
                 appended.append(grid[-1])
@@ -3011,7 +3690,7 @@ def set_store_prices(worksheet, store_key: str, kind: str,
         if unit not in ("kg", "ea"):
             display = item           # no suffix without a unit
 
-        match = _canonical_match_index(grid, display)
+        match = _reuse_match_index(grid, display)
         cell = _stamp_validity(round(float(price), 2), till) \
             if kind == "special" else round(float(price), 2)
         if match is None:

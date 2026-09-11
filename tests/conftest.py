@@ -34,6 +34,8 @@ for _p in (str(_PROJECT), str(_ROOT)):
 _STATE_ATTRS = [
     ("core.name_matcher", "QUEUE_PATH", "unmapped_queue.json"),
     ("core.local_deals", "POST_LOG_PATH", "local_deals_post_log.json"),
+    ("core.local_deals", "QUESTIONS_PATH",
+     "local_deals_questions.json"),
     ("core.item_codes", "REGISTRY_PATH", "item_code_registry.json"),
     ("core.aldi_specials", "STATE_PATH", "aldi_specials_state.json"),
     # R3-2 (R19): the R2-4 reason helper reads the breaker state

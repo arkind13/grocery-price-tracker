@@ -40,17 +40,29 @@ Extract EVERY price line into JSON ONLY (no prose, no markdown) matching:
 {"valid_until":"YYYY-MM-DD"|null,"validity_text":str|null,
  "deals":[{"item":str,"raw_text":str,"price":number,"unit":"kg"|"ea"|"pack",
 "price_kind":"single"|"multibuy"|"bulk_pack","multibuy_qty":int|null,
-"bulk_size":str|null,"category":"fruits"|"butchery"|"other","notes":str}]}
+"bulk_size":str|null,"category":"fruits"|"butchery"|"other","notes":str,
+"valid_until":"YYYY-MM-DD"|null}]}
 Rules:
 - valid_until: the date the specials END as printed on the board, in
   Australian day/month/year order ("valid until 11/09/2026" ->
   "2026-09-11"). null when no date is printed. validity_text = the raw
   wording you read it from.
 - "single": a normal per-kg or per-item price.
-- "multibuy": "N for $X" on the SAME standard pack -> multibuy_qty=N,
-  price=X (the bundle total).
-- "bulk_pack": a BULK/tier pack (e.g. "10kg box", "5kg bag") -> bulk_size
-  = the pack size string; NEVER report it as single.
+- "multibuy": a minimum-purchase deal on the SAME standard unit —
+  "N for $X" counted items AND "Nkg for $X" weighted meat alike ->
+  multibuy_qty=N, price=X (the bundle total). The unit is the unit
+  the deal is priced in: "kg" when the quantity is a WEIGHT ("3kg for
+  $32.99", "min 2kg") or the board prices that meat per kg; "ea" for
+  counted items. NEVER report a weighted deal as bulk_pack and never
+  report its per-unit/per-kg rate as price — price is ALWAYS the
+  bundle total.
+- "bulk_pack": ONLY a PHYSICAL pack product (a sealed box/bag/tray
+  you buy as one article, e.g. "10kg box", "5kg bag") -> bulk_size =
+  the pack size string; NEVER report "Nkg for $X" deal wording as
+  bulk_pack.
+- A deal line may carry its OWN end date printed next to it
+  (item-level date, e.g. "Lamb $12.99/kg til 14/09") -> that deal's
+  "valid_until" = "YYYY-MM-DD"; null when the line has no own date.
 - "category": fruits for produce, butchery for meat/chicken/smallgoods,
   anything else -> other.
 Output only the JSON object."""
@@ -101,6 +113,15 @@ def _validate_deal(deal: object) -> list[str]:
     kind = deal["price_kind"]
     qty = deal.get("multibuy_qty")
     bulk = deal.get("bulk_size")
+    # S6 (user directive 2026-09-11): a deal line may carry its own
+    # item-level end date — optional "YYYY-MM-DD" or null/absent.
+    deal_until = deal.get("valid_until")
+    if deal_until is not None \
+            and (not isinstance(deal_until, str)
+                 or not DATE_RE.match(deal_until)):
+        errs.append(
+            f"deal-level valid_until must be null or YYYY-MM-DD "
+            f"(got {deal_until!r})")
     if kind == "single":
         if qty not in (None, 0):
             errs.append(f"single deal carries multibuy_qty={qty!r}")

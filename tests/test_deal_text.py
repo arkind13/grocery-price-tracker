@@ -490,6 +490,9 @@ class TestDailyScan(unittest.TestCase):
                     patch("extractors.fb_timeline_fetch."
                           "fetch_timeline_posts",
                           side_effect=fake_fetch), \
+                    patch("core.sheets_client.connect_spreadsheet",
+                          side_effect=RuntimeError(
+                              "no sheet in test")), \
                     patch.object(ld, "_send_message",
                                  side_effect=lambda *a, **k:
                                  sent.append(a[2] if len(a) > 2
@@ -515,17 +518,20 @@ class TestDailyScan(unittest.TestCase):
                     offsets[refs[key]] = 30.0   # after the last alert
                     fake_fetch.ref = refs[key]
                 ld.run_daily_scan(send=True, force=True)  # new codes
-        self.assertEqual(n_after_first, 4)
+        # AI-M5 (2026-09-11): ONE digest per window — 4 shops with
+        # one post each are ONE message, never 4.
+        self.assertEqual(n_after_first, 1)
         # repeat scan: nothing new -> the heartbeat is the only
         # extra message (user rule 2026-09-07)
         self.assertEqual(n_after_repeat, n_after_first + 1)
-        self.assertEqual(len(sent), 9)
-        first = [t for t in sent if "code: FRU0709260907)" in t]
+        self.assertEqual(len(sent), 3)          # digest, heartbeat, digest
+        first = [t for t in sent if "FRU0709260907" in t]
         self.assertEqual(len(first), 1)
-        self.assertIn("When posted:", first[0])
-        self.assertIn("Valid until: Sat 12 Sep", first[0])
-        self.assertIn("ignore FRU0709260907", first[0])
-        delta = [t for t in sent if "code: FRU0709260917)" in t]
+        self.assertIn("Cos Lettuce", first[0])
+        self.assertIn("$0.99/ea", first[0])
+        self.assertIn("valid until Sat 12 Sep", first[0])
+        self.assertNotIn("done", first[0].lower())   # word retired
+        delta = [t for t in sent if "FRU0709260917" in t]
         self.assertEqual(len(delta), 1)
 
     def test_first_sighting_older_than_backfill_silent(self):
@@ -644,10 +650,13 @@ class TestDailyScan(unittest.TestCase):
                                  or {"ok": True}):
                 ld._save_scan_state({})
                 ld.run_daily_scan(send=True, force=True)
-        fru = [t for t in sent if "code: FRU" in t]
+        # AI-M5: one digest; the code still stamps the ALERT time.
+        fru = [t for t in sent if "FRU0709260907" in t]
         self.assertEqual(len(fru), 1)
-        self.assertIn("code: FRU0709260907)", fru[0])   # alert stamp
-        self.assertIn("When posted: Sun 06 Sep, 08:15 PM", fru[0])
+        self.assertIn("FRU0709260907", fru[0])   # alert stamp
+        # empty text, no images -> the S11 notice line
+        self.assertIn("notice only, no prices", fru[0])
+        self.assertNotIn("done", fru[0].lower())
 
     def test_missed_window_two_posts_both_notified(self):
         """The user's missed-run scenario: a window is skipped and the
@@ -692,6 +701,9 @@ class TestDailyScan(unittest.TestCase):
                     patch("extractors.fb_timeline_fetch."
                           "fetch_timeline_posts",
                           side_effect=fake_fetch), \
+                    patch("core.sheets_client.connect_spreadsheet",
+                          side_effect=RuntimeError(
+                              "no sheet in test")), \
                     patch.object(ld, "_send_message",
                                  side_effect=lambda *a, **k:
                                  sent.append(a[2] if len(a) > 2
@@ -704,22 +716,23 @@ class TestDailyScan(unittest.TestCase):
                 # scan sees both, none reported.
                 clock.now += _td(hours=6)                 # 15:07
                 state_refs = {
-                    "p3": (4020.0, "Valid until 12 September"),
-                    "p2": (14820.0, "Valid until 19 September"),
+                    "p3": (4020.0, "Valid until 12 September\n"
+                                  "Cos Lettuce \u2013 99\u00a2 each"),
+                    "p2": (14820.0, "Valid until 19 September\n"
+                                   "Carrots \u2013 $1.20/kg"),
                 }
                 ld.run_daily_scan(send=True, force=True)
-        fru = [t for t in sent if "(code: FRU" in t]
-        self.assertEqual(len(fru), 3)      # baseline + two deltas
-        self.assertIn("code: FRU0709261507)", fru[1])     # p3 newest
-        self.assertIn("code: FRU0709261507_2)", fru[2])   # p2 next
+        # AI-M5 (2026-09-11): ONE digest for the window carries BOTH
+        # posts — each with its own code and its OWN validity period.
+        digest = [t for t in sent if "FRU0709261507" in t]
+        self.assertEqual(len(digest), 1)
+        self.assertIn("FRU0709261507", digest[0])      # p3 newest
+        self.assertIn("FRU0709261507_2", digest[0])    # p2 next
         # each post keeps its OWN validity period
-        self.assertIn("Valid until: Sat 12 Sep", fru[1])
-        self.assertIn("Valid until: Sat 19 Sep", fru[2])
-        # the alert says how many posts are pending for this shop
-        self.assertIn("📍 2 new posts from this shop in this scan: "
-                      "FRU0709261507, FRU0709261507_2", fru[1])
-        self.assertIn("📍 2 new posts from this shop in this scan: "
-                      "FRU0709261507, FRU0709261507_2", fru[2])
+        self.assertIn("valid until Sat 12 Sep", digest[0])
+        self.assertIn("valid until Sat 19 Sep", digest[0])
+        self.assertIn("2 new items", digest[0])
+        self.assertNotIn("done", digest[0].lower())
 
     def test_heartbeat_notes_unchecked_shops(self):
         """Partial fetch failure: the heartbeat still fires and names
@@ -1368,7 +1381,7 @@ class TestDunyaSiteSync(unittest.TestCase):
         self.assertEqual(lamb[1], 15.0)
         # comments = the shop-tagged bundle note
         self.assertEqual(lamb[9],
-                         "[DUN] [multi buy 2 for $30.00 — $15.00/ea]")
+                         "[DUN] multi buy 2 for $30.00 — $15.00/ea")
         self.assertIn("1 on offer", sent[0])
 
 
@@ -1465,9 +1478,9 @@ class TestScanWindowsAndCutoff(unittest.TestCase):
                 created_offsets["p_new"] = -5.0
                 ld.run_daily_scan(send=True, force=True)
                 n3 = len(sent)
-        self.assertEqual(n1, 4)      # backfill: one per store
+        self.assertEqual(n1, 1)      # AI-M5: backfill digest = ONE msg
         self.assertEqual(n2, n1 + 1) # pre-alert post silent -> heartbeat
-        self.assertEqual(n3, n1 + 5) # 4 between-alerts + prior heartbeat
+        self.assertEqual(n3, n1 + 2) # between-alerts digest + heartbeat
 
 
 if __name__ == "__main__":

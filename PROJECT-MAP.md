@@ -65,9 +65,18 @@ Woolworths twin.
 
 ## The weekly rhythm
 
-1. During the week: the FB detector watches the four shops twice a
-   day; new posts land in an inbox; you (or the shops' own schedule)
-   trigger an ingest that updates the Local_Deals tab.
+1. During the week — **zero steps**: the 05:00/15:00 sweep finds every
+   new FB post and AUTO-INGESTS it (vision + merge + parity), then
+   posts ONE combined digest to the local-deals topic: items, prices,
+   "min order …" pack terms, per-item validity, standout comparisons
+   vs Woolworths, and any QUESTIONS (an undated board asks for its
+   end date — reply with the date or `open`; a shop-less watch-folder
+   drop asks which shop). Same-day re-posts show "was $X → now $Y".
+   Outside the sweep windows, save a post's images/text into the PC
+   watch-folder (`Desktop\shop-posts`, or a shop subfolder like
+   `shop-posts\Merjan\` to pin the shop) — the watcher pushes them to
+   the VPS and the digest arrives within minutes. The digest IS the
+   action; questions are the only thing you ever answer.
 2. Wednesday: paste your Woolworths list into `Woolworths.docx` and
    the specials into `Woolworths_Specials.docx`, run `wednesday`.
 3. 14 seconds later: prices synced, specials in topic 206, the ONE
@@ -81,11 +90,14 @@ Woolworths twin.
 
 - **Google Sheet** — the memory (Products_Master + Local_Deals +
   Archive + history tabs).
-- **Local PC** — runs Wednesday (reads the .docx files) and the test
-  suite (646 green).
+- **Local PC** — runs Wednesday (reads the .docx files), the test
+  suite (685 green), and the watch-folder daemon
+  (`tools/inbox_watcher.py` — auto-starts at logon via the
+  `tools/install_inbox_watcher.ps1` scheduled task; pushes
+  `Desktop\shop-posts` drops to the VPS and triggers the ingest).
 - **VPS** — runs the Telegram bot (sheet lookups, live search, batch),
-  the twice-daily FB detector + the 03:17 backup canary, and the
-  Wed/Sat 5 AM Aldi Special Buys cron.
+  the twice-daily auto-ingesting sweep + the 03:17 backup canary, and
+  the Wed/Sat 5 AM Aldi Special Buys cron.
 - **`old md/`** — the entire v1 system, the quality campaign (22
   defects found & fixed), and the v2 rebuild artifacts. History only.
 

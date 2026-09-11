@@ -22,11 +22,51 @@ deleted in the v2 rebuild. What remains is measured: **price lookup
 | `batch <codes+verdicts>` | ONE call: `ABC done; DEF gone; GHI rename halal lamb shoulder; JKL remove; MNO ignore`. Per-code replies. The agent never pre-investigates | ≤10s |
 | `ignored` | Reveals the hidden ignore list | ≤10s |
 | `wednesday` | THE weekly run: Woolworths.docx → overwrite prices; specials docx → deal rates; parity check; specials message (topic 206) + the ONE list (topic 208). `--specials-only` skips the main pass | ≤30s |
-| `local-deals …` | Local-shop machinery: twice-daily FB post detector, inbox ingest (image→vision / text→parser), Dunya site sync, expire sweep, set-permanent/special | — |
+| `local-deals …` | Local-shop machinery: twice-daily AUTO-INGESTING sweep (vision + merge + parity + ONE digest per window), watch-folder inbox ingest (image→vision / text→parser), open-question flow (undated boards / shop-less drops), Dunya site sync, expire sweep, set-permanent/special, resolve-shop | — |
 
 Scheduled alongside these: `aldi-specials` (cron `8 * * * *`, self-gated
 to Wed/Sat 05:xx Sydney, once per date) — posts the whole day's Aldi
 Special Buys drop, theme-grouped, to the specials topic (206).
+
+## The zero-step local flow (2026-09-11)
+
+You save a shop's images into one folder; everything else happens
+without you:
+
+- **Sweep path**: the 05:00/15:00 detector downloads every new FB post
+  itself (text-first, vision on the post's own images), ingests it
+  (one vision call per post, all its images together), merges per
+  shop (newest post's price wins), and posts ONE combined digest to
+  the local-deals topic: per shop — items, prices, `min order …`
+  pack terms, per-item validity, `was $X → now $Y` changes, standout
+  comparisons vs Woolworths, and any QUESTIONS. Detector messages
+  never say "done" and never ask you to save anything.
+- **Instant path**: the PC watch-folder daemon
+  (`tools/inbox_watcher.py`, auto-started at logon by
+  `tools/install_inbox_watcher.ps1`) watches `Desktop\shop-posts` —
+  drop images/text there (or into a shop subfolder
+  `shop-posts\Merjan\` to pin the shop) and the digest arrives within
+  minutes. A burst of files forms ONE post (90s settle window); the
+  same file twice = one ingest (sha256 dedupe); network down = files
+  queue until the push succeeds (60s retry); single-instance lock —
+  never two writers.
+- **Questions** (the only thing you ever answer, repeated in every
+  digest until answered): an undated board asks *reply with the date,
+  or 'open' to leave it undated* (the set-date path re-stamps the
+  sheet); a shop-less `AUTO…` drop asks *which shop?* —
+  `local-deals --resolve-shop <CODE> <shop>` completes the ingest.
+  Unreadable images write NOTHING and ask for a clearer version
+  (never guesses); notice posts record as zero-item.
+- **Ingest hardening (the three 2026-09-11 defects)**: /kg pack deals
+  always write the per-kg rate in the special cell + the terms in the
+  shop's Comments segment (`[MER] multi buy 3kg for $32.99` — one
+  division, never the raw pack price, never per-ea); row reuse is
+  plural-folded token matching that ignores unit markers and the
+  source-based halal prefix (`Halal Sliced Lamb Neck /kg` reuses the
+  existing `Halal Lamb Necks /kg` row + Item_Code; a 5kg pack and a
+  /kg row stay separate BY DESIGN); comment merges are idempotent,
+  strip-then-append per shop (no `[MER] [MER]`, untagged segments
+  never crash).
 
 ## The sheet
 
@@ -96,7 +136,7 @@ Google Drive cloud copies are impossible for the service account
 
 - Anaconda python (`anaconda3/python.exe`) — the default python3.13
   lacks curl_cffi.
-- Tests: `anaconda3/python.exe -m pytest tests/ -q` → **646 passed,
+- Tests: `anaconda3/python.exe -m pytest tests/ -q` → **685 passed,
   0 skipped**. Every behavioral rule has a pinned regression test; the
   suite must stay fully green (no xfails, no skips).
 

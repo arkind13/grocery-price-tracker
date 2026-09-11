@@ -444,7 +444,7 @@ class TestReport(unittest.TestCase):
         # Comments (idx 9).
         self.assertEqual(rows["FRUITS"][0][8], 2.99)
         self.assertEqual(rows["FRUITS"][0][9],
-                         "[ABS] [multi buy 5kg for $2.99]")
+                         "[ABS] multi buy 5kg for $2.99")
         results = ld.match_and_detect([deal], [], {})
         self.assertEqual(results[0].multibuy_note,
                          "multi buy 5kg for $2.99 — $0.60/kg")
@@ -454,7 +454,7 @@ class TestReport(unittest.TestCase):
         # Layout v2: dunya special (FB) = idx 2, Comments = idx 9.
         self.assertEqual(rows2["BUTCHERY"][0][2], 7.5)
         self.assertEqual(rows2["BUTCHERY"][0][9],
-                         "[DUN] [multi buy 2 for $15.00 — $7.50/ea]")
+                         "[DUN] multi buy 2 for $15.00 — $7.50/ea")
 
     def test_no_prices_warn_line(self):
         """A run with one active store -> ⚠️ lines for the other
@@ -1184,10 +1184,15 @@ class TestSetStorePrices(unittest.TestCase):
             "[FRU] multi buy 2 for $1.50 — $0.75/ea; "
             "[ABS] bulk 3 for $2")
 
-    def test_butchery_entry_q11_separate_from_plain_row(self):
-        """Round 3 (Q11/§5): a butchery entry is 'Halal '-prefixed —
-        it NEVER merges into a plain (non-halal) row; the plain row
-        stays untouched and the halal entry gets its own row."""
+    def test_butchery_entry_reuses_plain_row_id2(self):
+        """ID-2 (user directive 2026-09-11): the halal prefix is
+        source-based and IGNORED for row reuse — a butchery entry
+        reuses the existing plain-named row (prices + comments only,
+        Item_Code untouched, NO near-duplicate row). Supersedes the
+        Round-3 Q11 separate-row expectation for the LD tab: the read
+        side joins LD rows by Item_Code pairing (§8), not by the
+        Col A prefix. Divergence flagged in implementation-plan.md
+        (auto-ingest batch, AI-M2 verbatim quote)."""
         ws = _v2_ws([
             ["BUTCHERY", "", "", "", "", "", "", "", "", ""],
             ["Beef Diced /kg", "", "", 9.50, "", "", "", "", "",
@@ -1197,10 +1202,10 @@ class TestSetStorePrices(unittest.TestCase):
                                     [{"item": "beef diced",
                                       "price": 8.99, "unit": "kg"}])
         grid = ws.get_all_values()
-        self.assertEqual(grid[3][3], 9.50)     # plain row untouched
-        self.assertEqual(grid[-1][0], "Halal beef diced /kg")
-        self.assertEqual(grid[-1][4], 8.99)    # merjan special col
-        self.assertEqual(len(grid), 5)         # one new row only
+        self.assertEqual(grid[3][3], 9.50)   # dunya perm untouched
+        self.assertEqual(grid[3][4], 8.99)   # merjan special REUSES
+        self.assertEqual(grid[3][0], "Beef Diced /kg")  # name kept
+        self.assertEqual(len(grid), 4)       # NO near-duplicate row
 
     def test_unreadable_entry_reported_not_written(self):
         ws = _v2_ws([])
@@ -1504,7 +1509,7 @@ class TestMultibuySingleDivider(unittest.TestCase):
             cell, note = ld._cell_for(deal)
             self.assertEqual(cell, 1.5)          # 2.99/2 — ONCE
             self.assertEqual(note,
-                             "[multi buy 2 for $2.99 — $1.50/ea]")
+                             "multi buy 2 for $2.99 — $1.50/ea")
 
     def test_vision_any2_6_dollar_deal(self):
         # Vision-schema "Any 2 | $6.00" (price = bundle total).
@@ -1513,7 +1518,7 @@ class TestMultibuySingleDivider(unittest.TestCase):
             "price_kind": "multibuy", "multibuy_qty": 2,
         })
         self.assertEqual(cell, 3.0)
-        self.assertEqual(note, "[multi buy 2 for $6.00 — $3.00/ea]")
+        self.assertEqual(note, "multi buy 2 for $6.00 — $3.00/ea")
 
     def test_vision_bulk_pack_cell(self):
         # "10kg box $55" — bulk packs carry the bundle price as-is.
@@ -1522,7 +1527,7 @@ class TestMultibuySingleDivider(unittest.TestCase):
             "price_kind": "bulk_pack", "bulk_size": "10kg",
         })
         self.assertEqual(cell, 55.0)
-        self.assertEqual(note, "[multi buy 10kg for $55.00]")
+        self.assertEqual(note, "multi buy 10kg for $55.00")
 
     def test_scan_path_gets_true_bundle_total(self):
         # The standout scan (match_and_detect) reads price as the
