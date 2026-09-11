@@ -1,0 +1,8 @@
+$ price --item "Halal Drumstick"
+Halal Drumstick
+  not tracked at Woolworths — missing list [VCK]
+  🔪 Merjan Brothers Quality Meats  $4.00/kg (special) · min order 5kg for $19.99
+  🔪 Dunya (site)                   $7.99/kg
+  🏆 Best local: $4.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+rc=0

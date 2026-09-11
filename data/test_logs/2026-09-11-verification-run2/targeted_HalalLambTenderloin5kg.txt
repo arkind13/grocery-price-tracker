@@ -1,0 +1,7 @@
+$ price --item "Halal Lamb Tenderloin (5kg)"
+Halal Lamb Tenderloin – (5kg)
+  not tracked at Woolworths — missing list [WZF]
+  🔪 Dunya (site)  $134.99 / 5kg pack = $27.00/kg
+  🏆 Best local: $27.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+rc=0

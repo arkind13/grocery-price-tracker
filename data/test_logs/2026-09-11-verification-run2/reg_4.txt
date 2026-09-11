@@ -1,0 +1,8 @@
+$ price --item "chicken breast 5kg"
+Halal Chicken Breast – (5kg)
+  not tracked at Woolworths — missing list [NTB]
+  🔪 Merjan Brothers Quality Meats  $34.99 / 5kg pack = $7.00/kg (special) · min order 5kg for $34.99
+  🔪 Dunya (site)                   $54.99 / 5kg pack = $11.00/kg
+  🏆 Best local: $7.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+rc=0

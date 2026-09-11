@@ -1,0 +1,8 @@
+$ price --item "lamb necks"
+Not tracked at Woolworths — missing list [YTB]
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Dunya (site)                   $16.99/kg
+  🔪 Dunya (site)                   $29.99/kg
+  🏆 Best local: $15.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+rc=0

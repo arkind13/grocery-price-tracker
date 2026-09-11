@@ -1,0 +1,900 @@
+{
+ "D1": [
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Lebanese Chicken",
+   "q": "Chicken Halal Lebanese"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Lebanese Chicken",
+   "q": "Halal Lebanese Chickens"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Lebanese Chicken",
+   "q": "Lebanese Chicken"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Turkish chicken",
+   "q": "chicken Halal Turkish"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Turkish chicken",
+   "q": "Halal Turkish chickens"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Turkish chicken",
+   "q": "Turkish chicken"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Whole chicken s14",
+   "q": "s14 Halal Whole chicken"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Whole chicken s14",
+   "q": "Whole chicken s14"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Whole chicken s9",
+   "q": "s9 Halal Whole chicken"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Whole chicken s9",
+   "q": "Whole chicken s9"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Skin Off Drum",
+   "q": "Drum Halal Skin Off"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Skin Off Drum",
+   "q": "Halal Skin Off Drums"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Skin Off Drum",
+   "q": "Skin Off Drum"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Chicken Drumette",
+   "q": "Drumette Halal Chicken"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Chicken Drumette",
+   "q": "Halal Chicken Drumettes"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Chicken Drumette",
+   "q": "Chicken Drumette"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Drumstick",
+   "q": "Drumstick Halal"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Drumstick",
+   "q": "Halal Drumsticks"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Drumstick",
+   "q": "Drumstick"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Marylands Skin-Off",
+   "q": "Skin-Off Halal Marylands"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Marylands Skin-Off",
+   "q": "Halal Marylands Skin-Offs"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Marylands Skin-Off",
+   "q": "Marylands Skin-Off"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Spicy Wings",
+   "q": "Wings Halal Spicy"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Spicy Wings",
+   "q": "Halal Spicy Wing"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Spicy Wings",
+   "q": "Spicy Wings"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Turkish wings",
+   "q": "wings Halal Turkish"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Turkish wings",
+   "q": "Halal Turkish wing"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Turkish wings",
+   "q": "Turkish wings"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Wings",
+   "q": "Wings Halal"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Wings",
+   "q": "Halal Wing"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Wings",
+   "q": "Wings"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Greek Chops",
+   "q": "Chops Halal Greek"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Greek Chops",
+   "q": "Halal Greek Chop"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Greek Chops",
+   "q": "Greek Chops"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Greek Lamb",
+   "q": "Lamb Halal Greek"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Greek Lamb",
+   "q": "Halal Greek Lambs"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Greek Lamb",
+   "q": "Greek Lamb"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Beef Marrow Bones",
+   "q": "Bones Halal Beef Marrow"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Beef Marrow Bones",
+   "q": "Halal Beef Marrow Bone"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Beef Marrow Bones",
+   "q": "Beef Marrow Bones"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Beef Osso Bucco",
+   "q": "Bucco Halal Beef Osso"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Beef Osso Bucco",
+   "q": "Halal Beef Osso Buccos"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Beef Osso Bucco",
+   "q": "Beef Osso Bucco"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Beef Stir Fry",
+   "q": "Fry Halal Beef Stir"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Beef Stir Fry",
+   "q": "Beef Stir Fry"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Beef Gravy",
+   "q": "Gravy Halal Beef"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Beef Gravy",
+   "q": "Beef Gravy"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Beef Ossobuco",
+   "q": "Ossobuco Halal Beef"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Beef Ossobuco",
+   "q": "Halal Beef Ossobucos"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Beef Ossobuco",
+   "q": "Beef Ossobuco"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Beef Rump",
+   "q": "Rump Halal Beef"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Beef Rump",
+   "q": "Halal Beef Rumps"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Beef Rump",
+   "q": "Beef Rump"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Turkish Adana",
+   "q": "Adana Halal Turkish"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Turkish Adana",
+   "q": "Halal Turkish Adanas"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Turkish Adana",
+   "q": "Turkish Adana"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Lebanese Kofte",
+   "q": "Kofte Halal Lebanese"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Lebanese Kofte",
+   "q": "Halal Lebanese Koftes"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Lebanese Kofte",
+   "q": "Lebanese Kofte"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Turkish Kofte",
+   "q": "Kofte Halal Turkish"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Turkish Kofte",
+   "q": "Halal Turkish Koftes"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Turkish Kofte",
+   "q": "Turkish Kofte"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Eye silverside",
+   "q": "silverside Halal Eye"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Eye silverside",
+   "q": "Halal Eye silversides"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Eye silverside",
+   "q": "Eye silverside"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Kofte skewer",
+   "q": "skewer Halal Kofte"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Kofte skewer",
+   "q": "Halal Kofte skewers"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Kofte skewer",
+   "q": "Kofte skewer"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Cos Lettuce",
+   "q": "Lettuce Cos"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Cos Lettuce",
+   "q": "Cos Lettuces"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Jap Pumpkin",
+   "q": "Pumpkin Jap"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Jap Pumpkin",
+   "q": "Jap Pumpkins"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Silverbeet",
+   "q": "Silverbeets"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Sweet Corn",
+   "q": "Corn Sweet"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Artichoke",
+   "q": "Artichokes"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Beetroot Bunch",
+   "q": "Bunch Beetroot"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Telegraph Cucumber",
+   "q": "Cucumber Telegraph"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Telegraph Cucumber",
+   "q": "Telegraph Cucumbers"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Lebanese Bread",
+   "q": "Bread Lebanese"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Lebanese Bread",
+   "q": "Lebanese Breads"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Chokos",
+   "q": "Choko"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Large Parsley Bunch",
+   "q": "Bunch Large Parsley"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Eggplant",
+   "q": "Eggplants"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Cauliflower",
+   "q": "Cauliflowers"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Tomato",
+   "q": "Tomatos"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Yellow Capsicum",
+   "q": "Capsicum Yellow"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Yellow Capsicum",
+   "q": "Yellow Capsicums"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Lebanese Zucchini",
+   "q": "Zucchini Lebanese"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Lebanese Zucchini",
+   "q": "Lebanese Zucchinis"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Packham Pears",
+   "q": "Pears Packham"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Packham Pears",
+   "q": "Packham Pear"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Pink Lady Apples",
+   "q": "Apples Pink Lady"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Pink Lady Apples",
+   "q": "Pink Lady Apple"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "R2E2 Mangoes",
+   "q": "Mangoes R2E2"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "brown onion",
+   "q": "onion brown"
+  },
+  {
+   "f": "drift-plural",
+   "i": "brown onion",
+   "q": "brown onions"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "oregano leaves",
+   "q": "leaves oregano"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "nescafe latte kitkat",
+   "q": "kitkat nescafe latte"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "plastic bag",
+   "q": "bag plastic"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Banana Kids 5",
+   "q": "5 Banana Kids"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Capsicum Green each",
+   "q": "each Capsicum Green"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Spring Onion Bunch each",
+   "q": "each Spring Onion Bunch"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Woolworths Fresh Herb Coriander Bunch each",
+   "q": "each Woolworths Fresh Herb Coriander Bunch"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Royal Gala Apple 1 Kg",
+   "q": "Kg Royal Gala Apple 1"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Woolworths Little Gem Lettuce Green 2 pack",
+   "q": "pack Woolworths Little Gem Lettuce Green 2"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal BBQ Blade Steak /kg",
+   "q": "/kg Halal BBQ Blade Steak"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal BBQ Blade Steak /kg",
+   "q": "Halal BBQ Blade Steaks /kg"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal BBQ Blade Steak /kg",
+   "q": "BBQ Blade Steak /kg"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Flavoured Sausages /kg",
+   "q": "/kg Halal Flavoured Sausages"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Flavoured Sausages /kg",
+   "q": "Halal Flavoured Sausage /kg"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Flavoured Sausages /kg",
+   "q": "Flavoured Sausages /kg"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Sausages /kg",
+   "q": "/kg Halal Sausages"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Sausages /kg",
+   "q": "Halal Sausage /kg"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Sausages /kg",
+   "q": "Sausages /kg"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Povi Masima Bucket",
+   "q": "Bucket Halal Povi Masima"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Povi Masima Bucket",
+   "q": "Halal Povi Masima Buckets"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Povi Masima Bucket",
+   "q": "Povi Masima Bucket"
+  }
+ ],
+ "D3": [
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Chicken Thighs",
+   "code": "AQZ",
+   "cited": "SNA",
+   "q": "Thighs Halal Chicken"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Chicken Thighs",
+   "code": "AQZ",
+   "cited": "SNA",
+   "q": "Halal Chicken Thigh"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Chicken Thighs",
+   "code": "AQZ",
+   "cited": "SNA",
+   "q": "Chicken Thighs"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Halal Beef Mince",
+   "code": "AUG",
+   "cited": "EPJ",
+   "q": "Mince Halal Beef"
+  },
+  {
+   "f": "no-halal-prefix",
+   "i": "Halal Beef Mince",
+   "code": "AUG",
+   "cited": "EPJ",
+   "q": "Beef Mince"
+  },
+  {
+   "f": "drift-shuffle",
+   "i": "Woolworths Beef Mince 500g",
+   "code": "GJZ",
+   "cited": "XJA",
+   "q": "500g Woolworths Beef Mince"
+  }
+ ],
+ "mangled": [
+  {
+   "f": "drift-plural",
+   "i": "Halal Chicken Breast \u2013 (5kg)",
+   "q": "Halal Chicken Breast \u2013 (5kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Whole chicken s14",
+   "q": "Halal Whole chickens s14"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Whole chicken s9",
+   "q": "Halal Whole chickens s9"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Chicken Curry \u2013 (5kg)",
+   "q": "Halal Chicken Curry \u2013 (5kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Drumsticks \u2013 (5kg)",
+   "q": "Halal Drumsticks \u2013 (5kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Full Wings \u2013 (5kg)",
+   "q": "Halal Full Wings \u2013 (5kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Chicken Maryland \u2013 (5kg)",
+   "q": "Halal Chicken Maryland \u2013 (5kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Mid-Wings \u2013 (5kg)",
+   "q": "Halal Mid-Wings \u2013 (5kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Chicken Tenderloin \u2013 (5kg)",
+   "q": "Halal Chicken Tenderloin \u2013 (5kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Chicken Thigh \u2013 (5kg)",
+   "q": "Halal Chicken Thigh \u2013 (5kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Goat Curry \u2013 (5kg)",
+   "q": "Halal Goat Curry \u2013 (5kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Lamb Backstrap \u2013 (5kg)",
+   "q": "Halal Lamb Backstrap \u2013 (5kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Lamb Loin Chops \u2013 (3kg)",
+   "q": "Halal Lamb Loin Chops \u2013 (3kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Lamb Curry \u2013 (5kg)",
+   "q": "Halal Lamb Curry \u2013 (5kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Diced Lamb (BBQ)",
+   "q": "Halal Diced Lamb (BBQ)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Diced Lamb (Cook)",
+   "q": "Halal Diced Lamb (Cook)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Finely Diced Lamb",
+   "q": "Halal Finely Diced Lambs"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Lamb Neck Fillet (BBQ)",
+   "q": "Halal Lamb Neck Fillet (BBQ)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Boneless Lamb Leg (2kg)",
+   "q": "Halal Boneless Lamb Leg (2kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Lamb Mince \u2013 (5kg)",
+   "q": "Halal Lamb Mince \u2013 (5kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Lean Lamb Mince \u2013 (5kg)",
+   "q": "Halal Lean Lamb Mince \u2013 (5kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Lamb Ribs \u2013 (5kg)",
+   "q": "Halal Lamb Ribs \u2013 (5kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Lamb Shank \u2013 (5kg)",
+   "q": "Halal Lamb Shank \u2013 (5kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Boneless Lamb Shoulder (1.8kg)",
+   "q": "Halal Boneless Lamb Shoulder (1.8kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Lamb Tenderloin \u2013 (5kg)",
+   "q": "Halal Lamb Tenderloin \u2013 (5kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Diced Beef",
+   "q": "Halal Diced Beefs"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Beef Rib Eye",
+   "q": "Halal Beefs Rib Eye"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Beef Stir Fry",
+   "q": "Halal Beef Stirs Fry"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Beef Gravy",
+   "q": "Halal Beef Gravys"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal BEEF MINCE (5KG)",
+   "q": "Halal BEEF MINCE (5KG)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Beef Mince",
+   "q": "Halal Beef Minces"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Lebanese kofta \u2013 (4kg)",
+   "q": "Halal Lebanese kofta \u2013 (4kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Turkish Kofta \u2013 (5kg)",
+   "q": "Halal Turkish Kofta \u2013 (5kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal Mince \u2013 (5kg)",
+   "q": "Halal Mince \u2013 (5kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal premium chuck Mince \u2013 (5kg)",
+   "q": "Halal premium chuck Mince \u2013 (5kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Halal BBQ Sausages (4kg)",
+   "q": "Halal BBQ Sausages (4kg)s"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Sweet Corn",
+   "q": "Sweet Corns"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Beetroot Bunch",
+   "q": "Beetroot Bunchs"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Celery",
+   "q": "Celerys"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Large Parsley Bunch",
+   "q": "Large Parsley Bunchs"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Strawberries",
+   "q": "Strawberrie"
+  },
+  {
+   "f": "drift-plural",
+   "i": "R2E2 Mangoes",
+   "q": "R2E2 Mangoe"
+  },
+  {
+   "f": "drift-plural",
+   "i": "oregano leaves",
+   "q": "oregano leave"
+  },
+  {
+   "f": "drift-plural",
+   "i": "nescafe latte kitkat",
+   "q": "nescafe latte kitkats"
+  },
+  {
+   "f": "drift-plural",
+   "i": "plastic bag",
+   "q": "plastics bag"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Banana Kids 5",
+   "q": "Banana Kid 5"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Capsicum Green each",
+   "q": "Capsicum Green eachs"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Spring Onion Bunch each",
+   "q": "Spring Onion Bunch eachs"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Woolworths Fresh Herb Coriander Bunch each",
+   "q": "Woolworths Fresh Herb Coriander Bunch eachs"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Blueberries",
+   "q": "Blueberrie"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Raspberries Punnet 125g",
+   "q": "Raspberries Punnet 125gs"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Woolworths Beef Mince 500g",
+   "q": "Woolworths Beef Mince 500gs"
+  },
+  {
+   "f": "drift-plural",
+   "i": "Woolworths Little Gem Lettuce Green 2 pack",
+   "q": "Woolworths Little Gem Lettuce Green 2 packs"
+  }
+ ]
+}

@@ -1,0 +1,11 @@
+`batch NTB done` came back with a block — `done` is verify-only and NTB (Halal Chicken Breast – 5kg) still has two blank cells in Products_Master:
+
+- **col D** — Woolworths price
+- **col G** — search keyword
+
+Two ways to close it out:
+
+1. **Fill D + G in the sheet yourself**, then I re-run `batch NTB done` and it verifies ✅
+2. If Woolworths doesn't stock it (it's a halal butcher 5kg pack), say the word and I'll run **`batch NTB gone`** — marks it GONE-at-Woolworths and it leaves the list properly.
+
+Which one?

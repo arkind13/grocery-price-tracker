@@ -1,0 +1,7 @@
+$ price --item "premium chuck Mince (5kg)"
+Halal premium chuck Mince – (5kg)
+  not tracked at Woolworths — missing list [HSZ]
+  🔪 Dunya (site)  $79.99 / 5kg pack = $16.00/kg
+  🏆 Best local: $16.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+rc=0
