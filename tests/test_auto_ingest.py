@@ -850,5 +850,88 @@ class TestInboxWatcher(unittest.TestCase):
                                 for ln in lines))
 
 
+# ---------------------------------------------------------------------------
+# Retention (user rule 2026-09-11): no unbounded image buildup
+# ---------------------------------------------------------------------------
+class TestRetention(unittest.TestCase):
+
+    def test_prune_old_inbox_folders(self):
+        """VPS inbox: code folders older than 14 days are deleted;
+        fresh ones stay; needs_date evidence for an OPEN question
+        survives; the just-ingested code (exclude) is untouched even
+        when its moved files carry old mtimes."""
+        import os
+        import tempfile as tf
+        with tf.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old = root / "MER0109260500"
+            (old / "processed").mkdir(parents=True)
+            (old / "processed" / "b.jpg").write_bytes(b"o")
+            fresh = root / "MER1109260800"
+            (fresh / "processed").mkdir(parents=True)
+            (fresh / "processed" / "b.jpg").write_bytes(b"f")
+            pending = root / "FRU0109260700"
+            (pending / "needs_date").mkdir(parents=True)
+            (pending / "needs_date" / "b.jpg").write_bytes(b"p")
+            oldmoved = root / "DUN0109260600"
+            (oldmoved / "processed").mkdir(parents=True)
+            (oldmoved / "processed" / "b.jpg").write_bytes(b"m")
+            now = time.time()
+            for d in (old, pending, oldmoved):
+                os.utime(d, (now - 20 * 86400, now - 20 * 86400))
+                for f in d.rglob("*"):
+                    os.utime(f, (now - 20 * 86400, now - 20 * 86400))
+            with patch.object(ld, "INBOX_DIR", root),                     patch.object(ld, "QUESTIONS_PATH",
+                                 root / "q.json"):
+                ld.open_question("expiry", "FRU0109260700",
+                                 "b.jpg", "fruitopia", "ask")
+                pruned = ld._prune_inbox(now=now,
+                                         exclude="DUN0109260600")
+            self.assertIn("MER0109260500", pruned)
+            self.assertFalse(old.exists())
+            self.assertTrue(fresh.exists())
+            self.assertTrue(pending.exists())   # open question kept
+            self.assertTrue(oldmoved.exists())  # exclude kept
+
+    def test_prune_flyer_runs(self):
+        """Sweep-download run dirs older than 14 days are deleted."""
+        import os
+        import tempfile as tf
+        with tf.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old = root / "20260828_050000"
+            old.mkdir()
+            (old / "img.jpg").write_bytes(b"x")
+            fresh = root / "20260911_050000"
+            fresh.mkdir()
+            (fresh / "img.jpg").write_bytes(b"x")
+            now = time.time()
+            os.utime(old, (now - 20 * 86400, now - 20 * 86400))
+            with patch("extractors.fb_flyer_fetch.FLYERS_DIR", root):
+                pruned = ld._prune_flyer_runs(now=now)
+            self.assertEqual(pruned, ["20260828_050000"])
+            self.assertFalse(old.exists())
+            self.assertTrue(fresh.exists())
+
+    def test_watcher_prunes_old_sent(self):
+        """Desktop .sent: pushed-batch folders older than 14 days are
+        deleted; fresh ones stay."""
+        import os
+        import tempfile as tf
+        with tf.TemporaryDirectory() as tmp:
+            from tools import inbox_watcher as iw
+            root = Path(tmp) / "shop-posts"
+            root.mkdir()
+            old = root / ".sent" / "AUTO0109260900"
+            old.mkdir(parents=True)
+            fresh = root / ".sent" / "AUTO1109260900"
+            fresh.mkdir(parents=True)
+            now = time.time()
+            os.utime(old, (now - 20 * 86400, now - 20 * 86400))
+            self.assertEqual(iw.prune_sent(root, now=now), 1)
+            self.assertFalse(old.exists())
+            self.assertTrue(fresh.exists())
+
+
 if __name__ == "__main__":
     unittest.main()

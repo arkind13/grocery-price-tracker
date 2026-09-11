@@ -52,6 +52,12 @@ without you:
   same file twice = one ingest (sha256 dedupe); network down = files
   queue until the push succeeds (60s retry); single-instance lock —
   never two writers.
+- **Retention** (no image buildup): processed images auto-delete
+  after 14 days on ALL three stores — the desktop `.sent\` folders,
+  the VPS inbox code folders, and the sweep's downloaded post
+  images. The data lives on the sheet + post log; images are only
+  inputs. Pending needs_date evidence survives until its question is
+  answered.
 - **Questions** (the only thing you ever answer, repeated in every
   digest until answered): an undated board asks *reply with the date,
   or 'open' to leave it undated* (the set-date path re-stamps the

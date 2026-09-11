@@ -28,6 +28,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -46,6 +47,8 @@ POLL_S = 10
 RETRY_AFTER_S = 60               # S15: queue-then-retry cadence
 LOCK_STALE_S = 15 * 60
 PUSHED_HASH_CAP = 500
+RETAIN_DAYS = 14                 # .sent pruning (user rule
+                                 # 2026-09-11: no unbounded buildup)
 
 # shop subfolder name -> the VPS ingest resolves the shop from the
 # code's first three letters (core.local_deals._store_for_code)
@@ -188,6 +191,28 @@ def push_batch(batch: dict, code: str) -> bool:
     return rc == 0
 
 
+def prune_sent(root: Path, keep_days: int = RETAIN_DAYS,
+               now: float | None = None) -> int:
+    """Delete .sent/<CODE> dirs older than keep_days (user rule
+    2026-09-11: processed images do not pile up — the pushed hashes
+    in the state file still dedupe re-drops). Returns how many
+    were pruned."""
+    now = time.time() if now is None else now
+    sent = root / ".sent"
+    if not sent.is_dir():
+        return 0
+    cutoff = now - keep_days * 86400
+    pruned = 0
+    for d in sent.iterdir():
+        try:
+            if d.is_dir() and d.stat().st_mtime < cutoff:
+                shutil.rmtree(d, ignore_errors=True)
+                pruned += 1
+        except OSError:
+            continue
+    return pruned
+
+
 def run_once(root: Path, settle_s: int = DEFAULT_SETTLE_S,
              now: float | None = None,
              push=None, code_now=None) -> list[str]:
@@ -230,6 +255,10 @@ def run_once(root: Path, settle_s: int = DEFAULT_SETTLE_S,
                 pass
         lines.append(f"[watcher] {code}: pushed + ingest triggered")
     save_state(root, state)
+    pruned = prune_sent(root)
+    if pruned:
+        lines.append(f"[watcher] pruned {pruned} .sent folder(s) "
+                     f"older than {RETAIN_DAYS} days")
     return lines
 
 

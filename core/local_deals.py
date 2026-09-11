@@ -404,6 +404,16 @@ def _sweep_auto_ingest(new_posts: list, window_label: str,
     else:
         for text in messages:
             print(text)
+    # Retention (user rule 2026-09-11): this window's downloaded
+    # post images + old inbox folders leave on the same 14-day rule.
+    pruned_runs = _prune_flyer_runs()
+    if pruned_runs:
+        print(f"[daily-scan] pruned {len(pruned_runs)} flyer run "
+              f"dir(s) older than {INBOX_PRUNE_DAYS} days")
+    pruned_inbox = _prune_inbox()
+    if pruned_inbox:
+        print(f"[daily-scan] pruned {len(pruned_inbox)} inbox "
+              f"folder(s) older than {INBOX_PRUNE_DAYS} days")
 
 
 def run_daily_scan(dry_run: bool = False, send: bool = True,
@@ -792,6 +802,81 @@ def clear_questions(code: str, filename: str | None = None) -> int:
     if cleared:
         _save_questions(kept)
     return cleared
+
+
+# Image retention (user rule 2026-09-11: no unbounded image buildup —
+# the DATA lives on the sheet + post log; images are only inputs).
+INBOX_PRUNE_DAYS = 14
+
+
+def _prune_inbox(keep_days: int = INBOX_PRUNE_DAYS,
+                 now: float | None = None,
+                 exclude: str | None = None) -> list[str]:
+    """Delete ingest-code folders whose NEWEST file is older than
+    keep_days. Folders still holding needs_date evidence for an open
+    question survive until answered (the set-date answer may still
+    want the file). Returns the pruned folder names.
+
+    Args:
+        keep_days: retention window in days.
+        now: injectable clock (tests).
+        exclude: a code folder to skip this call (e.g. the one just
+            ingested — moved files keep their original mtime).
+    """
+    import shutil
+    import time as _time
+
+    now = _time.time() if now is None else now
+    cutoff = now - keep_days * 86400
+    pruned: list[str] = []
+    if not INBOX_DIR.is_dir():
+        return pruned
+    open_codes = {q.get("code") for q in _load_questions()}
+    for folder in sorted(INBOX_DIR.iterdir()):
+        if not folder.is_dir() or folder.name.startswith("."):
+            continue
+        if exclude and folder.name == exclude.strip().upper():
+            continue
+        files = [p for p in folder.rglob("*") if p.is_file()]
+        newest = (max(p.stat().st_mtime for p in files)
+                  if files else folder.stat().st_mtime)
+        if newest >= cutoff:
+            continue
+        if folder.name in open_codes and any(
+                p.parent.name == "needs_date" for p in files):
+            continue
+        shutil.rmtree(folder, ignore_errors=True)
+        pruned.append(folder.name)
+    return pruned
+
+
+def _prune_flyer_runs(keep_days: int = INBOX_PRUNE_DAYS,
+                      now: float | None = None) -> list[str]:
+    """Delete sweep-download run dirs older than keep_days (every
+    05:00/15:00 window downloads the posts' images into
+    data/fb_flyers/<timestamp>/ — same retention rule as the
+    inbox). Returns the pruned dir names."""
+    import shutil
+    import time as _time
+
+    from extractors.fb_flyer_fetch import FLYERS_DIR
+
+    now = _time.time() if now is None else now
+    cutoff = now - keep_days * 86400
+    pruned: list[str] = []
+    if not FLYERS_DIR.is_dir():
+        return pruned
+    for run in sorted(FLYERS_DIR.iterdir()):
+        if not run.is_dir():
+            continue
+        try:
+            if run.stat().st_mtime >= cutoff:
+                continue
+        except OSError:
+            continue
+        shutil.rmtree(run, ignore_errors=True)
+        pruned.append(run.name)
+    return pruned
 
 
 def post_log_cmd(code: str) -> int:
@@ -1375,6 +1460,15 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
             entry["expired"] = True
         entries.append(entry)
     _save_post_log(entries)
+    # Retention (user rule 2026-09-11): inbox code folders older than
+    # INBOX_PRUNE_DAYS are deleted — except this run's code (moved
+    # files keep their original mtime) and pending needs_date
+    # evidence for open questions.
+    pruned = _prune_inbox(exclude=code)
+    if pruned:
+        print(f"[ingest] pruned {len(pruned)} inbox folder(s) older "
+              f"than {INBOX_PRUNE_DAYS} days: "
+              f"{', '.join(pruned[:5])}")
     needs = [b for b in batches if not b["valid_until"]]
     if needs:
         print("[ingest] posts missing a validity date (question "
