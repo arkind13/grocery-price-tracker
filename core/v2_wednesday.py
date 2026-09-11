@@ -29,6 +29,13 @@ LISTS_TOPIC_ID = 208          # env override TELEGRAM_LISTS_TOPIC_ID
 
 GONE_MARKER = "GONE"
 
+# Local_Deals layout (user directive 2026-09-12): the LD tab mirrors
+# Products_Master ROW-FOR-ROW — a header row + item rows only. These
+# structural labels are legacy furniture; the parity step strips them
+# on sight and never writes them back.
+LD_STRUCTURAL_LABELS = ("Prices valid until", "BUTCHERY", "FRUITS",
+                        "OTHER")
+
 
 def _norm(text) -> str:
     """Case-insensitive, whitespace-collapsed match key."""
@@ -236,19 +243,131 @@ def apply_writes(master_ws, master_grid: list[list],
                      range_name=f"A1:M{len(master_grid)}")
 
 
+def _heal_ld_layout(ld_grid: list[list],
+                    master_grid: list[list]) -> list[str]:
+    """Heal Local_Deals layout drift BEFORE the audit (user directive
+    2026-09-12: LD mirrors the master tab row-for-row).
+
+    - A coded row with a BLANK Col A name is a Wool-only mirrored
+      row whose name was lost (legacy mirrors) — it is re-named from
+      the master row sharing its Item_Code (word-for-word).
+    - A structural furniture row (stamp / section title) is dropped.
+
+    Mutates ld_grid in place. Returns report lines ([] when clean).
+    """
+    lines: list[str] = []
+    code_to_name: dict[str, str] = {}
+    for row in master_grid[1:]:
+        name = _cell(row, 0)
+        code = _cell(row, MASTER_CODE_IDX).upper()
+        if name and code:
+            code_to_name.setdefault(code, name)
+
+    healed: list[list] = []
+    for i, row in enumerate(ld_grid):
+        if i == 0:                       # header row stays
+            healed.append(row)
+            continue
+        first = _cell(row, 0)
+        if first in LD_STRUCTURAL_LABELS:
+            lines.append(f"  healed: LD row {i + 1} structural row "
+                         f"'{first}' removed")
+            continue
+        code = _cell(row, LD_CODE_IDX).upper()
+        if not first and code:
+            name = code_to_name.get(code)
+            if name:
+                row = list(row)
+                row[0] = name
+                lines.append(f"  healed: LD row {i + 1} named "
+                             f"'{name}' [{code}] (was blank)")
+        healed.append(row)
+    ld_grid[:] = healed
+    return lines
+
+
+def _move_inserted_row(master_grid: list[list],
+                       ld_grid: list[list],
+                       miss: dict) -> tuple[bool, bool, list[str]]:
+    """Attempt ONE deterministic middle-insert repair (user directive
+    2026-09-12: 'anything not in order to be fixed by' the sync).
+
+    The audit break names the first code-pair mismatch. The side whose
+    NEXT row carries the other side's break code is the side holding
+    the inserted row — that row is moved to that tab's bottom (the
+    layout's append convention), realigning every later pair.
+
+    Returns (master_moved, ld_moved, report_lines) — all False/[]
+    when the break is not a single-row insert (deletion/reorder):
+    the caller then aborts with the verbatim alert.
+    """
+    m_sheet = int(miss.get("master_sheet_row") or 0)
+    l_sheet = int(miss.get("ld_sheet_row") or 0)
+    m_code = str(miss.get("master_code") or "").strip().upper()
+    l_code = str(miss.get("ld_code") or "").strip().upper()
+    if not (m_sheet and l_sheet):
+        return False, False, []
+
+    def _code(grid: list, idx: int) -> str:
+        row = grid[idx] if 0 <= idx < len(grid) else []
+        return _cell(row, MASTER_CODE_IDX if grid is master_grid
+                     else LD_CODE_IDX).upper()
+
+    # Master-side insert: LD's break row pairs with master's NEXT row.
+    if l_code and _code(master_grid, m_sheet) == l_code:
+        row = master_grid.pop(m_sheet - 1)
+        master_grid.append(row)
+        return True, False, [
+            f"  healed: master row {m_sheet} "
+            f"('{_cell(row, 0) or m_code}') moved to the bottom "
+            f"(mid-tab insert)"]
+    # LD-side insert: master's break row pairs with LD's NEXT row.
+    if m_code and _code(ld_grid, l_sheet) == m_code:
+        row = ld_grid.pop(l_sheet - 1)
+        ld_grid.append(row)
+        return False, True, [
+            f"  healed: LD row {l_sheet} "
+            f"('{_cell(row, 0) or m_code}') moved to the bottom "
+            f"(mid-tab insert)"]
+    return False, False, []
+
+
 def parity_step(master_grid: list[list], ld_grid: list[list],
                 ld_ws, master_ws=None) -> str:
     """tools/parity_audit.audit on the two grids (§18/A2):
     ALIGNED -> one clean line, continue. bottom_append -> AUTO-MIRROR
     during the run (blank counterpart rows appended, codes reserved
     via core.item_codes, report lines, continue). middle_insert ->
-    print the VERBATIM A2 alert and return 'ABORT' (run exits 1: no
-    writes, no posts)."""
+    one deterministic repair attempt (_move_inserted_row); when the
+    break is not a single-row insert, print the VERBATIM A2 alert and
+    return 'ABORT' (run exits 1: no writes, no posts).
+
+    Before the audit, legacy LD layout drift is healed in place
+    (_heal_ld_layout): structural rows dropped, coded blank rows
+    named from their master pair — the layout the user pinned
+    2026-09-12 (row # = row #, no blank lines)."""
+    heal_lines = _heal_ld_layout(ld_grid, master_grid)
+    if heal_lines:
+        ld_ws.clear()
+        ld_ws.freeze(rows=1)
+        ld_ws.update(values=ld_grid,
+                     range_name=f"A1:K{len(ld_grid)}")
+
     from tools.parity_audit import audit, format_report
 
+    master_changed = ld_changed = False
     result = audit(master_grid, ld_grid)
     if result["status"] == "aligned":
-        return format_report(result)
+        report = format_report(result)
+        return "\n".join(heal_lines + [report]) if heal_lines \
+            else report
+    if result["status"] == "middle_insert":
+        moved_m, moved_l, fix_lines = _move_inserted_row(
+            master_grid, ld_grid, result["misses"][0])
+        master_changed, ld_changed = moved_m, moved_l
+        heal_lines.extend(fix_lines)
+        if moved_m or moved_l:
+            result = audit(master_grid, ld_grid)
     if result["status"] == "middle_insert":
         print(result["alert"])     # VERBATIM (§18/A2.2) — never edit
         return "ABORT"
@@ -274,7 +393,6 @@ def parity_step(master_grid: list[list], ld_grid: list[list],
         return code
 
     pending: list[tuple[str, int]] = []   # (code, 1-based sheet row)
-    master_changed = ld_changed = False
 
     for m in result["misses"]:
         if m["side"] == "master":
@@ -323,12 +441,14 @@ def parity_step(master_grid: list[list], ld_grid: list[list],
                          range_name=f"A1:M{len(master_grid)}")
     if ld_changed:
         ld_ws.clear()
-        ld_ws.freeze(rows=2)
+        ld_ws.freeze(rows=1)
         ld_ws.update(values=ld_grid, range_name=f"A1:K{len(ld_grid)}")
     # Confirm AFTER the write succeeded (item_codes discipline D-IC4).
     for code, row_index in pending:
         item_codes.confirm_code(code, row_index,
                                 spreadsheet_id=sheet_id)
+    if heal_lines:
+        return "\n".join(heal_lines + [""] + lines)
     return "\n".join(lines)
 
 

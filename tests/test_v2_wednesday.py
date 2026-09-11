@@ -100,11 +100,7 @@ def _fixture():
                           ww="GONE", keyword="cheddar cheese block"),
               _master_row("Halal Lamb Shoulder", "HLS")]
     ld = [["Product", "", "", "", "", "", "", "", "", "", ""],
-          ["Prices valid until", "n/a (live site)", "", "", "", "",
-           "", "", "", "", ""],
-          ["FRUITS"] + [""] * 10,
           ["Tomato", "", "", "", "", "0.90", "", "", "", "", "EYF"],
-          ["BUTCHERY"] + [""] * 10,
           ["Halal Beef Mince 500g", "", "9.20", "", "", "", "", "",
            "", "", "AUG"],
           ["Woolworths Cheddar Block 1kg", "", "", "", "", "", "",
@@ -287,7 +283,7 @@ class TestParityStep(unittest.TestCase):
         report = parity_step(master._values, ld._values, ld,
                              master_ws=master)
         self.assertIn("BOTTOM_APPEND", report)
-        self.assertIn("mirrored -> LD row 9: New User Row", report)
+        self.assertIn("mirrored -> LD row 6: New User Row", report)
         new_ld = ld._values[-1]
         self.assertEqual(new_ld[0], "New User Row")
         self.assertTrue(item_codes.is_valid_code(new_ld[10]))
@@ -299,7 +295,7 @@ class TestParityStep(unittest.TestCase):
         self.assertEqual(audit_fn(master._values, ld._values)
                          ["status"], "aligned")
         self.assertEqual(ld.clears, 1)
-        self.assertEqual(ld.updates, ["A1:K9"])
+        self.assertEqual(ld.updates, ["A1:K6"])
         self.assertEqual(master.clears, 1)
         self.assertEqual(master.updates, ["A1:M6"])
 
@@ -332,6 +328,77 @@ class TestParityStep(unittest.TestCase):
     def test_middle_insert_prints_verbatim_alert_and_aborts(self):
         master, ld = _fixture()
         ld._values[3][10] = "ZZQ"          # code break mid-sequence
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            report = parity_step(master._values, ld._values, ld,
+                                 master_ws=master)
+        self.assertEqual(report, "ABORT")
+        self.assertIn(MIDDLE_INSERT_ALERT.format(n=4), buf.getvalue())
+        self.assertEqual(master.clears, 0)
+        self.assertEqual(ld.clears, 0)
+
+    def test_heal_names_coded_blank_ld_row_from_master_pair(self):
+        """User directive 2026-09-12: a Wool-only LD mirror row that
+        lost its name (coded, Col-A-blank) is re-named from the
+        master row sharing its Item_Code — no blank lines."""
+        master, ld = _fixture()
+        ld._values[3][0] = ""              # Cheddar row name lost
+        report = parity_step(master._values, ld._values, ld,
+                             master_ws=master)
+        self.assertIn("healed: LD row 4 named "
+                      "'Woolworths Cheddar Block 1kg'", report)
+        self.assertEqual(ld._values[3][0],
+                         "Woolworths Cheddar Block 1kg")
+        self.assertEqual(ld.clears, 1)     # heal written immediately
+        self.assertEqual(audit_fn(master._values, ld._values)
+                         ["status"], "aligned")
+
+    def test_heal_strips_legacy_structural_rows(self):
+        """Legacy furniture (stamp row / section titles) is removed
+        by the parity step — LD mirrors the master row-for-row."""
+        master, ld = _fixture()
+        ld._values.insert(1, ["Prices valid until",
+                              "n/a (live site)"] + [""] * 9)
+        ld._values.insert(3, ["FRUITS"] + [""] * 10)
+        report = parity_step(master._values, ld._values, ld,
+                             master_ws=master)
+        self.assertIn("structural row 'Prices valid until' removed",
+                      report)
+        self.assertIn("structural row 'FRUITS' removed", report)
+        names = [str(r[0]).strip() for r in ld._values]
+        self.assertNotIn("Prices valid until", names)
+        self.assertNotIn("FRUITS", names)
+        self.assertNotIn("BUTCHERY", names)
+        self.assertEqual(audit_fn(master._values, ld._values)
+                         ["status"], "aligned")
+
+    def test_middle_insert_single_row_auto_moved_to_bottom(self):
+        """User directive 2026-09-12: 'anything not in order to be
+        fixed by it' — a genuine single-row mid-tab insert is moved
+        to the tab's bottom automatically, then parity is aligned."""
+        master, ld = _fixture()
+        # A new item inserted in the MIDDLE of the LD tab (code new,
+        # not yet mirrored): rows 3.. shift down by one.
+        ld._values.insert(2, ["Halal Chicken Mince", "", "", "", "",
+                              "", "", "", "", "", "NEW1"])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            report = parity_step(master._values, ld._values, ld,
+                                 master_ws=master)
+        self.assertIn("healed: LD row 3 ('Halal Chicken Mince') "
+                      "moved to the bottom", report)
+        self.assertIn("BOTTOM_APPEND", report)   # mirror followed
+        self.assertEqual(ld._values[-1][0], "Halal Chicken Mince")
+        self.assertEqual(audit_fn(master._values, ld._values)
+                         ["status"], "aligned")
+        self.assertEqual(ld.clears, 1)   # the single mirror write
+
+    def test_middle_insert_swap_is_never_auto_repaired(self):
+        """A code SWAP (reorder/deletion class) is not a single-row
+        insert: no move, verbatim alert, ABORT — no writes."""
+        master, ld = _fixture()
+        ld._values[2][10], ld._values[3][10] = \
+            ld._values[3][10], ld._values[2][10]     # AUG <-> CHD
         buf = io.StringIO()
         with redirect_stdout(buf):
             report = parity_step(master._values, ld._values, ld,

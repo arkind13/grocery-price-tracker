@@ -898,9 +898,10 @@ class TestMergeStoreTab(unittest.TestCase):
                      if str(r[0]).strip().startswith("Cos Lettuce"))
         self.assertTrue(idx_l > idx_f and idx_l > idx_b)
 
-    def test_merge_stamps_validity_row(self):
-        """User rule 2026-09-07: row 2 carries 'Prices valid until'
-        per shop column; the Dunya SITE column is n/a (live site)."""
+    def test_merge_writes_no_validity_row(self):
+        """Layout 2026-09-12 (user directive): row 2 is an ITEM row —
+        no 'Prices valid until' summary row is ever (re-)written;
+        per-cell ' (till …)' stamps carry validity."""
         from datetime import date as _date
         from core import local_deals as ld
         tab = self._FakeTab(self._existing())
@@ -915,32 +916,31 @@ class TestMergeStoreTab(unittest.TestCase):
             tab, "fruitopia", deals, valid_until=_date(2026, 9, 12))
         self.assertGreater(rows, 0)
         grid = tab.grid
-        self.assertEqual(grid[1][0], "Prices valid until")
-        self.assertEqual(grid[1][1], "n/a (live site)")   # Dunya site
-        self.assertEqual(grid[1][6], "valid until Sat 12 Sep")
-        self.assertEqual(grid[1][4], "")                  # Merjan
-        # no date given -> row exists, nothing stamped
+        self.assertNotEqual(grid[1][0], "Prices valid until")
+        stamp_rows = [r for r in grid
+                      if str(r[0]).strip() == "Prices valid until"]
+        self.assertEqual(stamp_rows, [])
+        # no date given -> identical layout, nothing stamped
         tab2 = self._FakeTab(self._existing())
         ld.merge_store_tab(tab2, "fruitopia", deals)
-        self.assertEqual(tab2.grid[1][0], "Prices valid until")
-        self.assertEqual(tab2.grid[1][6], "")
+        stamp_rows2 = [r for r in tab2.grid
+                       if str(r[0]).strip() == "Prices valid until"]
+        self.assertEqual(stamp_rows2, [])
 
-    def test_rebuild_tab_includes_validity_row(self):
-        """rebuild_tab writes the canonical validity row under the
-        header and stamps any provided values."""
+    def test_rebuild_tab_writes_header_plus_items_only(self):
+        """rebuild_tab writes header + item rows ONLY — no validity
+        row, no section-title rows (layout 2026-09-12)."""
         from core import local_deals as ld
         tab = self._FakeTab([])
         ld.rebuild_tab(
             tab, {"FRUITS": [["Apples /kg", "", "", "", "", "", 3.2,
                               "", "", ""]]},
-            ["fruitopia"],
-            validity={"fruitopia": "valid until Sat 12 Sep"})
+            ["fruitopia"])
         grid = tab.grid
         self.assertEqual(grid[0][0], "Product")
-        self.assertEqual(grid[1][0], "Prices valid until")
-        self.assertEqual(grid[1][1], "n/a (live site)")
-        self.assertEqual(grid[1][6], "valid until Sat 12 Sep")
-        self.assertEqual(grid[1][4], "")
+        self.assertEqual(len(grid), 2)
+        self.assertEqual(grid[1][0], "Apples /kg")
+        self.assertEqual(grid[1][6], 3.2)
 
 
 class TestIngestFlow(unittest.TestCase):
@@ -1155,8 +1155,10 @@ class TestIngestFlow(unittest.TestCase):
                            "Cos Lettuce"))
         self.assertEqual(lettuce[6], "0.99 (till 19 Sep)")
         # NEWEST post's price, stamped with ITS OWN post's validity
-        self.assertEqual(tab.grid[1][6],
-                         "valid until Sat 19 Sep")
+        # (no row-2 summary stamp — layout 2026-09-12)
+        stamp_rows = [r for r in tab.grid
+                      if str(r[0]).strip() == "Prices valid until"]
+        self.assertEqual(stamp_rows, [])
 
     def test_plain_repricing_clears_stale_comment(self):
         """FIX-4 (D11): a newer post that re-prices an item WITHOUT

@@ -247,8 +247,9 @@ class TestItemLevelDates(unittest.TestCase):
 
     def test_item_level_dates_per_cell(self):
         """S6: two items in ONE post with different own dates keep
-        their OWN till stamps; the row-2 shop stamp shows the LATEST
-        remaining."""
+        their OWN till stamps (the row-2 summary stamp is retired —
+        per-cell stamps are the only validity display, layout
+        2026-09-12)."""
         from datetime import date
         ws = FakeWorksheet()
         ld.merge_store_tab(ws, "merjan", [
@@ -263,8 +264,10 @@ class TestItemLevelDates(unittest.TestCase):
                      if "Beef Curry" in str(r[0]))
         self.assertIn("till 14 Sep", str(lamb[MER_SP]))
         self.assertIn("till 18 Sep", str(curry[MER_SP]))
-        self.assertEqual(ws.rows[1][MER_SP],
-                         "valid until Fri 18 Sep")
+        # No row-2 summary stamp is ever written (layout 2026-09-12).
+        stamp_rows = [r for r in ws.rows
+                      if str(r[0]).strip() == "Prices valid until"]
+        self.assertEqual(stamp_rows, [])
 
     def test_vision_validator_accepts_item_level_date(self):
         """The vision schema accepts an optional per-deal valid_until

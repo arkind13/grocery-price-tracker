@@ -115,20 +115,21 @@ class TestSheetRebuild(unittest.TestCase):
         self.assertEqual(len(ws.updates), 2)
 
     def test_header_row_frozen(self):
-        """Rows 1-2 frozen (header + validity row); header = Product
-        + the 4 store names; row 2 = the validity labels."""
+        """Header row frozen (layout 2026-09-12: header + item rows
+        ONLY — no validity row); header = Product + the 4 store
+        names; row 2 is the first ITEM row."""
         ws = FakeWorksheet()
         self._rebuild(ws, {"dunya": [_deal()]})
-        self.assertEqual(ws.frozen, 2)
+        self.assertEqual(ws.frozen, 1)
         header = ws.updates[-1][0][0]
         self.assertEqual(header[0], "Product")
         self.assertEqual(header[1:], [n for _k, n in ld.TAB_COLUMNS])
-        validity = ws.updates[-1][0][1]
-        self.assertEqual(validity[0], "Prices valid until")
-        self.assertEqual(validity[1], "n/a (live site)")
+        self.assertNotEqual(ws.updates[-1][0][1][0],
+                            "Prices valid until")
 
     def test_section_order_fruits_butchery_other(self):
-        """Sections appear FRUITS, BUTCHERY, OTHER in grid order."""
+        """Items appear in FRUITS, BUTCHERY, OTHER order — written as
+        plain item rows, NO section-title rows (layout 2026-09-12)."""
         deals = {
             "dunya": [_deal()],                       # BUTCHERY
             "fruitopia": [
@@ -142,9 +143,12 @@ class TestSheetRebuild(unittest.TestCase):
         ws = FakeWorksheet()
         self._rebuild(ws, deals)
         grid = ws.updates[-1][0]
-        order = [row[0] for row in grid[1:]
-                 if row[0] in ("FRUITS", "BUTCHERY", "OTHER")]
-        self.assertEqual(order, ["FRUITS", "BUTCHERY", "OTHER"])
+        names = [str(row[0]).strip() for row in grid[1:]]
+        for label in ("FRUITS", "BUTCHERY", "OTHER"):
+            self.assertNotIn(label, names)   # no structural rows
+        self.assertTrue(names[0].startswith("Apples"))
+        self.assertTrue(names[1].startswith("Beef Diced"))
+        self.assertTrue(names[2].startswith("Oreo"))
 
     def test_bulk_note_cell_and_shared_row_unit_price(self):
         """Bulk cell holds the note; a unit-price store keeps its
@@ -988,10 +992,9 @@ class TestSweepExpiredSpecials(unittest.TestCase):
                          "6.50 (till 1 Sep)")
 
     def test_expired_row2_summary_stamp_cleared(self):
-        # R2-6 (D21) contract: the stamp is deleted only when NO live
-        # specials remain — this fixture now has ZERO fruitopia
-        # specials (the undated Carrots row moved to the new test
-        # below; spec: undated specials are live specials).
+        """Layout 2026-09-12: the sweep NEVER touches the legacy
+        'Prices valid until' row (no re-derivation, no clearing) —
+        it only sweeps expired special CELLS on item rows."""
         ws = _v2_ws([
             ["FRUITS", "", "", "", "", "", "", "", "", ""],
             ["Carrots /ea", "", "", "", "", "",
@@ -1002,8 +1005,10 @@ class TestSweepExpiredSpecials(unittest.TestCase):
         lines = ld.sweep_expired_specials(ws, today=self.TODAY)
         grid = ws.get_all_values()
         self.assertEqual(grid[3][6], "")           # expired cell gone
-        self.assertEqual(grid[1][6], "")           # stamp gone (no live)
+        self.assertEqual(grid[1][6], "valid until Sun 06 Sep")
         self.assertEqual(grid[1][4], "valid until Sat 12 Sep")
+        self.assertFalse(any("re-derived" in ln or "stamp" in ln
+                             for ln in lines))
 
     def test_expired_stamp_survives_while_undated_special_live(self):
         # R2-6 (D21): an UNDATED special is a live special — its
@@ -1029,10 +1034,10 @@ class TestSweepExpiredSpecials(unittest.TestCase):
 
 
 class TestSweepStampReDerivationR2_6(unittest.TestCase):
-    """R2-6 (D21): the sweep RE-DERIVES each store's row-2 stamp from
-    its REMAINING live specials — the Merjan incident (row 104 'till
-    11 Sep' survived while the 'valid until Fri 11 Sep' stamp died)
-    must never repeat."""
+    """The R2-6 (D21) row-2 stamp RE-DERIVATION is RETIRED (layout
+    2026-09-12: no summary row). What survives is the D21 acceptance
+    invariant in its new form: sweeping an UNRELATED expired cell
+    never disturbs other live cells of the same store."""
 
     TODAY = datetime(2026, 9, 8).date()
 
@@ -1059,36 +1064,9 @@ class TestSweepStampReDerivationR2_6(unittest.TestCase):
         self.assertEqual(grid[5][4], "")            # expired cell gone
         self.assertEqual(grid[4][4], "8.99 (till 11 Sep)")
         self.assertEqual(grid[3][4], "27.99 (till 11 Sep)")
-        # Stamp untouched: max remaining till (11 Sep) matches it.
+        # Legacy stamp row is never modified by the sweep.
         self.assertEqual(grid[1][4], "valid until Fri 11 Sep")
         self.assertTrue(all("stamp" not in ln for ln in lines))
-
-    def test_stale_stamp_rederived_to_max_remaining(self):
-        # The stamp went stale/expired while a LATER special lives on
-        # (the set-special-overwrite shape behind the D21 evidence):
-        # re-derive to the max remaining till date.
-        ws = self._merjan_ws("valid until Sat 05 Sep", [
-            ["Lamb Curry /ea", "", "", "", "27.99 (till 11 Sep)", "",
-             "", "", "", ""],
-            ["Chicken /ea", "", "", "", "12.50 (till 5 Sep)", "",
-             "", "", "", ""],
-        ])
-        lines = ld.sweep_expired_specials(ws, today=self.TODAY)
-        grid = ws.get_all_values()
-        self.assertEqual(grid[4][4], "")            # expired swept
-        self.assertEqual(grid[1][4], "valid until Fri 11 Sep")
-        self.assertTrue(any("re-derived" in ln for ln in lines))
-
-    def test_zero_remaining_specials_lose_stamp(self):
-        ws = self._merjan_ws("valid until Sat 05 Sep", [
-            ["Chicken /ea", "", "", "", "12.50 (till 5 Sep)", "",
-             "", "", "", ""],
-        ])
-        lines = ld.sweep_expired_specials(ws, today=self.TODAY)
-        grid = ws.get_all_values()
-        self.assertEqual(grid[3][4], "")
-        self.assertEqual(grid[1][4], "")
-        self.assertTrue(any("removed (expired)" in ln for ln in lines))
 
 
 class TestSetStorePrices(unittest.TestCase):
@@ -1132,8 +1110,10 @@ class TestSetStorePrices(unittest.TestCase):
 
     def test_new_row_appended_in_shop_section_with_stamp(self):
         """Round 3 (Q27): a new row APPENDS AT GRID END — never a
-        mid-tab insert inside the section block."""
-        ws = _v2_ws([])
+        mid-tab insert inside the section block. Layout 2026-09-12:
+        no row-2 summary stamp is written."""
+        ws = FakeWorksheet()
+        ws.rows = [["Product"] + [n for _k, n in ld.TAB_COLUMNS]]
         lines = ld.set_store_prices(ws, "fruitopia", "special",
                                     [{"item": "Carrots",
                                       "price": 0.75, "unit": "ea"}],
@@ -1141,7 +1121,9 @@ class TestSetStorePrices(unittest.TestCase):
         grid = ws.get_all_values()
         self.assertEqual(grid[-1][0], "Carrots /ea")   # grid end
         self.assertEqual(grid[-1][6], "0.75 (till 12 Sep)")
-        self.assertEqual(grid[1][6], "valid until Sat 12 Sep")
+        stamp_rows = [r for r in grid
+                      if str(r[0]).strip() == "Prices valid until"]
+        self.assertEqual(stamp_rows, [])
         self.assertIn("[new row]", lines[0])
 
     def test_existing_row_matched_ignoring_unit_suffix(self):
@@ -1221,7 +1203,7 @@ class TestRebuildPreservation(unittest.TestCase):
 
     def _rebuild(self, ws, deals, keys, validity=None):
         rows = ld.build_rows(deals)
-        ld.rebuild_tab(ws, rows, keys, validity=validity)
+        ld.rebuild_tab(ws, rows, keys)     # validity param retired
 
     def test_permanent_survives_special_rebuild(self):
         ws = _v2_ws([
@@ -1235,14 +1217,14 @@ class TestRebuildPreservation(unittest.TestCase):
                                      unit="kg",
                                      valid_until=datetime(
                                          2026, 9, 12).date())]}
-        self._rebuild(ws, deals, ["fruitopia"],
-                      validity={"fruitopia":
-                                "valid until Sat 12 Sep"})
+        self._rebuild(ws, deals, ["fruitopia"])
         grid = ws.get_all_values()
         carrot = next(r for r in grid if r[0] == "Carrots /kg")
         self.assertEqual(carrot[1], 6.49)         # dunya PERM kept
         self.assertEqual(carrot[6], "0.8 (till 12 Sep)")
-        self.assertEqual(grid[1][6], "valid until Sat 12 Sep")
+        stamp_rows = [r for r in grid
+                      if str(r[0]).strip() == "Prices valid until"]
+        self.assertEqual(stamp_rows, [])          # no summary row
 
     def test_non_run_shop_special_survives(self):
         ws = _v2_ws([
@@ -1455,8 +1437,8 @@ class TestValidityStampsFromRealPost(unittest.TestCase):
 
 class TestRestampUndated(unittest.TestCase):
     """--set-date must re-stamp the SHEET (checker fix 2026-09-08):
-    undated special cells + row 2 get the date; dated cells keep
-    their own date."""
+    undated special cells get the date; dated cells keep their own.
+    Layout 2026-09-12: no row-2 summary stamp."""
 
     def _grid(self):
         return [
@@ -1478,8 +1460,27 @@ class TestRestampUndated(unittest.TestCase):
         self.assertEqual(n, 2)                    # 2 undated cells
         self.assertIn("(till 11 Sep)", grid[3][6])
         self.assertIn("(till 11 Sep)", grid[4][6])
-        self.assertIn("valid until Fri 11 Sep", grid[1][6])
+        # legacy stamp row untouched (retired layout)
+        self.assertEqual(grid[1][6], "")
         self.assertIn("(till 5 Sep)", grid[5][6])  # dated kept
+
+    def test_new_layout_items_all_stamped(self):
+        """On the 2026-09-12 layout (no stamp/section rows) every
+        undated special cell of the store is stamped — the old
+        row-2 guard never blocked stamping."""
+        from datetime import date
+        grid_in = [
+            ["Product"] + [""] * 9,
+            ["Cos Lettuce /ea", "", "", "", "", "", "0.99",
+             "", "", ""],
+            ["Celery /ea", "", "", "", "", "", "2 for $2.99",
+             "", "", ""],
+        ]
+        grid, n = ld._restamp_undated(grid_in, "fruitopia",
+                                      date(2026, 9, 11))
+        self.assertEqual(n, 2)
+        self.assertIn("(till 11 Sep)", grid[1][6])
+        self.assertIn("(till 11 Sep)", grid[2][6])
 
     def test_unknown_store_noop(self):
         from datetime import date

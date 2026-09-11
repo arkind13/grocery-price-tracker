@@ -911,14 +911,15 @@ def post_log_cmd(code: str) -> int:
 
 def _restamp_undated(grid: list, store_key: str,
                      valid_until: "date") -> tuple[list, int]:
-    """Stamp the store's UNDATED special cells + row 2 (checker fix
+    """Stamp the store's UNDATED special cells (checker fix
     2026-09-08: --set-date previously recorded the date only in the
-    post log — the sheet kept bare cells and a blank validity row, so
-    the user could not see the validity).
+    post log — the sheet kept bare cells, so the user could not see
+    the validity).
 
     Only cells WITHOUT an existing ' (till ...)' stamp are touched
-    (a dated cell keeps its own date); row 2 gets the store summary
-    stamp. Returns (grid, stamped_count).
+    (a dated cell keeps its own date). Layout (user directive
+    2026-09-12): no row-2 summary stamp — per-cell stamps only.
+    Returns (grid, stamped_count).
     """
     if isinstance(store_key, dict):     # _store_for_code() shape
         store_key = store_key.get("key", "")
@@ -928,16 +929,16 @@ def _restamp_undated(grid: list, store_key: str,
     grid = [list(r) for r in grid]
     width = len(TAB_COLUMNS) + 1
     grid = [(r + [""] * width)[:width] for r in grid]
-    if len(grid) < 2 or str(grid[1][0]).strip() != \
-            "Prices valid until":
-        return grid, 0
     stamped = 0
-    for row in grid[2:]:
+    for row in grid[1:]:
+        name = str(row[0]).strip() if row else ""
+        if not name or name in SECTION_ORDER \
+                or name == "Prices valid until":
+            continue
         cell = str(row[col]) if len(row) > col else ""
         if cell.strip() and "(till" not in cell.lower():
             row[col] = _stamp_validity(cell, valid_until)
             stamped += 1
-    grid[1][col] = f"valid until {valid_until:%a %d %b}"
     return grid, stamped
 
 
@@ -946,7 +947,7 @@ def set_date_cmd(code: str, filename: str, date_text: str) -> int:
     pasted post whose board didn't show one, and archive the file.
 
     The date is ALSO stamped onto the sheet: every undated special
-    cell of that store + the row-2 summary (checker fix 2026-09-08).
+    cell of that store (checker fix 2026-09-08).
 
     Args:
         code: the notification's inbox code (FRU0709260507; legacy
@@ -1021,7 +1022,7 @@ def set_date_cmd(code: str, filename: str, date_text: str) -> int:
             grid, stamped = _restamp_undated(tab.get_all_values(),
                                              store, valid_until)
             tab.clear()
-            tab.freeze(rows=2)
+            tab.freeze(rows=1)
             tab.update(values=grid,
                        range_name=f"A1:K{len(grid)}")
         except Exception as exc:  # noqa: BLE001 — log update already safe
@@ -1950,8 +1951,7 @@ def build_rows(all_store_deals: dict) -> dict:
 
 
 def rebuild_tab(worksheet, rows_by_section: dict,
-                store_keys: list[str],
-                validity: dict[str, str] | None = None) -> None:
+                store_keys: list[str]) -> None:
     """Rewrite THIS run's shops' SPECIAL columns; preserve everything
     else (idempotent). ONE batch update A1:K{N}.
 
@@ -1967,17 +1967,16 @@ def rebuild_tab(worksheet, rows_by_section: dict,
     - The shared Comments column is shop-tagged: this run's notes
       replace their shop's segment, other shops' notes survive.
 
-    Row 2 is the "Prices valid until" summary row: one stamp per
-    shop column (newest dated special); per-cell dates are
-    authoritative. The Dunya PERM column is n/a (live site prices).
+    Layout (user directive 2026-09-12): header + item rows ONLY —
+    the tab mirrors the master tab ROW-FOR-ROW. No "Prices valid
+    until" summary row, no section-title rows; per-cell ' (till …)'
+    stamps are the only validity display.
 
     Args:
         worksheet: gspread/Fake worksheet handle for Local_Deals.
         rows_by_section: build_rows() output.
         store_keys: shops in THIS run (their FB-post keys, e.g.
             "dunya_fb"; other shops' columns stay untouched).
-        validity: optional {store_key: "valid until …"} row-2
-            summary stamps.
     """
     run_keys = {k.strip() for k in (store_keys or []) if k and
                 k.strip()}
@@ -1994,41 +1993,31 @@ def rebuild_tab(worksheet, rows_by_section: dict,
     old = worksheet.get_all_values() or []
     width = len(TAB_COLUMNS) + 1
     old = [(list(r) + [""] * width)[:width] for r in old]
-    # Preserve: per (section, Col A name) the permanent cells, the
-    # non-run shops' special cells, and the non-run shops' comments.
-    preserved: dict[tuple, dict] = {}
-    section = ""
+    # Preserve: per Col A name the permanent cells, the non-run
+    # shops' special cells, and the non-run shops' comments.
+    # Legacy furniture rows (stamp / section titles) are never
+    # preserved — the layout has no structural rows (2026-09-12).
+    preserved: dict[str, dict] = {}
     for row in old[1:]:
         first = str(row[0]).strip()
-        if first in SECTION_ORDER:
-            section = first
-            continue
-        if not first or section == "":
+        if not first or first in SECTION_ORDER \
+                or first == "Prices valid until":
             continue
         keep = {"comments": str(row[comments_col] or "")}
         for i, (k, _n) in enumerate(TAB_COLUMNS, start=1):
             if i in perm_cols or i not in run_cols:
                 if i != comments_col and str(row[i] or "").strip():
                     keep.setdefault("cells", {})[i] = row[i]
-        preserved[(section, first)] = keep
+        preserved[first] = keep
 
     run_shop_keys = [k.replace("_fb", "") for k in run_keys]
-    grid = [["Product"] + [name for _k, name in TAB_COLUMNS],
-            ["Prices valid until", "n/a (live site)",
-             "", "", "", "", "", "", "", "", ""]]
-    # Row 2: keep non-run shops' existing summary stamps.
-    if len(old) > 1 and str(old[1][0]).strip() == \
-            "Prices valid until":
-        for i in range(1, width):
-            if i not in run_cols:
-                grid[1][i] = old[1][i]
+    grid = [["Product"] + [name for _k, name in TAB_COLUMNS]]
 
-    seen: set[tuple] = set()
+    seen: set[str] = set()
     for sec in SECTION_ORDER:
         section_rows = rows_by_section.get(sec) or []
         if not section_rows:
             continue
-        grid.append([sec] + [""] * len(TAB_COLUMNS))
         for row in section_rows:
             row = list(row)
             name = str(row[0]).strip()
@@ -2036,7 +2025,7 @@ def rebuild_tab(worksheet, rows_by_section: dict,
             # permanent cells and non-run shops' special cells fill
             # only blanks; comments merge (other shops kept, this
             # run's notes replace their own).
-            keep = preserved.get((sec, name))
+            keep = preserved.get(name)
             if keep:
                 for i, cellv in (keep.get("cells") or {}).items():
                     if not str(row[i] or "").strip():
@@ -2052,32 +2041,26 @@ def rebuild_tab(worksheet, rows_by_section: dict,
                             _shop_key_for_tag(m.group(1)),
                             seg[m.end():].strip())
                 row[comments_col] = merged
-            seen.add((sec, name))
+            seen.add(name)
             grid.append(row)
     # Re-append rows this run no longer carries but which still hold
     # preserved data (other shops' prices / perm entries). This run's
     # shops' notes drop with their rebuilt specials.
-    for sec in SECTION_ORDER:
-        for (psec, name), keep in preserved.items():
-            if psec != sec or (sec, name) in seen:
-                continue
-            cells = keep.get("cells") or {}
-            comments = _strip_shop_segments(
-                keep.get("comments") or "", run_shop_keys)
-            if not (cells or comments):
-                continue
-            row = [name] + [""] * len(TAB_COLUMNS)
-            for i, cellv in cells.items():
-                row[i] = cellv
-            row[comments_col] = comments
-            grid.append(row)
-    # Row 2 summary stamps for THIS run's shops.
-    for key, text in (validity or {}).items():
-        col = _target_column(key)[0]
-        if col is not None and col != _perm_column_for("dunya"):
-            grid[1][col] = text
+    for name, keep in preserved.items():
+        if name in seen:
+            continue
+        cells = keep.get("cells") or {}
+        comments = _strip_shop_segments(
+            keep.get("comments") or "", run_shop_keys)
+        if not (cells or comments):
+            continue
+        row = [name] + [""] * len(TAB_COLUMNS)
+        for i, cellv in cells.items():
+            row[i] = cellv
+        row[comments_col] = comments
+        grid.append(row)
     worksheet.clear()
-    worksheet.freeze(rows=2)
+    worksheet.freeze(rows=1)
     worksheet.update(values=grid, range_name=f"A1:K{len(grid)}")
 
 
@@ -3364,10 +3347,10 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
     """Merge ONE store's deals into the existing Local_Deals tab.
 
     The ingest flow must NOT touch the other stores' cells: the
-    current grid is read, matching Product rows (same section, same
-    Col A text) get this store's column cell updated, and the FULL
-    grid is written back in ONE batch update (layout: header, "Prices
-    valid until" row, then per section a title row + item rows).
+    current grid is read, matching Product rows (same Col A text,
+    grid-wide) get this store's column cell updated, and the FULL
+    grid is written back in ONE batch update (layout: header row,
+    then item rows — row-for-row parity with the master tab).
 
     v2 (Round 3, Q27 + §18/A2): NEW rows APPEND AT GRID END — a
     mid-tab insert would read as a parity middle_insert hard alert.
@@ -3411,16 +3394,12 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
             for r in grid]
     if not grid or not str(grid[0][0]).strip():
         grid = [["Product"] + [name for _k, name in TAB_COLUMNS]]
-    # Canonical row 2: "Prices valid until" (insert for tabs that
-    # predate the 2026-09-07 layout).
-    if len(grid) < 2 or str(grid[1][0]).strip() != \
-            "Prices valid until":
-        grid.insert(1, ["Prices valid until", "n/a (live site)",
-                        "", "", "", "", "", "", "", "", ""])
-    if valid_until is not None and col is not None \
-            and kind == "special":
-        grid[1][col] = f"valid until {valid_until:%a %d %b}"
-
+    # Layout (user directive 2026-09-12): header + item rows ONLY —
+    # no "Prices valid until" stamp row, no section-title rows. The
+    # LD tab mirrors the master tab ROW-FOR-ROW; per-cell ' (till …)'
+    # stamps carry all validity (the row-2 summary is retired).
+    # Legacy furniture rows are left in place here — the Wednesday
+    # parity step strips them (parity_step heal), never the sweep.
     appended: list[list] = []    # NEW rows, in append order
     domain_skips: list[str] = []
     for section in SECTION_ORDER:
@@ -3463,7 +3442,7 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
         new_row_lines = _mirror_new_rows(store_key, appended,
                                          master_ws)
     worksheet.clear()
-    worksheet.freeze(rows=2)
+    worksheet.freeze(rows=1)
     worksheet.update(values=grid, range_name=f"A1:K{len(grid)}")
     if domain_skips:
         new_row_lines = ([f"[domain gate] {len(domain_skips)} "
@@ -3563,14 +3542,10 @@ def sweep_expired_specials(worksheet, today: "date | None" = None
     them. Rows are KEPT (only the cell is cleared, user decision
     2026-09-07). PERMANENT columns are never touched.
 
-    R2-6 (D21): row-2 summary stamps are RE-DERIVED after the cell
-    sweep — from the store's REMAINING live special cells (max
-    remaining till date), so a stamp never dies (or goes stale) while
-    live specials of that store survive elsewhere (Merjan: row 104
-    till 11 Sep lived on while the stamp was cleared). A stamp is
-    DELETED only when the store has NO live specials left AND the
-    stamp itself is expired. An orphan FUTURE stamp with zero
-    specials is deliberately left alone (D12, awaiting user triage).
+    Layout (user directive 2026-09-12): item rows start right under
+    the header — the row-2 summary stamp is retired (per-cell
+    ' (till …)' stamps are the only validity display). Legacy
+    structural rows are skipped, never swept.
 
     Args:
         worksheet: gspread/Fake worksheet handle for Local_Deals.
@@ -3586,7 +3561,7 @@ def sweep_expired_specials(worksheet, today: "date | None" = None
         grid = worksheet.get_all_values() or []
     except Exception:  # noqa: BLE001 — missing tab -> nothing to do
         return []
-    if len(grid) < 3:
+    if len(grid) < 2:
         return []
     width = len(TAB_COLUMNS) + 1
     grid = [(list(r) + [""] * width)[:width] for r in grid]
@@ -3596,9 +3571,10 @@ def sweep_expired_specials(worksheet, today: "date | None" = None
     changed = False
 
     # --- Pass 1: expired special CELLS (rows kept, cell cleared) ----
-    for row in grid[2:]:
+    for row in grid[1:]:
         name = str(row[0]).strip()
-        if not name or name in SECTION_ORDER:
+        if not name or name in SECTION_ORDER \
+                or name == "Prices valid until":
             continue
         for key in SHOP_TAGS:
             col = _special_column_for(key)
@@ -3616,44 +3592,6 @@ def sweep_expired_specials(worksheet, today: "date | None" = None
                 row[comments_col] = _merge_comment_cell(
                     row[comments_col], key, "")
             changed = True
-
-    # --- Pass 2 (R2-6): row-2 stamps re-derived from what REMAINS ---
-    # Only EXISTING stamps are re-derived/cleared — a blank stamp cell
-    # stays blank (stamps are born in the ingest/set-special writers,
-    # not the sweep).
-    if str(grid[1][0]).strip() == "Prices valid until":
-        for key in SHOP_TAGS:
-            col = _special_column_for(key)
-            cell = str(grid[1][col] or "")
-            if not cell.strip():
-                continue
-            stamp = _stamp_date(cell, today)
-            live_tills: list = []
-            any_live = False
-            for row in grid[2:]:
-                if not str(row[0]).strip() or \
-                        str(row[0]).strip() in SECTION_ORDER:
-                    continue
-                live_cell = str(row[col]) if len(row) > col else ""
-                if not live_cell.strip():
-                    continue
-                any_live = True
-                till = _cell_till_date(live_cell, today)
-                if till is not None and till >= today:
-                    live_tills.append(till)
-            if live_tills:
-                wanted = f"valid until {max(live_tills):%a %d %b}"
-                if cell.strip() != wanted:
-                    lines.append(
-                        f"{names[key]}: validity stamp re-derived "
-                        f"to '{wanted}' (from live specials)")
-                    grid[1][col] = wanted
-                    changed = True
-            elif not any_live and stamp is not None and stamp < today:
-                lines.append(f"{names[key]}: validity stamp "
-                             f"'{cell.strip()}' removed (expired)")
-                grid[1][col] = ""
-                changed = True
 
     if changed:
         worksheet.clear()
@@ -3691,7 +3629,7 @@ def repair_orphan_comments(worksheet) -> list[str]:
     comments_col = _grid_col("comments")
     lines: list[str] = []
     changed = False
-    for row in grid[2:]:
+    for row in grid[1:]:
         name = str(row[0]).strip()
         if not name or name in SECTION_ORDER:
             continue
@@ -3783,10 +3721,6 @@ def set_store_prices(worksheet, store_key: str, kind: str,
         name for _k, name in TAB_COLUMNS]]
     width = len(TAB_COLUMNS) + 1
     grid = [(list(r) + [""] * width)[:width] for r in grid]
-    if len(grid) < 2 or str(grid[1][0]).strip() != \
-            "Prices valid until":
-        grid.insert(1, ["Prices valid until", "n/a (live site)",
-                        "", "", "", "", "", "", "", "", ""])
 
     entries = _prefix_butcher_deals(store_key, entries)
     lines: list[str] = []
@@ -3829,8 +3763,6 @@ def set_store_prices(worksheet, store_key: str, kind: str,
             lines.append(
                 f"{shop} {kind}: {display} = {cell}"
                 f" — was {old or 'empty'} [row {match + 1}]")
-        if kind == "special" and till is not None:
-            grid[1][col] = f"valid until {till:%a %d %b}"
 
     if appended:
         lines.extend(_mirror_new_rows(store_key, appended,
@@ -4151,18 +4083,8 @@ def run_local_deals(stores=None, dry_run: bool = False,
             spreadsheet = connect_spreadsheet()
             worksheet = ensure_local_deals_tab(spreadsheet)
             rows_by_section = build_rows(store_deals)
-            # Row-2 summary stamp per shop: the NEWEST dated post of
-            # the run (per-cell stamps are authoritative; this is
-            # readability only).
-            validity = {}
-            for key, shop_deals in store_deals.items():
-                dated = [d["valid_until"] for d in shop_deals
-                         if d.get("valid_until")]
-                if dated:
-                    validity[key] = (f"valid until "
-                                     f"{max(dated):%a %d %b}")
             rebuild_tab(worksheet, rows_by_section,
-                        list(store_deals.keys()), validity=validity)
+                        list(store_deals.keys()))
         except Exception as exc:  # noqa: BLE001 — tab write is not
             # allowed to kill the report; the run still delivers.
             print(f"[local-deals] tab rebuild failed: "

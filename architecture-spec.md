@@ -100,14 +100,24 @@ code of the paired row. The new column is APPENDED (not inserted) so all
 existing column references stay valid. Shop columns keep the
 permanent/special + validity-stamp + expire-sweep mechanics exactly as-is.
 
-### 3.3 Row alignment (Q27)
+### 3.3 Row alignment (Q27 — SUPERSEDED by user directive 2026-09-12)
 
-Master data row N (N ≥ 2) ↔ Local_Deals row N+1 (Local_Deals row 2 is the
-"Prices valid until" stamp row and is exempt). EVERY insert or removal
-mirrors on both tabs in the same operation. `Item_Code` remains the
-durable key: Wednesday's parity check (§10) verifies alignment from the
-same two reads it already does and reports drift as a warning line —
-repairs are NEVER automatic.
+**2026-09-12 ruling (user):** the two tabs must match LINE-FOR-LINE —
+same row count, same item at the same row number, no blank lines. The
+Local_Deals "Prices valid until" stamp row and the BUTCHERY/FRUITS/
+OTHER section-title rows are RETIRED: the LD tab is header + item rows
+only, so LD row N = master row N for every item. The 05:00 sweep, the
+merge/rebuild/set-special writers and --set-date never write structural
+rows again; per-cell ' (till …)' stamps are the only validity display.
+
+Alignment mechanics: EVERY bottom-append mirrors on both tabs in the
+same operation (name included). `Item_Code` remains the durable key.
+Wednesday's parity step (§10) first HEALS legacy drift — strips
+structural rows, re-names coded blank rows from their master pair —
+then audits: bottom-appends auto-mirror; a single-row mid-tab INSERT
+is auto-repaired by moving that row to the tab's bottom; a break that
+is not a single-row insert (deletion/reorder) still prints the verbatim
+A2 alert and aborts with no writes.
 
 ### 3.4 Archive tab
 

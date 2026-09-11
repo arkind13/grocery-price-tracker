@@ -239,7 +239,7 @@ def apply_verdicts(verdicts: list, *, master_ws=None, ld_ws=None,
                          range_name=f"A1:M{len(master_grid)}")
     if ld_changed:
         ld_ws.clear()
-        ld_ws.freeze(rows=2)
+        ld_ws.freeze(rows=1)
         ld_ws.update(values=ld_grid,
                      range_name=f"A1:K{len(ld_grid)}")
 

@@ -90,15 +90,22 @@ without you:
 
 ## The row-parity model (the core invariant)
 
-Both tabs carry the SAME item set, always. A local-only item has a
+Both tabs carry the SAME item set, always — and, since the 2026-09-12
+user ruling, they match ROW-FOR-ROW: same row count, same item at the
+same row number, no blank lines. The Local_Deals tab is header + item
+rows only (the old "Prices valid until" stamp row and the
+BUTCHERY/FRUITS section titles are retired; per-cell ` (till …)`
+stamps are the only validity display). A local-only item has a
 master row with blank price + blank keyword and appears on the ONE
 list. You fill the price + keyword in the sheet, say `done` (verify
 only), and it leaves the list. If Woolies doesn't stock it, say `gone`
 → `GONE` written to the price cell, item leaves the list, row survives.
-A Wool-only item's local line is simply blanked — never listed.
-Inserts mirror on both tabs; a row inserted in the MIDDLE triggers a
-hard alert (move it to the bottom and re-run); bottom-appends are
-auto-mirrored by the next sync.
+A Wool-only item's local line stays on the tab (name only, no prices)
+so the row numbers keep matching. Inserts mirror on both tabs; a row
+inserted in the MIDDLE is auto-repaired by Wednesday's sync (moved to
+that tab's bottom); a break that isn't a single-row insert
+(deletion/reorder) hard-alerts. Bottom-appends are auto-mirrored by
+the next sync.
 
 ## Halal rules
 
