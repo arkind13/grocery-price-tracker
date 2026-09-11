@@ -3297,6 +3297,67 @@ def _reuse_match_index(grid: list, name: str) -> int | None:
     return None
 
 
+PRODUCE_WORDS = frozenset({
+    "lettuce", "onion", "pumpkin", "tomato", "apple", "banana",
+    "cucumber", "capsicum", "carrot", "broccoli", "cauliflower",
+    "eggplant", "artichoke", "choko", "celery", "corn", "pear",
+    "mango", "strawberry", "blueberry", "raspberry", "herb",
+    "parsley", "coriander", "potato", "zucchini", "mushroom",
+    "avocado", "lemon", "lime", "orange", "grape", "spinach",
+    "silverbeet", "bean", "pea", "cabbage", "chilli", "ginger",
+    "garlic", "plum", "peach", "nectarine", "melon", "watermelon",
+    "papaya", "pawpaw", "kiwi", "fig", "date", "salad", "greens"})
+BUTCHERY_STORE_KEYS = frozenset({"merjan", "dunya_fb", "dunya"})
+FRUITVEG_STORE_KEYS = frozenset({"fruitopia", "abusalim"})
+
+
+_GATE_PACK_RE = re.compile(r"\(?\d+(?:[.,]\d+)?\s*kg\)?", re.I)
+
+_GATE_STYLE_WORDS = frozenset({
+    "halal", "turkish", "lebanese", "greek", "spicy", "premium",
+    "lean", "whole", "skin", "off", "boneless", "bbq", "cook",
+    "cooking", "finely", "fresh", "each", "s9", "s14"})
+
+
+def _item_words(name: str) -> set:
+    """Content words of an item name: plural-folded, style words and
+    pack sizes removed, unit suffix removed."""
+    toks = set()
+    for t in re.findall(r"[a-z0-9]+", str(name or "").lower()):
+        if t in _GATE_STYLE_WORDS or _GATE_PACK_RE.fullmatch(t) or t.isdigit():
+            continue
+        toks.add(t[:-1] if t.endswith("s") and len(t) > 3 else t)
+    return toks
+
+
+def is_produce_item(name: str) -> bool:
+    """Produce test: any content word in the produce vocabulary."""
+    return bool(_item_words(name) & PRODUCE_WORDS)
+
+
+def is_meat_item(name: str) -> bool:
+    """Meat test: the halal module's raw-meat vocabulary."""
+    from core.halal import is_meat_term
+    return is_meat_term(str(name or ""))
+
+
+def domain_gate_skip(item_name: str, store_key: str) -> str | None:
+    """DOMAIN GATE (user ruling 2026-09-11): butcheries do not stock
+    produce; fruit & veg shops do not stock meat. A deal outside its
+    source shop's domain is SKIPPED with a logged line — never written
+    to the tab, never compared. Unclassifiable items pass (recorded,
+    per the original out-of-domain design)."""
+    produce = is_produce_item(item_name)
+    meat = is_meat_item(item_name)
+    if store_key in BUTCHERY_STORE_KEYS and produce and not meat:
+        return (f"[domain gate] '{item_name[:40]}' skipped — produce "
+                f"item from a butchery source")
+    if store_key in FRUITVEG_STORE_KEYS and meat and not produce:
+        return (f"[domain gate] '{item_name[:40]}' skipped — meat item "
+                f"from a fruit & veg source")
+    return None
+
+
 def merge_store_tab(worksheet, store_key: str, deals: list[dict],
                     valid_until=None,
                     master_ws=None) -> tuple[int, list[str]]:
@@ -3361,11 +3422,19 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
         grid[1][col] = f"valid until {valid_until:%a %d %b}"
 
     appended: list[list] = []    # NEW rows, in append order
+    domain_skips: list[str] = []
     for section in SECTION_ORDER:
         section_rows = rows_by_section.get(section) or []
         if not section_rows:
             continue
         for row in section_rows:
+            # DOMAIN GATE (2026-09-11): butcheries do not stock
+            # produce; fruit & veg shops do not stock meat. Skipped
+            # deals are logged in the report — never written.
+            gate = domain_gate_skip(str(row[0]), store_key)
+            if gate:
+                domain_skips.append("[domain gate] " + gate)
+                continue
             # FIX-8 (D4) + ID-2 (v2 reuse guard, 2026-09-11): exact
             # canonical equality first, then plural-folded token
             # containment (unit markers + halal ignored) — the
@@ -3396,6 +3465,10 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
     worksheet.clear()
     worksheet.freeze(rows=2)
     worksheet.update(values=grid, range_name=f"A1:K{len(grid)}")
+    if domain_skips:
+        new_row_lines = ([f"[domain gate] {len(domain_skips)} "
+                          f"out-of-domain deal(s) skipped"] +
+                         new_row_lines)
     return len(grid), new_row_lines
 
 
