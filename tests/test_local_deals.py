@@ -1032,6 +1032,28 @@ class TestSweepExpiredSpecials(unittest.TestCase):
                          [])
         self.assertEqual(ws.clear_calls, 0)
 
+    def test_legacy_summary_stamp_text_cleared_from_item_row(self):
+        """The 2026-09-12 08:32 incident: a raw out-of-CLI write
+        landed the RETIRED row-2 summary text ('valid until Sun 13
+        Sep') in the Fruitopia cell of the FIRST ITEM row — the old
+        stamp ROW is gone, so sheet row 2 is now an item row. Such
+        text is never a price, the numeric readers ignore it, and the
+        '(till …)' expiry matcher can never clear it: the sweep
+        removes it on sight. Legal cells are never touched."""
+        ws = _v2_ws([
+            ["Halal chicken breast diced /kg", "13.99", "", "", "",
+             "", "valid until Sun 13 Sep", "", "", ""],
+            ["Carrots /ea", "", "", "", "", "",
+             "0.99 (till 20 Sep)", "", "", ""],
+        ])
+        lines = ld.sweep_expired_specials(ws, today=self.TODAY)
+        grid = ws.get_all_values()
+        self.assertEqual(len(lines), 1)
+        self.assertIn("legacy summary stamp text", lines[0])
+        self.assertEqual(grid[2][6], "")           # defect cleared
+        self.assertEqual(grid[2][1], "13.99")      # perm untouched
+        self.assertEqual(grid[3][6], "0.99 (till 20 Sep)")
+
 
 class TestSweepStampReDerivationR2_6(unittest.TestCase):
     """The R2-6 (D21) row-2 stamp RE-DERIVATION is RETIRED (layout

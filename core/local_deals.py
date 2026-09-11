@@ -3611,6 +3611,30 @@ def sweep_expired_specials(worksheet, today: "date | None" = None
                     row[comments_col], key, "")
             changed = True
 
+    # --- Pass 2: legacy summary-stamp TEXT in shop columns ----------
+    # The row-2 "valid until <day> <date>" summary was retired with
+    # the 2026-09-12 layout. The only way such text lands in a SHOP
+    # column now is a raw out-of-CLI write (the 2026-09-12 08:32
+    # incident: the agent aimed at the old stamp ROW and hit the
+    # first item row's Fruitopia cell). Such text is always a defect:
+    # it is not a price, the numeric readers ignore it, the expiry
+    # sweep can never match it — clear it on sight.
+    for row in grid[1:]:
+        name = str(row[0]).strip()
+        if not name or name in SECTION_ORDER \
+                or name == "Prices valid until":
+            continue
+        for col in range(1, 9):            # shop columns B..I
+            cell = str(row[col] or "").strip()
+            if cell.lower().startswith("valid until"):
+                col_name = TAB_COLUMNS[col - 1][1]
+                lines.append(
+                    f"{col_name}: {name} — legacy summary stamp text "
+                    f"{cell!r} removed (row 2 is an item row since "
+                    f"the 2026-09-12 layout)")
+                row[col] = ""
+                changed = True
+
     if changed:
         worksheet.clear()
         worksheet.update(values=grid, range_name=f"A1:K{len(grid)}")
