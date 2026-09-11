@@ -178,7 +178,11 @@ same styled list; both are fresh sheet reads (≤5s budget).
 | `<item>` / "price of X" (NL default) | Sheet-only lookup: WW display price (5% + home-brand extra) + every local shop's price (special-first) + winner (§11 format) | ≤10s |
 | `live <item>` | Direct web search Woolworths + Coles. ≤3 compact lines per store: name, price, pack size. PRICES ONLY — never adds items, never assigns codes, never queues. If a sheet row exists → one side-note line with the tracked WW price. No classifier, no fallback, no investigation turns | ≤20s |
 | `list` | The ONE missing list (§6), fresh from the sheet, styled, coded | ≤5s |
-| `specials` | WW specials from the sheet (col H + D deal rates); Wednesday posts it automatically | ≤10s |
+| `specials` | Per-shop (user decision 2026-09-12): the agent asks WHICH SHOP when the
+  user's phrasing names none — Woolworths (`specials`, col H + D deal rates), Aldi
+  (`aldi-specials --force --no-telegram`, on-demand print only), or the local shops
+  (`specials --store local` — read-only Local_Deals special columns, never the
+  ingest sweep). Wednesday still posts the Woolworths specials automatically. | ≤10s |
 | `batch <codes+verdicts>` | ONE call: `ABC done; DEF gone; GHI rename halal lamb shoulder; JKL remove; MNO ignore`. Executes all verdicts (§4 semantics), replies per code. The agent is FORBIDDEN from pre-investigation turns — with one sheet and one list there is nothing to investigate | ≤10s |
 | `ignored` | Reveals the hidden ignore list | ≤10s |
 

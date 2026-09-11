@@ -18,6 +18,7 @@ Telegram.
 | "price of halal beef mince" (or just the item) | Woolworths price + every local shop's price + 🏆 winner. Meat items also show the non-halal Woolworths twin ("also at Woolworths (non-halal): $13.54 — …"). Messy wording is fine: "price of X", "how much is X", plurals and typos all find the same row, and the answer's [code] always names the row you actually asked about |
 | "live beef mince" | Fresh web search, Woolworths + Coles + Aldi, 3 prices each. Prices only — nothing is ever added |
 | "list" | The ONE list: local items you haven't tracked at Woolies yet, each with a code |
+| "what's on special" | Asks you WHICH SHOP first (Woolworths / Aldi / local shops), then shows that shop's specials. Name the shop in the question ("aldi specials") and it skips the ask |
 | "specials" | Woolworths specials from the sheet |
 | "AUG done; EPJ gone; XYZ rename halal lamb shoulder" | One call, all verdicts executed, per-code replies |
 | "ignored" | The hidden ignore list |

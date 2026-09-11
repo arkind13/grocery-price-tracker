@@ -851,6 +851,43 @@ def render_lookup(result: dict) -> str:
     return "\n".join(lines)
 
 
+def local_specials_report(ld_rows: list) -> str:
+    """The four local shops' CURRENT specials, read-only (the
+    `specials --store local` answer — user decision 2026-09-12:
+    'what's on special' asks which shop first).
+
+    One sheet-side source: every Local_Deals quote whose resolved
+    kind is 'special' (validity-aware), grouped per shop with the
+    multibuy terms ('min order …') next to the price. Permanent
+    prices are excluded — this is the SPECIALS answer, not the
+    catalogue."""
+    groups: dict = {}
+    for ld in ld_rows:
+        display = re.sub(r"\s*/(kg|ea)\s*$", "", str(ld["name"] or ""),
+                         flags=re.I).strip()
+        for q in _ld_quotes(ld):
+            if q["kind"] != "special":
+                continue
+            price_text = _quote_price_text(q)
+            note = _note_text(q["note"])[2:].strip() if q.get("note") \
+                else ""
+            suffix = f" · {note}" if note else ""
+            groups.setdefault(q["shop"], []).append(
+                f"  {display} — {price_text} (special){suffix}")
+    if not groups:
+        return "No active local specials right now."
+    lines: list = []
+    total = 0
+    for shop, items in groups.items():
+        lines.append(f"{_SHOP_ICONS.get(shop, '·')} {_shop_label(shop)}"
+                     f" — {len(items)} on special")
+        lines.extend(sorted(items))
+        total += len(items)
+    lines.append(f"📊 {total} local special(s) across "
+                 f"{len(groups)} shop(s)")
+    return "\n".join(lines)
+
+
 def render_list(items: list) -> str:
     """The ONE list, styled (spec §6/§11): 📋 header, '[CODE] name —
     best $X (shop)' lines, count + compact footer."""

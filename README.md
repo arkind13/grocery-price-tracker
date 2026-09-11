@@ -18,7 +18,7 @@ deleted in the v2 rebuild. What remains is measured: **price lookup
 | `<item>` / "price of X" | Sheet-only lookup: Woolworths display price (5% team discount + home-brand extra) + every local shop's price + 🏆 winner. Meat lookups also carry the non-halal Woolworths twin line | ≤10s |
 | `live <item>` | Direct web search Woolworths + Coles + Aldi (Amazon future). ≤3 prices per store. PRICES ONLY — never adds items, never codes. Sheet row shown as a side note if tracked | ≤20s |
 | `list` | The ONE list: local items whose Woolworths side is blank (no price + no keyword). Fresh from the sheet, every entry coded | ≤5s |
-| `specials` | Woolworths specials from the sheet (multi-buy deal rates + discounts) | ≤10s |
+| `specials` | Per-shop (2026-09-12): bare "what's on special" asks WHICH SHOP first — Woolworths (`specials`), Aldi (`aldi-specials --force --no-telegram`, print-only on demand), or local shops (`specials --store local`, read-only from Local_Deals) | ≤10s |
 | `batch <codes+verdicts>` | ONE call: `ABC done; DEF gone; GHI rename halal lamb shoulder; JKL remove; MNO ignore`. Per-code replies. The agent never pre-investigates | ≤10s |
 | `ignored` | Reveals the hidden ignore list | ≤10s |
 | `wednesday` | THE weekly run: Woolworths.docx → overwrite prices; specials docx → deal rates; parity check; specials message (topic 206) + the ONE list (topic 208). `--specials-only` skips the main pass | ≤30s |
@@ -112,8 +112,11 @@ halal) with local prices ALWAYS on the halal side.
 ## Search semantics (fixed, no surprises)
 
 Sheet miss → answer from Local_Deals ("missing list [code]") or
-"not tracked". Live search happens ONLY when you type `live`. No
-classifier, no fallback, no investigation.
+"not tracked". Live search happens ONLY when you type `live` — on
+every other phrasing, including "compare halal vs non halal X", the
+sheet answer is relayed verbatim and the agent never touches the web
+(user directive 2026-09-12: sheet-first, absolute). No classifier,
+no fallback, no investigation.
 
 **Lookup matching (hardened in the 2026-09-11/12 convergence loop —
 2,000+ checks across three verification cycles):**

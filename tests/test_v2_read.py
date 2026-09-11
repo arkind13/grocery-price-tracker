@@ -420,6 +420,50 @@ class TestUnitAwareQuotes(unittest.TestCase):
         self.assertNotIn("/kg", out)
 
 
+class TestLocalSpecialsReport(unittest.TestCase):
+    """`specials --store local` (user decision 2026-09-12): the four
+    shops' CURRENT specials, read-only — kind 'special' only, grouped
+    per shop, multibuy terms rewritten 'min order …', permanent
+    prices never shown, empty → honest no-specials line."""
+
+    def _report(self, ld):
+        from core.v2_read import local_specials_report
+        return local_specials_report(ld)
+
+    def test_specials_only_grouped_with_min_order(self):
+        ld = [
+            _l("Halal Lamb Mince /kg", "GVJ",
+               merjan_sp="15 (till 13 Sep)",
+               merjan_perm="16.99", dunya_perm="15.99"),
+            _l("Halal Drumstick", "VCK", merjan_sp="4"),
+            _l("Cos Lettuce /ea", "COS", fruitopia_perm="0.99"),
+        ]
+        out = self._report(ld)
+        self.assertIn("Merjan Brothers Quality Meats", out)
+        self.assertIn("Halal Lamb Mince — $15.00/kg (special)", out)
+        self.assertIn("Halal Drumstick — $4.00 (special)", out)
+        # permanent prices never appear in the specials answer
+        self.assertNotIn("16.99", out)
+        self.assertNotIn("15.99", out)
+        self.assertNotIn("Fruitopia", out)
+        self.assertIn("📊 2 local special(s) across 1 shop(s)", out)
+
+    def test_min_order_terms_rendered(self):
+        ld = [_l("Halal Goat Curry /kg", "NZH",
+                 merjan_sp="15 (till 13 Sep)")]
+        ld[0]["comments"] = "[MER] multi buy 2kg for $29.99"
+        out = self._report(ld)
+        self.assertIn("min order 2kg for $29.99", out)
+        self.assertNotIn("multi buy", out)
+
+    def test_empty_is_honest(self):
+        self.assertEqual(self._report([]),
+                         "No active local specials right now.")
+        ld = [_l("Cos Lettuce /ea", "COS", fruitopia_perm="0.99")]
+        self.assertEqual(self._report(ld),
+                         "No active local specials right now.")
+
+
 if __name__ == "__main__":
     unittest.main()
 
