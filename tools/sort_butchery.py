@@ -1,8 +1,8 @@
 """One-time butchery section sort (user request 2026-09-11).
 
-Order: CHICKEN items, then LAMB, then GOAT, then BEEF, then MISC
-(items with no recognisable protein). Within a protein, items cluster
-by FAMILY so the same product's presentations sit together —
+Order: CHICKEN items, then GOAT, then LAMB, then BEEF (user
+ruling 2026-09-11), then UNDECIDED (items with no recognisable
+protein - the user will classify them with the store later).
 "Chicken Breast (5kg)" next to "Chicken Breast Fillet /kg", all minces
 adjacent, all chops adjacent — and /kg rows sit with their pack twins.
 
@@ -20,13 +20,14 @@ from __future__ import annotations
 
 import re
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core.sheets_client import connect_spreadsheet  # noqa: E402
 
-PROTEIN_RANK = [("chicken", 0), ("lamb", 1), ("goat", 2), ("beef", 3)]
+PROTEIN_RANK = [("chicken", 0), ("goat", 1), ("lamb", 2), ("beef", 3)]
 STYLE_WORDS = {"halal", "turkish", "lebanese", "greek", "spicy",
                "premium", "lean", "whole", "skin", "off", "boneless",
                "bbq", "cook", "cooking", "finely", "fresh", "each",
@@ -82,85 +83,118 @@ def family(name: str, prot: str) -> str:
     return sorted(heads)[0]
 
 
+_RANK = dict(PROTEIN_RANK)
+
+
 def sort_key(name: str) -> tuple:
     prot = protein(name)
     fam = family(name, prot)
-    return (prot, fam, name.lower())
+    return (_RANK.get(prot, 9), fam, name.lower())
 
 
-def main(mode: str = "preview") -> int:
+def main(mode="preview") -> int:
     sh = connect_spreadsheet()
     ld = sh.worksheet("Local_Deals")
     mw = sh.worksheet("Products_Master")
     ld_grid = ld.get_all_values()
     m_grid = mw.get_all_values()
 
-    # ---- collect butchery pairs via Item_Code (parity key) ----
-    ld_items = {}    # code -> (ld_row_idx, ld_row)
+    pairs = collect_pairs(ld_grid, m_grid)
+    ordered = sorted(pairs, key=lambda pr: sort_key(str(pr[3][0]).strip()))
+
+    if mode == "preview":
+        for j, p in enumerate(ordered, 1):
+            nm = str(p[3][0])
+            prt = protein(nm)
+            fam = family(nm, prt)
+            print("  %3d. [%s] %-12s %s  [%s]" % (j, prt[:3].upper(), fam[:12], nm[:50], p[0]))
+        print("PREVIEW ONLY - run with apply to rewrite both tabs.")
+        return 0
+
+    # APPLY: reorder CONTENT within the fixed butchery position set.
+    ld_pos = sorted(p[1] for p in pairs)
+    m_pos = sorted(p[2] for p in pairs)
+    print("APPLY: sorting %d pairs (LD %d-%d, master %d-%d)" % (
+        len(ordered), ld_pos[0], ld_pos[-1], m_pos[0], m_pos[-1]))
+    time.sleep(1)
+    ld_base = ld_pos[0]
+    m_base = m_pos[0]
+    writes_ld = []
+    writes_m = []
+    for j, p in enumerate(ordered):
+        slot = j
+        writes_ld.append((ld_base + slot, (list(p[3]) + [""] * 11)[:11]))
+        writes_m.append((m_base + slot, (list(p[4]) + [""] * 13)[:13]))
+    writes_ld.sort()
+    writes_m.sort()
+    ld.update(values=[r for _s, r in writes_ld],
+              range_name="A%d:K%d" % (writes_ld[0][0], writes_ld[-1][0]))
+    time.sleep(1)
+    mw.update(values=[r for _s, r in writes_m],
+              range_name="A%d:M%d" % (writes_m[0][0], writes_m[-1][0]))
+    print("APPLIED: %d sorted pairs written to both tabs." % len(ordered))
+    return 0
+
+
+
+
+def collect_pairs(ld_grid: list, m_grid: list) -> list:
+    """(code, ld_idx, m_idx, ld_row, m_row) for every coded butchery
+    item, keyed by Item_Code (the parity key)."""
+    ld_items: dict = {}
+    first_fruit = None
     for i, r in enumerate(ld_grid[2:], start=3):
         n = str(r[0]).strip()
         code = str(r[10]).strip() if len(r) > 10 else ""
+        if n in ("FRUITS", "FRUIT & VEG", "OTHER"):
+            first_fruit = i
+            break
         if n and code and n not in ("BUTCHERY", "PRICES VALID UNTIL",
-                                    "Product", "FRUITS",
-                                    "FRUIT & VEG", "OTHER"):
-            ld_items[code] = (i, r)
-    m_items = {}
-    first_fruit_m = None
-    for i, r in enumerate(m_grid[1:], start=2):
-        code = str(r[11]).strip() if len(r) > 11 else ""
-        sub = str(r[9]).strip().lower() if len(r) > 9 else ""
-        name = str(r[0]).strip()
-        if code and code in ld_items:
-            m_items[code] = (i, r)
-    # butchery = LD codes whose position precedes the FRUITS section
-    first_fruit = next((i for i, r in enumerate(ld_grid[2:], start=3)
-                        if str(r[0]).strip() in ("FRUITS",
-                                                 "FRUIT & VEG")), None)
+                                    "Product"):
+            ld_items[code] = (i, list(r))
     pairs = []
-    for code, (i, r) in ld_items.items():
-        if first_fruit is not None and i > first_fruit:
+    for code, (li, lrow) in ld_items.items():
+        twin = None
+        for mi, mr in enumerate(m_grid[1:], start=2):
+            if len(mr) > 11 and str(mr[11]).strip() == code:
+                twin = (mi, list(mr))
+                break
+        if twin is None:
+            print(f"SKIP (no master twin): LD {li} "
+                  f"{str(lrow[0])[:40]} [{code}]")
             continue
-        if code not in m_items:
-            print(f"SKIP (no master twin): LD {i} {r[0][:40]} [{code}]")
-            continue
-        pairs.append((code, i, m_items[code][0], r,
-                      m_items[code][1]))
-    print(f"butchery pairs: {len(pairs)}")
-
-    # ---- sort the pairs ----
-    def pair_key(p):
-        r = p[3]
-        return sort_key(str(r[0]).strip())
-    pairs.sort(key=pair_key)
-
-    if mode == "preview":
-        for j, (code, li, mi, r, _mr) in enumerate(pairs, 1):
-            print(f"  {j:3d}. [{protein(str(r[0]))[:3].upper()}] "
-                  f"{family(str(r[0]), protein(str(r[0])))[:12]:12s} "
-                  f"{str(r[0])[:50]}  [{code}]  (LD{li}/M{mi})")
-    print("\nPREVIEW ONLY — run `apply` to rewrite both tabs.")
-    return 0
-
-    # ---- apply: reorder CONTENT within the existing position set ----
-    ld_positions = sorted(p[1] for p in pairs)          # ascending
-    m_positions = sorted(p[2] for p in pairs)
-    assert len(ld_positions) == len(m_positions) == len(pairs)
-    time.sleep(1)
-    for j, (code, _li, _mi, _r, _mr) in enumerate(pairs):
-        ld_row_content = next(p[3] for p in pairs if p[1] == ld_positions[j])
-        m_row_content = next(p[4] for p in pairs if p[2] == m_positions[j])
-        # pad/trim to the tab width
-        ld_row_content = (list(ld_row_content) + [""] * 11)[:11]
-        m_row_content = (list(m_row_content) + [""] * 13)[:13]
-        ld.update(values=[ld_row_content],
-                  range_name=f"A{ld_positions[j]}:K{ld_positions[j]}")
-        mw.update(values=[m_row_content],
-                  range_name=f"A{m_positions[j]}:M{m_positions[j]}")
-        time.sleep(1.05)
-    print(f"rewrote {len(pairs)} sorted pairs on both tabs "
-          f"(content travels with its code — parity preserved)")
-    return 0
+        pairs.append((code, li, twin[0], lrow, twin[1]))
+    return pairs
 
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1] if len(sys.argv) > 1 else "preview"))
+
+
+def collect_pairs(ld_grid: list, m_grid: list) -> list:
+    """(code, ld_idx, m_idx, ld_row, m_row) for every coded butchery
+    item, keyed by Item_Code (the parity key)."""
+    ld_items: dict = {}
+    first_fruit = None
+    for i, r in enumerate(ld_grid[2:], start=3):
+        n = str(r[0]).strip()
+        code = str(r[10]).strip() if len(r) > 10 else ""
+        if n in ("FRUITS", "FRUIT & VEG", "OTHER"):
+            first_fruit = i
+            break
+        if n and code and n not in ("BUTCHERY", "PRICES VALID UNTIL",
+                                    "Product"):
+            ld_items[code] = (i, list(r))
+    pairs = []
+    for code, (li, lrow) in ld_items.items():
+        twin = None
+        for mi, mr in enumerate(m_grid[1:], start=2):
+            if len(mr) > 11 and str(mr[11]).strip() == code:
+                twin = (mi, list(mr))
+                break
+        if twin is None:
+            print(f"SKIP (no master twin): LD {li} "
+                  f"{str(lrow[0])[:40]} [{code}]")
+            continue
+        pairs.append((code, li, twin[0], lrow, twin[1]))
+    return pairs
