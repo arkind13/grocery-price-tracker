@@ -1,0 +1,45 @@
+item,code,format,command,rc,verdict,reply
+Halal Lamb Blade 1.3,KFM,exact,Halal Lamb Blade 1.3,0,PASS,"Halal Lamb Blade 1.3
+  not tracked at Woolworths — missing list [KFM]
+  🔪 Dunya (site)  $29.99/ea
+  🏆 Best local: $29.99 — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Lamb Blade 1.3,KFM,drift-shuffle,1.3 Halal Lamb Blade,0,PASS,"Not tracked at Woolworths — missing list [KFM]
+  🔪 Dunya (site)  $29.99/ea
+  🏆 Best local: $29.99 — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Lamb Blade 1.3,KFM,drift-plural,Halal Lamb Blades 1.3,0,PASS,"Not tracked at Woolworths — missing list [KFM]
+  🔪 Dunya (site)  $29.99/ea
+  🏆 Best local: $29.99 — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Lamb Blade 1.3,KFM,no-halal-prefix,Lamb Blade 1.3,0,PASS,"Not tracked at Woolworths — missing list [KFM]
+  🔪 Dunya (site)  $29.99/ea
+  🏆 Best local: $29.99 — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Lamb Blade 1.3,KFM,round3-variant,halals lambs blades 1s 3s,0,PASS,"Halal Lamb Blade 1.3
+  not tracked at Woolworths — missing list [KFM]
+  🔪 Dunya (site)  $29.99/ea
+  🏆 Best local: $29.99 — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Lamb Neck Fillet (BBQ),YTB,exact,Halal Lamb Neck Fillet (BBQ),0,PASS,"Halal Lamb Neck Fillet (BBQ)
+  not tracked at Woolworths — missing list [YTB]
+  🔪 Dunya (site)  $29.99/kg
+  🏆 Best local: $29.99/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Lamb Neck Fillet (BBQ),YTB,drift-shuffle,(BBQ) Halal Lamb Neck Fillet,0,PASS,"Not tracked at Woolworths — missing list [YTB]
+  🔪 Dunya (site)  $29.99/kg
+  🏆 Best local: $29.99/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Lamb Neck Fillet (BBQ),YTB,drift-plural,Halal Lamb Neck Fillets (BBQ),0,PASS,"Not tracked at Woolworths — missing list [YTB]
+  🔪 Dunya (site)  $29.99/kg
+  🏆 Best local: $29.99/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Lamb Neck Fillet (BBQ),YTB,no-halal-prefix,Lamb Neck Fillet (BBQ),0,PASS,"Not tracked at Woolworths — missing list [YTB]
+  🔪 Dunya (site)  $29.99/kg
+  🏆 Best local: $29.99/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Lamb Neck Fillet (BBQ),YTB,round3-variant,halals lambs necks fillets bbqs,0,PASS,"Halal Lamb Neck Fillet (BBQ)
+  not tracked at Woolworths — missing list [YTB]
+  🔪 Dunya (site)  $29.99/kg
+  🏆 Best local: $29.99/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"

@@ -76,17 +76,30 @@ and ZERO new findings. Only then is the loop DONE.
     the v2_read VPS sync blocker (py3.11 refactor) · the specials
     scope question (user decision)
 - **Cycle 2 (FIX then CHECK) — 2026-09-11 evening:** the whole open
-  list above is FIXED (commits `8014417`, `6cf5b13`) except the
-  specials-scope user decision (escalation, not blocking):
+  list above is FIXED (commits `8014417`, `6cf5b13`, `a4b0241`):
   matched-row citation (best token match, never sheet order), NL
   filler strip + GJZ §8 tracked-class + honest no-code unfiltered
   pool, plural/stem-folded realistic forms, D1 design ruling encoded
   in the audit judging, container-parity `_note_text` refactor +
   py3.11 guard test (sync blocker CLOSED — the named exception is
-  retired), gateway relay discipline in the grocery-price skill.
-  Semantic sweep came back 143/143. Goat-curry standing pin updates:
-  bare "goat curry" now cites the matched /kg row [NZH] (the same
-  principle that fixed AUG/AQZ); [PTU] remains the 5kg pack row.
+  retired), gateway relay discipline in the grocery-price skill,
+  GWY/CHZ taxonomy labels, -ies forms, pack-family ranking. Goat-
+  curry standing pin updates: bare "goat curry" cites the matched
+  /kg row [NZH] (the same principle that fixed AUG/AQZ); [PTU]
+  remains the 5kg pack row.
+- **Cycle 3 (CHECK, round 3) — 2026-09-12 early morning: CLEAN EXIT
+  declared.** Sweep 143/143 · matrix 688 checks (672 PASS + 14
+  by-design RECORDED; 2 fails = 1 fixed mid-cycle + re-proven, 1
+  quota retry — post-fix re-run 10/10, zero unexpected FAILs stand) ·
+  exec 17/17 · spots 7/7 (twin byte-exact) · gateway 8/8 delivered
+  (7 clean + 1 PASS-with-observations) · suite 732/0 · parity
+  ALIGNED · zero sheet writes (md5-identical). Every previously-
+  failing check from runs 1–2 + cycle 2 re-passed. Next step per the
+  loop: the INDEPENDENT close-out session (`session-3-checker-
+  prompt.md`) re-verifies and archives before final sign-off.
+  Residual (non-blocking, disclosed in cycle-3-report.md §5): the
+  gateway agent's compare-query live-enrichment preference; the
+  `specials` scope user decision; the Drive backup quota.
 - **D1 reclassified BY DESIGN** (user ruling 2026-09-11): the halal
   keyword gates the BUTCHER search — without it, butchers are not
   searched, and that is correct. The audit's meat judging must treat

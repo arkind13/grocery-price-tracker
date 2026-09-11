@@ -285,6 +285,21 @@ class TestRealisticForms(unittest.TestCase):
             self.assertEqual(res["status"], "tracked", q)
             self.assertEqual(res["code"], code, q)
 
+    def test_stress_round_double_plurals_converge(self):
+        # cycle-3 round-3 variant pluralises EVERY token ('halals
+        # lebaneses chickens'); the stem-candidate set must converge
+        # on the row's singular stems — including where the 'ses'
+        # fold rule overreaches ('lebaneses' -> 'lebanes')
+        master = [
+            _m("Halal Lebanese Chicken", "LCH"),
+            _m("Halal chicken breast strips", "XBS"),
+        ]
+        ld = [_l("Halal Lebanese Chicken", "LCH", dunya="12.99")]
+        self.assertEqual(lookup_item("halals lebaneses chickens",
+                                     master, ld)["code"], "LCH")
+        self.assertEqual(lookup_item("halals chickens breasts stripss",
+                                     master, ld)["code"], "XBS")
+
 
 class TestUnfilteredPoolHonesty(unittest.TestCase):
     """run-2 D2 half-b: the last-resort pool (2026-09-10 user fix: a

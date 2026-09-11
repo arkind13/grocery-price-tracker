@@ -172,34 +172,57 @@ def _stems(text: str) -> set:
                                          str(text or "").lower())}
 
 
+def _stem_candidates(token: str) -> set:
+    """Every plausible stem of ONE query token: its fold, the fold of
+    the once-unpluralised word, and the twice-folded form — so the
+    stress-round double plurals ('stripss', 'halals', 'lebaneses')
+    still converge on the row's singular stem without letting the
+    'ses' rule overreach stand alone ('lebaneses' -> 'lebanes' is
+    rescued by the t[:-1] branch -> 'lebanese')."""
+    outs = {token, _fold(token)}
+    if token.endswith("s") and len(token) >= 2:
+        outs.add(_fold(token[:-1]))
+    second = _fold(token)
+    if second != token:
+        outs.add(_fold(second))
+    return outs
+
+
 def _name_has_all(name_lower: str, tokens: list) -> bool:
     """Word-boundary-safe 'contains EVERY token' (subcategory.py
     discipline), plural-folded on BOTH sides — 'Tomatos' finds
     'Tomatoes', 'Choko' finds 'Chokos', 'thigh' finds 'Thighs'."""
     name_stems = _stems(name_lower)
-    return all(_fold(t) in name_stems for t in tokens)
+    return all(_stem_candidates(t) & name_stems for t in tokens)
 
 
 def _best_token_row(rows: list, tokens: list):
     """The row whose name is CLOSEST to the query tokens: every query
-    token must be present (plural-folded); ranking = fewest unmatched
-    name tokens, then the shorter name, then sheet order. This — never
-    sheet order alone — picks the row whose code a reply cites
-    (2026-09-11 fix: the butchery sort put cousin rows first in sheet
-    order, so 'lamb necks' headed with the Fillet row [YTB] instead of
-    the matched Sliced Neck [YCQ])."""
+    token must be present (plural-folded via _stem_candidates, so
+    stress-round double plurals still match); ranking = fewest
+    unmatched name tokens, then the shorter name, then sheet order.
+    This — never sheet order alone — picks the row whose code a reply
+    cites (2026-09-11 fix: the butchery sort put cousin rows first in
+    sheet order, so 'lamb necks' headed with the Fillet row [YTB]
+    instead of the matched Sliced Neck [YCQ])."""
     if not tokens:
         return None
-    qstems = {_fold(t) for t in tokens}
+    cands = [_stem_candidates(t) for t in tokens]
     best = None
     best_key = None
     for master in rows:
         stems = _stems(str(master["name"] or ""))
-        if not qstems <= stems:
+        matched: set = set()
+        ok = True
+        for c in cands:
+            hit = c & stems
+            if not hit:
+                ok = False
+                break
+            matched |= hit
+        if not ok:
             continue
-        diff = len(stems - qstems)
-        ntok = len(stems)
-        key = (diff, ntok)
+        key = (len(stems - matched), len(stems))
         if best is None or key < best_key:
             best, best_key = master, key
     return best

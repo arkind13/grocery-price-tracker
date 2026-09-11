@@ -1,4 +1,4 @@
-# OPEN FIX LIST — standing (updated: cycle 2, 2026-09-11 late evening)
+# OPEN FIX LIST — standing (updated: cycle 3, 2026-09-12 early morning)
 
 Carry-over rule: every cycle's CHECK appends its classified defects
 here; the next FIX phase works EXACTLY this list, each item with a
@@ -6,14 +6,13 @@ regression test, then strikes the line with proof.
 
 ## OPEN (non-blocking)
 
-1. **[GW] relay discipline re-verify (cycle-2 GW3)** — the
-   grocery-price skill now bans raw col-D re-derivation and demands
-   complete relays, but the cycle-2 gateway session (skills preload
-   at session start) still quoted "$30/kg" raw and dropped one Dunya
-   line. NEXT CYCLE: run the compare/twin phrasing FIRST in the
-   battery; PASS = verbatim `$13.54 · 500g = $27.08/kg` twin line +
-   all shop lines. If it repeats on a fresh session, escalate with
-   captures.
+1. **[GW agent-layer, observed-not-failing]** On open "compare …"
+   phrasings the gateway agent prefers live web enrichment over the
+   sheet's canonical twin line and editorialises about sheet
+   freshness ("mis-entered" — it isn't). Local-shop relays are now
+   complete and the raw-quote-as-twin fault did NOT recur in cycle 3.
+   Deterministic CLI contract re-proven byte-exact. Documented
+   behaviour; revisit only if the user wants the twin line forced.
 2. **[USER DECISION] `specials` scope (carried from run 1/2)** —
    the gateway agent surfaces local-shop specials; the CLI verb is
    Woolworths-scoped per spec. Update the spec story (two layers) or
@@ -22,20 +21,19 @@ regression test, then strikes the line with proof.
    403s (user's Drive storage full). Local fallback verified; zero-
    writes guard unaffected. Free quota or repoint.
 
-## CLOSED this cycle (proof in `cycle-2/cycle-2-report.md`)
+## NEXT STEP (per convergence-loop.md)
 
-- ~~D1 halal-prefix load-bearing~~ → BY DESIGN per user ruling
-  2026-09-11 (encoded in the audit judging); the REAL remainder
-  (plurals/noun-first/typo forms) FIXED + tested.
-- ~~D2 "price of …" / exact WW-name dump under false header~~ →
-  filler-strip + GJZ §8 tracked-class + honest no-code pool.
-- ~~D3 cousin codes (6 rows)~~ → `_best_token_row` matched-row
-  citation (also `_pack_master_hit` ranking, cycle-2 matrix).
-- ~~lamb-necks header flip [YCQ]→[YTB]~~ → same root fix, pinned.
-- ~~run-2 fix list 7: v2_read py3.11 sync blocker~~ → container-parity
-  `_note_text` upstream + on-container py3.11 parse proof + guard
-  test; the named sync exception is retired.
-- ~~run-2 fix list 5: GW relay discipline (skill text)~~ → landed;
-  behavior re-verify is item 1 above.
-- ~~cycle-2 matrix families: GWY/CHZ taxonomy gap, -ies mangles,
-  BMR pack-family bias~~ → fixed + re-proven 33/33.
+A cycle-3 clean exit was declared (cycle-3-report.md §4). Run the
+INDEPENDENT close-out session (`session-3-checker-prompt.md`) to
+re-verify and archive before final sign-off.
+
+## CLOSED (proof in the cycle reports)
+
+- Cycle 2 closed: D1-by-design judging + D1 real remainder, D2
+  (filler-strip + GJZ tracked-class + honest pool), D3 + lamb-necks
+  matched-row citation, py3.11 sync blocker (exception retired), GW
+  skill relay rules, GWY/CHZ taxonomy, -ies forms, pack-family
+  ranking. Proof: `cycle-2/cycle-2-report.md`.
+- Cycle 3 closed: round-3 stress hardening (double-plural stem
+  candidates + short-token strip guard; blade 1.3 [KFM] re-proven),
+  full clean exit. Proof: `cycle-3/cycle-3-report.md`.

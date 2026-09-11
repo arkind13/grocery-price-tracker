@@ -1,0 +1,91 @@
+item,code,format,command,rc,verdict,reply
+Halal chicken breast diced,XJA,name-exact,price --item Halal chicken breast diced,0,PASS,"Halal chicken breast diced
+  not tracked at Woolworths — missing list [XJA]
+  🔪 Dunya (site)  $13.99/kg
+  🏆 Best local: $13.99/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Chicken Breast Fillet,NRQ,name-exact,price --item Halal Chicken Breast Fillet,0,PASS,"Halal Chicken Breast Fillet
+  not tracked at Woolworths — missing list [NRQ]
+  🔪 Dunya (site)  $13.99/kg
+  🏆 Best local: $13.99/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal chicken breast strips,AXW,name-exact,price --item Halal chicken breast strips,0,PASS,"Halal chicken breast strips
+  not tracked at Woolworths — missing list [AXW]
+  🔪 Dunya (site)                   $13.99/kg
+  🔪 Merjan Brothers Quality Meats  $13.99/kg
+  🏆 Best local: $13.99/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Chicken Breast – (5kg),NTB,name-exact,price --item Halal Chicken Breast – (5kg),0,PASS,"Halal Chicken Breast – (5kg)
+  not tracked at Woolworths — missing list [NTB]
+  🔪 Merjan Brothers Quality Meats  $34.99 / 5kg pack = $7.00/kg (special) · min order 5kg for $34.99
+  🔪 Dunya (site)                   $54.99 / 5kg pack = $11.00/kg
+  🏆 Best local: $7.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Chicken Breast – (5kg),NTB,pack-routing,price --item halal chicken breast 5kg,0,PASS,"Halal Chicken Breast – (5kg)
+  not tracked at Woolworths — missing list [NTB]
+  🔪 Merjan Brothers Quality Meats  $34.99 / 5kg pack = $7.00/kg (special) · min order 5kg for $34.99
+  🔪 Dunya (site)                   $54.99 / 5kg pack = $11.00/kg
+  🏆 Best local: $7.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Drumstick,VCK,name-exact,price --item Halal Drumstick,0,PASS,"Halal Drumstick
+  not tracked at Woolworths — missing list [VCK]
+  🔪 Merjan Brothers Quality Meats  $4.00/kg (special) · min order 5kg for $19.99
+  🔪 Dunya (site)                   $7.99/kg
+  🏆 Best local: $4.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Drumsticks – (5kg),RPG,name-exact,price --item Halal Drumsticks – (5kg),0,PASS,"Halal Drumsticks – (5kg)
+  not tracked at Woolworths — missing list [RPG]
+  🔪 Dunya (site)  $29.99 / 5kg pack = $6.00/kg
+  🏆 Best local: $6.00/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Drumsticks – (5kg),RPG,pack-routing,price --item halal drumsticks 5kg,0,PASS,"Halal Drumsticks – (5kg)
+  not tracked at Woolworths — missing list [RPG]
+  🔪 Dunya (site)  $29.99 / 5kg pack = $6.00/kg
+  🏆 Best local: $6.00/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Goat Curry – (5kg),PTU,name-exact,price --item Halal Goat Curry – (5kg),0,PASS,"Halal Goat Curry – (5kg)
+  not tracked at Woolworths — missing list [PTU]
+  🔪 Dunya (site)  $89.99 / 5kg pack = $18.00/kg
+  🏆 Best local: $18.00/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Goat Curry – (5kg),PTU,pack-routing,price --item halal goat curry 5kg,0,PASS,"Halal Goat Curry – (5kg)
+  not tracked at Woolworths — missing list [PTU]
+  🔪 Dunya (site)  $89.99 / 5kg pack = $18.00/kg
+  🏆 Best local: $18.00/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Lamb Neck Fillet (BBQ),YTB,name-exact,price --item Halal Lamb Neck Fillet (BBQ),0,PASS,"Halal Lamb Neck Fillet (BBQ)
+  not tracked at Woolworths — missing list [YTB]
+  🔪 Dunya (site)  $29.99/kg
+  🏆 Best local: $29.99/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Sliced Lamb Neck,YCQ,name-exact,price --item Halal Sliced Lamb Neck,0,PASS,"Halal Sliced Lamb Neck
+  not tracked at Woolworths — missing list [YCQ]
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Dunya (site)                   $16.99/kg
+  🏆 Best local: $15.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal BEEF MINCE (5KG),EPJ,name-exact,price --item Halal BEEF MINCE (5KG),0,PASS,"Halal BEEF MINCE (5KG)
+  not tracked at Woolworths — missing list [EPJ]
+  🔪 Dunya (site)  $64.99 / 5kg pack = $13.00/kg
+  🏆 Best local: $13.00/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal BEEF MINCE (5KG),EPJ,pack-routing,price --item halal beef mince 5kg,0,PASS,"Halal BEEF MINCE (5KG)
+  not tracked at Woolworths — missing list [EPJ]
+  🔪 Dunya (site)  $64.99 / 5kg pack = $13.00/kg
+  🏆 Best local: $13.00/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Beef Mince,AUG,name-exact,price --item Halal Beef Mince,0,PASS,"Halal Beef Mince
+  not tracked at Woolworths — missing list [AUG]
+  🔪 Dunya (site)  $15.99/kg
+  🏆 Best local: $15.99/kg — Dunya (site)
+also at Woolworths (non-halal): $13.54 · 500g = $27.08/kg — Woolworths Beef Mince 500g
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Woolworths Beef Mince 500g,GJZ,name-exact,price --item Woolworths Beef Mince 500g,0,PASS,"Woolworths Beef Mince 500g · 500g  🏠
+  🟢 Woolworths  $13.54 · 500g = $27.08/kg
+  [GJZ]
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Goat Curry /kg,NZH,name-exact,price --item Halal Goat Curry /kg,0,PASS,"Halal Goat Curry /kg
+  not tracked at Woolworths — missing list [NZH]
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🏆 Best local: $15.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"

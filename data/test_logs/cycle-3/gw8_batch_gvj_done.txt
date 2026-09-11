@@ -1,0 +1,10 @@
+Same deal — `done` is verify-only, and GVJ (**Halal Lamb Mince**) still has both blanks in Products_Master:
+
+- **col D** — Woolworths price
+- **col G** — search keyword
+
+Options:
+1. Fill D + G in the sheet, then I re-run `batch GVJ done` to verify ✅
+2. Or I run `batch GVJ gone` (Woolworths doesn't stock halal lamb mince) / `remove` (drops the row entirely)
+
+Note: all three codes you've tried (NTB, NZH, GVJ) are halal butcher items — Woolworths won't have most of these. If you want them off the list in bulk, I can run a batch of `gone` verdicts for the whole halal set in one shot. Want that?
