@@ -1,0 +1,4 @@
+[NTB] ✗ not done — still blank: Woolworths price (col D) and search keyword (col G)
+
+Halal Chicken Breast 5kg has no Woolworths price/keyword on the sheet yet, so it can't be marked done. Give me the price if you've got it, or say "live search chicken breast 5kg" and I'll pull supermarket prices.
+rc=0

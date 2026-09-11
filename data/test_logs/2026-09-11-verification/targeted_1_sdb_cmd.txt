@@ -1,0 +1,2 @@
+$ price --item "Lebanese kofta (4kg)"
+rc=0

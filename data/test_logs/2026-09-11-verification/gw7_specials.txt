@@ -1,0 +1,6 @@
+🏷️ **Specials**
+
+No active specials right now.
+
+(The Banana Kids $2.71 multi-buy from yesterday must have expired from the sheet.) Also noted: the Woolworths saved-list API is still bot-blocked from this runner — live saved-list checks only work from the local window; doesn't affect the sheet.
+rc=0

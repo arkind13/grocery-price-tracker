@@ -1,0 +1,2 @@
+$ price --item "goat curry"
+rc=0

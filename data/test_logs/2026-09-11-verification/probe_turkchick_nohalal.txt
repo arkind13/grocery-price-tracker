@@ -1,0 +1,3 @@
+$ price --item "Turkish chicken"
+Not tracked
+rc=0

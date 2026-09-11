@@ -1,0 +1,2 @@
+$ price --item "beef mince"
+rc=0

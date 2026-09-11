@@ -1,0 +1,3 @@
+$ price --item "Drumstick"
+Not tracked
+rc=0

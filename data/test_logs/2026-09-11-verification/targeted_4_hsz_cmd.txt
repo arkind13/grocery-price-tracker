@@ -1,0 +1,2 @@
+$ price --item "premium chuck Mince (5kg)"
+rc=0

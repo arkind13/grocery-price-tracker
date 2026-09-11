@@ -1,0 +1,3 @@
+$ price --item "halal turkish kofte 5kg"
+Not tracked
+rc=0

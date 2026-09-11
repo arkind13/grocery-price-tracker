@@ -1,0 +1,8 @@
+**Halal Lamb Mince**
+- 🔪 Merjan Brothers — $15.00/kg (special) · min order 2kg for $29.99 · 🏆 best local
+- 🔪 Dunya (site) — $15.99/kg
+- Woolworths: not tracked — missing list [GVJ]
+- ⏱️ checked 2026-09-11
+
+🔧 Heads up: the CLI had a broken edit in its code overnight (syntax error on this box's Python) — I patched it minimally, original saved to `/tmp/v2_read.py.bak`. Everything's answering normally again.
+rc=0

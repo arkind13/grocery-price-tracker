@@ -1,0 +1,128 @@
+$ price --item "price of goat curry"
+Not tracked at Woolworths — missing list [EPJ]
+  🔪 Merjan Brothers Quality Meats  $4.00/kg (special) · min order 5kg for $19.99
+  🔪 Merjan Brothers Quality Meats  $4.00/kg (special) · min order 5kg for $19.99
+  🔪 Merjan Brothers Quality Meats  $4.00/kg (special) · min order 5kg for $19.99
+  🔪 Dunya (site)                   $24.99 / 5kg pack = $5.00/kg
+  🔪 Dunya (site)                   $29.99 / 5kg pack = $6.00/kg
+  🔪 Merjan Brothers Quality Meats  $7.00/kg (special) · min order 5kg for $34.99
+  🔪 Merjan Brothers Quality Meats  $7.00/kg (special) · min order 5kg for $34.99
+  🔪 Dunya (site)                   $7.99/kg
+  🔪 Dunya (site)                   $7.99/kg
+  🔪 Dunya (site)                   $7.99/kg
+  🔪 Dunya (site)                   $39.99 / 5kg pack = $8.00/kg
+  🔪 Dunya (site)                   $8.99/kg
+  🔪 Merjan Brothers Quality Meats  $9.00/kg (special) · min order 2kg for $17.99
+  🔪 Merjan Brothers Quality Meats  $9.00/kg (special) · min order 2kg for $17.99
+  🔪 Dunya (site)                   $44.99 / 5kg pack = $9.00/kg
+  🔪 Dunya (site)                   $44.99 / 5kg pack = $9.00/kg
+  🔪 Dunya (site)                   $9.99/kg
+  🔪 Dunya (site)                   $9.99/kg
+  🔪 Merjan Brothers Quality Meats  $10.00/kg (special) · min order 5kg for $49.99
+  🔪 Dunya (site)                   $10.99/kg
+  🔪 Dunya (site)                   $10.99/kg
+  🔪 Merjan Brothers Quality Meats  $11.00/kg (special) · min order 3kg for $32.99
+  🔪 Merjan Brothers Quality Meats  $11.00/kg (special) · min order 2kg for $21.99
+  🔪 Dunya (site)                   $54.99 / 5kg pack = $11.00/kg
+  🔪 Dunya (site)                   $54.99 / 5kg pack = $11.00/kg
+  🔪 Dunya (site)                   $49.99 / 4kg pack = $12.50/kg
+  🔪 Dunya (site)                   $12.99/kg
+  🔪 Dunya (site)                   $12.99/kg
+  🔪 Dunya (site)                   $12.99/kg
+  🔪 Dunya (site)                   $64.99 / 5kg pack = $13.00/kg
+  🔪 Dunya (site)                   $64.99 / 5kg pack = $13.00/kg
+  🔪 Dunya (site)                   $13.99/kg
+  🔪 Merjan Brothers Quality Meats  $13.99/kg
+  🔪 Dunya (site)                   $13.99/kg
+  🔪 Dunya (site)                   $13.99/kg
+  🔪 Dunya (site)                   $13.99/kg
+  🔪 Dunya (site)                   $13.99/kg
+  🔪 Dunya (site)                   $13.99/kg
+  🔪 Dunya (site)                   $13.99/kg
+  🔪 Dunya (site)                   $69.99 / 5kg pack = $14.00/kg
+  🔪 Dunya (site)                   $69.99 / 5kg pack = $14.00/kg
+  🔪 Dunya (site)                   $69.99 / 5kg pack = $14.00/kg
+  🔪 Dunya (site)                   $14.99/kg
+  🔪 Dunya (site)                   $14.99/kg
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Dunya (site)                   $59.99 / 4kg pack = $15.00/kg
+  🔪 Dunya (site)                   $74.99 / 5kg pack = $15.00/kg
+  🔪 Dunya (site)                   $15.99/kg
+  🔪 Dunya (site)                   $15.99/kg
+  🔪 Dunya (site)                   $15.99/kg
+  🔪 Dunya (site)                   $15.99/kg
+  🔪 Dunya (site)                   $15.99/kg
+  🔪 Merjan Brothers Quality Meats  $16.00/kg (special) · min order 2kg for $31.99
+  🔪 Dunya (site)                   $79.99 / 5kg pack = $16.00/kg
+  🔪 Dunya (site)                   $79.99 / 5kg pack = $16.00/kg
+  🔪 Dunya (site)                   $79.99 / 5kg pack = $16.00/kg
+  🔪 Dunya (site)                   $49.99 / 3kg pack = $16.66/kg
+  🔪 Dunya (site)                   $16.99/kg
+  🔪 Dunya (site)                   $16.99/kg
+  🔪 Dunya (site)                   $16.99/kg
+  🔪 Dunya (site)                   $16.99/kg
+  🔪 Dunya (site)                   $16.99/kg
+  🔪 Dunya (site)                   $16.99/kg
+  🔪 Merjan Brothers Quality Meats  $17.00/kg (special) · min order 2kg for $33.99
+  🔪 Dunya (site)                   $17.99/kg
+  🔪 Dunya (site)                   $17.99/kg
+  🔪 Dunya (site)                   $17.99/kg
+  🔪 Dunya (site)                   $17.99/kg
+  🔪 Dunya (site)                   $17.99/kg
+  🔪 Dunya (site)                   $89.99 / 5kg pack = $18.00/kg
+  🔪 Dunya (site)                   $89.99 / 5kg pack = $18.00/kg
+  🔪 Dunya (site)                   $18.99/kg
+  🔪 Dunya (site)                   $18.99/kg
+  🔪 Dunya (site)                   $18.99/kg
+  🔪 Dunya (site)                   $18.99/kg
+  🔪 Dunya (site)                   $18.99/kg
+  🔪 Dunya (site)                   $19.99/kg
+  🔪 Dunya (site)                   $19.99/kg
+  🔪 Dunya (site)                   $19.99/kg
+  🔪 Dunya (site)                   $19.99/kg
+  🔪 Dunya (site)                   $19.99/kg
+  🔪 Dunya (site)                   $21.99/kg
+  🔪 Dunya (site)                   $44.99 / 2kg pack = $22.50/kg
+  🔪 Dunya (site)                   $22.99/kg
+  🔪 Dunya (site)                   $23.99/kg
+  🔪 Dunya (site)                   $23.99/kg
+  🔪 Dunya (site)                   $23.99/kg
+  🔪 Dunya (site)                   $24.99/kg
+  🔪 Dunya (site)                   $44.99 / 1.8kg pack = $24.99/kg
+  🔪 Dunya (site)                   $134.99 / 5kg pack = $27.00/kg
+  🔪 Dunya (site)                   $27.99/kg
+  🔪 Merjan Brothers Quality Meats  $27.99/kg (special)
+  🔪 Dunya (site)                   $29.99/kg
+  🔪 Dunya (site)                   $29.99/kg
+  🔪 Dunya (site)                   $29.99/kg
+  🔪 Dunya (site)                   $29.99/kg
+  🔪 Dunya (site)                   $149.99 / 5kg pack = $30.00/kg
+  🔪 Dunya (site)                   $32.99/kg
+  🔪 Dunya (site)                   $37.99/kg
+  🔪 Dunya (site)                   $39.99/kg
+  🔪 Dunya (site)                   $2.99/ea
+  🔪 Dunya (site)                   $2.99/ea
+  🔪 Dunya (site)                   $3.99/ea
+  🔪 Merjan Brothers Quality Meats  $6.00/ea (special) · min order 2 for $11.99 — $6.00/ea
+  🔪 Dunya (site)                   $6.99/ea
+  🔪 Merjan Brothers Quality Meats  $7.00/ea (special) · min order 5 for $34.99 — $7.00/ea
+  🔪 Dunya (site)                   $7.99/ea
+  🔪 Dunya (site)                   $8.99/ea
+  🔪 Dunya (site)                   $8.99/ea
+  🔪 Dunya (site)                   $10.99/ea
+  🔪 Dunya (site)                   $10.99/ea
+  🔪 Dunya (site)                   $11.99/ea
+  🔪 Dunya (site)                   $21.99/ea
+  🔪 Dunya (site)                   $24.99/ea
+  🔪 Dunya (site)                   $29.99/ea
+  🔪 Dunya (site)                   $49.99/ea
+  🔪 Merjan Brothers Quality Meats  $49.99 (special) · Povi Masima bucket $49.99
+  🔪 Dunya (site)                   $69.99/ea
+  🏆 Best local: $4.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+rc=0

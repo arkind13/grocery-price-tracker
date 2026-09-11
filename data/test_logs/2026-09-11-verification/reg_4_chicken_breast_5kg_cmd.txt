@@ -1,0 +1,2 @@
+$ price --item "chicken breast 5kg"
+rc=0
