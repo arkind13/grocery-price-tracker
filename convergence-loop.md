@@ -30,9 +30,19 @@
 6. **Quota discipline**: single writer, ≥1.3s throttle, 429 → wait
    120s and resume. Never run two sheet sessions at once.
 
-## The cycle (repeat until clean)
+## THE LOOP IS AUTONOMOUS — DO NOT STOP UNTIL CLEAN
 
-### CYCLE N — CHECK phase (fresh session)
+**Model assignment (user directive 2026-09-11):**
+- FIX phase: **GLM-5.3** (the stronger model)
+- CHECK phase: **GLM-5.3-Flash** (the fast model — the tool's
+  computed verdicts are the arbiter, so self-grading risk is low)
+
+**THE LOOP DOES NOT STOP between cycles. No assumptions. No "probably
+fine." No skipping. EVERY line, EVERY scenario, EVERY item — checked
+each and every cycle. The ONLY exit is: a full cycle where every
+check passes AND all previously-failing checks re-pass.**
+
+### CYCLE N — CHECK phase (GLM-5.3-Flash)
 1. `tools/item_audit.py` — the fast semantic sweep (all items).
 2. `tools/item_audit.py --matrix --round N` — every item × the format
    matrix + this round's invented variants.
@@ -43,17 +53,17 @@
 5. Parity audit + zero-writes check (md5 the tabs before/after) +
    suite count.
 6. **Deliverable**: `cycle-N-report.md` — totals, every non-PASS
-   classified (real defect / judging artifact / environment), the
-   numbered FIX LIST.
+   classified, the numbered FIX LIST.
 
-### CYCLE N — FIX phase (separate fresh session)
+### CYCLE N — FIX phase (GLM-5.3)
 1. Read the cycle-N FIX LIST. Fix ONLY the numbered items, each with a
    regression test.
 2. Suite green. Commit, push, sync.
 3. Deliverable: the fix report with per-item proof.
 
-### Then CYCLE N+1: CHECK phase again (fresh session, new invented
-commands, --round N+1).
+### Then CYCLE N+1: CHECK phase again (new invented commands,
+--round N+1). Repeat until a full cycle comes back with ZERO failures
+and ZERO new findings. Only then is the loop DONE.
 
 ## Current state (the loop's starting point)
 
