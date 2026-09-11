@@ -128,24 +128,71 @@ def _best(prices: dict) -> tuple | None:
     return shop, price, kind
 
 
-_STRIP_TOKENS = ("halal", "non", "and", "compare", "vs", "versus")
+_STRIP_TOKENS = ("halal", "non", "and", "compare", "vs", "versus",
+                 "woolworths", "woolies")
 
 
 def _query_tokens(query: str) -> list:
     """Product tokens of a query: lowercased alphanumeric words minus
-    the halal/non/comparison filler tokens."""
+    the halal/non/comparison filler tokens and the retailer brand
+    words (a brand word never picks or rejects a product row)."""
     return [t for t in re.findall(r"[a-z0-9]+", str(query or "").lower())
             if t not in _STRIP_TOKENS]
 
 
+def _fold(token: str) -> str:
+    """Light plural fold — one word, both directions. tomato/tomatoes,
+    berry/berries, box/boxes, hero/heroes, thigh/thighs, kg/kgs."""
+    t = token
+    if len(t) > 4 and t.endswith("ies"):
+        return t[:-3] + "y"
+    if len(t) > 4 and t.endswith(
+            ("shes", "ches", "xes", "zes", "ses", "oes")):
+        return t[:-2]
+    if len(t) > 2 and t.endswith("s") and not t.endswith("ss"):
+        return t[:-1]
+    return t
+
+
+def _stems(text: str) -> set:
+    """Plural-folded token stems of a name or query (word tokens,
+    brand/filler words already excluded by the caller's tokeniser when
+    needed)."""
+    return {_fold(t) for t in re.findall(r"[a-z0-9]+",
+                                         str(text or "").lower())}
+
+
 def _name_has_all(name_lower: str, tokens: list) -> bool:
     """Word-boundary-safe 'contains EVERY token' (subcategory.py
-    discipline)."""
-    for tok in tokens:
-        base = tok[:-1] if tok.endswith("s") and len(tok) > 2 else tok
-        if not re.search(rf"\b{re.escape(base)}s?\b", name_lower):
-            return False
-    return True
+    discipline), plural-folded on BOTH sides — 'Tomatos' finds
+    'Tomatoes', 'Choko' finds 'Chokos', 'thigh' finds 'Thighs'."""
+    name_stems = _stems(name_lower)
+    return all(_fold(t) in name_stems for t in tokens)
+
+
+def _best_token_row(rows: list, tokens: list):
+    """The row whose name is CLOSEST to the query tokens: every query
+    token must be present (plural-folded); ranking = fewest unmatched
+    name tokens, then the shorter name, then sheet order. This — never
+    sheet order alone — picks the row whose code a reply cites
+    (2026-09-11 fix: the butchery sort put cousin rows first in sheet
+    order, so 'lamb necks' headed with the Fillet row [YTB] instead of
+    the matched Sliced Neck [YCQ])."""
+    if not tokens:
+        return None
+    qstems = {_fold(t) for t in tokens}
+    best = None
+    best_key = None
+    for master in rows:
+        stems = _stems(str(master["name"] or ""))
+        if not qstems <= stems:
+            continue
+        diff = len(stems - qstems)
+        ntok = len(stems)
+        key = (diff, ntok)
+        if best is None or key < best_key:
+            best, best_key = master, key
+    return best
 
 
 def _size_split(text: str) -> tuple:
@@ -225,17 +272,21 @@ def _pack_master_hit(query: str, master_rows: list, meat: bool):
     return equal or contains
 
 
-def _non_halal_twin(query: str, master_rows: list) -> list:
+def _non_halal_twin(query: str, master_rows: list,
+                    exclude_code: str | None = None) -> list:
     """Plain (non-halal) Woolworths master rows matching a MEAT query.
 
     Match rule (binding): strip the tokens 'halal'/'non'/'and' (+ the
-    comparison fillers 'compare'/'vs'/'versus') from the query; a
-    plain DOMAIN row matches iff its normalized name contains EVERY
-    remaining query token (word-boundary-safe — the subcategory.py
-    discipline), its name does NOT contain 'halal', and it is not the
-    halal row already answering. Returns [{'name', 'state':
-    'priced'|'gone'|'na', 'value': float|str|None, 'kg': float|None}]
-    — the row set the RENDERER shows; no other consumer exists.
+    comparison fillers 'compare'/'vs'/'versus' and the retailer brand
+    words) from the query; a plain DOMAIN row matches iff its
+    normalized name contains EVERY remaining query token
+    (word-boundary-safe — the subcategory.py discipline), its name
+    does NOT contain 'halal', and it is not the halal row already
+    answering. `exclude_code` drops the row that IS the answer (a
+    tracked plain-row hit must never twin itself). Returns [{'name',
+    'state': 'priced'|'gone'|'na', 'value': float|str|None, 'kg':
+    float|None}] — the row set the RENDERER shows; no other consumer
+    exists.
 
     Spec §18 A4: reads master_rows ONLY (never Local_Deals — locals
     are always the halal side) and never consults the answering halal
@@ -250,6 +301,8 @@ def _non_halal_twin(query: str, master_rows: list) -> list:
     for master in master_rows:
         name = str(master["name"] or "").lower()
         if "halal" in name or not _is_domain_row(master):
+            continue
+        if exclude_code and master["code"] == exclude_code:
             continue
         if not _name_has_all(name, tokens):
             continue
@@ -328,23 +381,123 @@ def _quotes_and_best(rows: list) -> tuple:
     return quotes, best_q, label
 
 
+_FILLER_RE = re.compile(
+    r"^\s*(?:what(?:'s| is|s)\s+)?(?:the\s+)?(?:price|cost)\s+"
+    r"(?:of|for)\s+"
+    r"|^\s*how\s+much\s+(?:is|are|for)\s+"
+    r"|^\s*(?:current|today's|todays)\s+price\s+(?:of|for)\s+",
+    re.I)
+_TRAILER_RE = re.compile(r"\s*(?:please|thanks)\s*[?.!]*\s*$", re.I)
+
+
+def _strip_fillers(query: str) -> str:
+    """Natural-language price fillers off the front ("price of goat
+    curry" → "goat curry", "how much is halal lamb mince" → "halal
+    lamb mince") and politeness off the back. 2026-09-11 fix: without
+    this the filler tokens matched NO row name, so a meat query fell
+    into the unfiltered locals pool — a full-sheet dump under a false
+    cluster header (run-2 defect D2)."""
+    q = str(query or "").strip()
+    for _ in range(3):                      # stacked fillers
+        stripped = _FILLER_RE.sub("", q, count=1).strip()
+        if stripped == q or not stripped:
+            break
+        q = stripped
+    return _TRAILER_RE.sub("", q).strip() or str(query or "").strip()
+
+
+def _plain_master_hit(tokens: list, master_rows: list):
+    """Plain (non-halal) domain row a MEAT query explicitly names.
+
+    §8 row 1: a query that names the Woolworths product itself
+    ("Woolworths Beef Mince 500g") must answer that row's tracked
+    class — never the halal locals pool. Gated: the raw query must
+    carry a retailer brand word, at least two product tokens must
+    match, and the row must not be halal-named."""
+    if len(tokens) < 2:
+        return None
+    candidates = [m for m in master_rows
+                  if "halal" not in str(m["name"] or "").lower()
+                  and _is_domain_row(m)
+                  and _name_has_all(str(m["name"] or "").lower(), tokens)]
+    return _best_token_row(candidates, tokens)
+
+
+def _domain_master_hit(tokens: list, master_rows: list):
+    """Order-free, plural-folded master-row match for NON-meat
+    queries ('Cauliflowers' → 'Cauliflower', 'Choko' → 'Chokos',
+    'R2E2 Mango' → 'Mango R2E2'). Needs ≥2 product tokens, or a
+    UNIQUE single-token candidate — a bare generic word ('apple')
+    with many candidates stays unanswered rather than guessing."""
+    if not tokens:
+        return None
+    candidates = [m for m in master_rows
+                  if _is_domain_row(m)
+                  and _name_has_all(str(m["name"] or "").lower(), tokens)]
+    if len(tokens) < 2 and len(candidates) != 1:
+        return None
+    return _best_token_row(candidates, tokens)
+
+
+def lookup_item_hit(hit: dict, master_rows, ld_rows, twins: list,
+                    q: str) -> dict:
+    """The §8 answer dict for a RESOLVED master row (status derived
+    from the row's own cells; locals from its code-paired LD row)."""
+    ld = next((ld for ld in ld_rows
+               if ld["code"] and ld["code"] == hit["code"]), None)
+    prices = dict(ld["prices"]) if ld else {}
+    quotes, best_q, best_label = _quotes_and_best([ld] if ld else [])
+    best = ((best_q["shop"], best_q["price"], best_q["kind"])
+            if best_q else None)
+    base = {"master": hit, "local": prices, "best": best,
+            "best_label": best_label, "local_quotes": quotes,
+            "code": hit["code"], "non_halal_twins": twins,
+            "query": q}
+    if hit["gone"]:
+        base["status"] = "gone"
+    elif hit["na_marker"]:
+        base["status"] = "na"
+    elif hit["ww_num"] is not None:
+        base["status"] = "tracked"
+    elif best is not None and _is_domain_row(hit):
+        base["status"] = "missing"
+    elif _is_domain_row(hit):
+        base["status"] = "not-tracked"
+    else:
+        base["status"] = "out-of-domain"
+    return base
+
+
 def lookup_item(query: str, master_rows, ld_rows) -> dict:
     """Sheet-only lookup per the §8 table. NEVER raises on a miss.
 
     Match: exact Col A, then exact alias (col J), case-insensitive;
     then a pack-presented row by name+size token ('halal lamb mince
-    5kg' -> 'Halal Lamb Mince – (5kg)'); a MEAT query resolves
-    through halal-named rows only (spec §5).
+    5kg' -> 'Halal Lamb Mince – (5kg)'); then — meat query naming the
+    Woolworths product itself — the plain WW row's tracked class
+    (§8 row 1); a MEAT query otherwise resolves through halal-named
+    rows only (spec §5); a non-meat query falls to an order-free,
+    plural-folded token match ('Cauliflowers' -> 'Cauliflower').
     """
-    q = str(query or "").strip()
+    q = _strip_fillers(str(query or "").strip())
     ql = q.lower()
     meat = is_meat_query(q)
     twins = _non_halal_twin(q, master_rows) if meat else []
+    brand_named = any(w in ql for w in ("woolworths", "woolies"))
+
+    def _hit_twins(hit_code: str) -> list:
+        # the answering row must never twin itself (§18 A4)
+        return (_non_halal_twin(q, master_rows, exclude_code=hit_code)
+                if meat else [])
 
     def _matches(name: str) -> bool:
         low = name.lower()
         if meat:
-            return low == ql and "halal" in low
+            # exact halal row, OR the plain WW row the query names
+            # verbatim WITH the brand word ('Woolworths Beef Mince
+            # 500g' answers GJZ's tracked class, not a locals dump;
+            # a brandless 'beef diced' stays halal-scoped — row3b)
+            return low == ql and ("halal" in low or brand_named)
         return low == ql
 
     def _alias_matches(aliases) -> bool:
@@ -362,6 +515,12 @@ def lookup_item(query: str, master_rows, ld_rows) -> dict:
     if hit is None:
         hit = _pack_master_hit(q, master_rows, meat)
 
+    if hit is None and meat and brand_named and "halal" not in ql:
+        # §8 row 1 via an explicit brand naming ('500g Woolworths
+        # Beef Mince'): the plain row's own tracked class — a halal-
+        # prefixed brand query keeps the halal cluster + twin instead
+        hit = _plain_master_hit(_query_tokens(q), master_rows)
+
     if hit is None and meat:
         # §8 row 3: meat term, no halal master row — fall back to
         # halal-named LOCAL rows (butcher prices + missing-list code).
@@ -369,6 +528,9 @@ def lookup_item(query: str, master_rows, ld_rows) -> dict:
         # tokens, pool ONLY those — a 'beef mince' answer must never
         # quote a chicken row. The unfiltered pool survives only as
         # the last resort so a meat term never answers empty.
+        # NOTE: the pool matches on the query's FULL product tokens —
+        # the size token stays, so 'halal lebanese kofta 5kg' can
+        # never pool the 4kg row (size-mismatch discipline)
         tokens = _query_tokens(q)
         locals_with = [ld for ld in ld_rows
                        if "halal" in ld["name"].lower() and ld["prices"]]
@@ -383,38 +545,40 @@ def lookup_item(query: str, master_rows, ld_rows) -> dict:
             quotes, best_q, best_label = _quotes_and_best(pool_rows)
             best = ((best_q["shop"], best_q["price"], best_q["kind"])
                     if best_q else None)
+            # the header code is the MATCHED row's — best token match
+            # across the matched LD rows AND the halal master rows,
+            # never 'first row in sheet order' (run-2 D3: cousin
+            # codes; lamb-necks regression: [YTB] for [YCQ]). With no
+            # matched row at all the unfiltered pool answers WITHOUT
+            # a code — a false 'missing list [XJA]' header on a
+            # full-sheet dump is worse than an honest one.
+            code_row = (_best_token_row(matched, tokens) if matched
+                        else None)
+            if code_row is None:
+                halal_masters = [m for m in master_rows
+                                 if "halal" in str(m["name"] or "")
+                                 .lower()]
+                code_row = _best_token_row(halal_masters, tokens)
             return {"status": "meat-local-only", "master": None,
                     "local": prices, "best": best,
                     "best_label": best_label,
                     "local_quotes": quotes,
-                    "code": pool_rows[0]["code"],
+                    "code": code_row["code"] if code_row else "",
                     "non_halal_twins": twins,
                     "query": q}
 
     if hit is not None:
-        ld = next((ld for ld in ld_rows
-                   if ld["code"] and ld["code"] == hit["code"]), None)
-        prices = dict(ld["prices"]) if ld else {}
-        quotes, best_q, best_label = _quotes_and_best([ld] if ld else [])
-        best = ((best_q["shop"], best_q["price"], best_q["kind"])
-                if best_q else None)
-        base = {"master": hit, "local": prices, "best": best,
-                "best_label": best_label, "local_quotes": quotes,
-                "code": hit["code"], "non_halal_twins": twins,
-                "query": q}
-        if hit["gone"]:
-            base["status"] = "gone"
-        elif hit["na_marker"]:
-            base["status"] = "na"
-        elif hit["ww_num"] is not None:
-            base["status"] = "tracked"
-        elif best is not None and _is_domain_row(hit):
-            base["status"] = "missing"
-        elif _is_domain_row(hit):
-            base["status"] = "not-tracked"
-        else:
-            base["status"] = "out-of-domain"
-        return base
+        return lookup_item_hit(hit, master_rows, ld_rows,
+                               _hit_twins(hit["code"]), q)
+
+    if hit is None and not meat:
+        # realistic non-meat forms: plural ('Cauliflowers'),
+        # singular ('Choko' on 'Chokos'), noun-first ('R2E2 Mango').
+        # FULL product tokens — the size token stays, so a size
+        # mismatch ('… 5kg' vs a 4kg row) can never route
+        hit = _domain_master_hit(_query_tokens(q), master_rows)
+        if hit is not None:
+            return lookup_item_hit(hit, master_rows, ld_rows, [], q)
 
     return {"status": "not-tracked", "master": None, "local": {},
             "best": None, "code": "", "non_halal_twins": twins,
@@ -492,6 +656,16 @@ def _quote_price_text(q: dict) -> str:
     return f"${q['price']:.2f}"
 
 
+def _note_text(note: str) -> str:
+    """Note suffix, 'multi buy …' shortened to 'min order …'.
+
+    A standalone helper (container parity with the 2026-09-11 03:22
+    VPS hot-patch): py3.11 rejects PEP 701 f-strings, so the re.sub
+    must not sit inside an f-string expression."""
+    import re
+    return " · " + re.sub(r"^multi buy\b", "min order", note, count=1)
+
+
 def _local_lines(result: dict) -> list:
     """Aligned per-shop price lines (kit: aligned price columns).
     Quote records (local_quotes) carry the sheet's unit markers —
@@ -508,8 +682,7 @@ def _local_lines(result: dict) -> list:
                    _quote_price_text(q)
                    + {"special": " (special)", "permanent": ""}[
                        q["kind"]]
-                   + (f" · {__import__('re').sub(r'^multi buy\b', 'min order', q['note'], count=1)}"
-                      if q.get("note") else ""))
+                   + (_note_text(q["note"]) if q.get("note") else ""))
                   for q in ordered]
     else:
         entries = sorted(result["local"].items(),
@@ -607,8 +780,12 @@ def render_lookup(result: dict) -> str:
         lines.append(f"  not tracked at Woolworths — missing list "
                      f"[{master['code']}]")
     elif status == "meat-local-only":
+        # a matched row's code leads the missing-list line; the
+        # unfiltered last-resort pool answers WITHOUT one — never a
+        # false '[XJA]' header on rows the query never named
         lines.append("Not tracked at Woolworths — missing list "
-                     f"[{result['code']}]")
+                     f"[{result['code']}]" if result.get("code")
+                     else "Not tracked at Woolworths")
     elif status == "out-of-domain":
         return "Not tracked — outside local-shop domains"
     else:

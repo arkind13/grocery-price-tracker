@@ -87,9 +87,10 @@ class TestLookup(unittest.TestCase):
     def test_row3_meat_term_no_halal_row(self):
         result = lookup_item("chicken", self.master, self.ld)
         self.assertEqual(result["status"], "meat-local-only")
-        # no halal MASTER row -> local butcher prices via the first
-        # halal-named priced LD row in tab order
-        self.assertEqual(result["code"], "AUG")
+        # nothing matches 'chicken', so the unfiltered last-resort
+        # pool answers WITHOUT a code (2026-09-11 D2 honesty fix: the
+        # old first-in-tab-order code cited an unrelated beef row)
+        self.assertEqual(result["code"], "")
         self.assertTrue(result["local"])
 
     def test_row3b_plain_meat_row_invisible_to_meat_query(self):
@@ -268,15 +269,17 @@ class TestNonHalalTwin(unittest.TestCase):
             out = render_lookup(lookup_item(q, master, ld))
             self.assertIn(self.TWIN_LINE, out)
 
-    def test_exact_plain_name_query_carries_twin(self):
-        """The exact plain-row name (unreachable before the fix) gets
-        the halal-scoped answer + the twin line."""
+    def test_exact_plain_name_query_tracks_its_own_row(self):
+        """run-2 fix list #2: the exact WW-row name answers §8 row 1 —
+        GJZ's own tracked class (was: a locals dump under a false
+        header, 'the GJZ tracked-class answer never shown')."""
         master, ld = self._fixture()
         result = lookup_item("Woolworths Beef Mince 500g", master, ld)
-        self.assertIsNone(result["master"])   # halal scope unchanged
+        self.assertEqual(result["status"], "tracked")
+        self.assertEqual(result["code"], "GJZ")
         out = render_lookup(result)
-        self.assertIn("missing list [AUG]", out)
-        self.assertIn(self.TWIN_LINE, out)
+        self.assertIn("13.54", out)          # discounted WW price
+        self.assertNotIn("missing list [", out)
 
     def test_non_halal_side_never_local(self):
         """M2: twins come from master rows ONLY — an LD decoy sharing
@@ -339,7 +342,7 @@ class TestNonHalalTwin(unittest.TestCase):
             ["query", "master_rows", "ld_rows"])
         self.assertEqual(
             list(inspect.signature(_non_halal_twin).parameters),
-            ["query", "master_rows"])
+            ["query", "master_rows", "exclude_code"])
         self.assertNotIn("v2_live", (_PROJECT / "core" / "v2_read.py")
                          .read_text(encoding="utf-8"))
 
@@ -391,7 +394,9 @@ class TestUnitAwareQuotes(unittest.TestCase):
                      merjan_perm="13.99"))
         result = lookup_item("beef mince", master, ld)
         out = render_lookup(result)
-        self.assertEqual(result["code"], "EPJ")
+        # 2026-09-11 D3 fix: the header cites the best-MATCHED row
+        # (the /kg AUG row), never sheet order
+        self.assertEqual(result["code"], "AUG")
         self.assertNotIn("Merjan", out)
         self.assertNotIn("13.99", out)
         self.assertNotIn("Chicken", out)

@@ -121,7 +121,8 @@ def main() -> int:
         result = lookup_item(name, master, ld)
         actual = result["status"]
         text = render_for(result)
-        verdict = judge(name, exp, actual, text, master)
+        verdict = judge(name, exp, actual, text, master,
+                        item_code=m.get("code", ""))
         rows.append({"item": name, "code": m.get("code", ""),
                      "row": m.get("row", ""), "query": name,
                      "expected": exp, "actual": actual,
@@ -154,15 +155,23 @@ MEAT_STATUSES = {"meat-local-only", "tracked", "missing", "gone",
 
 
 def judge(name: str, exp: str, actual: str, text: str,
-          m_rows: list) -> str:
+          m_rows: list, item_code: str = "") -> str:
     """§8 + A4 judging: meat queries are judged on CONTENT (locals +
     missing-list code + the non-halal twin line when a plain row
-    exists), not on a single status token."""
+    exists), not on a single status token.
+
+    2026-09-11 fixes: the missing-list line is required for
+    missing-class rows (the old `exp == 'tracked'` condition was
+    inverted — a tracked row's §8 answer shows the WW price, not a
+    missing-list line); and a plain row that answers its OWN name is
+    never demanded as a twin of itself (twin self-exclusion by
+    code)."""
     if meat_query(name):
         problems = []
-        if "missing list [" not in text and exp in ("tracked",):
+        if "missing list [" not in text and exp == "missing":
             problems.append("no missing-list line")
-        if twin_expected(name, m_rows) and                 "also at Woolworths (non-halal)" not in text:
+        if twin_expected(name, m_rows, item_code) \
+                and "also at Woolworths (non-halal)" not in text:
             problems.append("twin line missing")
         if problems:
             return "FAIL: " + "; ".join(problems)
@@ -170,6 +179,42 @@ def judge(name: str, exp: str, actual: str, text: str,
     if exp != actual:
         return f"FAIL: expected {exp}, got {actual}"
     return "PASS"
+
+
+def twin_expected(name: str, m_rows: list[dict],
+                  item_code: str = "") -> bool:
+    """A4: a meat query shows the non-halal twin line whenever a plain
+    (non-halal) meat master row shares a PRODUCT token with the query.
+    Brand/size tokens never drive the overlap (the old raw split made
+    'Woolworths … 500g' rows twin every 500g row through the shared
+    brand/size tokens), and the answering row never twins itself."""
+    from core.halal import is_meat_term
+    from core.v2_read import _query_tokens
+
+    if not is_meat_term(name):
+        return False
+    # a query that names a plain row verbatim IS that row's answer —
+    # no twin demand (its §8 reply is the WW tracked block itself)
+    low = name.lower()
+    for r in m_rows:
+        n = str(r["name"] or "").lower()
+        if n == low and "halal" not in n:
+            return False
+    qtoks = {t for t in _query_tokens(name)
+             if not t[0].isdigit() and t not in ("each", "ea")}
+    for r in m_rows:
+        if item_code and str(r.get("code", "")) == item_code:
+            continue
+        n = str(r["name"]).lower()
+        if "halal" in n:
+            continue
+        if not is_meat_term(n):
+            continue
+        ntoks = {t for t in _query_tokens(n)
+                 if not t[0].isdigit() and t not in ("each", "ea")}
+        if qtoks & ntoks:
+            return True
+    return False
 
 
 def render_for(result: dict) -> str:
@@ -284,12 +329,20 @@ def _shuffle(name: str) -> str:
 
 
 def _toggle_plural(name: str) -> str:
+    """Toggle the LAST real product word. Pack-size tokens ('(5kg)',
+    '500g'), code-ish tokens ('s9/s14', 'R2E2') and 'each' are never
+    toggled — '(5kg)s'/'500gs' was a generator artifact no shopper
+    sends (run-2 'mangled' bucket), so the plural probe now lands on
+    the word a real message would pluralise."""
     toks = name.split()
     for i in range(len(toks) - 1, -1, -1):
         t = toks[i]
-        if len(t) > 3 and t.lower() != "halal":
-            toks[i] = t[:-1] if t.endswith("s") else t + "s"
-            break
+        if t.lower() == "halal" or t.startswith("(") \
+                or any(c.isdigit() for c in t) \
+                or t.lower() in ("each", "ea") or len(t) <= 2:
+            continue
+        toks[i] = t[:-1] if t.endswith("s") else t + "s"
+        break
     return " ".join(toks)
 
 
@@ -324,10 +377,50 @@ def matrix_formats(item: dict, seq: int) -> list[tuple]:
         fmts.append(("code-as-query", code, "FINDING-B: codes are not "
                      "lookup keys in v2 — record actual"))
     if seq % 25 == 0:
-        fmts.append(("nl-price-of", f"price of {name}",
-                     "FINDING-A: NL is agent-layer; CLI is expected to "
-                     "answer or honestly miss"))
+        # NL filler probe — the CLI strips price fillers since the
+        # 2026-09-11 D2 fix, so this is judged like any real format
+        fmts.append(("nl-price-of", f"price of {name}", code))
     return fmts
+
+
+STYLE_WORDS = {"the", "and", "at", "for", "of"}
+
+
+def judge_matrix(fmt: str, marker: str, code: str, rc: int,
+                 reply: str) -> str:
+    """Matrix verdict for ONE check (pure — unit-tested).
+
+    - FINDING probes (code-as-query): recorded, never FAIL — codes
+      are not lookup keys by design.
+    - no-halal-prefix on a halal meat row: the D1 design ruling
+      (user, 2026-09-11) — 'the halal keyword gates the BUTCHER
+      search … bare protein queries are Woolworths-scope by design'
+      — so the row's own code PASSES and an honest Woolworths-scope
+      'Not tracked' answer PASSES; anything else FAILs.
+    - with-halal-prefix on a plain row: 'twin-or-code' — the halal
+      cluster with the row's code, or the non-halal twin line.
+    - everything else: the row's own code must appear (rc=0)."""
+    if marker.startswith("FINDING"):
+        return "RECORDED"
+    if rc != 0:
+        return f"FAIL rc={rc}"
+    body = (reply or "").strip()
+    if not body:
+        return "FAIL empty reply"
+    if fmt == "no-halal-prefix":
+        if code and code in body:
+            return "PASS"
+        if "Not tracked" in body or "not tracked" in body:
+            return "PASS"
+        return "FAIL bare query: neither the row code nor a " \
+               "Woolworths-scope answer"
+    if marker == "twin-or-code":
+        if (code and code in body) or "non-halal" in body:
+            return "PASS"
+        return "FAIL twin-or-code"
+    if code:
+        return "PASS" if code in body else "FAIL wrong-or-missing code"
+    return "PASS"
 
 
 ROUND_VARIANTS = {
@@ -383,15 +476,7 @@ def matrix_audit(items_filter: str = "", rnd: int = 1) -> int:
                          r["code"]))
         for fmt, query, marker in fmts:
             rc, reply = run_cli(["price", "--item", query])
-            if marker.startswith("FINDING"):
-                verdict = "RECORDED"
-            rcode = r["code"]
-            if rc == 0 and rcode and f"[{rcode}]" in reply:
-                verdict = "PASS"
-            elif rc == 0 and (not rcode) and reply.strip():
-                verdict = "PASS"
-            else:
-                verdict = "FAIL"
+            verdict = judge_matrix(fmt, marker, r["code"], rc, reply)
             total += 1
             passed += (verdict == "PASS")
             w.writerow([r["name"], r["code"], fmt, query, rc, verdict,

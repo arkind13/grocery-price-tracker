@@ -130,5 +130,15 @@
    "",
    "ZGK"
   ]
+ },
+ {
+  "deleted_at": "2026-09-11T11:20:00+10:00",
+  "source": "domain-gate-cleanup",
+  "row_index": 105,
+  "note": "cleared Dunya_FB 0.99 + Merjan_spec 0.99 (produce in butchery columns) from Cos Lettuce /ea; Fruitopia_spec 0.99 + AbuSalim 0.99 kept",
+  "cells": {
+   "Dunya_FB": "0.99",
+   "Merjan_spec": "0.99"
+  }
  }
 ]
