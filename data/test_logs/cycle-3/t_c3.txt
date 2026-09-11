@@ -1,0 +1,13 @@
+Lamb necks — halal vs non-halal (CLI render):
+
+```
+Not tracked at Woolworths — missing list [YCQ]
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Dunya (site)                   $16.99/kg
+  🔪 Dunya (site)                   $29.99/kg  ← neck fillet (BBQ cut)
+  🏆 Best local: $15.00/kg — Merjan Brothers Quality Meats
+```
+
+Non-halal side: lamb necks aren't tracked at Woolworths (or Coles/Aldi — it's a specialty cut the supermarkets rarely carry, like goat). 
+
+**Verdict: halal wins by default** — Merjan $15/kg sliced (2kg/$29.99, till Sun 13 Sep) is the only real option on the sheet.
