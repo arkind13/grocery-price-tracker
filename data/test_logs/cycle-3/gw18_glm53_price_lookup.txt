@@ -1,0 +1,12 @@
+Halal lamb mince (CLI render):
+
+```
+Halal Lamb Mince
+  not tracked at Woolworths — missing list [GVJ]
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Dunya (site)                   $15.99/kg
+  🏆 Best local: $15.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+```
+
+Merjan — $15/kg, 2kg for $29.99, till Sun 13 Sep.
