@@ -86,11 +86,14 @@ def main() -> int:
                     help="FORMAT MATRIX: every item x every real-world "
                          "message format (exact/drift/plural/halal-"
                          "toggle/code/NL), all judged + recorded")
+    ap.add_argument("--round", type=int, default=1,
+                    help="verification round number - varies the "
+                         "invented query formats per cycle")
     args = ap.parse_args()
     if args.exec:
         return exec_audit(args.items)
     if args.matrix:
-        return matrix_audit(args.items)
+        return matrix_audit(args.items, rnd=max(1, args.round))
 
     from core.sheets_client import connect_spreadsheet
     sh = connect_spreadsheet()
@@ -327,7 +330,30 @@ def matrix_formats(item: dict, seq: int) -> list[tuple]:
     return fmts
 
 
-def matrix_audit(items_filter: str = "") -> int:
+ROUND_VARIANTS = {
+    # each verification round invents DIFFERENT commands: the shuffle
+    # rotation, the plural direction and the qualifier phrasing change
+    # per round, so the system is tested against fresh inputs every
+    # cycle (user mandate 2026-09-11 — no overfitting to fixed strings).
+    1: lambda toks: " ".join(reversed(toks)),
+    2: lambda toks: " ".join(toks[1:]) + " " + toks[0],
+    3: lambda toks: " ".join(t + "s" for t in toks),
+    4: lambda toks: " ".join(t[:-1] if t.endswith("s") else t
+                              for t in toks),
+    5: lambda toks: " and ".join(toks),
+}
+
+
+def _round_variant(name: str, rnd: int) -> str:
+    toks = [t for t in re.findall(r"[a-z0-9]+", name.lower())
+            if t not in STYLE_WORDS]
+    if not toks:
+        return name
+    fn = ROUND_VARIANTS.get(rnd)
+    return fn(toks) if fn else name
+
+
+def matrix_audit(items_filter: str = "", rnd: int = 1) -> int:
     from core.sheets_client import connect_spreadsheet
     sh = connect_spreadsheet()
     master = sh.worksheet("Products_Master").get_all_values()
@@ -348,7 +374,14 @@ def matrix_audit(items_filter: str = "") -> int:
                 "reply"])
     total = passed = 0
     for seq, r in enumerate(rows, start=1):
-        for fmt, query, marker in matrix_formats(r, seq):
+        fmts = matrix_formats(r, seq)
+        if rnd > 1:
+            # round-invented variant: the row's name cycled through this
+            # round's transformation (fresh commands, same product)
+            nm = r["name"]
+            fmts.append((f"round{rnd}-variant", _round_variant(nm, rnd),
+                         r["code"]))
+        for fmt, query, marker in fmts:
             rc, reply = run_cli(["price", "--item", query])
             if marker.startswith("FINDING"):
                 verdict = "RECORDED"
