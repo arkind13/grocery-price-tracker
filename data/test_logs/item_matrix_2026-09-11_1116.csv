@@ -1,0 +1,38 @@
+item,code,format,command,rc,verdict,reply
+Halal chicken breast strips,AXW,exact,Halal chicken breast strips,1,FAIL,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal chicken breast strips,AXW,drift-shuffle,strips Halal chicken breast,1,FAIL,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal chicken breast strips,AXW,drift-plural,Halal chicken breast strip,1,FAIL,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal chicken breast strips,AXW,no-halal-prefix,chicken breast strips,0,PASS,"Not tracked at Woolworths — missing list [AXW]
+  🔪 Dunya (site)                   $13.99/kg
+  🔪 Merjan Brothers Quality Meats  $13.99/kg
+  🏆 Best local: $13.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal chicken breast diced,XJA,exact,Halal chicken breast diced,0,PASS,"Halal chicken breast diced
+  not tracked at Woolworths — missing list [XJA]
+  🔪 Dunya (site)  $13.99/kg
+  🏆 Best local: $13.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal chicken breast diced,XJA,drift-shuffle,diced Halal chicken breast,0,PASS,"Not tracked at Woolworths — missing list [XJA]
+  🔪 Dunya (site)  $13.99/kg
+  🏆 Best local: $13.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal chicken breast diced,XJA,drift-plural,Halal chicken breast diceds,0,PASS,"Not tracked at Woolworths — missing list [XJA]
+  🔪 Dunya (site)  $13.99/kg
+  🏆 Best local: $13.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal chicken breast diced,XJA,no-halal-prefix,chicken breast diced,0,PASS,"Not tracked at Woolworths — missing list [XJA]
+  🔪 Dunya (site)  $13.99/kg
+  🏆 Best local: $13.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Chicken Breast – (5kg),NTB,exact,Halal Chicken Breast – (5kg),1,FAIL,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Chicken Breast – (5kg),NTB,drift-shuffle,(5kg) Halal Chicken Breast –,1,FAIL,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Chicken Breast – (5kg),NTB,drift-plural,Halal Chicken Breast – (5kg)s,1,FAIL,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Chicken Breast – (5kg),NTB,no-halal-prefix,Chicken Breast – (5kg),1,FAIL,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Chicken Breast Fillet,NRQ,exact,Halal Chicken Breast Fillet,1,FAIL,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Chicken Breast Fillet,NRQ,drift-shuffle,Fillet Halal Chicken Breast,1,FAIL,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Chicken Breast Fillet,NRQ,drift-plural,Halal Chicken Breast Fillets,1,FAIL,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Chicken Breast Fillet,NRQ,no-halal-prefix,Chicken Breast Fillet,0,PASS,"Not tracked at Woolworths — missing list [NRQ]
+  🔪 Merjan Brothers Quality Meats  $7.00/kg (special) · min order 5kg for $34.99
+  🔪 Dunya (site)                   $13.99/kg
+  🏆 Best local: $7.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"

@@ -1,0 +1,617 @@
+item,code,format,command,rc,verdict,reply
+Halal BEEF MINCE (5KG),EPJ,name-exact,price --item Halal BEEF MINCE (5KG),0,PASS,"Halal BEEF MINCE (5KG)
+  not tracked at Woolworths — missing list [EPJ]
+  🔪 Dunya (site)  $64.99 / 5kg pack = $13.00/kg
+  🏆 Best local: $13.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal BEEF MINCE (5KG),EPJ,pack-routing,price --item halal beef mince 5kg,0,PASS,"Not tracked at Woolworths — missing list [EPJ]
+  🔪 Dunya (site)  $64.99 / 5kg pack = $13.00/kg
+  🏆 Best local: $13.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Chicken Skewer,PJM,name-exact,price --item Halal Chicken Skewer,0,PASS,"Halal Chicken Skewer
+  not tracked at Woolworths — missing list [PJM]
+  🔪 Dunya (site)  $2.99/ea
+  🏆 Best local: $2.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Greek Chops,RHD,name-exact,price --item Halal Greek Chops,0,PASS,"Halal Greek Chops
+  not tracked at Woolworths — missing list [RHD]
+  🔪 Dunya (site)  $21.99/ea
+  🏆 Best local: $21.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Spicy Wings,RGX,name-exact,price --item Halal Spicy Wings,0,PASS,"Halal Spicy Wings
+  not tracked at Woolworths — missing list [RGX]
+  🔪 Dunya (site)  $10.99/ea
+  🏆 Best local: $10.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Beef Curry,QWC,name-exact,price --item Halal Beef Curry,0,PASS,"Halal Beef Curry
+  not tracked at Woolworths — missing list [QWC]
+  🔪 Merjan Brothers Quality Meats  $10.00/kg (special) · min order 5kg for $49.99
+  🔪 Dunya (site)                   $15.99/kg
+  🏆 Best local: $10.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Beef Ossobuco,BTE,name-exact,price --item Halal Beef Ossobuco,0,PASS,"Halal Beef Ossobuco
+  not tracked at Woolworths — missing list [BTE]
+  🔪 Dunya (site)  $15.99/kg
+  🏆 Best local: $15.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Turkish wings,QMD,name-exact,price --item Halal Turkish wings,0,PASS,"Halal Turkish wings
+  not tracked at Woolworths — missing list [QMD]
+  🔪 Dunya (site)  $10.99/kg
+  🏆 Best local: $10.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Turkish chicken,BVK,name-exact,price --item Halal Turkish chicken,0,PASS,"Halal Turkish chicken
+  not tracked at Woolworths — missing list [BVK]
+  🔪 Dunya (site)  $16.99/kg
+  🏆 Best local: $16.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Chicken Drumette,XGS,name-exact,price --item Halal Chicken Drumette,0,PASS,"Halal Chicken Drumette
+  not tracked at Woolworths — missing list [XGS]
+  🔪 Merjan Brothers Quality Meats  $4.00/kg (special) · min order 5kg for $19.99
+  🔪 Dunya (site)                   $7.99/kg
+  🏆 Best local: $4.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Chicken mid-wings,DRW,name-exact,price --item Halal Chicken mid-wings,0,PASS,"Halal Chicken mid-wings
+  not tracked at Woolworths — missing list [DRW]
+  🔪 Merjan Brothers Quality Meats  $9.00/kg (special) · min order 2kg for $17.99
+  🔪 Dunya (site)                   $9.99/kg
+  🏆 Best local: $9.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Whole chicken s9,QDY,name-exact,price --item Halal Whole chicken s9,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal chicken breast strips,AXW,name-exact,price --item Halal chicken breast strips,0,PASS,"Halal chicken breast strips
+  not tracked at Woolworths — missing list [AXW]
+  🔪 Dunya (site)                   $13.99/kg
+  🔪 Merjan Brothers Quality Meats  $13.99/kg
+  🏆 Best local: $13.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal chicken breast diced,XJA,name-exact,price --item Halal chicken breast diced,0,PASS,"Halal chicken breast diced
+  not tracked at Woolworths — missing list [XJA]
+  🔪 Dunya (site)  $13.99/kg
+  🏆 Best local: $13.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal chicken tenders,BUD,name-exact,price --item Halal chicken tenders,0,PASS,"Halal chicken tenders
+  not tracked at Woolworths — missing list [BUD]
+  🔪 Merjan Brothers Quality Meats  $11.00/kg (special) · min order 3kg for $32.99
+  🔪 Dunya (site)                   $13.99/kg
+  🏆 Best local: $11.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Blade 1.3,KFM,name-exact,price --item Halal Lamb Blade 1.3,0,PASS,"Halal Lamb Blade 1.3
+  not tracked at Woolworths — missing list [KFM]
+  🔪 Dunya (site)  $29.99/ea
+  🏆 Best local: $29.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Leg Roast,RQY,name-exact,price --item Halal Lamb Leg Roast,0,PASS,"Halal Lamb Leg Roast
+  not tracked at Woolworths — missing list [RQY]
+  🔪 Dunya (site)  $49.99/ea
+  🏆 Best local: $49.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Shank – each,NYV,name-exact,price --item Halal Lamb Shank – each,0,PASS,"Halal Lamb Shank – each
+  not tracked at Woolworths — missing list [NYV]
+  🔪 Dunya (site)  $6.99/ea
+  🏆 Best local: $6.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Sliced Lamb Neck,YCQ,name-exact,price --item Halal Sliced Lamb Neck,0,PASS,"Halal Sliced Lamb Neck
+  not tracked at Woolworths — missing list [YCQ]
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Dunya (site)                   $16.99/kg
+  🏆 Best local: $15.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Leg Chops,GVZ,name-exact,price --item Halal Lamb Leg Chops,0,PASS,"Halal Lamb Leg Chops
+  not tracked at Woolworths — missing list [GVZ]
+  🔪 Dunya (site)  $18.99/kg
+  🏆 Best local: $18.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Chump Chops,CBH,name-exact,price --item Halal Lamb Chump Chops,0,PASS,"Halal Lamb Chump Chops
+  not tracked at Woolworths — missing list [CBH]
+  🔪 Dunya (site)  $17.99/kg
+  🏆 Best local: $17.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Loin Chops,BCG,name-exact,price --item Halal Lamb Loin Chops,1,FAIL rc=1,[stderr] Error: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Lamb Grilling Chops,MZH,name-exact,price --item Halal Lamb Grilling Chops,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Lamb Cutlet,THX,name-exact,price --item Halal Lamb Cutlet,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Lamb Neck Fillet (BBQ),YTB,name-exact,price --item Halal Lamb Neck Fillet (BBQ),0,PASS,"Halal Lamb Neck Fillet (BBQ)
+  not tracked at Woolworths — missing list [YTB]
+  🔪 Dunya (site)  $29.99/kg
+  🏆 Best local: $29.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Backstrap,DBK,name-exact,price --item Halal Lamb Backstrap,0,PASS,"Halal Lamb Backstrap
+  not tracked at Woolworths — missing list [DBK]
+  🔪 Dunya (site)  $32.99/kg
+  🏆 Best local: $32.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Fillet,SJG,name-exact,price --item Halal Lamb Fillet,0,PASS,"Halal Lamb Fillet
+  not tracked at Woolworths — missing list [SJG]
+  🔪 Dunya (site)  $29.99/kg
+  🏆 Best local: $29.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Finely Diced Lamb,KZT,name-exact,price --item Halal Finely Diced Lamb,0,PASS,"Halal Finely Diced Lamb
+  not tracked at Woolworths — missing list [KZT]
+  🔪 Dunya (site)  $23.99/kg
+  🏆 Best local: $23.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Diced Lamb (BBQ),EUG,name-exact,price --item Halal Diced Lamb (BBQ),0,PASS,"Halal Diced Lamb (BBQ)
+  not tracked at Woolworths — missing list [EUG]
+  🔪 Dunya (site)  $27.99/kg
+  🏆 Best local: $27.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Stirfry,EWC,name-exact,price --item Halal Lamb Stirfry,0,PASS,"Halal Lamb Stirfry
+  not tracked at Woolworths — missing list [EWC]
+  🔪 Dunya (site)  $23.99/kg
+  🏆 Best local: $23.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Diced Lamb (Cook),UMD,name-exact,price --item Halal Diced Lamb (Cook),0,PASS,"Halal Diced Lamb (Cook)
+  not tracked at Woolworths — missing list [UMD]
+  🔪 Dunya (site)  $23.99/kg
+  🏆 Best local: $23.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Topside,MUV,name-exact,price --item Halal Lamb Topside,0,PASS,"Halal Lamb Topside
+  not tracked at Woolworths — missing list [MUV]
+  🔪 Dunya (site)  $24.99/kg
+  🏆 Best local: $24.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Premium Mince,DSY,name-exact,price --item Halal Lamb Premium Mince,0,PASS,"Halal Lamb Premium Mince
+  not tracked at Woolworths — missing list [DSY]
+  🔪 Dunya (site)  $18.99/kg
+  🏆 Best local: $18.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Mince,GVJ,name-exact,price --item Halal Lamb Mince,0,PASS,"Halal Lamb Mince
+  not tracked at Woolworths — missing list [GVJ]
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Dunya (site)                   $15.99/kg
+  🏆 Best local: $15.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Curry,ZWX,name-exact,price --item Halal Lamb Curry,0,PASS,"Halal Lamb Curry
+  not tracked at Woolworths — missing list [ZWX]
+  🔪 Dunya (site)                   $17.99/kg
+  🔪 Merjan Brothers Quality Meats  $27.99/kg (special)
+  🏆 Best local: $17.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Chicken Thighs,AQZ,name-exact,price --item Halal Chicken Thighs,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Marylands Skin-Off,RAB,name-exact,price --item Halal Marylands Skin-Off,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Drumstick,VCK,name-exact,price --item Halal Drumstick,0,PASS,"Halal Drumstick
+  not tracked at Woolworths — missing list [VCK]
+  🔪 Merjan Brothers Quality Meats  $4.00/kg (special) · min order 5kg for $19.99
+  🔪 Dunya (site)                   $7.99/kg
+  🏆 Best local: $4.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Whole chicken s14,ATN,name-exact,price --item Halal Whole chicken s14,0,PASS,"Halal Whole chicken s14
+  not tracked at Woolworths — missing list [ATN]
+  🔪 Merjan Brothers Quality Meats  $7.00/ea (special) · min order 5 for $34.99 — $7.00/ea
+  🔪 Dunya (site)                   $11.99/ea
+  🏆 Best local: $7.00 — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Chicken curry s14,BWJ,name-exact,price --item Halal Chicken curry s14,0,PASS,"Halal Chicken curry s14
+  not tracked at Woolworths — missing list [BWJ]
+  🔪 Dunya (site)  $10.99/ea
+  🏆 Best local: $10.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Wings,QEV,name-exact,price --item Halal Wings,0,PASS,"Halal Wings
+  not tracked at Woolworths — missing list [QEV]
+  🔪 Merjan Brothers Quality Meats  $4.00/kg (special) · min order 5kg for $19.99
+  🔪 Dunya (site)                   $7.99/kg
+  🏆 Best local: $4.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lebanese Chicken,DTP,name-exact,price --item Halal Lebanese Chicken,0,PASS,"Halal Lebanese Chicken
+  not tracked at Woolworths — missing list [DTP]
+  🔪 Dunya (site)  $16.99/kg
+  🏆 Best local: $16.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Greek Lamb,KZJ,name-exact,price --item Halal Greek Lamb,0,PASS,"Halal Greek Lamb
+  not tracked at Woolworths — missing list [KZJ]
+  🔪 Dunya (site)  $29.99/kg
+  🏆 Best local: $29.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Beef Sausages,TGK,name-exact,price --item Halal Beef Sausages,0,PASS,"Halal Beef Sausages
+  not tracked at Woolworths — missing list [TGK]
+  🔪 Dunya (site)  $12.99/kg
+  🏆 Best local: $12.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal chicken Sausage,ENG,name-exact,price --item Halal chicken Sausage,0,PASS,"Halal chicken Sausage
+  not tracked at Woolworths — missing list [ENG]
+  🔪 Dunya (site)  $12.99/kg
+  🏆 Best local: $12.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Spicy Lamb sausage,DQP,name-exact,price --item Halal Spicy Lamb sausage,0,PASS,"Halal Spicy Lamb sausage
+  not tracked at Woolworths — missing list [DQP]
+  🔪 Dunya (site)  $13.99/kg
+  🏆 Best local: $13.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Spicy Beef sausage,KNA,name-exact,price --item Halal Spicy Beef sausage,0,PASS,"Halal Spicy Beef sausage
+  not tracked at Woolworths — missing list [KNA]
+  🔪 Dunya (site)  $13.99/kg
+  🏆 Best local: $13.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal lamb Sausages,ZRD,name-exact,price --item Halal lamb Sausages,0,PASS,"Halal lamb Sausages
+  not tracked at Woolworths — missing list [ZRD]
+  🔪 Dunya (site)  $12.99/kg
+  🏆 Best local: $12.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb skewer,ZKQ,name-exact,price --item Halal Lamb skewer,0,PASS,"Halal Lamb skewer
+  not tracked at Woolworths — missing list [ZKQ]
+  🔪 Dunya (site)  $3.99/ea
+  🏆 Best local: $3.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Kofte skewer,GQD,name-exact,price --item Halal Kofte skewer,0,PASS,"Halal Kofte skewer
+  not tracked at Woolworths — missing list [GQD]
+  🔪 Dunya (site)  $2.99/ea
+  🏆 Best local: $2.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Chicken maryland,QYG,name-exact,price --item Halal Chicken maryland,0,PASS,"Halal Chicken maryland
+  not tracked at Woolworths — missing list [QYG]
+  🔪 Merjan Brothers Quality Meats  $7.00/kg (special) · min order 5kg for $34.99
+  🔪 Dunya (site)                   $9.99/kg
+  🏆 Best local: $7.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lebanese Kofte,GMH,name-exact,price --item Halal Lebanese Kofte,0,PASS,"Halal Lebanese Kofte
+  not tracked at Woolworths — missing list [GMH]
+  🔪 Dunya (site)  $16.99/kg
+  🏆 Best local: $16.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Turkish Kofte,FZH,name-exact,price --item Halal Turkish Kofte,0,PASS,"Halal Turkish Kofte
+  not tracked at Woolworths — missing list [FZH]
+  🔪 Dunya (site)  $16.99/kg
+  🏆 Best local: $16.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Turkish Adana,MBQ,name-exact,price --item Halal Turkish Adana,0,PASS,"Halal Turkish Adana
+  not tracked at Woolworths — missing list [MBQ]
+  🔪 Dunya (site)  $16.99/kg
+  🏆 Best local: $16.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Skin Off Drum,BDW,name-exact,price --item Halal Skin Off Drum,0,PASS,"Halal Skin Off Drum
+  not tracked at Woolworths — missing list [BDW]
+  🔪 Dunya (site)  $8.99/kg
+  🏆 Best local: $8.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Boneless Lamb Shoulder (1.8kg),RZA,name-exact,price --item Halal Boneless Lamb Shoulder (1.8kg),0,PASS,"Halal Boneless Lamb Shoulder (1.8kg)
+  not tracked at Woolworths — missing list [RZA]
+  🔪 Dunya (site)  $44.99 / 1.8kg pack = $24.99/kg
+  🏆 Best local: $24.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Boneless Lamb Shoulder (1.8kg),RZA,pack-routing,price --item halal boneless lamb shoulder 1.8kg,0,PASS,"Not tracked at Woolworths — missing list [RZA]
+  🔪 Dunya (site)  $44.99 / 1.8kg pack = $24.99/kg
+  🏆 Best local: $24.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Boneless Lamb Leg (2kg),ARS,name-exact,price --item Halal Boneless Lamb Leg (2kg),0,PASS,"Halal Boneless Lamb Leg (2kg)
+  not tracked at Woolworths — missing list [ARS]
+  🔪 Dunya (site)  $44.99 / 2kg pack = $22.50/kg
+  🏆 Best local: $22.50/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Boneless Lamb Leg (2kg),ARS,pack-routing,price --item halal boneless lamb leg 2kg,1,CHECK routing — see reply,[stderr] Error: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Beef Short Ribs,REH,name-exact,price --item Halal Beef Short Ribs,0,PASS,"Halal Beef Short Ribs
+  not tracked at Woolworths — missing list [REH]
+  🔪 Dunya (site)  $21.99/kg
+  🏆 Best local: $21.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Beef chuck steak,DTU,name-exact,price --item Halal Beef chuck steak,0,PASS,"Halal Beef chuck steak
+  not tracked at Woolworths — missing list [DTU]
+  🔪 Dunya (site)  $18.99/kg
+  🏆 Best local: $18.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lebanese kofta – (4kg),SDB,name-exact,price --item Halal Lebanese kofta – (4kg),0,PASS,"Halal Lebanese kofta – (4kg)
+  not tracked at Woolworths — missing list [SDB]
+  🔪 Dunya (site)  $59.99 / 4kg pack = $15.00/kg
+  🏆 Best local: $15.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lebanese kofta – (4kg),SDB,pack-routing,price --item halal lebanese kofta 4kg,0,CHECK routing — see reply,Not tracked
+Halal Lamb Ribs,JXV,name-exact,price --item Halal Lamb Ribs,0,PASS,"Halal Lamb Ribs
+  not tracked at Woolworths — missing list [JXV]
+  🔪 Dunya (site)                   $14.99/kg
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🏆 Best local: $14.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Beef eye-fillet 1.5,CWQ,name-exact,price --item Halal Beef eye-fillet 1.5,0,PASS,"Halal Beef eye-fillet 1.5
+  not tracked at Woolworths — missing list [CWQ]
+  🔪 Dunya (site)  $69.99/ea
+  🏆 Best local: $69.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Beef Rib Eye,VRQ,name-exact,price --item Halal Beef Rib Eye,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal BBQ Sausages (4kg),KDX,name-exact,price --item Halal BBQ Sausages (4kg),1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal BBQ Sausages (4kg),KDX,pack-routing,price --item halal bbq sausages 4kg,1,CHECK routing — see reply,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Drumsticks – (5kg),RPG,name-exact,price --item Halal Drumsticks – (5kg),1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Drumsticks – (5kg),RPG,pack-routing,price --item halal drumsticks 5kg,1,CHECK routing — see reply,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Full Wings – (5kg),CRA,name-exact,price --item Halal Full Wings – (5kg),1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Full Wings – (5kg),CRA,pack-routing,price --item halal full wings 5kg,1,CHECK routing — see reply,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Chicken Thigh – (5kg),SNA,name-exact,price --item Halal Chicken Thigh – (5kg),1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Chicken Thigh – (5kg),SNA,pack-routing,price --item halal chicken thigh 5kg,1,CHECK routing — see reply,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Chicken Breast – (5kg),NTB,name-exact,price --item Halal Chicken Breast – (5kg),1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Chicken Breast – (5kg),NTB,pack-routing,price --item halal chicken breast 5kg,1,CHECK routing — see reply,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Chicken Curry – (5kg),SUD,name-exact,price --item Halal Chicken Curry – (5kg),1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Chicken Curry – (5kg),SUD,pack-routing,price --item halal chicken curry 5kg,0,PASS,"Not tracked at Woolworths — missing list [SUD]
+  🔪 Dunya (site)  $44.99 / 5kg pack = $9.00/kg
+  🏆 Best local: $9.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Tenderloin – (5kg),WZF,name-exact,price --item Halal Lamb Tenderloin – (5kg),0,PASS,"Halal Lamb Tenderloin – (5kg)
+  not tracked at Woolworths — missing list [WZF]
+  🔪 Dunya (site)  $134.99 / 5kg pack = $27.00/kg
+  🏆 Best local: $27.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Tenderloin – (5kg),WZF,pack-routing,price --item halal lamb tenderloin 5kg,0,CHECK routing — see reply,Not tracked
+Halal Lamb Backstrap – (5kg),ZVU,name-exact,price --item Halal Lamb Backstrap – (5kg),0,PASS,"Halal Lamb Backstrap – (5kg)
+  not tracked at Woolworths — missing list [ZVU]
+  🔪 Dunya (site)  $149.99 / 5kg pack = $30.00/kg
+  🏆 Best local: $30.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Backstrap – (5kg),ZVU,pack-routing,price --item halal lamb backstrap 5kg,0,PASS,"Not tracked at Woolworths — missing list [ZVU]
+  🔪 Dunya (site)  $149.99 / 5kg pack = $30.00/kg
+  🏆 Best local: $30.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Shank – (5kg),QVG,name-exact,price --item Halal Lamb Shank – (5kg),0,PASS,"Halal Lamb Shank – (5kg)
+  not tracked at Woolworths — missing list [QVG]
+  🔪 Dunya (site)  $79.99 / 5kg pack = $16.00/kg
+  🏆 Best local: $16.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Shank – (5kg),QVG,pack-routing,price --item halal lamb shank 5kg,0,PASS,"Not tracked at Woolworths — missing list [QVG]
+  🔪 Dunya (site)  $79.99 / 5kg pack = $16.00/kg
+  🏆 Best local: $16.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Ribs – (5kg),VQG,name-exact,price --item Halal Lamb Ribs – (5kg),0,PASS,"Halal Lamb Ribs – (5kg)
+  not tracked at Woolworths — missing list [VQG]
+  🔪 Dunya (site)  $69.99 / 5kg pack = $14.00/kg
+  🏆 Best local: $14.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Ribs – (5kg),VQG,pack-routing,price --item halal lamb ribs 5kg,0,PASS,"Not tracked at Woolworths — missing list [VQG]
+  🔪 Dunya (site)  $69.99 / 5kg pack = $14.00/kg
+  🏆 Best local: $14.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Turkish Kofta – (5kg),KWM,name-exact,price --item Halal Turkish Kofta – (5kg),0,PASS,"Halal Turkish Kofta – (5kg)
+  not tracked at Woolworths — missing list [KWM]
+  🔪 Dunya (site)  $74.99 / 5kg pack = $15.00/kg
+  🏆 Best local: $15.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Turkish Kofta – (5kg),KWM,pack-routing,price --item halal turkish kofta 5kg,0,CHECK routing — see reply,Not tracked
+Halal Beef premium Mince,VFZ,name-exact,price --item Halal Beef premium Mince,0,PASS,"Halal Beef premium Mince
+  not tracked at Woolworths — missing list [VFZ]
+  🔪 Dunya (site)  $17.99/kg
+  🏆 Best local: $17.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Mince – (5kg),BMR,name-exact,price --item Halal Mince – (5kg),1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Mince – (5kg),BMR,pack-routing,price --item halal mince 5kg,1,CHECK routing — see reply,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Goat Curry – (5kg),PTU,name-exact,price --item Halal Goat Curry – (5kg),0,PASS,"Halal Goat Curry – (5kg)
+  not tracked at Woolworths — missing list [PTU]
+  🔪 Dunya (site)  $89.99 / 5kg pack = $18.00/kg
+  🏆 Best local: $18.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Goat Curry – (5kg),PTU,pack-routing,price --item halal goat curry 5kg,0,PASS,"Not tracked at Woolworths — missing list [PTU]
+  🔪 Dunya (site)  $89.99 / 5kg pack = $18.00/kg
+  🏆 Best local: $18.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Curry – (5kg),ZET,name-exact,price --item Halal Lamb Curry – (5kg),0,PASS,"Halal Lamb Curry – (5kg)
+  not tracked at Woolworths — missing list [ZET]
+  🔪 Dunya (site)  $89.99 / 5kg pack = $18.00/kg
+  🏆 Best local: $18.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Curry – (5kg),ZET,pack-routing,price --item halal lamb curry 5kg,0,PASS,"Not tracked at Woolworths — missing list [ZET]
+  🔪 Dunya (site)  $89.99 / 5kg pack = $18.00/kg
+  🏆 Best local: $18.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Beef Burger,YVB,name-exact,price --item Halal Beef Burger,0,PASS,"Halal Beef Burger
+  not tracked at Woolworths — missing list [YVB]
+  🔪 Dunya (site)  $17.99/kg
+  🏆 Best local: $17.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Beef Marrow Bones,NDQ,name-exact,price --item Halal Beef Marrow Bones,0,PASS,"Halal Beef Marrow Bones
+  not tracked at Woolworths — missing list [NDQ]
+  🔪 Dunya (site)  $7.99/ea
+  🏆 Best local: $7.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Chicken Breast Fillet,NRQ,name-exact,price --item Halal Chicken Breast Fillet,0,PASS,"Halal Chicken Breast Fillet
+  not tracked at Woolworths — missing list [NRQ]
+  🔪 Merjan Brothers Quality Meats  $7.00/kg (special) · min order 5kg for $34.99
+  🔪 Dunya (site)                   $13.99/kg
+  🏆 Best local: $7.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Chicken Tenderloin – (5kg),PSB,name-exact,price --item Halal Chicken Tenderloin – (5kg),0,PASS,"Halal Chicken Tenderloin – (5kg)
+  not tracked at Woolworths — missing list [PSB]
+  🔪 Dunya (site)  $54.99 / 5kg pack = $11.00/kg
+  🏆 Best local: $11.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Chicken Tenderloin – (5kg),PSB,pack-routing,price --item halal chicken tenderloin 5kg,0,CHECK routing — see reply,Not tracked
+Halal Chicken Maryland – (5kg),EXW,name-exact,price --item Halal Chicken Maryland – (5kg),0,PASS,"Halal Chicken Maryland – (5kg)
+  not tracked at Woolworths — missing list [EXW]
+  🔪 Dunya (site)  $39.99 / 5kg pack = $8.00/kg
+  🏆 Best local: $8.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Chicken Maryland – (5kg),EXW,pack-routing,price --item halal chicken maryland 5kg,0,PASS,"Not tracked at Woolworths — missing list [EXW]
+  🔪 Dunya (site)  $39.99 / 5kg pack = $8.00/kg
+  🏆 Best local: $8.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Mid-Wings – (5kg),KRN,name-exact,price --item Halal Mid-Wings – (5kg),0,PASS,"Halal Mid-Wings – (5kg)
+  not tracked at Woolworths — missing list [KRN]
+  🔪 Dunya (site)  $44.99 / 5kg pack = $9.00/kg
+  🏆 Best local: $9.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Mid-Wings – (5kg),KRN,pack-routing,price --item halal mid-wings 5kg,1,CHECK routing — see reply,[stderr] Error: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Chicken Mince,ENZ,name-exact,price --item Halal Chicken Mince,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Chicken Curry s9,EGT,name-exact,price --item Halal Chicken Curry s9,0,PASS,"Halal Chicken Curry s9
+  not tracked at Woolworths — missing list [EGT]
+  🔪 Dunya (site)  $8.99/ea
+  🏆 Best local: $8.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Loin Chops – (3kg),PNM,name-exact,price --item Halal Lamb Loin Chops – (3kg),0,PASS,"Halal Lamb Loin Chops – (3kg)
+  not tracked at Woolworths — missing list [PNM]
+  🔪 Dunya (site)  $49.99 / 3kg pack = $16.66/kg
+  🏆 Best local: $16.66/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Loin Chops – (3kg),PNM,pack-routing,price --item halal lamb loin chops 3kg,0,PASS,"Not tracked at Woolworths — missing list [PNM]
+  🔪 Dunya (site)  $49.99 / 3kg pack = $16.66/kg
+  🏆 Best local: $16.66/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lean Lamb Mince – (5kg),ZDA,name-exact,price --item Halal Lean Lamb Mince – (5kg),0,PASS,"Halal Lean Lamb Mince – (5kg)
+  not tracked at Woolworths — missing list [ZDA]
+  🔪 Dunya (site)  $79.99 / 5kg pack = $16.00/kg
+  🏆 Best local: $16.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lean Lamb Mince – (5kg),ZDA,pack-routing,price --item halal lean lamb mince 5kg,0,PASS,"Not tracked at Woolworths — missing list [ZDA]
+  🔪 Dunya (site)  $79.99 / 5kg pack = $16.00/kg
+  🏆 Best local: $16.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Mince – (5kg),WHA,name-exact,price --item Halal Lamb Mince – (5kg),0,PASS,"Halal Lamb Mince – (5kg)
+  not tracked at Woolworths — missing list [WHA]
+  🔪 Dunya (site)  $69.99 / 5kg pack = $14.00/kg
+  🏆 Best local: $14.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Lamb Mince – (5kg),WHA,pack-routing,price --item halal lamb mince 5kg,0,CHECK routing — see reply,"Not tracked at Woolworths — missing list [ZDA]
+  🔪 Dunya (site)  $69.99 / 5kg pack = $14.00/kg
+  🔪 Dunya (site)  $79.99 / 5kg pack = $16.00/kg
+  🏆 Best local: $14.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Beef Sirloin Steak,KMC,name-exact,price --item Halal Beef Sirloin Steak,0,PASS,"Halal Beef Sirloin Steak
+  not tracked at Woolworths — missing list [KMC]
+  🔪 Dunya (site)  $29.99/kg
+  🏆 Best local: $29.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal premium chuck Mince – (5kg),HSZ,name-exact,price --item Halal premium chuck Mince – (5kg),0,PASS,"Halal premium chuck Mince – (5kg)
+  not tracked at Woolworths — missing list [HSZ]
+  🔪 Dunya (site)  $79.99 / 5kg pack = $16.00/kg
+  🏆 Best local: $16.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal premium chuck Mince – (5kg),HSZ,pack-routing,price --item halal premium chuck mince 5kg,0,CHECK routing — see reply,Not tracked
+Halal Beef Mince,AUG,name-exact,price --item Halal Beef Mince,0,PASS,"Halal Beef Mince
+  not tracked at Woolworths — missing list [AUG]
+  🔪 Dunya (site)  $15.99/kg
+  🏆 Best local: $15.99/kg — Dunya (site)
+also at Woolworths (non-halal): $13.54 · 500g = $27.08/kg — Woolworths Beef Mince 500g
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Diced Beef,RJG,name-exact,price --item Halal Diced Beef,0,PASS,"Halal Diced Beef
+  not tracked at Woolworths — missing list [RJG]
+  🔪 Dunya (site)  $18.99/kg
+  🏆 Best local: $18.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Beef Topside Steak,KJZ,name-exact,price --item Halal Beef Topside Steak,1,FAIL rc=1,[stderr] Error: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Beef Rump,PKX,name-exact,price --item Halal Beef Rump,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Beef Stir Fry,DGR,name-exact,price --item Halal Beef Stir Fry,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Beef Minute Steak,GVK,name-exact,price --item Halal Beef Minute Steak,0,PASS,"Halal Beef Minute Steak
+  not tracked at Woolworths — missing list [GVK]
+  🔪 Dunya (site)  $19.99/kg
+  🏆 Best local: $19.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Eye silverside,SEX,name-exact,price --item Halal Eye silverside,0,PASS,"Halal Eye silverside
+  not tracked at Woolworths — missing list [SEX]
+  🔪 Dunya (site)  $19.99/kg
+  🏆 Best local: $19.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Beef Scotch Fillet,DKQ,name-exact,price --item Halal Beef Scotch Fillet,0,PASS,"Halal Beef Scotch Fillet
+  not tracked at Woolworths — missing list [DKQ]
+  🔪 Dunya (site)  $39.99/kg
+  🏆 Best local: $39.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Beef Gravy,KJM,name-exact,price --item Halal Beef Gravy,0,PASS,"Halal Beef Gravy
+  not tracked at Woolworths — missing list [KJM]
+  🔪 Dunya (site)  $18.99/kg
+  🏆 Best local: $18.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Beef Osso Bucco,CEV,name-exact,price --item Halal Beef Osso Bucco,0,PASS,"Halal Beef Osso Bucco
+  not tracked at Woolworths — missing list [CEV]
+  🔪 Dunya (site)  $14.99/kg
+  🏆 Best local: $14.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Cos Lettuce,WJX,name-exact,price --item Cos Lettuce,0,PASS,"Cos Lettuce
+  not tracked at Woolworths — missing list [WJX]
+  🍎 Abu Salim Fruit Market         $0.99/ea (special)
+  🔪 Dunya (site)                   $0.99/ea (special)
+  🍎 Fruitopia Mt Druitt            $0.99/ea (special)
+  🔪 Merjan Brothers Quality Meats  $0.99/ea (special)
+  🏆 Best local: $0.99 — Abu Salim Fruit Market
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Jap Pumpkin,FVJ,name-exact,price --item Jap Pumpkin,0,PASS,Not tracked [FVJ]
+Silverbeet,CFQ,name-exact,price --item Silverbeet,0,PASS,Not tracked [CFQ]
+Sweet Corn,UAX,name-exact,price --item Sweet Corn,0,PASS,Not tracked [UAX]
+Artichoke,FNY,name-exact,price --item Artichoke,0,PASS,Not tracked [FNY]
+Beetroot Bunch,KGJ,name-exact,price --item Beetroot Bunch,0,PASS,Not tracked [KGJ]
+Telegraph Cucumber,VUH,name-exact,price --item Telegraph Cucumber,0,PASS,Not tracked [VUH]
+Lebanese Bread,PEV,name-exact,price --item Lebanese Bread,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Chokos,AQN,name-exact,price --item Chokos,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Celery,ZAY,name-exact,price --item Celery,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Carrots 1kg Bag,YCE,name-exact,price --item Carrots 1kg Bag,0,PASS,Not tracked [YCE]
+Large Parsley Bunch,VCF,name-exact,price --item Large Parsley Bunch,0,PASS,Not tracked [VCF]
+Washed Potatoes 5kg Bag,EJR,name-exact,price --item Washed Potatoes 5kg Bag,0,PASS,Not tracked [EJR]
+Brown Onions 5kg Bag,ZTS,name-exact,price --item Brown Onions 5kg Bag,0,PASS,Not tracked [ZTS]
+Eggplant,NWJ,name-exact,price --item Eggplant,0,PASS,Not tracked [NWJ]
+Cauliflower,JDY,name-exact,price --item Cauliflower,0,PASS,Not tracked [JDY]
+Tomato,EYF,name-exact,price --item Tomato,0,PASS,"Tomato · Each
+  🟢 Woolworths  $0.51
+  [EYF]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Yellow Capsicum,VQF,name-exact,price --item Yellow Capsicum,1,FAIL rc=1,[stderr] Error: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Lebanese Zucchini,YSE,name-exact,price --item Lebanese Zucchini,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Lebanese Cucumber 2kg Bag,UGZ,name-exact,price --item Lebanese Cucumber 2kg Bag,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Packham Pears,FBM,name-exact,price --item Packham Pears,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Pink Lady Apples,ZHG,name-exact,price --item Pink Lady Apples,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Strawberries,TUR,name-exact,price --item Strawberries,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+R2E2 Mangoes,BGX,name-exact,price --item R2E2 Mangoes,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+brown onion,KSC,name-exact,price --item brown onion,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+oregano leaves,EUR,name-exact,price --item oregano leaves,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+nescafe latte kitkat,DPV,name-exact,price --item nescafe latte kitkat,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+plastic bag,SZC,name-exact,price --item plastic bag,0,PASS,"plastic bag
+  not tracked at Woolworths — missing list [SZC]
+  🍎 Fruitopia Mt Druitt  $0.10/ea
+  🏆 Best local: $0.10 — Fruitopia Mt Druitt
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Banana Kids 5,PXQ,name-exact,price --item Banana Kids 5,0,PASS,"Banana Kids 5 · 5 Pk  🏠
+  🟢 Woolworths  $2.71
+  [PXQ]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Capsicum Green each,DSA,name-exact,price --item Capsicum Green each,0,PASS,"Capsicum Green each · 220g  🏠
+  🟢 Woolworths  $1.34 · 220g = $6.09/kg
+  [DSA]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Spring Onion Bunch each,NWH,name-exact,price --item Spring Onion Bunch each,0,PASS,"Spring Onion Bunch each
+  🟢 Woolworths — unavailable this week (N/A 2026-09-02)
+  [NWH]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Woolworths Fresh Herb Coriander Bunch each,GWY,name-exact,price --item Woolworths Fresh Herb Coriander Bunch each,0,PASS,"Woolworths Fresh Herb Coriander Bunch each · Bunch  🏠
+  🟢 Woolworths  $2.97
+  [GWY]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Brown Onion 1Kg,PGW,name-exact,price --item Brown Onion 1Kg,0,PASS,"Brown Onion 1Kg · 1Kg  🏠
+  🟢 Woolworths  $2.26 · 1Kg = $2.26/kg
+  [PGW]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Royal Gala Apple 1 Kg,SGW,name-exact,price --item Royal Gala Apple 1 Kg,0,PASS,"Royal Gala Apple 1 Kg · 1 Kg
+  🟢 Woolworths  $7.50 · 1 Kg = $7.50/kg
+  [SGW]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Blueberries,MFG,name-exact,price --item Blueberries,0,PASS,"Blueberries · 170g  🏠
+  🟢 Woolworths  $3.61 · 170g = $21.24/kg
+  [MFG]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Raspberries Punnet 125g,CMB,name-exact,price --item Raspberries Punnet 125g,0,PASS,"Raspberries Punnet 125g · 125g  🏠
+  🟢 Woolworths  $3.61 · 125g = $28.88/kg
+  [CMB]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Woolworths Beef Mince 500g,GJZ,name-exact,price --item Woolworths Beef Mince 500g,0,PASS,"Not tracked at Woolworths — missing list [EPJ]
+  🔪 Merjan Brothers Quality Meats  $4.00/kg (special) · min order 5kg for $19.99
+  🔪 Merjan Brothers Quality Meats  $4.00/kg (special) · min order 5kg for $19.99
+  🔪 Merjan Brothers Quality Meats  $4.00/kg (special) · min order 5kg for $19.99
+  🔪 Dunya (site)                   $24.99 / 5kg pack = $5.00/kg
+  🔪 Dunya (site)                   $29.99 / 5kg pack = $6.00/kg
+  🔪 Merjan Brothers Quality Meats  $7.00/kg (special) · min order 5kg for $34.99
+  🔪 Merjan Brothers Quality Meats  $7.00/kg (special) · min order 5kg for $34.99
+  🔪 Dunya (site)                   $7.99/kg
+  🔪 Dunya (site)                   $7.99/kg
+  🔪 Dunya (site)                   $7.99/kg
+  🔪 Dunya (site)                   $39.99 / 5kg pack = $8.00/kg
+  🔪 Dunya (site)                   $8.99/kg
+  🔪 Merjan Brothers Quality Meats  $9.00/kg (special) · min order 2kg for $17.99
+  🔪 Merjan Brothers Quality Meats  $9.00/kg (special) · min order 2kg for $17.99
+  🔪 Dunya (site)                   $44.99 / 5kg pack = $9.00/kg
+  🔪 Dunya (site)                   $44.99 / 5kg pack = $9.00/kg
+  🔪 Dunya (site)                   $9.99/kg
+  🔪 Dunya (site)                   $9.99/kg
+  🔪 Merjan Brothers Quality Meats  $10.00/kg (special) · min order 5kg for $49.99
+  🔪 Dunya (site)                   $10.99/kg
+  🔪 Dunya (site)                   $10.99/kg
+  🔪 Merjan Brothers Quality Meats  $11.00/kg (special) · min order 3kg for $32.99
+  🔪 Merjan Brothers Quality Meats  $11.00/kg (sp"
+Woolworths Little Gem Lettuce Green 2 pack,CHZ,name-exact,price --item Woolworths Little Gem Lettuce Green 2 pack,0,PASS,"Woolworths Little Gem Lettuce Green 2 pack · 2 pack  🏠
+  🟢 Woolworths  $4.43
+  [CHZ]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal BBQ Blade Steak /kg,RVS,name-exact,price --item Halal BBQ Blade Steak /kg,1,FAIL rc=1,[stderr] Error: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Flavoured Sausages /kg,YRU,name-exact,price --item Halal Flavoured Sausages /kg,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Sausages /kg,GDJ,name-exact,price --item Halal Sausages /kg,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Goat Curry /kg,NZH,name-exact,price --item Halal Goat Curry /kg,1,FAIL rc=1,[stderr] Error: Failed to connect to spreadsheet: APIError: [429]: Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per user' of service 'sheets.googleapis.com' for consumer 'project_number:673157371339'.
+Halal Povi Masima Bucket,XBV,name-exact,price --item Halal Povi Masima Bucket,0,PASS,"Halal Povi Masima Bucket
+  not tracked at Woolworths — missing list [XBV]
+  🔪 Merjan Brothers Quality Meats  $49.99 (special) · Povi Masima bucket $49.99
+  🏆 Best local: $49.99 — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"

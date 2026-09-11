@@ -148,6 +148,25 @@ def _name_has_all(name_lower: str, tokens: list) -> bool:
     return True
 
 
+def _size_split(text: str) -> tuple:
+    """text -> (pack kg, name tokens with the size phrase removed).
+
+    The size phrase is cut as a SPAN, not a token, so '1.8kg'
+    (tokenised '1' + '8kg') never leaks a stray number token into a
+    name match. Returns (None, tokens) when no size is stated."""
+    text = str(text or "").lower()
+    m = re.search(r"(\d+(?:[.,]\d+)?)\s*kgs?\b", text)
+    scale = 1.0
+    if m is None:
+        m = re.search(r"(\d+(?:[.,]\d+)?)\s*g\b", text)
+        scale = 0.001
+    if m is None:
+        return None, _query_tokens(text)
+    kg = float(m.group(1).replace(",", ".")) * scale
+    rest = text[:m.start()] + " " + text[m.end():]
+    return kg, _query_tokens(rest)
+
+
 def _pack_kg(text: str) -> float | None:
     """Pack size in kg parsed from text ('500g' -> 0.5, '(5KG)' -> 5).
 
@@ -166,6 +185,44 @@ def _pack_kg(text: str) -> float | None:
 def _fmt_kg(kg: float) -> str:
     """0.5 -> '500g', 5.0 -> '5kg'."""
     return f"{kg * 1000:.0f}g" if kg < 1 else f"{kg:g}kg"
+
+
+def _pack_master_hit(query: str, master_rows: list, meat: bool):
+    """Pack-presented master row matching a name+size-token query.
+
+    2026-09-11 fix (item_exec_2026-09-11_1106.csv): 'halal lebanese
+    kofta 4kg' answered bare 'Not tracked' because 'kofta' (like
+    'tenderloin', 'chuck') is not a meat term, so the §8 row-3
+    halal-local fallback never ran and the exact-name match missed
+    the row's '– (4kg)' decoration.
+
+    Rule: the query's size token (kg/g) equals the row's pack size
+    (col C, else the name) AND every other query token appears in
+    the row name (word-boundary). An exact token-SET match wins over
+    containment so 'lamb mince 5kg' takes 'Halal Lamb Mince – (5kg)'
+    [WHA], not 'Halal Lean Lamb Mince – (5kg)' [ZDA]. Meat queries
+    still resolve through halal-named rows only (spec §5)."""
+    kg, tokens = _size_split(query)
+    if kg is None or not tokens:
+        return None
+    token_set = set(tokens)
+    equal = contains = None
+    for master in master_rows:
+        name = str(master["name"] or "")
+        low = name.lower()
+        if meat and "halal" not in low:
+            continue
+        row_kg = _pack_kg(master["size"] or name)
+        if row_kg is None or row_kg != kg:
+            continue
+        if not _name_has_all(low, tokens):
+            continue
+        if contains is None:
+            contains = master
+        if equal is None and set(_size_split(low)[1]) == token_set:
+            equal = master
+            break
+    return equal or contains
 
 
 def _non_halal_twin(query: str, master_rows: list) -> list:
@@ -275,7 +332,9 @@ def lookup_item(query: str, master_rows, ld_rows) -> dict:
     """Sheet-only lookup per the §8 table. NEVER raises on a miss.
 
     Match: exact Col A, then exact alias (col J), case-insensitive;
-    a MEAT query resolves through halal-named rows only (spec §5).
+    then a pack-presented row by name+size token ('halal lamb mince
+    5kg' -> 'Halal Lamb Mince – (5kg)'); a MEAT query resolves
+    through halal-named rows only (spec §5).
     """
     q = str(query or "").strip()
     ql = q.lower()
@@ -299,6 +358,9 @@ def lookup_item(query: str, master_rows, ld_rows) -> dict:
                 _alias_matches(master["aliases"]):
             hit = master
             break
+
+    if hit is None:
+        hit = _pack_master_hit(q, master_rows, meat)
 
     if hit is None and meat:
         # §8 row 3: meat term, no halal master row — fall back to

@@ -453,3 +453,113 @@ class TestMultibuyTermsInReply(unittest.TestCase):
         ld = dict(self.LD, comments="")
         lines = _local_lines({"local_quotes": _ld_quotes(ld)})
         self.assertFalse(any("multi buy" in ln for ln in lines))
+
+
+class TestPackRouting(unittest.TestCase):
+    """2026-09-11 fix (item_exec_2026-09-11_1106.csv): a pack-
+    presented row ('Name – (5kg)') must answer a name+size-token
+    query with ITS code. Evidence rows: SDB 'halal lebanese kofta
+    4kg', KWM 'halal turkish kofta 5kg', PSB 'halal chicken
+    tenderloin 5kg', HSZ 'halal premium chuck mince 5kg' all
+    answered bare 'Not tracked' — 'kofta'/'tenderloin'/'chuck' are
+    not meat terms, so the §8 row-3 halal-local fallback never ran
+    and the exact-name match missed the '– (5kg)' decoration."""
+
+    def setUp(self):
+        self.master = [
+            _m("Halal Lebanese Kofte", "GMH", sub="butchery"),
+            _m("Halal Lebanese kofta – (4kg)", "SDB", sub="butchery"),
+            _m("Halal Turkish Kofte", "FZH", sub="butchery"),
+            _m("Halal Turkish Kofta – (5kg)", "KWM", sub="butchery"),
+            _m("Halal chicken tenders", "BUD", sub="butchery"),
+            _m("Halal Chicken Tenderloin – (5kg)", "PSB",
+               sub="butchery"),
+            _m("Halal Lamb Tenderloin – (5kg)", "WZF",
+               sub="butchery"),
+            _m("Halal Beef premium Mince", "VFZ", sub="butchery"),
+            _m("Halal Lean Lamb Mince – (5kg)", "ZDA",
+               sub="butchery"),
+            _m("Halal Lamb Mince – (5kg)", "WHA", sub="butchery"),
+            _m("Halal premium chuck Mince – (5kg)", "HSZ",
+               sub="butchery"),
+        ]
+        self.ld = [
+            _l("Halal Lebanese Kofte /kg", "GMH", dunya_perm="16.99"),
+            _l("Halal Lebanese kofta – (4kg) /ea", "SDB",
+               dunya_perm="59.99"),
+            _l("Halal Turkish Kofte /kg", "FZH", dunya_perm="16.99"),
+            _l("Halal Turkish Kofta – (5kg) /ea", "KWM",
+               dunya_perm="74.99"),
+            _l("Halal chicken tenders /kg", "BUD",
+               merjan_sp="11.00 (till 12 Sep)"),
+            _l("Halal Chicken Tenderloin – (5kg) /ea", "PSB",
+               dunya_perm="54.99"),
+            _l("Halal Lamb Tenderloin – (5kg) /ea", "WZF",
+               dunya_perm="134.99"),
+            _l("Halal Beef premium Mince /kg", "VFZ",
+               dunya_perm="17.99"),
+            _l("Halal Lean Lamb Mince – (5kg) /ea", "ZDA",
+               dunya_perm="79.99"),
+            _l("Halal Lamb Mince – (5kg) /ea", "WHA",
+               dunya_perm="69.99"),
+            _l("Halal premium chuck Mince – (5kg) /ea", "HSZ",
+               dunya_perm="79.99"),
+        ]
+
+    def _missing(self, query):
+        result = lookup_item(query, self.master, self.ld)
+        self.assertEqual(result["status"], "missing")
+        return result
+
+    def test_sdb_lebanese_kofta_4kg(self):
+        result = self._missing("halal lebanese kofta 4kg")
+        self.assertEqual(result["code"], "SDB")
+        out = render_lookup(result)
+        self.assertIn("missing list [SDB]", out)
+        self.assertIn("$59.99 / 4kg pack = $15.00/kg", out)
+
+    def test_kwm_turkish_kofta_5kg(self):
+        result = self._missing("halal turkish kofta 5kg")
+        self.assertEqual(result["code"], "KWM")
+        self.assertIn("missing list [KWM]",
+                      render_lookup(result))
+
+    def test_psb_chicken_tenderloin_5kg(self):
+        result = self._missing("halal chicken tenderloin 5kg")
+        self.assertEqual(result["code"], "PSB")
+        self.assertIn("$54.99 / 5kg pack = $11.00/kg",
+                      render_lookup(result))
+
+    def test_hsz_premium_chuck_mince_5kg(self):
+        result = self._missing("halal premium chuck mince 5kg")
+        self.assertEqual(result["code"], "HSZ")
+        self.assertIn("missing list [HSZ]",
+                      render_lookup(result))
+
+    def test_wzf_lamb_tenderloin_5kg(self):
+        # 5th evidence row in the same CSV (line 'halal lamb
+        # tenderloin 5kg' -> bare 'Not tracked')
+        result = self._missing("halal lamb tenderloin 5kg")
+        self.assertEqual(result["code"], "WZF")
+
+    def test_wha_exact_token_set_beats_lean_cousin(self):
+        # 'lamb mince 5kg' must cite WHA (Lamb Mince), not ZDA (Lean
+        # Lamb Mince) — same sheet, both 5kg packs
+        result = self._missing("halal lamb mince 5kg")
+        self.assertEqual(result["code"], "WHA")
+        out = render_lookup(result)
+        self.assertIn("$69.99 / 5kg pack = $14.00/kg", out)
+        self.assertNotIn("Lean", out)
+
+    def test_size_mismatch_never_routes_to_pack_row(self):
+        # wrong size token: no 5kg kofta row exists -> honest miss,
+        # never the 4kg row
+        result = lookup_item("halal lebanese kofta 5kg",
+                             self.master, self.ld)
+        self.assertNotEqual(result["code"], "SDB")
+        self.assertIsNone(result["master"])
+
+    def test_exact_name_still_wins_over_pack_match(self):
+        result = lookup_item("Halal Turkish Kofta – (5kg)",
+                             self.master, self.ld)
+        self.assertEqual(result["code"], "KWM")

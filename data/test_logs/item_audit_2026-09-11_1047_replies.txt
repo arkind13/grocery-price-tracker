@@ -1,0 +1,1049 @@
+### Halal BEEF MINCE (5KG) [EPJ] expected=missing actual=missing FAIL: twin line missing
+Halal BEEF MINCE (5KG)
+  not tracked at Woolworths — missing list [EPJ]
+  🔪 Dunya (site)  $64.99 / 5kg pack = $13.00/kg
+  🏆 Best local: $13.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Chicken Skewer [PJM] expected=missing actual=missing PASS
+Halal Chicken Skewer
+  not tracked at Woolworths — missing list [PJM]
+  🔪 Dunya (site)  $2.99/ea
+  🏆 Best local: $2.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Greek Chops [RHD] expected=missing actual=missing PASS
+Halal Greek Chops
+  not tracked at Woolworths — missing list [RHD]
+  🔪 Dunya (site)  $21.99/ea
+  🏆 Best local: $21.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Spicy Wings [RGX] expected=missing actual=missing PASS
+Halal Spicy Wings
+  not tracked at Woolworths — missing list [RGX]
+  🔪 Dunya (site)  $10.99/ea
+  🏆 Best local: $10.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Beef Curry [QWC] expected=missing actual=missing FAIL: twin line missing
+Halal Beef Curry
+  not tracked at Woolworths — missing list [QWC]
+  🔪 Merjan Brothers Quality Meats  $10.00/kg (special) · min order 5kg for $49.99
+  🔪 Dunya (site)                   $15.99/kg
+  🏆 Best local: $10.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Beef Ossobuco [BTE] expected=missing actual=missing PASS
+Halal Beef Ossobuco
+  not tracked at Woolworths — missing list [BTE]
+  🔪 Dunya (site)  $15.99/kg
+  🏆 Best local: $15.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Turkish wings [QMD] expected=missing actual=missing PASS
+Halal Turkish wings
+  not tracked at Woolworths — missing list [QMD]
+  🔪 Dunya (site)  $10.99/kg
+  🏆 Best local: $10.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Turkish chicken [BVK] expected=missing actual=missing PASS
+Halal Turkish chicken
+  not tracked at Woolworths — missing list [BVK]
+  🔪 Dunya (site)  $16.99/kg
+  🏆 Best local: $16.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Chicken Drumette [XGS] expected=missing actual=missing PASS
+Halal Chicken Drumette
+  not tracked at Woolworths — missing list [XGS]
+  🔪 Merjan Brothers Quality Meats  $4.00/kg (special) · min order 5kg for $19.99
+  🔪 Dunya (site)                   $7.99/kg
+  🏆 Best local: $4.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Chicken mid-wings [DRW] expected=missing actual=missing PASS
+Halal Chicken mid-wings
+  not tracked at Woolworths — missing list [DRW]
+  🔪 Merjan Brothers Quality Meats  $9.00/kg (special) · min order 2kg for $17.99
+  🔪 Dunya (site)                   $9.99/kg
+  🏆 Best local: $9.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Whole chicken s9 [QDY] expected=missing actual=missing PASS
+Halal Whole chicken s9
+  not tracked at Woolworths — missing list [QDY]
+  🔪 Merjan Brothers Quality Meats  $6.00/ea (special) · min order 2 for $11.99 — $6.00/ea
+  🔪 Dunya (site)                   $8.99/ea
+  🏆 Best local: $6.00 — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal chicken breast strips [AXW] expected=missing actual=missing PASS
+Halal chicken breast strips
+  not tracked at Woolworths — missing list [AXW]
+  🔪 Dunya (site)                   $13.99/kg
+  🔪 Merjan Brothers Quality Meats  $13.99/kg
+  🏆 Best local: $13.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal chicken breast diced [XJA] expected=missing actual=missing PASS
+Halal chicken breast diced
+  not tracked at Woolworths — missing list [XJA]
+  🔪 Dunya (site)  $13.99/kg
+  🏆 Best local: $13.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal chicken tenders [BUD] expected=missing actual=missing PASS
+Halal chicken tenders
+  not tracked at Woolworths — missing list [BUD]
+  🔪 Merjan Brothers Quality Meats  $11.00/kg (special) · min order 3kg for $32.99
+  🔪 Dunya (site)                   $13.99/kg
+  🏆 Best local: $11.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Blade 1.3 [KFM] expected=missing actual=missing PASS
+Halal Lamb Blade 1.3
+  not tracked at Woolworths — missing list [KFM]
+  🔪 Dunya (site)  $29.99/ea
+  🏆 Best local: $29.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Leg Roast [RQY] expected=missing actual=missing PASS
+Halal Lamb Leg Roast
+  not tracked at Woolworths — missing list [RQY]
+  🔪 Dunya (site)  $49.99/ea
+  🏆 Best local: $49.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Shank – each [NYV] expected=missing actual=missing PASS
+Halal Lamb Shank – each
+  not tracked at Woolworths — missing list [NYV]
+  🔪 Dunya (site)  $6.99/ea
+  🏆 Best local: $6.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Sliced Lamb Neck [YCQ] expected=missing actual=missing PASS
+Halal Sliced Lamb Neck
+  not tracked at Woolworths — missing list [YCQ]
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Dunya (site)                   $16.99/kg
+  🏆 Best local: $15.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Leg Chops [GVZ] expected=missing actual=missing PASS
+Halal Lamb Leg Chops
+  not tracked at Woolworths — missing list [GVZ]
+  🔪 Dunya (site)  $18.99/kg
+  🏆 Best local: $18.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Chump Chops [CBH] expected=missing actual=missing PASS
+Halal Lamb Chump Chops
+  not tracked at Woolworths — missing list [CBH]
+  🔪 Dunya (site)  $17.99/kg
+  🏆 Best local: $17.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Loin Chops [BCG] expected=missing actual=missing PASS
+Halal Lamb Loin Chops
+  not tracked at Woolworths — missing list [BCG]
+  🔪 Dunya (site)  $17.99/kg
+  🏆 Best local: $17.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Grilling Chops [MZH] expected=missing actual=missing PASS
+Halal Lamb Grilling Chops
+  not tracked at Woolworths — missing list [MZH]
+  🔪 Merjan Brothers Quality Meats  $17.00/kg (special) · min order 2kg for $33.99
+  🔪 Dunya (site)                   $19.99/kg
+  🏆 Best local: $17.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Cutlet [THX] expected=missing actual=missing PASS
+Halal Lamb Cutlet
+  not tracked at Woolworths — missing list [THX]
+  🔪 Dunya (site)  $37.99/kg
+  🏆 Best local: $37.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Neck Fillet (BBQ) [YTB] expected=missing actual=missing PASS
+Halal Lamb Neck Fillet (BBQ)
+  not tracked at Woolworths — missing list [YTB]
+  🔪 Dunya (site)  $29.99/kg
+  🏆 Best local: $29.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Backstrap [DBK] expected=missing actual=missing PASS
+Halal Lamb Backstrap
+  not tracked at Woolworths — missing list [DBK]
+  🔪 Dunya (site)  $32.99/kg
+  🏆 Best local: $32.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Fillet [SJG] expected=missing actual=missing PASS
+Halal Lamb Fillet
+  not tracked at Woolworths — missing list [SJG]
+  🔪 Dunya (site)  $29.99/kg
+  🏆 Best local: $29.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Finely Diced Lamb [KZT] expected=missing actual=missing PASS
+Halal Finely Diced Lamb
+  not tracked at Woolworths — missing list [KZT]
+  🔪 Dunya (site)  $23.99/kg
+  🏆 Best local: $23.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Diced Lamb (BBQ) [EUG] expected=missing actual=missing PASS
+Halal Diced Lamb (BBQ)
+  not tracked at Woolworths — missing list [EUG]
+  🔪 Dunya (site)  $27.99/kg
+  🏆 Best local: $27.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Stirfry [EWC] expected=missing actual=missing PASS
+Halal Lamb Stirfry
+  not tracked at Woolworths — missing list [EWC]
+  🔪 Dunya (site)  $23.99/kg
+  🏆 Best local: $23.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Diced Lamb (Cook) [UMD] expected=missing actual=missing PASS
+Halal Diced Lamb (Cook)
+  not tracked at Woolworths — missing list [UMD]
+  🔪 Dunya (site)  $23.99/kg
+  🏆 Best local: $23.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Topside [MUV] expected=missing actual=missing PASS
+Halal Lamb Topside
+  not tracked at Woolworths — missing list [MUV]
+  🔪 Dunya (site)  $24.99/kg
+  🏆 Best local: $24.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Premium Mince [DSY] expected=missing actual=missing FAIL: twin line missing
+Halal Lamb Premium Mince
+  not tracked at Woolworths — missing list [DSY]
+  🔪 Dunya (site)  $18.99/kg
+  🏆 Best local: $18.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Mince [GVJ] expected=missing actual=missing FAIL: twin line missing
+Halal Lamb Mince
+  not tracked at Woolworths — missing list [GVJ]
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Dunya (site)                   $15.99/kg
+  🏆 Best local: $15.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Curry [ZWX] expected=missing actual=missing PASS
+Halal Lamb Curry
+  not tracked at Woolworths — missing list [ZWX]
+  🔪 Dunya (site)                   $17.99/kg
+  🔪 Merjan Brothers Quality Meats  $27.99/kg (special)
+  🏆 Best local: $17.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Chicken Thighs [AQZ] expected=missing actual=missing PASS
+Halal Chicken Thighs
+  not tracked at Woolworths — missing list [AQZ]
+  🔪 Merjan Brothers Quality Meats  $11.00/kg (special) · min order 2kg for $21.99
+  🔪 Dunya (site)                   $15.99/kg
+  🏆 Best local: $11.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Marylands Skin-Off [RAB] expected=missing actual=missing PASS
+Halal Marylands Skin-Off
+  not tracked at Woolworths — missing list [RAB]
+  🔪 Dunya (site)  $10.99/kg
+  🏆 Best local: $10.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Drumstick [VCK] expected=missing actual=missing PASS
+Halal Drumstick
+  not tracked at Woolworths — missing list [VCK]
+  🔪 Merjan Brothers Quality Meats  $4.00/kg (special) · min order 5kg for $19.99
+  🔪 Dunya (site)                   $7.99/kg
+  🏆 Best local: $4.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Whole chicken s14 [ATN] expected=missing actual=missing PASS
+Halal Whole chicken s14
+  not tracked at Woolworths — missing list [ATN]
+  🔪 Merjan Brothers Quality Meats  $7.00/ea (special) · min order 5 for $34.99 — $7.00/ea
+  🔪 Dunya (site)                   $11.99/ea
+  🏆 Best local: $7.00 — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Chicken curry s14 [BWJ] expected=missing actual=missing PASS
+Halal Chicken curry s14
+  not tracked at Woolworths — missing list [BWJ]
+  🔪 Dunya (site)  $10.99/ea
+  🏆 Best local: $10.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Wings [QEV] expected=missing actual=missing PASS
+Halal Wings
+  not tracked at Woolworths — missing list [QEV]
+  🔪 Merjan Brothers Quality Meats  $4.00/kg (special) · min order 5kg for $19.99
+  🔪 Dunya (site)                   $7.99/kg
+  🏆 Best local: $4.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lebanese Chicken [DTP] expected=missing actual=missing PASS
+Halal Lebanese Chicken
+  not tracked at Woolworths — missing list [DTP]
+  🔪 Dunya (site)  $16.99/kg
+  🏆 Best local: $16.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Greek Lamb [KZJ] expected=missing actual=missing PASS
+Halal Greek Lamb
+  not tracked at Woolworths — missing list [KZJ]
+  🔪 Dunya (site)  $29.99/kg
+  🏆 Best local: $29.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Beef Sausages [TGK] expected=missing actual=missing FAIL: twin line missing
+Halal Beef Sausages
+  not tracked at Woolworths — missing list [TGK]
+  🔪 Dunya (site)  $12.99/kg
+  🏆 Best local: $12.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal chicken Sausage [ENG] expected=missing actual=missing PASS
+Halal chicken Sausage
+  not tracked at Woolworths — missing list [ENG]
+  🔪 Dunya (site)  $12.99/kg
+  🏆 Best local: $12.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Spicy Lamb sausage [DQP] expected=missing actual=missing PASS
+Halal Spicy Lamb sausage
+  not tracked at Woolworths — missing list [DQP]
+  🔪 Dunya (site)  $13.99/kg
+  🏆 Best local: $13.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Spicy Beef sausage [KNA] expected=missing actual=missing FAIL: twin line missing
+Halal Spicy Beef sausage
+  not tracked at Woolworths — missing list [KNA]
+  🔪 Dunya (site)  $13.99/kg
+  🏆 Best local: $13.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal lamb Sausages [ZRD] expected=missing actual=missing PASS
+Halal lamb Sausages
+  not tracked at Woolworths — missing list [ZRD]
+  🔪 Dunya (site)  $12.99/kg
+  🏆 Best local: $12.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb skewer [ZKQ] expected=missing actual=missing PASS
+Halal Lamb skewer
+  not tracked at Woolworths — missing list [ZKQ]
+  🔪 Dunya (site)  $3.99/ea
+  🏆 Best local: $3.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Kofte skewer [GQD] expected=missing actual=missing PASS
+Halal Kofte skewer
+  not tracked at Woolworths — missing list [GQD]
+  🔪 Dunya (site)  $2.99/ea
+  🏆 Best local: $2.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Chicken maryland [QYG] expected=missing actual=missing PASS
+Halal Chicken maryland
+  not tracked at Woolworths — missing list [QYG]
+  🔪 Merjan Brothers Quality Meats  $7.00/kg (special) · min order 5kg for $34.99
+  🔪 Dunya (site)                   $9.99/kg
+  🏆 Best local: $7.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lebanese Kofte [GMH] expected=missing actual=missing PASS
+Halal Lebanese Kofte
+  not tracked at Woolworths — missing list [GMH]
+  🔪 Dunya (site)  $16.99/kg
+  🏆 Best local: $16.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Turkish Kofte [FZH] expected=missing actual=missing PASS
+Halal Turkish Kofte
+  not tracked at Woolworths — missing list [FZH]
+  🔪 Dunya (site)  $16.99/kg
+  🏆 Best local: $16.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Turkish Adana [MBQ] expected=missing actual=missing PASS
+Halal Turkish Adana
+  not tracked at Woolworths — missing list [MBQ]
+  🔪 Dunya (site)  $16.99/kg
+  🏆 Best local: $16.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Skin Off Drum [BDW] expected=missing actual=missing PASS
+Halal Skin Off Drum
+  not tracked at Woolworths — missing list [BDW]
+  🔪 Dunya (site)  $8.99/kg
+  🏆 Best local: $8.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Boneless Lamb Shoulder (1.8kg) [RZA] expected=missing actual=missing PASS
+Halal Boneless Lamb Shoulder (1.8kg)
+  not tracked at Woolworths — missing list [RZA]
+  🔪 Dunya (site)  $44.99 / 1.8kg pack = $24.99/kg
+  🏆 Best local: $24.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Boneless Lamb Leg (2kg) [ARS] expected=missing actual=missing PASS
+Halal Boneless Lamb Leg (2kg)
+  not tracked at Woolworths — missing list [ARS]
+  🔪 Dunya (site)  $44.99 / 2kg pack = $22.50/kg
+  🏆 Best local: $22.50/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Beef Short Ribs [REH] expected=missing actual=missing FAIL: twin line missing
+Halal Beef Short Ribs
+  not tracked at Woolworths — missing list [REH]
+  🔪 Dunya (site)  $21.99/kg
+  🏆 Best local: $21.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Beef chuck steak [DTU] expected=missing actual=missing FAIL: twin line missing
+Halal Beef chuck steak
+  not tracked at Woolworths — missing list [DTU]
+  🔪 Dunya (site)  $18.99/kg
+  🏆 Best local: $18.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lebanese kofta – (4kg) [SDB] expected=missing actual=missing PASS
+Halal Lebanese kofta – (4kg)
+  not tracked at Woolworths — missing list [SDB]
+  🔪 Dunya (site)  $59.99 / 4kg pack = $15.00/kg
+  🏆 Best local: $15.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Ribs [JXV] expected=missing actual=missing PASS
+Halal Lamb Ribs
+  not tracked at Woolworths — missing list [JXV]
+  🔪 Dunya (site)                   $14.99/kg
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🏆 Best local: $14.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Beef eye-fillet 1.5 [CWQ] expected=missing actual=missing FAIL: twin line missing
+Halal Beef eye-fillet 1.5
+  not tracked at Woolworths — missing list [CWQ]
+  🔪 Dunya (site)  $69.99/ea
+  🏆 Best local: $69.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Beef Rib Eye [VRQ] expected=missing actual=missing FAIL: twin line missing
+Halal Beef Rib Eye
+  not tracked at Woolworths — missing list [VRQ]
+  🔪 Dunya (site)  $24.99/ea
+  🏆 Best local: $24.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal BBQ Sausages (4kg) [KDX] expected=missing actual=missing PASS
+Halal BBQ Sausages (4kg)
+  not tracked at Woolworths — missing list [KDX]
+  🔪 Dunya (site)  $49.99 / 4kg pack = $12.50/kg
+  🏆 Best local: $12.50/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Drumsticks – (5kg) [RPG] expected=missing actual=missing PASS
+Halal Drumsticks – (5kg)
+  not tracked at Woolworths — missing list [RPG]
+  🔪 Dunya (site)  $29.99 / 5kg pack = $6.00/kg
+  🏆 Best local: $6.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Full Wings – (5kg) [CRA] expected=missing actual=missing PASS
+Halal Full Wings – (5kg)
+  not tracked at Woolworths — missing list [CRA]
+  🔪 Dunya (site)  $24.99 / 5kg pack = $5.00/kg
+  🏆 Best local: $5.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Chicken Thigh – (5kg) [SNA] expected=missing actual=missing PASS
+Halal Chicken Thigh – (5kg)
+  not tracked at Woolworths — missing list [SNA]
+  🔪 Dunya (site)  $64.99 / 5kg pack = $13.00/kg
+  🏆 Best local: $13.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Chicken Breast – (5kg) [NTB] expected=missing actual=missing PASS
+Halal Chicken Breast – (5kg)
+  not tracked at Woolworths — missing list [NTB]
+  🔪 Dunya (site)  $54.99 / 5kg pack = $11.00/kg
+  🏆 Best local: $11.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Chicken Curry – (5kg) [SUD] expected=missing actual=missing PASS
+Halal Chicken Curry – (5kg)
+  not tracked at Woolworths — missing list [SUD]
+  🔪 Dunya (site)  $44.99 / 5kg pack = $9.00/kg
+  🏆 Best local: $9.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Tenderloin – (5kg) [WZF] expected=missing actual=missing PASS
+Halal Lamb Tenderloin – (5kg)
+  not tracked at Woolworths — missing list [WZF]
+  🔪 Dunya (site)  $134.99 / 5kg pack = $27.00/kg
+  🏆 Best local: $27.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Backstrap – (5kg) [ZVU] expected=missing actual=missing PASS
+Halal Lamb Backstrap – (5kg)
+  not tracked at Woolworths — missing list [ZVU]
+  🔪 Dunya (site)  $149.99 / 5kg pack = $30.00/kg
+  🏆 Best local: $30.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Shank – (5kg) [QVG] expected=missing actual=missing PASS
+Halal Lamb Shank – (5kg)
+  not tracked at Woolworths — missing list [QVG]
+  🔪 Dunya (site)  $79.99 / 5kg pack = $16.00/kg
+  🏆 Best local: $16.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Ribs – (5kg) [VQG] expected=missing actual=missing PASS
+Halal Lamb Ribs – (5kg)
+  not tracked at Woolworths — missing list [VQG]
+  🔪 Dunya (site)  $69.99 / 5kg pack = $14.00/kg
+  🏆 Best local: $14.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Turkish Kofta – (5kg) [KWM] expected=missing actual=missing PASS
+Halal Turkish Kofta – (5kg)
+  not tracked at Woolworths — missing list [KWM]
+  🔪 Dunya (site)  $74.99 / 5kg pack = $15.00/kg
+  🏆 Best local: $15.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Beef premium Mince [VFZ] expected=missing actual=missing FAIL: twin line missing
+Halal Beef premium Mince
+  not tracked at Woolworths — missing list [VFZ]
+  🔪 Dunya (site)  $17.99/kg
+  🏆 Best local: $17.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Mince – (5kg) [BMR] expected=missing actual=missing PASS
+Halal Mince – (5kg)
+  not tracked at Woolworths — missing list [BMR]
+  🔪 Dunya (site)  $69.99 / 5kg pack = $14.00/kg
+  🏆 Best local: $14.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Goat Curry – (5kg) [PTU] expected=missing actual=missing PASS
+Halal Goat Curry – (5kg)
+  not tracked at Woolworths — missing list [PTU]
+  🔪 Dunya (site)  $89.99 / 5kg pack = $18.00/kg
+  🏆 Best local: $18.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Curry – (5kg) [ZET] expected=missing actual=missing PASS
+Halal Lamb Curry – (5kg)
+  not tracked at Woolworths — missing list [ZET]
+  🔪 Dunya (site)  $89.99 / 5kg pack = $18.00/kg
+  🏆 Best local: $18.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Beef Burger [YVB] expected=missing actual=missing FAIL: twin line missing
+Halal Beef Burger
+  not tracked at Woolworths — missing list [YVB]
+  🔪 Dunya (site)  $17.99/kg
+  🏆 Best local: $17.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Beef Marrow Bones [NDQ] expected=missing actual=missing PASS
+Halal Beef Marrow Bones
+  not tracked at Woolworths — missing list [NDQ]
+  🔪 Dunya (site)  $7.99/ea
+  🏆 Best local: $7.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Chicken Breast Fillet [NRQ] expected=missing actual=missing PASS
+Halal Chicken Breast Fillet
+  not tracked at Woolworths — missing list [NRQ]
+  🔪 Merjan Brothers Quality Meats  $7.00/kg (special) · min order 5kg for $34.99
+  🔪 Dunya (site)                   $13.99/kg
+  🏆 Best local: $7.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Chicken Tenderloin – (5kg) [PSB] expected=missing actual=missing PASS
+Halal Chicken Tenderloin – (5kg)
+  not tracked at Woolworths — missing list [PSB]
+  🔪 Dunya (site)  $54.99 / 5kg pack = $11.00/kg
+  🏆 Best local: $11.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Chicken Maryland – (5kg) [EXW] expected=missing actual=missing PASS
+Halal Chicken Maryland – (5kg)
+  not tracked at Woolworths — missing list [EXW]
+  🔪 Dunya (site)  $39.99 / 5kg pack = $8.00/kg
+  🏆 Best local: $8.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Mid-Wings – (5kg) [KRN] expected=missing actual=missing PASS
+Halal Mid-Wings – (5kg)
+  not tracked at Woolworths — missing list [KRN]
+  🔪 Dunya (site)  $44.99 / 5kg pack = $9.00/kg
+  🏆 Best local: $9.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Chicken Mince [ENZ] expected=missing actual=missing FAIL: twin line missing
+Halal Chicken Mince
+  not tracked at Woolworths — missing list [ENZ]
+  🔪 Merjan Brothers Quality Meats  $9.00/kg (special) · min order 2kg for $17.99
+  🔪 Dunya (site)                   $13.99/kg
+  🏆 Best local: $9.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Chicken Curry s9 [EGT] expected=missing actual=missing PASS
+Halal Chicken Curry s9
+  not tracked at Woolworths — missing list [EGT]
+  🔪 Dunya (site)  $8.99/ea
+  🏆 Best local: $8.99 — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Loin Chops – (3kg) [PNM] expected=missing actual=missing PASS
+Halal Lamb Loin Chops – (3kg)
+  not tracked at Woolworths — missing list [PNM]
+  🔪 Dunya (site)  $49.99 / 3kg pack = $16.66/kg
+  🏆 Best local: $16.66/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lean Lamb Mince – (5kg) [ZDA] expected=missing actual=missing FAIL: twin line missing
+Halal Lean Lamb Mince – (5kg)
+  not tracked at Woolworths — missing list [ZDA]
+  🔪 Dunya (site)  $79.99 / 5kg pack = $16.00/kg
+  🏆 Best local: $16.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Lamb Mince – (5kg) [WHA] expected=missing actual=missing FAIL: twin line missing
+Halal Lamb Mince – (5kg)
+  not tracked at Woolworths — missing list [WHA]
+  🔪 Dunya (site)  $69.99 / 5kg pack = $14.00/kg
+  🏆 Best local: $14.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Beef Sirloin Steak [KMC] expected=missing actual=missing FAIL: twin line missing
+Halal Beef Sirloin Steak
+  not tracked at Woolworths — missing list [KMC]
+  🔪 Dunya (site)  $29.99/kg
+  🏆 Best local: $29.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal premium chuck Mince – (5kg) [HSZ] expected=missing actual=missing PASS
+Halal premium chuck Mince – (5kg)
+  not tracked at Woolworths — missing list [HSZ]
+  🔪 Dunya (site)  $79.99 / 5kg pack = $16.00/kg
+  🏆 Best local: $16.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Beef Mince [AUG] expected=missing actual=missing PASS
+Halal Beef Mince
+  not tracked at Woolworths — missing list [AUG]
+  🔪 Dunya (site)  $15.99/kg
+  🏆 Best local: $15.99/kg — Dunya (site)
+also at Woolworths (non-halal): $13.54 · 500g = $27.08/kg — Woolworths Beef Mince 500g
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Diced Beef [RJG] expected=missing actual=missing FAIL: twin line missing
+Halal Diced Beef
+  not tracked at Woolworths — missing list [RJG]
+  🔪 Dunya (site)  $18.99/kg
+  🏆 Best local: $18.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Beef Topside Steak [KJZ] expected=missing actual=missing FAIL: twin line missing
+Halal Beef Topside Steak
+  not tracked at Woolworths — missing list [KJZ]
+  🔪 Dunya (site)  $19.99/kg
+  🏆 Best local: $19.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Beef Rump [PKX] expected=missing actual=missing PASS
+Halal Beef Rump
+  not tracked at Woolworths — missing list [PKX]
+  🔪 Dunya (site)  $22.99/kg
+  🏆 Best local: $22.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Beef Stir Fry [DGR] expected=missing actual=missing PASS
+Halal Beef Stir Fry
+  not tracked at Woolworths — missing list [DGR]
+  🔪 Dunya (site)  $19.99/kg
+  🏆 Best local: $19.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Beef Minute Steak [GVK] expected=missing actual=missing FAIL: twin line missing
+Halal Beef Minute Steak
+  not tracked at Woolworths — missing list [GVK]
+  🔪 Dunya (site)  $19.99/kg
+  🏆 Best local: $19.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Eye silverside [SEX] expected=missing actual=missing PASS
+Halal Eye silverside
+  not tracked at Woolworths — missing list [SEX]
+  🔪 Dunya (site)  $19.99/kg
+  🏆 Best local: $19.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Beef Scotch Fillet [DKQ] expected=missing actual=missing FAIL: twin line missing
+Halal Beef Scotch Fillet
+  not tracked at Woolworths — missing list [DKQ]
+  🔪 Dunya (site)  $39.99/kg
+  🏆 Best local: $39.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Beef Gravy [KJM] expected=missing actual=missing PASS
+Halal Beef Gravy
+  not tracked at Woolworths — missing list [KJM]
+  🔪 Dunya (site)  $18.99/kg
+  🏆 Best local: $18.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Beef Osso Bucco [CEV] expected=missing actual=missing PASS
+Halal Beef Osso Bucco
+  not tracked at Woolworths — missing list [CEV]
+  🔪 Dunya (site)  $14.99/kg
+  🏆 Best local: $14.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Cos Lettuce [WJX] expected=missing actual=missing PASS
+Cos Lettuce
+  not tracked at Woolworths — missing list [WJX]
+  🍎 Abu Salim Fruit Market         $0.99/ea (special)
+  🔪 Dunya (site)                   $0.99/ea (special)
+  🍎 Fruitopia Mt Druitt            $0.99/ea (special)
+  🔪 Merjan Brothers Quality Meats  $0.99/ea (special)
+  🏆 Best local: $0.99 — Abu Salim Fruit Market
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Jap Pumpkin [FVJ] expected=not-tracked actual=not-tracked PASS
+Not tracked [FVJ]
+
+### Silverbeet [CFQ] expected=not-tracked actual=not-tracked PASS
+Not tracked [CFQ]
+
+### Sweet Corn [UAX] expected=not-tracked actual=not-tracked PASS
+Not tracked [UAX]
+
+### Artichoke [FNY] expected=not-tracked actual=not-tracked PASS
+Not tracked [FNY]
+
+### Beetroot Bunch [KGJ] expected=not-tracked actual=not-tracked PASS
+Not tracked [KGJ]
+
+### Telegraph Cucumber [VUH] expected=not-tracked actual=not-tracked PASS
+Not tracked [VUH]
+
+### Lebanese Bread [PEV] expected=not-tracked actual=not-tracked PASS
+Not tracked [PEV]
+
+### Chokos [AQN] expected=not-tracked actual=not-tracked PASS
+Not tracked [AQN]
+
+### Celery [ZAY] expected=not-tracked actual=not-tracked PASS
+Not tracked [ZAY]
+
+### Carrots 1kg Bag [YCE] expected=not-tracked actual=not-tracked PASS
+Not tracked [YCE]
+
+### Large Parsley Bunch [VCF] expected=not-tracked actual=not-tracked PASS
+Not tracked [VCF]
+
+### Washed Potatoes 5kg Bag [EJR] expected=not-tracked actual=not-tracked PASS
+Not tracked [EJR]
+
+### Brown Onions 5kg Bag [ZTS] expected=not-tracked actual=not-tracked PASS
+Not tracked [ZTS]
+
+### Eggplant [NWJ] expected=not-tracked actual=not-tracked PASS
+Not tracked [NWJ]
+
+### Cauliflower [JDY] expected=not-tracked actual=not-tracked PASS
+Not tracked [JDY]
+
+### Tomato [EYF] expected=tracked actual=tracked PASS
+Tomato · Each
+  🟢 Woolworths  $0.51
+  [EYF]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Yellow Capsicum [VQF] expected=not-tracked actual=not-tracked PASS
+Not tracked [VQF]
+
+### Lebanese Zucchini [YSE] expected=not-tracked actual=not-tracked PASS
+Not tracked [YSE]
+
+### Lebanese Cucumber 2kg Bag [UGZ] expected=not-tracked actual=not-tracked PASS
+Not tracked [UGZ]
+
+### Packham Pears [FBM] expected=not-tracked actual=not-tracked PASS
+Not tracked [FBM]
+
+### Pink Lady Apples [ZHG] expected=not-tracked actual=not-tracked PASS
+Not tracked [ZHG]
+
+### Strawberries [TUR] expected=tracked actual=tracked PASS
+Strawberries · 250g  🏠
+  🟢 Woolworths  $1.80 · 250g = $7.20/kg
+  [TUR]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### R2E2 Mangoes [BGX] expected=not-tracked actual=not-tracked PASS
+Not tracked [BGX]
+
+### brown onion [KSC] expected=missing actual=missing PASS
+brown onion
+  not tracked at Woolworths — missing list [KSC]
+  🍎 Fruitopia Mt Druitt  $3.99/kg
+  🏆 Best local: $3.99/kg — Fruitopia Mt Druitt
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### oregano leaves [EUR] expected=missing actual=missing PASS
+oregano leaves
+  not tracked at Woolworths — missing list [EUR]
+  🍎 Fruitopia Mt Druitt  $3.99/ea
+  🏆 Best local: $3.99 — Fruitopia Mt Druitt
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### nescafe latte kitkat [DPV] expected=missing actual=missing PASS
+nescafe latte kitkat
+  not tracked at Woolworths — missing list [DPV]
+  🍎 Fruitopia Mt Druitt  $2.99/ea
+  🏆 Best local: $2.99 — Fruitopia Mt Druitt
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### plastic bag [SZC] expected=missing actual=missing PASS
+plastic bag
+  not tracked at Woolworths — missing list [SZC]
+  🍎 Fruitopia Mt Druitt  $0.10/ea
+  🏆 Best local: $0.10 — Fruitopia Mt Druitt
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Banana Kids 5 [PXQ] expected=tracked actual=tracked PASS
+Banana Kids 5 · 5 Pk  🏠
+  🟢 Woolworths  $2.71
+  [PXQ]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Capsicum Green each [DSA] expected=tracked actual=tracked PASS
+Capsicum Green each · 220g  🏠
+  🟢 Woolworths  $1.34 · 220g = $6.09/kg
+  [DSA]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Spring Onion Bunch each [NWH] expected=na actual=na PASS
+Spring Onion Bunch each
+  🟢 Woolworths — unavailable this week (N/A 2026-09-02)
+  [NWH]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Woolworths Fresh Herb Coriander Bunch each [GWY] expected=tracked actual=tracked PASS
+Woolworths Fresh Herb Coriander Bunch each · Bunch  🏠
+  🟢 Woolworths  $2.97
+  [GWY]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Brown Onion 1Kg [PGW] expected=tracked actual=tracked PASS
+Brown Onion 1Kg · 1Kg  🏠
+  🟢 Woolworths  $2.26 · 1Kg = $2.26/kg
+  [PGW]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Royal Gala Apple 1 Kg [SGW] expected=tracked actual=tracked PASS
+Royal Gala Apple 1 Kg · 1 Kg
+  🟢 Woolworths  $7.50 · 1 Kg = $7.50/kg
+  [SGW]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Blueberries [MFG] expected=tracked actual=tracked PASS
+Blueberries · 170g  🏠
+  🟢 Woolworths  $3.61 · 170g = $21.24/kg
+  [MFG]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Raspberries Punnet 125g [CMB] expected=tracked actual=tracked PASS
+Raspberries Punnet 125g · 125g  🏠
+  🟢 Woolworths  $3.61 · 125g = $28.88/kg
+  [CMB]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Woolworths Beef Mince 500g [GJZ] expected=tracked actual=meat-local-only PASS
+Not tracked at Woolworths — missing list [EPJ]
+  🔪 Merjan Brothers Quality Meats  $4.00/kg (special) · min order 5kg for $19.99
+  🔪 Merjan Brothers Quality Meats  $4.00/kg (special) · min order 5kg for $19.99
+  🔪 Merjan Brothers Quality Meats  $4.00/kg (special) · min order 5kg for $19.99
+  🔪 Dunya (site)                   $24.99 / 5kg pack = $5.00/kg
+  🔪 Dunya (site)                   $29.99 / 5kg pack = $6.00/kg
+  🔪 Merjan Brothers Quality Meats  $7.00/kg (special) · min order 5kg for $34.99
+  🔪 Merjan Brothers Quality Meats  $7.00/kg (special) · min order 5kg for $34.99
+  🔪 Dunya (site)                   $7.99/kg
+  🔪 Dunya (site)                   $7.99/kg
+  🔪 Dunya (site)                   $7.99/kg
+  🔪 Dunya (site)                   $39.99 / 5kg pack = $8.00/kg
+  🔪 Dunya (site)                   $8.99/kg
+  🔪 Merjan Brothers Quality Meats  $9.00/kg (special) · min order 2kg for $17.99
+  🔪 Merjan Brothers Quality Meats  $9.00/kg (special) · min order 2kg for $17.99
+  🔪 Dunya (site)                   $44.99 / 5kg pack = $9.00/kg
+  🔪 Dunya (site)                   $44.99 / 5kg pack = $9.00/kg
+  🔪 Dunya (site)                   $9.99/kg
+  🔪 Dunya (site)                   $9.99/kg
+  🔪 Merjan Brothers Quality Meats  $10.00/kg (special) · min order 5kg for $49.99
+  🔪 Dunya (site)                   $10.99/kg
+  🔪 Dunya (site)                   $10.99/kg
+  🔪 Merjan Brothers Quality Meats  $11.00/kg (special) · min order 3kg for $32.99
+  🔪 Merjan Brothers Quality Meats  $11.00/kg (special) · min order 2kg for $21.99
+  🔪 Dunya (site)                   $54.99 / 5kg pack = $11.00/kg
+  🔪 Dunya (site)                   $54.99 / 5kg pack = $11.00/kg
+  🔪 Dunya (site)                   $49.99 / 4kg pack = $12.50/kg
+  🔪 Dunya (site)                   $12.99/kg
+  🔪 Dunya (site)                   $12.99/kg
+  🔪 Dunya (site)                   $12.99/kg
+  🔪 Dunya (site)                   $64.99 / 5kg pack = $13.00/kg
+  🔪 Dunya (site)                   $64.99 / 5kg pack = $13.00/kg
+  🔪 Dunya (site)                   $13.99/kg
+  🔪 Merjan Brothers Quality Meats  $13.99/kg
+  🔪 Dunya (site)                   $13.99/kg
+  🔪 Dunya (site)                   $13.99/kg
+  🔪 Dunya (site)                   $13.99/kg
+  🔪 Dunya (site)                   $13.99/kg
+  🔪 Dunya (site)                   $13.99/kg
+  🔪 Dunya (site)                   $13.99/kg
+  🔪 Dunya (site)                   $69.99 / 5kg pack = $14.00/kg
+  🔪 Dunya (site)                   $69.99 / 5kg pack = $14.00/kg
+  🔪 Dunya (site)                   $69.99 / 5kg pack = $14.00/kg
+  🔪 Dunya (site)                   $14.99/kg
+  🔪 Dunya (site)                   $14.99/kg
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Dunya (site)                   $59.99 / 4kg pack = $15.00/kg
+  🔪 Dunya (site)                   $74.99 / 5kg pack = $15.00/kg
+  🔪 Dunya (site)                   $15.99/kg
+  🔪 Dunya (site)                   $15.99/kg
+  🔪 Dunya (site)                   $15.99/kg
+  🔪 Dunya (site)                   $15.99/kg
+  🔪 Dunya (site)                   $15.99/kg
+  🔪 Merjan Brothers Quality Meats  $16.00/kg (special) · min order 2kg for $31.99
+  🔪 Dunya (site)                   $79.99 / 5kg pack = $16.00/kg
+  🔪 Dunya (site)                   $79.99 / 5kg pack = $16.00/kg
+  🔪 Dunya (site)                   $79.99 / 5kg pack = $16.00/kg
+  🔪 Dunya (site)                   $49.99 / 3kg pack = $16.66/kg
+  🔪 Dunya (site)                   $16.99/kg
+  🔪 Dunya (site)                   $16.99/kg
+  🔪 Dunya (site)                   $16.99/kg
+  🔪 Dunya (site)                   $16.99/kg
+  🔪 Dunya (site)                   $16.99/kg
+  🔪 Dunya (site)                   $16.99/kg
+  🔪 Merjan Brothers Quality Meats  $17.00/kg (special) · min order 2kg for $33.99
+  🔪 Dunya (site)                   $17.99/kg
+  🔪 Dunya (site)                   $17.99/kg
+  🔪 Dunya (site)                   $17.99/kg
+  🔪 Dunya (site)                   $17.99/kg
+  🔪 Dunya (site)                   $17.99/kg
+  🔪 Dunya (site)                   $89.99 / 5kg pack = $18.00/kg
+  🔪 Dunya (site)                   $89.99 / 5kg pack = $18.00/kg
+  🔪 Dunya (site)                   $18.99/kg
+  🔪 Dunya (site)                   $18.99/kg
+  🔪 Dunya (site)                   $18.99/kg
+  🔪 Dunya (site)                   $18.99/kg
+  🔪 Dunya (site)                   $18.99/kg
+  🔪 Dunya (site)                   $19.99/kg
+  🔪 Dunya (site)                   $19.99/kg
+  🔪 Dunya (site)                   $19.99/kg
+  🔪 Dunya (site)                   $19.99/kg
+  🔪 Dunya (site)                   $19.99/kg
+  🔪 Dunya (site)                   $21.99/kg
+  🔪 Dunya (site)                   $44.99 / 2kg pack = $22.50/kg
+  🔪 Dunya (site)                   $22.99/kg
+  🔪 Dunya (site)                   $23.99/kg
+  🔪 Dunya (site)                   $23.99/kg
+  🔪 Dunya (site)                   $23.99/kg
+  🔪 Dunya (site)                   $24.99/kg
+  🔪 Dunya (site)                   $44.99 / 1.8kg pack = $24.99/kg
+  🔪 Dunya (site)                   $134.99 / 5kg pack = $27.00/kg
+  🔪 Dunya (site)                   $27.99/kg
+  🔪 Merjan Brothers Quality Meats  $27.99/kg (special)
+  🔪 Dunya (site)                   $29.99/kg
+  🔪 Dunya (site)                   $29.99/kg
+  🔪 Dunya (site)                   $29.99/kg
+  🔪 Dunya (site)                   $29.99/kg
+  🔪 Dunya (site)                   $149.99 / 5kg pack = $30.00/kg
+  🔪 Dunya (site)                   $32.99/kg
+  🔪 Dunya (site)                   $37.99/kg
+  🔪 Dunya (site)                   $39.99/kg
+  🔪 Dunya (site)                   $2.99/ea
+  🔪 Dunya (site)                   $2.99/ea
+  🔪 Dunya (site)                   $3.99/ea
+  🔪 Merjan Brothers Quality Meats  $6.00/ea (special) · min order 2 for $11.99 — $6.00/ea
+  🔪 Dunya (site)                   $6.99/ea
+  🔪 Merjan Brothers Quality Meats  $7.00/ea (special) · min order 5 for $34.99 — $7.00/ea
+  🔪 Dunya (site)                   $7.99/ea
+  🔪 Dunya (site)                   $8.99/ea
+  🔪 Dunya (site)                   $8.99/ea
+  🔪 Dunya (site)                   $10.99/ea
+  🔪 Dunya (site)                   $10.99/ea
+  🔪 Dunya (site)                   $11.99/ea
+  🔪 Dunya (site)                   $21.99/ea
+  🔪 Dunya (site)                   $24.99/ea
+  🔪 Dunya (site)                   $29.99/ea
+  🔪 Dunya (site)                   $49.99/ea
+  🔪 Merjan Brothers Quality Meats  $49.99 (special) · Povi Masima bucket $49.99
+  🔪 Dunya (site)                   $69.99/ea
+  🏆 Best local: $4.00/kg — Merjan Brothers Quality Meats
+also at Woolworths (non-halal): $13.54 · 500g = $27.08/kg — Woolworths Beef Mince 500g
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Woolworths Little Gem Lettuce Green 2 pack [CHZ] expected=tracked actual=tracked PASS
+Woolworths Little Gem Lettuce Green 2 pack · 2 pack  🏠
+  🟢 Woolworths  $4.43
+  [CHZ]
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal BBQ Blade Steak /kg [RVS] expected=missing actual=missing PASS
+Halal BBQ Blade Steak /kg
+  not tracked at Woolworths — missing list [RVS]
+  🔪 Merjan Brothers Quality Meats  $16.00/kg (special) · min order 2kg for $31.99
+  🏆 Best local: $16.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Flavoured Sausages /kg [YRU] expected=missing actual=missing PASS
+Halal Flavoured Sausages /kg
+  not tracked at Woolworths — missing list [YRU]
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🏆 Best local: $15.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Sausages /kg [GDJ] expected=missing actual=missing PASS
+Halal Sausages /kg
+  not tracked at Woolworths — missing list [GDJ]
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🏆 Best local: $15.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Goat Curry /kg [NZH] expected=missing actual=missing PASS
+Halal Goat Curry /kg
+  not tracked at Woolworths — missing list [NZH]
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🏆 Best local: $15.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+
+### Halal Povi Masima Bucket [XBV] expected=missing actual=missing PASS
+Halal Povi Masima Bucket
+  not tracked at Woolworths — missing list [XBV]
+  🔪 Merjan Brothers Quality Meats  $49.99 (special) · Povi Masima bucket $49.99
+  🏆 Best local: $49.99 — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code

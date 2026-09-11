@@ -1,0 +1,27 @@
+item,code,format,command,rc,verdict,reply
+Halal chicken breast strips,AXW,name-exact,price --item Halal chicken breast strips,0,PASS,"Halal chicken breast strips
+  not tracked at Woolworths — missing list [AXW]
+  🔪 Dunya (site)                   $13.99/kg
+  🔪 Merjan Brothers Quality Meats  $13.99/kg
+  🏆 Best local: $13.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal chicken breast diced,XJA,name-exact,price --item Halal chicken breast diced,0,PASS,"Halal chicken breast diced
+  not tracked at Woolworths — missing list [XJA]
+  🔪 Dunya (site)  $13.99/kg
+  🏆 Best local: $13.99/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Chicken Breast – (5kg),NTB,name-exact,price --item Halal Chicken Breast – (5kg),0,PASS,"Halal Chicken Breast – (5kg)
+  not tracked at Woolworths — missing list [NTB]
+  🔪 Dunya (site)  $54.99 / 5kg pack = $11.00/kg
+  🏆 Best local: $11.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Chicken Breast – (5kg),NTB,pack-routing,price --item halal chicken breast 5kg,0,PASS,"Not tracked at Woolworths — missing list [NTB]
+  🔪 Dunya (site)  $54.99 / 5kg pack = $11.00/kg
+  🏆 Best local: $11.00/kg — Dunya (site)
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
+Halal Chicken Breast Fillet,NRQ,name-exact,price --item Halal Chicken Breast Fillet,0,PASS,"Halal Chicken Breast Fillet
+  not tracked at Woolworths — missing list [NRQ]
+  🔪 Merjan Brothers Quality Meats  $7.00/kg (special) · min order 5kg for $34.99
+  🔪 Dunya (site)                   $13.99/kg
+  🏆 Best local: $7.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code"
