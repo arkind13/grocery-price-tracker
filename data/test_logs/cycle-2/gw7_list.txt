@@ -1,0 +1,11 @@
+Missing list — **110 items** (rows with a local price but no Woolworths price/keyword yet). Breakdown:
+
+- **Chicken** — 31 items (whole s9/s14, breast fillet/diced/strips, thighs, drumsticks, wings, marylands, mince, tenders, 5kg packs…)
+- **Lamb** — 30 items (mince, necks, ribs, chops, curry cuts, backstrap, cutlets, shanks, shoulders, 5kg packs…)
+- **Beef & kofta** — 26 items (mince, curry, diced, osso bucco, ribs, steaks, sausages, kofte, adana…)
+- **Merjan weekend specials** — 5 items (BBQ blade steak, sausages ×2, goat curry, povi masima bucket)
+- **Fruitopia extras** — 4 items (cos lettuce 99c, brown onion $3.99, oregano $3.99, nescafe kitkat $2.99, plastic bag 10c)
+
+These are all halal butcher items — Woolworths prices don't exist for most of them, so they sit on the missing list until you fill col D + G or mark them `gone`/`remove`.
+
+Want the full 110-line dump, or a batch verdict pass on some (e.g. `NTB gone` from this morning)?

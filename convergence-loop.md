@@ -71,16 +71,29 @@ and ZERO new findings. Only then is the loop DONE.
   - FIXED+verified: the 4 pack-presentation rows, lamb necks merge,
     goat curry both-presentations, beef mince twin line, multibuy
     terms, chicken breast 5kg routing
-  - OPEN: D2 (price-of dump, 6) · D3 cousin codes (6) · lamb-necks
-    header flip (1) · GW relay discipline (agent layer) · the v2_read
-    VPS sync blocker (py3.11 refactor) · the specials scope question
-    (user decision)
+  - OPEN (was): D2 (price-of dump, 6) · D3 cousin codes (6) ·
+    lamb-necks header flip (1) · GW relay discipline (agent layer) ·
+    the v2_read VPS sync blocker (py3.11 refactor) · the specials
+    scope question (user decision)
+- **Cycle 2 (FIX then CHECK) — 2026-09-11 evening:** the whole open
+  list above is FIXED (commits `8014417`, `6cf5b13`) except the
+  specials-scope user decision (escalation, not blocking):
+  matched-row citation (best token match, never sheet order), NL
+  filler strip + GJZ §8 tracked-class + honest no-code unfiltered
+  pool, plural/stem-folded realistic forms, D1 design ruling encoded
+  in the audit judging, container-parity `_note_text` refactor +
+  py3.11 guard test (sync blocker CLOSED — the named exception is
+  retired), gateway relay discipline in the grocery-price skill.
+  Semantic sweep came back 143/143. Goat-curry standing pin updates:
+  bare "goat curry" now cites the matched /kg row [NZH] (the same
+  principle that fixed AUG/AQZ); [PTU] remains the 5kg pack row.
 - **D1 reclassified BY DESIGN** (user ruling 2026-09-11): the halal
   keyword gates the BUTCHER search — without it, butchers are not
   searched, and that is correct. The audit's meat judging must treat
   bare protein queries as Woolworths-scope answers (halal-scoped
   cluster + missing-list answers are only expected for "halal …"
   queries). Produce plural/noun-first misses remain REAL defects.
+  (Encoded in `tools/item_audit.py` judge_matrix, 2026-09-11.)
 
 ## The standing prompts
 

@@ -1,0 +1,136 @@
+item,code,format,command,rc,verdict,reply
+Halal Lamb Loin Chops,BCG,exact,Halal Lamb Loin Chops,0,PASS,"Halal Lamb Loin Chops
+  not tracked at Woolworths — missing list [BCG]
+  🔪 Dunya (site)  $17.99/kg
+  🏆 Best local: $17.99/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Lamb Loin Chops,BCG,drift-shuffle,Chops Halal Lamb Loin,0,PASS,"Not tracked at Woolworths — missing list [BCG]
+  🔪 Dunya (site)  $49.99 / 3kg pack = $16.66/kg
+  🔪 Dunya (site)  $17.99/kg
+  🏆 Best local: $16.66/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Lamb Loin Chops,BCG,drift-plural,Halal Lamb Loin Chop,0,PASS,"Not tracked at Woolworths — missing list [BCG]
+  🔪 Dunya (site)  $49.99 / 3kg pack = $16.66/kg
+  🔪 Dunya (site)  $17.99/kg
+  🏆 Best local: $16.66/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Lamb Loin Chops,BCG,no-halal-prefix,Lamb Loin Chops,0,PASS,"Not tracked at Woolworths — missing list [BCG]
+  🔪 Dunya (site)  $49.99 / 3kg pack = $16.66/kg
+  🔪 Dunya (site)  $17.99/kg
+  🏆 Best local: $16.66/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Lamb Loin Chops,BCG,round2-variant,lamb loin chops halal,0,PASS,"Not tracked at Woolworths — missing list [BCG]
+  🔪 Dunya (site)  $49.99 / 3kg pack = $16.66/kg
+  🔪 Dunya (site)  $17.99/kg
+  🏆 Best local: $16.66/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Lamb Loin Chops – (3kg),PNM,exact,Halal Lamb Loin Chops – (3kg),0,PASS,"Halal Lamb Loin Chops – (3kg)
+  not tracked at Woolworths — missing list [PNM]
+  🔪 Dunya (site)  $49.99 / 3kg pack = $16.66/kg
+  🏆 Best local: $16.66/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Lamb Loin Chops – (3kg),PNM,drift-shuffle,(3kg) Halal Lamb Loin Chops –,0,PASS,"Halal Lamb Loin Chops – (3kg)
+  not tracked at Woolworths — missing list [PNM]
+  🔪 Dunya (site)  $49.99 / 3kg pack = $16.66/kg
+  🏆 Best local: $16.66/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Lamb Loin Chops – (3kg),PNM,drift-plural,Halal Lamb Loin Chop – (3kg),0,PASS,"Halal Lamb Loin Chops – (3kg)
+  not tracked at Woolworths — missing list [PNM]
+  🔪 Dunya (site)  $49.99 / 3kg pack = $16.66/kg
+  🏆 Best local: $16.66/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Lamb Loin Chops – (3kg),PNM,no-halal-prefix,Lamb Loin Chops – (3kg),0,PASS,"Halal Lamb Loin Chops – (3kg)
+  not tracked at Woolworths — missing list [PNM]
+  🔪 Dunya (site)  $49.99 / 3kg pack = $16.66/kg
+  🏆 Best local: $16.66/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Lamb Loin Chops – (3kg),PNM,round2-variant,lamb loin chops 3kg halal,0,PASS,"Halal Lamb Loin Chops – (3kg)
+  not tracked at Woolworths — missing list [PNM]
+  🔪 Dunya (site)  $49.99 / 3kg pack = $16.66/kg
+  🏆 Best local: $16.66/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Mince – (5kg),BMR,exact,Halal Mince – (5kg),0,PASS,"Halal Mince – (5kg)
+  not tracked at Woolworths — missing list [BMR]
+  🔪 Dunya (site)  $69.99 / 5kg pack = $14.00/kg
+  🏆 Best local: $14.00/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Mince – (5kg),BMR,drift-shuffle,(5kg) Halal Mince –,0,PASS,"Halal Mince – (5kg)
+  not tracked at Woolworths — missing list [BMR]
+  🔪 Dunya (site)  $69.99 / 5kg pack = $14.00/kg
+  🏆 Best local: $14.00/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Mince – (5kg),BMR,drift-plural,Halal Minces – (5kg),0,PASS,"Halal Mince – (5kg)
+  not tracked at Woolworths — missing list [BMR]
+  🔪 Dunya (site)  $69.99 / 5kg pack = $14.00/kg
+  🏆 Best local: $14.00/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Mince – (5kg),BMR,no-halal-prefix,Mince – (5kg),0,PASS,"Halal Mince – (5kg)
+  not tracked at Woolworths — missing list [BMR]
+  🔪 Dunya (site)  $69.99 / 5kg pack = $14.00/kg
+  🏆 Best local: $14.00/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Halal Mince – (5kg),BMR,round2-variant,mince 5kg halal,0,PASS,"Halal Mince – (5kg)
+  not tracked at Woolworths — missing list [BMR]
+  🔪 Dunya (site)  $69.99 / 5kg pack = $14.00/kg
+  🏆 Best local: $14.00/kg — Dunya (site)
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Strawberries,TUR,exact,Strawberries,0,PASS,"Strawberries · 250g  🏠
+  🟢 Woolworths  $1.80 · 250g = $7.20/kg
+  [TUR]
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Strawberries,TUR,drift-plural,Strawberry,0,PASS,"Strawberries · 250g  🏠
+  🟢 Woolworths  $1.80 · 250g = $7.20/kg
+  [TUR]
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Strawberries,TUR,round2-variant, strawberries,0,PASS,"Strawberries · 250g  🏠
+  🟢 Woolworths  $1.80 · 250g = $7.20/kg
+  [TUR]
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+R2E2 Mangoes,BGX,exact,R2E2 Mangoes,0,PASS,Not tracked [BGX]
+R2E2 Mangoes,BGX,drift-shuffle,Mangoes R2E2,0,PASS,Not tracked [BGX]
+R2E2 Mangoes,BGX,drift-plural,R2E2 Mango,0,PASS,Not tracked [BGX]
+R2E2 Mangoes,BGX,round2-variant,mangoes r2e2,0,PASS,Not tracked [BGX]
+Woolworths Fresh Herb Coriander Bunch each,GWY,exact,Woolworths Fresh Herb Coriander Bunch each,0,PASS,"Woolworths Fresh Herb Coriander Bunch each · Bunch  🏠
+  🟢 Woolworths  $2.97
+  [GWY]
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Woolworths Fresh Herb Coriander Bunch each,GWY,drift-shuffle,each Woolworths Fresh Herb Coriander Bunch,0,PASS,"Woolworths Fresh Herb Coriander Bunch each · Bunch  🏠
+  🟢 Woolworths  $2.97
+  [GWY]
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Woolworths Fresh Herb Coriander Bunch each,GWY,drift-plural,Woolworths Fresh Herb Coriander Bunchs each,0,PASS,"Woolworths Fresh Herb Coriander Bunch each · Bunch  🏠
+  🟢 Woolworths  $2.97
+  [GWY]
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Woolworths Fresh Herb Coriander Bunch each,GWY,round2-variant,fresh herb coriander bunch each woolworths,0,PASS,"Woolworths Fresh Herb Coriander Bunch each · Bunch  🏠
+  🟢 Woolworths  $2.97
+  [GWY]
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Blueberries,MFG,exact,Blueberries,0,PASS,"Blueberries · 170g  🏠
+  🟢 Woolworths  $3.61 · 170g = $21.24/kg
+  [MFG]
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Blueberries,MFG,drift-plural,Blueberry,0,PASS,"Blueberries · 170g  🏠
+  🟢 Woolworths  $3.61 · 170g = $21.24/kg
+  [MFG]
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Blueberries,MFG,round2-variant, blueberries,0,PASS,"Blueberries · 170g  🏠
+  🟢 Woolworths  $3.61 · 170g = $21.24/kg
+  [MFG]
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Woolworths Little Gem Lettuce Green 2 pack,CHZ,exact,Woolworths Little Gem Lettuce Green 2 pack,0,PASS,"Woolworths Little Gem Lettuce Green 2 pack · 2 pack  🏠
+  🟢 Woolworths  $4.43
+  [CHZ]
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Woolworths Little Gem Lettuce Green 2 pack,CHZ,drift-shuffle,pack Woolworths Little Gem Lettuce Green 2,0,PASS,"Woolworths Little Gem Lettuce Green 2 pack · 2 pack  🏠
+  🟢 Woolworths  $4.43
+  [CHZ]
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Woolworths Little Gem Lettuce Green 2 pack,CHZ,drift-plural,Woolworths Little Gem Lettuce Green 2 packs,0,PASS,"Woolworths Little Gem Lettuce Green 2 pack · 2 pack  🏠
+  🟢 Woolworths  $4.43
+  [CHZ]
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"
+Woolworths Little Gem Lettuce Green 2 pack,CHZ,round2-variant,little gem lettuce green 2 pack woolworths,0,PASS,"Woolworths Little Gem Lettuce Green 2 pack · 2 pack  🏠
+  🟢 Woolworths  $4.43
+  [CHZ]
+  ⏱️ 2026-09-12 · [CODE] = sheet Item_Code"

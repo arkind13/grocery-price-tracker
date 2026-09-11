@@ -333,7 +333,10 @@ def _toggle_plural(name: str) -> str:
     '500g'), code-ish tokens ('s9/s14', 'R2E2') and 'each' are never
     toggled — '(5kg)s'/'500gs' was a generator artifact no shopper
     sends (run-2 'mangled' bucket), so the plural probe now lands on
-    the word a real message would pluralise."""
+    the word a real message would pluralise. -ies/-oes words get
+    their PROPER singular ('Strawberries' -> 'Strawberry',
+    'Mangoes' -> 'Mango'), not the naive 'Strawberrie'/'Mangoe'
+    typo forms (cycle-2 mangled bucket)."""
     toks = name.split()
     for i in range(len(toks) - 1, -1, -1):
         t = toks[i]
@@ -341,7 +344,15 @@ def _toggle_plural(name: str) -> str:
                 or any(c.isdigit() for c in t) \
                 or t.lower() in ("each", "ea") or len(t) <= 2:
             continue
-        toks[i] = t[:-1] if t.endswith("s") else t + "s"
+        low = t.lower()
+        if low.endswith("ies") and len(t) > 4:
+            toks[i] = t[:-3] + "y"
+        elif low.endswith("oes") and len(t) > 4:
+            toks[i] = t[:-2]
+        elif low.endswith(("ches", "shes", "xes")) and len(t) > 4:
+            toks[i] = t[:-2]
+        else:
+            toks[i] = t[:-1] if t.endswith("s") else t + "s"
         break
     return " ".join(toks)
 

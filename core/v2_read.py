@@ -23,7 +23,14 @@ IGNORED_PATH = (Path(__file__).resolve().parent.parent / "data"
 _DOMAIN_LABELS = ({normalize_subcategory(s) for s in BUTCHERY_DOMAIN}
                   | {normalize_subcategory(s)
                      for s in PRODUCE_SUBCATEGORIES}
-                  | {"butchery", "fruit & veg"})
+                  | {"butchery", "fruit & veg"}
+                  # cycle-2 check 2026-09-11: live-sheet WW rows carry
+                  # these produce subs; without them their drift forms
+                  # were judged out-of-domain and answered bare
+                  # ('Woolworths … Lettuce/coriander' — codes CHZ/GWY).
+                  # Kept here, not in the shared PRODUCE taxonomy, so
+                  # the finished migration's borderline pins stand.
+                  | {"lettuce", "coriander"})
 
 _NA_RE_MARKERS = ("n/a", "unavailable")
 
@@ -142,10 +149,13 @@ def _query_tokens(query: str) -> list:
 
 def _fold(token: str) -> str:
     """Light plural fold — one word, both directions. tomato/tomatoes,
-    berry/berries, box/boxes, hero/heroes, thigh/thighs, kg/kgs."""
+    berry/berries, box/boxes, hero/heroes, thigh/thighs, kg/kgs —
+    and the typo forms ('Strawberrie' folds like 'Strawberry')."""
     t = token
     if len(t) > 4 and t.endswith("ies"):
         return t[:-3] + "y"
+    if len(t) > 4 and t.endswith("ie"):
+        return t[:-2] + "y"
     if len(t) > 4 and t.endswith(
             ("shes", "ches", "xes", "zes", "ses", "oes")):
         return t[:-2]
@@ -245,15 +255,17 @@ def _pack_master_hit(query: str, master_rows: list, meat: bool):
 
     Rule: the query's size token (kg/g) equals the row's pack size
     (col C, else the name) AND every other query token appears in
-    the row name (word-boundary). An exact token-SET match wins over
-    containment so 'lamb mince 5kg' takes 'Halal Lamb Mince – (5kg)'
-    [WHA], not 'Halal Lean Lamb Mince – (5kg)' [ZDA]. Meat queries
-    still resolve through halal-named rows only (spec §5)."""
+    the row name (word-boundary, plural-folded). When a whole pack
+    family matches ('Halal Minces – (5kg)' vs the lamb/beef/chuck
+    5kg rows), the MATCHED row wins by the _best_token_row ranking —
+    never first-in-sheet-order (cycle-2 check: the generic 'Halal
+    Minces' probe cited [WHA] instead of [BMR], the same accident
+    class as the lamb-necks regression). Meat queries still resolve
+    through halal-named rows only (spec §5)."""
     kg, tokens = _size_split(query)
     if kg is None or not tokens:
         return None
-    token_set = set(tokens)
-    equal = contains = None
+    candidates = []
     for master in master_rows:
         name = str(master["name"] or "")
         low = name.lower()
@@ -264,12 +276,8 @@ def _pack_master_hit(query: str, master_rows: list, meat: bool):
             continue
         if not _name_has_all(low, tokens):
             continue
-        if contains is None:
-            contains = master
-        if equal is None and set(_size_split(low)[1]) == token_set:
-            equal = master
-            break
-    return equal or contains
+        candidates.append(master)
+    return _best_token_row(candidates, tokens)
 
 
 def _non_halal_twin(query: str, master_rows: list,

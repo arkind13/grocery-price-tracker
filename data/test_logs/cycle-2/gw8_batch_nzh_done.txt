@@ -1,0 +1,10 @@
+Same as NTB — `done` is verify-only and NZH (**Halal Goat Curry /kg**, sheet row 143) still has both blanks:
+
+- **col D** — Woolworths price
+- **col G** — search keyword
+
+To close it out:
+1. Fill D + G in the sheet yourself, then I'll re-run `batch NZH done` to verify ✅
+2. Or if Woolworths doesn't stock goat curry, say the word and I'll run `batch NZH gone` (or `remove` to drop the row entirely)
+
+Which?

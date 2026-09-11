@@ -237,6 +237,54 @@ class TestRealisticForms(unittest.TestCase):
         self.assertEqual(res["code"], "VCK")
         self.assertEqual(res["status"], "missing")
 
+    def test_generic_pack_family_cites_its_own_row(self):
+        # cycle-2 matrix: 'Halal Minces – (5kg)' matched the whole
+        # 5kg mince family and cited the sheet-first row [WHA]; the
+        # pack ranking must pick the row the query actually names
+        master = [
+            _m("Halal Mince – (5kg)", "BMR", sub="butchery"),
+            _m("Halal Lamb Mince – (5kg)", "WHA", sub="butchery"),
+            _m("Halal BEEF MINCE (5KG)", "EPJ", sub="butchery"),
+        ]
+        ld = [_l("Halal Mince – (5kg)", "BMR", dunya="49.99")]
+        res = lookup_item("Halal Minces – (5kg)", master, ld)
+        self.assertEqual(res["code"], "BMR")
+
+    def test_ies_typo_forms_still_find_rows(self):
+        # cycle-2 mangled bucket: 'Strawberrie'/'Blueberrie' folds
+        # like 'Strawberry'/'Blueberry' -> the row is found
+        master = [
+            _m("Strawberries", "TUR", sub="strawberries"),
+            _m("Blueberries", "MFG", sub="blueberries"),
+        ]
+        ld = [_l("Strawberries", "TUR", dunya="3.99")]
+        self.assertEqual(lookup_item("Strawberrie", master, ld)
+                         ["code"], "TUR")
+        self.assertEqual(lookup_item("Blueberrie", master, ld)
+                         ["code"], "MFG")
+
+    def test_new_produce_taxonomy_rows_found_by_drift(self):
+        # cycle-2 matrix: 'coriander'/'lettuce' subs were outside the
+        # produce taxonomy, so drift forms answered bare not-tracked
+        master = [
+            _m("Woolworths Fresh Herb Coriander Bunch each", "GWY",
+               ww="3.30", sub="coriander"),
+            _m("Woolworths Little Gem Lettuce Green 2 pack", "CHZ",
+               ww="4.90", sub="lettuce"),
+        ]
+        for q, code in (
+                ("each Woolworths Fresh Herb Coriander Bunch", "GWY"),
+                ("Woolworths Fresh Herb Coriander Bunchs each",
+                 "GWY"),
+                ("fresh herb coriander bunch each woolworths",
+                 "GWY"),
+                ("pack Woolworths Little Gem Lettuce Green 2", "CHZ"),
+                ("Woolworths Little Gem Lettuce Green 2 packs",
+                 "CHZ")):
+            res = lookup_item(q, master, [])
+            self.assertEqual(res["status"], "tracked", q)
+            self.assertEqual(res["code"], code, q)
+
 
 class TestUnfilteredPoolHonesty(unittest.TestCase):
     """run-2 D2 half-b: the last-resort pool (2026-09-10 user fix: a
