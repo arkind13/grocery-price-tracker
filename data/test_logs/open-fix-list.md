@@ -18,13 +18,17 @@ regression test, then strikes the line with proof.
    to per-kg + terms before the cell write, regression-test all three
    board layouts (combined grid / chicken view / meat view).
 
-1. **[GW agent-layer, observed-not-failing]** On open "compare …"
-   phrasings the gateway agent prefers live web enrichment over the
-   sheet's canonical twin line and editorialises about sheet
-   freshness ("mis-entered" — it isn't). Local-shop relays are now
-   complete and the raw-quote-as-twin fault did NOT recur in cycle 3.
-   Deterministic CLI contract re-proven byte-exact. Documented
-   behaviour; revisit only if the user wants the twin line forced.
+1. **[GW agent-layer — CLOSED by user decision 2026-09-12]** On
+   compare phrasings where the sheet has NO non-halal twin row, the
+   gateway live-fills the supermarket side (disclosed every time; the
+   halal/sheet side is always correct). Root cause found by the
+   user's own experiments: the sheet has exactly ONE plain twin row,
+   and with a twin present the compare relay is perfectly sheet-first
+   ("no live search" magic words also force strict sheet-only).
+   The user ACCEPTED the live-fill on twin gaps (declined creating
+   twin rows — the two tabs stay exact row-to-row mirrors by design),
+   and keeps the "no live search" magic words as the strictness
+   tool. No further action.
 2. **[USER DECISION] `specials` scope (carried from run 1/2)** —
    the gateway agent surfaces local-shop specials; the CLI verb is
    Woolworths-scoped per spec. Update the spec story (two layers) or
