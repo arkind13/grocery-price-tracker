@@ -1,0 +1,11 @@
+Chicken wings — halal vs non-halal (CLI render):
+
+```
+Not tracked at Woolworths — missing list [DRW]
+  🔪 Merjan Brothers Quality Meats  $9.00/kg (special) · min order 2kg for $17.99
+  🔪 Dunya (site)                   $9.99/kg
+  🏆 Best local: $9.00/kg — Merjan Brothers Quality Meats
+also at Woolworths (non-halal): $8.58 · 1kg = $8.58/kg — Woolworths Chicken Wings 1kg
+```
+
+Woolworths edges it by 42c/kg — but note the sheet's Merjan line here shows mid-wings ($9/kg); their **plain wings are actually $4.00/kg** (5kg/$19.99) per the specials board, which would make halal the clear winner at less than half WW's price.

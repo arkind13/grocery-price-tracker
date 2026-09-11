@@ -1,0 +1,11 @@
+Goat curry — sheet only (CLI render):
+
+```
+Not tracked at Woolworths — missing list [NZH]
+  🔪 Merjan Brothers Quality Meats  $15.00/kg (special) · min order 2kg for $29.99
+  🔪 Dunya (site)                   $89.99 / 5kg pack = $18.00/kg
+  🏆 Best local: $15.00/kg — Merjan Brothers Quality Meats
+  ⏱️ 2026-09-11 · [CODE] = sheet Item_Code
+```
+
+Halal: Merjan $15/kg wins over Dunya's 5kg pack ($18/kg equivalent). Non-halal: no sheet price — goat curry isn't tracked at Woolworths (missing-list item NZH).
