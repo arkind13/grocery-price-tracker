@@ -139,6 +139,30 @@ No "save the image", no "done", no instructions to act — the digest IS
 the action, and questions are the only thing you ever need to answer.
 The watch-folder is for instant results outside the sweep windows.
 
+## ID-4 — DOMAIN GATE (implemented 2026-09-11, live)
+
+**Butcheries do not stock produce; fruit & veg shops do not stock
+meat.** Enforced at BOTH layers after the Cos-Lettuce-99c-at-Merjan
+incident:
+
+1. **Ingest gate** (`core/local_deals.py::domain_gate_skip`, wired into
+   merge_store_tab): a butchery-sourced produce deal (or a fruit-shop
+   meat deal) is SKIPPED with a logged `[domain gate]` report line —
+   never written to the tab, never compared. Unclassifiable items pass
+   (recorded, per the original out-of-domain design). Regression test:
+   the merjan lettuce merge is blocked end-to-end.
+2. **Digest gate**: price lines only cite shops whose domain matches
+   the item (produce → fruit shops; meat → butcheries). The
+   "99c everywhere: Merjan, Dunya FB…" mislabel class is dead.
+3. **Data cleanup**: the Cos Lettuce row's invalid butchery cells
+   (Dunya_FB 0.99 + Merjan 0.99) were cleared, ledger recorded; the
+   legitimate Fruitopia + Abu Salim 0.99 specials remain.
+4. The Cos Lettuce mystery itself — a butchery board listing lettuce —
+   is the shops' own combined-board behaviour; the ingest now refuses
+   to record it under a butcher's name. If the user ever reports a
+   REAL butcher lettuce price, it goes in via a manual row or the
+   rename path, never the auto-ingest.
+
 ## Open questions for the user (answer before coding — planner collects more)
 
 1. S5 phrasing: is "reply with the date or 'open'" the interaction you want?
