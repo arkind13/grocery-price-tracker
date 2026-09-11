@@ -415,6 +415,62 @@ class TestQuestionsLifecycle(unittest.TestCase):
                 self.assertIn("till 12 Sep",
                               str(stamped[-1]))
 
+    def test_set_date_without_file_resolves_open_question(self):
+        """User directive 2026-09-12: the ONE-command reply form
+        (--set-date CODE DATE) — the file reference auto-resolves
+        from the code's single open expiry question; the sweep's
+        fb: file rides along to the post log; the question clears.
+        No questions.json / post-log spelunking needed."""
+        import tempfile as tf
+        with tf.TemporaryDirectory() as tmp:
+            with patch.object(ld, "INBOX_DIR", Path(tmp)), \
+                    patch.object(ld, "QUESTIONS_PATH",
+                                 Path(tmp) / "q.json"), \
+                    patch.object(ld, "POST_LOG_PATH",
+                                 Path(tmp) / "p.json"), \
+                    patch.object(ld, "SCAN_STATE_PATH",
+                                 Path(tmp) / "s.json"), \
+                    patch("core.sheets_client.connect_worksheet",
+                          side_effect=RuntimeError("no sheet")):
+                ld.open_question(
+                    "expiry", "MER1209260507",
+                    "fb:122188809842942477", "merjan", "ask")
+                rc = ld.set_date_cmd("MER1209260507", None,
+                                     "2026-09-13")
+                self.assertEqual(rc, 0)
+                self.assertEqual(ld._load_questions(), [])
+                entries = ld._load_post_log()
+                self.assertTrue(any(
+                    e["code"] == "MER1209260507"
+                    and e["file"] == "fb:122188809842942477"
+                    and e["valid_until"] == "2026-09-13"
+                    and e["archived"] == "processed"
+                    for e in entries))
+
+    def test_set_date_without_file_or_question_still_records(self):
+        """No open question (answered twice / cleared): the reply
+        still records under a reply: placeholder — rc 0, never an
+        investigation trigger."""
+        import tempfile as tf
+        with tf.TemporaryDirectory() as tmp:
+            with patch.object(ld, "INBOX_DIR", Path(tmp)), \
+                    patch.object(ld, "QUESTIONS_PATH",
+                                 Path(tmp) / "q.json"), \
+                    patch.object(ld, "POST_LOG_PATH",
+                                 Path(tmp) / "p.json"), \
+                    patch.object(ld, "SCAN_STATE_PATH",
+                                 Path(tmp) / "s.json"), \
+                    patch("core.sheets_client.connect_worksheet",
+                          side_effect=RuntimeError("no sheet")):
+                rc = ld.set_date_cmd("MER1209260507", None, "open")
+                self.assertEqual(rc, 0)
+                entries = ld._load_post_log()
+                self.assertTrue(any(
+                    e["code"] == "MER1209260507"
+                    and e["file"] == "reply:MER1209260507"
+                    and e["valid_until"] is None
+                    for e in entries))
+
     def test_auto_code_opens_shop_question(self):
         """P4: a shop-less AUTO drop writes NOTHING and asks which
         shop — never a guess."""

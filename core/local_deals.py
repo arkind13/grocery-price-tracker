@@ -942,18 +942,27 @@ def _restamp_undated(grid: list, store_key: str,
     return grid, stamped
 
 
-def set_date_cmd(code: str, filename: str, date_text: str) -> int:
-    """'--set-date CODE FILE DATE' — record a validity date for a
-    pasted post whose board didn't show one, and archive the file.
+def set_date_cmd(code: str, filename: "str | None",
+                 date_text: str) -> int:
+    """'--set-date CODE [FILE] DATE' — record a validity date for a
+    post whose board didn't show one, and archive the file.
 
     The date is ALSO stamped onto the sheet: every undated special
     cell of that store (checker fix 2026-09-08).
+
+    FILE is OPTIONAL (user directive 2026-09-12, one-command date
+    replies): when omitted, the file reference is auto-resolved from
+    the code's single open expiry question (sweep posts carry an
+    'fb:<post-ref>' file); with no open question a reply placeholder
+    is recorded. The agent never needs to open questions.json or the
+    post log to run this — a missing post-log entry for a sweep post
+    is NORMAL, not an anomaly to investigate.
 
     Args:
         code: the notification's inbox code (FRU0709260507; legacy
             FRUT / FRUT_1).
         filename: the file name inside needs_date/ (or processed/
-            when re-running set-date to fix stamps).
+            when re-running set-date to fix stamps), or None.
         date_text: e.g. "2026-09-12" or "12 September".
     """
     from core.sydney_time import sydney_today
@@ -982,6 +991,15 @@ def set_date_cmd(code: str, filename: str, date_text: str) -> int:
         if valid_until is None:
             print(f"[set-date] could not read a date from: {date_text}")
             return 1
+
+    if filename is None:
+        open_q = [q for q in _load_questions()
+                  if q.get("code") == code
+                  and q.get("kind") == "expiry"]
+        if len(open_q) == 1:
+            filename = open_q[0].get("file") or None
+        if filename is None:
+            filename = f"reply:{code}"
 
     folder = inbox_dir_for(code)
     needs = folder / "needs_date"
