@@ -5,6 +5,8 @@ test maps to an implementation-plan.md compliance-table row.
 """
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -795,17 +797,29 @@ class TestInboxWatcher(unittest.TestCase):
             self.assertEqual(calls["n"], 2)
 
     def test_watcher_single_instance_lock(self):
-        """S13: a live lock blocks a second instance; a stale lock is
-        taken over."""
+        """S13: a LIVE foreign process's lock blocks a second
+        instance; a killed watcher's lock (fresh mtime, dead pid)
+        and a stale lock are both taken over."""
         with tempfile.TemporaryDirectory() as tmp:
             root, iw = self._root(tmp)
             lock = root / ".watcher.lock"
             self.assertTrue(iw.acquire_lock(root))
-            # simulate ANOTHER process: fresh mtime, foreign pid
-            lock.write_text("999999", encoding="utf-8")
-            self.assertFalse(iw.acquire_lock(root))
-            # stale: old mtime -> takeover
-            import os
+            # a REAL second process holding the lock
+            child = subprocess.Popen(
+                [sys.executable, "-c", "import time; time.sleep(60)"])
+            try:
+                lock.write_text(str(child.pid), encoding="utf-8")
+                self.assertTrue(iw._pid_alive(child.pid))
+                self.assertFalse(iw.acquire_lock(root))
+            finally:
+                child.kill()
+                child.wait()
+            # killed holder -> takeover despite the fresh mtime (the
+            # dead pid is spelled out: Windows keeps a terminated
+            # pid resolvable while any handle to it stays open)
+            lock.write_text("999999999", encoding="utf-8")
+            self.assertTrue(iw.acquire_lock(root))
+            # stale mtime -> takeover
             old = time.time() - (iw.LOCK_STALE_S + 60)
             os.utime(lock, (old, old))
             self.assertTrue(iw.acquire_lock(root))
@@ -830,6 +844,22 @@ class TestInboxWatcher(unittest.TestCase):
                     {"Dunya": "DUN", "Merjan": "MER",
                      "Fruitopia": "FRU",
                      "Abu Salim": "ABS"}[name])
+
+    def test_dead_pid_lock_taken_over(self):
+        """A lock left by a KILLED watcher (fresh mtime, dead pid)
+        is taken over immediately — restarts must not wait out the
+        stale window. (Found live when the retention restart
+        refused to start.)"""
+        with tempfile.TemporaryDirectory() as tmp:
+            from tools import inbox_watcher as iw
+            root = Path(tmp) / "shop-posts"
+            root.mkdir()
+            lock = root / ".watcher.lock"
+            lock.write_text("999999999", encoding="utf-8")  # dead pid
+            self.assertFalse(iw._pid_alive(999999999))
+            self.assertFalse(iw._pid_alive(0))
+            self.assertTrue(iw._pid_alive(os.getpid()))
+            self.assertTrue(iw.acquire_lock(root))
 
     def test_watcher_unknown_shop_folder_ignored(self):
         with tempfile.TemporaryDirectory() as tmp:

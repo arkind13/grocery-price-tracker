@@ -262,9 +262,33 @@ def run_once(root: Path, settle_s: int = DEFAULT_SETTLE_S,
     return lines
 
 
+def _pid_alive(pid: int) -> bool:
+    """Is that process id actually running? (A killed watcher leaves
+    a fresh-looking lock behind — mtime alone would block the
+    replacement instance for LOCK_STALE_S.)"""
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = ctypes.windll.kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, 0, pid)
+        if not handle:
+            return False
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return True
+    try:
+        os.kill(pid, 0)             # POSIX liveness probe
+    except OSError:
+        return False
+    return True
+
+
 def acquire_lock(root: Path) -> bool:
-    """Single-instance lock (S13). A stale lock (no heartbeat for
-    LOCK_STALE_S) is taken over."""
+    """Single-instance lock (S13). Held only while the locking
+    process is ALIVE and heartbeating (mtime < LOCK_STALE_S) — a
+    lock from a killed/restarted watcher is taken over
+    immediately."""
     root.mkdir(parents=True, exist_ok=True)
     lock = root / ".watcher.lock"
     if lock.exists():
@@ -273,7 +297,8 @@ def acquire_lock(root: Path) -> bool:
             pid = int(lock.read_text(encoding="utf-8").strip() or 0)
         except (OSError, ValueError):
             age, pid = LOCK_STALE_S + 1, 0
-        if age < LOCK_STALE_S and pid != os.getpid():
+        if age < LOCK_STALE_S and pid != os.getpid() \
+                and _pid_alive(pid):
             return False
     lock.write_text(str(os.getpid()), encoding="utf-8")
     return True
