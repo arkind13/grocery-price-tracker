@@ -15,7 +15,7 @@ Telegram.
 
 | You type | You get |
 |----------|---------|
-| "price of halal beef mince" (or just the item) | Woolworths price + every local shop's price + 🏆 winner. Meat items also show the non-halal Woolworths twin ("also at Woolworths (non-halal): $13.54 — …") |
+| "price of halal beef mince" (or just the item) | Woolworths price + every local shop's price + 🏆 winner. Meat items also show the non-halal Woolworths twin ("also at Woolworths (non-halal): $13.54 — …"). Messy wording is fine: "price of X", "how much is X", plurals and typos all find the same row, and the answer's [code] always names the row you actually asked about |
 | "live beef mince" | Fresh web search, Woolworths + Coles + Aldi, 3 prices each. Prices only — nothing is ever added |
 | "list" | The ONE list: local items you haven't tracked at Woolies yet, each with a code |
 | "specials" | Woolworths specials from the sheet |
@@ -92,7 +92,7 @@ Woolworths twin.
 - **Google Sheet** — the memory (Products_Master + Local_Deals +
   Archive + history tabs).
 - **Local PC** — runs Wednesday (reads the .docx files), the test
-  suite (685 green), and the watch-folder daemon
+  suite (732 green), and the watch-folder daemon
   (`tools/inbox_watcher.py` — auto-starts at logon via the
   `tools/install_inbox_watcher.ps1` scheduled task; pushes
   `Desktop\shop-posts` drops to the VPS and triggers the ingest).
@@ -100,7 +100,9 @@ Woolworths twin.
   the twice-daily auto-ingesting sweep + the 03:17 backup canary, and
   the Wed/Sat 5 AM Aldi Special Buys cron.
 - **`old md/`** — the entire v1 system, the quality campaign (22
-  defects found & fixed), and the v2 rebuild artifacts. History only.
+  defects found & fixed), the v2 rebuild artifacts, and the
+  2026-09-11/12 convergence-loop run documents (3 verification
+  cycles, 2,000+ checks, clean exit). History only.
 
 ## ⚠️ Do not delete
 

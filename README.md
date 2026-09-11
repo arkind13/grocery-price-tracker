@@ -115,6 +115,28 @@ Sheet miss → answer from Local_Deals ("missing list [code]") or
 "not tracked". Live search happens ONLY when you type `live`. No
 classifier, no fallback, no investigation.
 
+**Lookup matching (hardened in the 2026-09-11/12 convergence loop —
+2,000+ checks across three verification cycles):**
+
+- The reply's `[code]` header always cites the row the query actually
+  MATCHED — best token match, never "first row in sheet order" (the
+  butchery sort exposed that accident class; `lamb necks` cites
+  [YCQ], not the fillet row).
+- Realistic forms just work: NL price fillers are stripped ("price
+  of goat curry" → "goat curry", "how much is …" too); plurals,
+  singulars, typos and even double-plural stress forms fold to the
+  same stem ("Cauliflowers", "Choko" on "Chokos", "Tomatos" on
+  "Tomatoes", "Strawberrie"); word order never matters.
+- Naming the Woolworths product itself ("Woolworths Beef Mince 500g",
+  brand word present) answers that row's own tracked price — never a
+  locals dump. Generic brandless plain-meat names stay halal-scoped.
+- The halal keyword gates the butcher search BY DESIGN (user ruling
+  2026-09-11): bare protein queries answer Woolworths-scope; the
+  halal cluster + missing-list answer is what "halal …" queries get.
+- When nothing matches, the last-resort locals pool answers WITHOUT
+  a code — never a false "missing list [XJA]" header on unrelated
+  rows.
+
 ## Wednesday
 
 Paste your Woolworths list + specials into the two .docx files, run
@@ -144,9 +166,20 @@ Google Drive cloud copies are impossible for the service account
 
 - Anaconda python (`anaconda3/python.exe`) — the default python3.13
   lacks curl_cffi.
-- Tests: `anaconda3/python.exe -m pytest tests/ -q` → **685 passed,
+- Tests: `anaconda3/python.exe -m pytest tests/ -q` → **732 passed,
   0 skipped**. Every behavioral rule has a pinned regression test; the
   suite must stay fully green (no xfails, no skips).
+- `tests/test_py311_syntax.py` guards every `core/` + `tools/` file
+  against py3.12-only syntax (PEP 701 f-strings) — the VPS container
+  runs Python 3.11 and a container-breaking syntax once shipped.
+- Verification tooling: `tools/item_audit.py` (semantic sweep ·
+  `--matrix --round N` — every item × every message format with
+  round-invented variants · `--exec` — real CLI runs) +
+  `tools/parity_audit.py`. The 2026-09-11/12 convergence loop (fix →
+  check → fix, no user stops) ran three cycles over 2,000+ checks to
+  a clean exit: evidence in `data/test_logs/cycle-2/` and
+  `cycle-3/`, standing mechanism in `convergence-loop.md`, open
+  items in `data/test_logs/open-fix-list.md`.
 
 ## Future projects (in order, each a fresh session)
 
@@ -160,6 +193,8 @@ Google Drive cloud copies are impossible for the service account
 ## History
 
 Everything from v1 (the full-complexity system), the 2026-09 quality
-campaign (22 defects found & fixed), and the v2 rebuild artifacts lives
-in `old md/`. The living docs are only: this README, `PROJECT-MAP.md`,
-and `architecture-spec.md`.
+campaign (22 defects found & fixed), the v2 rebuild artifacts, and
+the 2026-09-11/12 convergence-loop run documents live in `old md/`.
+The living docs are only: this README, `PROJECT-MAP.md`,
+`architecture-spec.md`, and `convergence-loop.md` (the standing
+re-verification mechanism).
