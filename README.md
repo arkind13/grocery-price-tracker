@@ -44,7 +44,8 @@ without you:
   to save anything.
 - **Instant path**: the PC watch-folder daemon
   (`tools/inbox_watcher.py`, auto-started at logon by
-  `tools/install_inbox_watcher.ps1`) watches `Desktop\shop-posts` —
+  `tools/install_inbox_watcher.ps1` — scheduled task with a
+  Startup-folder fallback) watches `Desktop\shop-posts` —
   the four shop subfolders (Dunya / Merjan / Fruitopia / Abu Salim)
   are created for you; drop images/text into one and the digest
   arrives within minutes. A burst of files forms ONE post (90s settle window); the
