@@ -11,6 +11,12 @@ All run from the tracker root with anaconda python. The audit is
 READ-ONLY (never writes the sheet).
 
 ```bash
+# 0. FULL FORMAT MATRIX — every item x every real-world message format
+#    (exact / word-order drift / plural drift / halal-prefix on-off /
+#    code-as-query / NL sample). ~500 real CLI runs, ~50 min.
+#    MUST run when NO ingest is active (shared Google quota).
+anaconda3/python.exe tools/item_audit.py --matrix
+
 # 1. FULL audit — every item on the sheet, one lookup each
 anaconda3/python.exe tools/item_audit.py
 

@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import csv
 import re
+import time
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -81,9 +82,15 @@ def main() -> int:
                     help="REAL command execution: every item through "
                          "the actual CLI, multiple formats, replies "
                          "recorded")
+    ap.add_argument("--matrix", action="store_true",
+                    help="FORMAT MATRIX: every item x every real-world "
+                         "message format (exact/drift/plural/halal-"
+                         "toggle/code/NL), all judged + recorded")
     args = ap.parse_args()
     if args.exec:
         return exec_audit(args.items)
+    if args.matrix:
+        return matrix_audit(args.items)
 
     from core.sheets_client import connect_spreadsheet
     sh = connect_spreadsheet()
@@ -185,6 +192,7 @@ PYEXE = Path(r"C:\Users\User.DESKTOP-R2G441H\anaconda3\python.exe")
 
 
 def run_cli(args_list: list, timeout: int = 90) -> tuple[int, str]:
+    time.sleep(1.2)                     # quota throttle (R12 lesson)
     cmd = [str(PYEXE), str(CLI)] + args_list
     try:
         p = subprocess.run(cmd, capture_output=True, text=True,
@@ -256,6 +264,109 @@ def exec_audit(items_filter: str = "") -> int:
     print(f"evidence: {out_csv}")
     return 0
 
+
+
+
+# ---------------------------------------------------------------------------
+# MATRIX MODE — every item × every real-world message format, judged
+# (user mandate 2026-09-11: "test all scenarios the message can be
+# received in — real-world, rigorous, all formats").
+# ---------------------------------------------------------------------------
+
+def _shuffle(name: str) -> str:
+    toks = name.split()
+    if len(toks) < 2:
+        return name
+    return " ".join([toks[-1]] + toks[:-1])
+
+
+def _toggle_plural(name: str) -> str:
+    toks = name.split()
+    for i in range(len(toks) - 1, -1, -1):
+        t = toks[i]
+        if len(t) > 3 and t.lower() != "halal":
+            toks[i] = t[:-1] if t.endswith("s") else t + "s"
+            break
+    return " ".join(toks)
+
+
+def _strip_halal(name: str) -> str:
+    return re.sub(r"\bhalal\s*", "", name, flags=re.I).strip() or name
+
+
+def _add_halal(name: str) -> str:
+    return "halal " + name if "halal" not in name.lower() else name
+
+
+def matrix_formats(item: dict, seq: int) -> list[tuple]:
+    """(format-name, query, expected-marker) — expected-marker is the
+    string that MUST appear in a correct reply (the row's code, unless
+    the format is expected to answer without it)."""
+    name = item["name"]
+    code = item["code"]
+    low = name.lower()
+    fmts = [("exact", name, code)]
+    if len(name.split()) > 1:
+        fmts.append(("drift-shuffle", _shuffle(name), code))
+    fmts.append(("drift-plural", _toggle_plural(name), code))
+    if "halal" in low:
+        fmts.append(("no-halal-prefix", _strip_halal(name), code))
+    else:
+        prot = any(w in low for w in ("chicken", "lamb", "goat",
+                                      "beef", "mutton"))
+        if prot:
+            fmts.append(("with-halal-prefix", _add_halal(name),
+                         "twin-or-code"))
+    if seq % 10 == 0:
+        fmts.append(("code-as-query", code, "FINDING-B: codes are not "
+                     "lookup keys in v2 — record actual"))
+    if seq % 25 == 0:
+        fmts.append(("nl-price-of", f"price of {name}",
+                     "FINDING-A: NL is agent-layer; CLI is expected to "
+                     "answer or honestly miss"))
+    return fmts
+
+
+def matrix_audit(items_filter: str = "") -> int:
+    from core.sheets_client import connect_spreadsheet
+    sh = connect_spreadsheet()
+    master = sh.worksheet("Products_Master").get_all_values()
+    rows = []
+    for i, r in enumerate(master[1:], start=2):
+        name = str(r[0]).strip()
+        if not name:
+            continue
+        if items_filter and not any(
+                f.lower() in name.lower() for f in items_filter.split(",")):
+            continue
+        rows.append({"row": i, "name": name,
+                     "code": str(r[11]).strip() if len(r) > 11 else ""})
+    stamp = datetime.now().strftime("%Y-%m-%d_%H%M")
+    out_csv = OUT / f"item_matrix_{stamp}.csv"
+    w = csv.writer(out_csv.open("w", encoding="utf-8", newline=""))
+    w.writerow(["item", "code", "format", "command", "rc", "verdict",
+                "reply"])
+    total = passed = 0
+    for seq, r in enumerate(rows, start=1):
+        for fmt, query, marker in matrix_formats(r, seq):
+            rc, reply = run_cli(["price", "--item", query])
+            if marker.startswith("FINDING"):
+                verdict = "RECORDED"
+            rcode = r["code"]
+            if rc == 0 and rcode and f"[{rcode}]" in reply:
+                verdict = "PASS"
+            elif rc == 0 and (not rcode) and reply.strip():
+                verdict = "PASS"
+            else:
+                verdict = "FAIL"
+            total += 1
+            passed += (verdict == "PASS")
+            w.writerow([r["name"], r["code"], fmt, query, rc, verdict,
+                        reply.strip()[:1200]])
+    print(f"MATRIX items: {len(rows)} | checks: {total} | "
+          f"PASS: {passed} | non-PASS: {total - passed}")
+    print(f"evidence: {out_csv}")
+    return 0
 
 if __name__ == "__main__":
     raise SystemExit(main())
