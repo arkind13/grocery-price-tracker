@@ -301,9 +301,21 @@ def _sweep_auto_ingest(new_posts: list, window_label: str,
             from extractors.deal_text import parse_validity_end
             valid_until = parse_validity_end(post.text, today=today)
         if not deals:
-            entry["posts"].append({
+            notice: dict = {
                 "code": code, "file": fname, "valid_txt": "",
-                "items": [], "notice_only": True, "unreadable": False})
+                "items": [], "notice_only": True, "unreadable": False}
+            # 2026-09-13 Dunya video post: a post with text but NO
+            # images (a video) can only be read from its caption —
+            # when even the caption yields nothing, teach the manual
+            # fallback instead of a bare 'notice only' line.
+            if not getattr(post, "image_urls", None) and \
+                    str(getattr(post, "text", "") or "").strip():
+                notice["hint"] = (
+                    "video/text post with no readable prices — if it "
+                    f"shows prices, drop a screenshot into "
+                    f"Desktop\\shop-posts\\"
+                    f"{SHORT_SHOP_NAMES.get(store['key'], store['name'])}")
+            entry["posts"].append(notice)
             continue
         if valid_until is not None and valid_until < today:
             entry["posts"].append({
@@ -2775,6 +2787,8 @@ def _render_window_digest(sections: list[dict], questions: list[dict],
             if p.get("notice_only"):
                 lines.append(f"📋 {code} {p.get('file') or ''} — notice "
                              f"only, no prices")
+                if p.get("hint"):
+                    lines.append(f"  ↳ {p['hint']}")
                 continue
             if p.get("expired"):
                 lines.append(f"🗑 {code} {p.get('file') or ''} — "
@@ -3224,7 +3238,7 @@ def _to_vision_deal(d: dict, category: str) -> dict:
         "multibuy_qty": qty,
         "bulk_size": None,
         "category": category,
-        "notes": d.get("multibuy_note") or "",
+        "notes": d.get("multibuy_note") or d.get("terms") or "",
     }
 
 
@@ -4276,6 +4290,17 @@ def tab_store_price(row: list, store_key: str,
         if price is not None:
             return price, label
     return None, ""
+
+
+def tab_store_perm_price(row: list, store_key: str) -> float | None:
+    """Only the PERMANENT-column price for one shop row (None when
+    blank/non-numeric) — the special cell is never read here. The
+    compare renderer uses it to show a special's regular price
+    (user directive 2026-09-13: special + normal price together)."""
+    col = _perm_column_for(store_key)
+    if col is None or len(row) <= col:
+        return None
+    return _numeric_price(row[col])
 
 
 def sweep_expired_specials(worksheet, today: "date | None" = None

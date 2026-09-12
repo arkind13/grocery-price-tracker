@@ -29,6 +29,20 @@ VALIDITY_RE = re.compile(
 DEAL_LINE_RE = re.compile(r"^\s*[^\w&()]*\s*(.+?)\s*[–—-]\s*(.+?)\s*$")
 MULTIBUY_RE = re.compile(
     r"^(\d+)\s+for\s+\$(\d+(?:\.\d{1,2})?)$", re.IGNORECASE)
+# Caption deal lines (the 2026-09-13 Dunya video post): "Beef Sirloin
+# - only $24.99 per kg when you buy the whole slab!" — an "only/just"
+# lead-in and a trailing CONDITION ("when you buy the whole slab")
+# around an explicit-unit price. The trailing text is accepted ONLY
+# when the price carries an explicit unit (per kg / /kg / each / ea)
+# and stays short — a bare "$5 off this week" (no unit) must never
+# become a deal.
+_ONLY_PREFIX_RE = re.compile(r"^(?:only|just)\s+", re.IGNORECASE)
+_TRAILING_PUNCT_RE = re.compile(r"[\s!.,;:…\-–—]+$")
+_MAX_TERMS_CHARS = 60
+_DOLLAR_PRICE_RE = re.compile(
+    r"^\$(\d+(?:\.\d{1,2})?)"
+    r"\s*(?:(/\s*kg\b|per\s+kg\b)|(?:\b(each|ea)\b))?"
+    r"\s*(.*)$", re.IGNORECASE)
 
 
 def parse_validity_end(text: str, *, today: date) -> date | None:
@@ -76,7 +90,13 @@ def _parse_price_part(part: str) -> dict | None:
     """Parse the right side of a deal line into a price dict.
 
     Accepts: "99¢ each" / "99¢/kg" / "99¢" / "$2.99" / "$2.99/kg" /
-    "$1.80 each" / "2 for $2.99".
+    "$1.80 each" / "2 for $2.99" — and, since the 2026-09-13 Dunya
+    video post, caption forms with a lead-in and a trailing
+    CONDITION: "only $24.99 per kg when you buy the whole slab!"
+    (optional "only"/"just" prefix; the trailing text is captured as
+    "terms" ONLY when the price carries an explicit unit — per kg,
+    /kg, each, ea — and stays under _MAX_TERMS_CHARS, so a bare
+    "$5 off this week" never becomes a deal).
 
     Returns:
         dict | None: {"price": float (2dp) — the BUNDLE TOTAL for
@@ -84,10 +104,12 @@ def _parse_price_part(part: str) -> dict | None:
         core.local_deals._cell_for is the ONLY divider), per-unit
         otherwise; "unit_price": display-only per-unit rate
         (multibuy only); "unit": "ea"|"kg", "multibuy": int|None,
-        "multibuy_note": str|None}, or None when the part holds no
-        parseable price.
+        "multibuy_note": str|None, "terms": str|None — the caption
+        condition text}, or None when the part holds no parseable
+        price.
     """
     part = part.strip().replace("\u00a0", " ")
+    part = _ONLY_PREFIX_RE.sub("", part, count=1).strip()
     mb = MULTIBUY_RE.match(part)
     if mb:
         qty = int(mb.group(1))
@@ -96,7 +118,8 @@ def _parse_price_part(part: str) -> dict | None:
                 "unit_price": round(bundle / qty, 2),
                 "unit": "ea",
                 "multibuy": qty,
-                "multibuy_note": f"{qty} for ${bundle:.2f}"}
+                "multibuy_note": f"{qty} for ${bundle:.2f}",
+                "terms": None}
     unit_tail = r"(?:\s*(?:/\s*)?(kg|each))?"
     cents = re.match(r"^(\d+(?:\.\d{1,2})?)\s*¢" + unit_tail + r"$",
                      part, re.IGNORECASE)
@@ -104,14 +127,23 @@ def _parse_price_part(part: str) -> dict | None:
         unit = (cents.group(2) or "ea").lower()
         return {"price": round(float(cents.group(1)) / 100, 2),
                 "unit": "kg" if unit == "kg" else "ea",
-                "multibuy": None, "multibuy_note": None}
-    dol = re.match(r"^\$(\d+(?:\.\d{1,2})?)" + unit_tail + r"$",
-                   part, re.IGNORECASE)
+                "multibuy": None, "multibuy_note": None,
+                "terms": None}
+    dol = _DOLLAR_PRICE_RE.match(part)
     if dol:
-        unit = (dol.group(2) or "ea").lower()
-        return {"price": round(float(dol.group(1)), 2),
-                "unit": "kg" if unit == "kg" else "ea",
-                "multibuy": None, "multibuy_note": None}
+        price = round(float(dol.group(1)), 2)
+        per_kg, each, rest = dol.group(2), dol.group(3), \
+            (dol.group(4) or "")
+        rest = _TRAILING_PUNCT_RE.sub("", rest).strip()
+        if rest and (not (per_kg or each)
+                     or len(rest) > _MAX_TERMS_CHARS):
+            # trailing words on a unit-less price ("$5 off this
+            # week") or a run-on sentence — never a deal
+            return None
+        return {"price": price,
+                "unit": "kg" if per_kg else "ea",
+                "multibuy": None, "multibuy_note": None,
+                "terms": rest or None}
     return None
 
 

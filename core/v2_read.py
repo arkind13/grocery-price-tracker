@@ -9,7 +9,7 @@ from pathlib import Path
 from core.halal import is_meat_term
 from core.local_deals import (
     BUTCHERY_DOMAIN, PRODUCE_SUBCATEGORIES, SHOP_TAGS, STORE_COLUMNS,
-    TAB_NAME, _numeric_price, tab_store_price,
+    TAB_NAME, _numeric_price, tab_store_perm_price, tab_store_price,
 )
 from core.subcategory import normalize_subcategory
 
@@ -91,15 +91,20 @@ def parse_ld_row(sheet_row: int, row: list,
             name in ("FRUITS", "BUTCHERY", "OTHER"):
         return None
     prices: dict = {}
+    perm_prices: dict = {}
     for shop in SHOP_TAGS:
         price, kind = tab_store_price(row, shop, today=today)
         if price is not None:
             prices[shop] = (price, kind)
+        perm = tab_store_perm_price(row, shop)
+        if perm is not None:
+            perm_prices[shop] = perm
     ccol = _grid_col("comments")
     comments = str(row[ccol]).strip() if len(row) > (ccol or 0) \
         else ""
     return {"row": sheet_row, "name": name, "prices": prices,
-            "comments": comments, "code": code}
+            "perm_prices": perm_prices, "comments": comments,
+            "code": code}
 
 
 def read_tabs() -> tuple:
@@ -384,7 +389,8 @@ def _ld_quotes(ld: dict) -> list:
             per_kg = None
         out.append({"shop": shop, "price": price, "kind": kind,
                     "unit": unit, "pack": pack, "per_kg": per_kg,
-                    "note": _shop_note(ld.get("comments", ""), shop)})
+                    "note": _shop_note(ld.get("comments", ""), shop),
+                    "reg": (ld.get("perm_prices") or {}).get(shop)})
     return out
 
 
@@ -499,6 +505,7 @@ def lookup_item_hit(hit: dict, master_rows, ld_rows, twins: list,
             if best_q else None)
     base = {"master": hit, "local": prices, "best": best,
             "best_label": best_label, "local_quotes": quotes,
+            "comments": (ld or {}).get("comments", ""),
             "code": hit["code"], "non_halal_twins": twins,
             "query": q}
     if hit["gone"]:
@@ -714,6 +721,37 @@ def _note_text(note: str) -> str:
     return " · " + re.sub(r"^multi buy\b", "min order", note, count=1)
 
 
+def _reg_text(q: dict) -> str:
+    """' · reg $29.99' — the shop's NORMAL price next to a special
+    (user directive 2026-09-13). Permanent-kind quotes never carry it
+    (they ARE the normal price); a special without a permanent cell,
+    or one equal to the special, stays unsuffixed."""
+    reg = q.get("reg")
+    if q.get("kind") != "special" or reg is None \
+            or reg == q.get("price"):
+        return ""
+    return " · reg ${:.2f}".format(reg)
+
+
+def _note_only_lines(comments: str, priced_shops: set) -> list:
+    """Lines for shops whose tagged Comments segment exists but has
+    NO price on the row (user directive 2026-09-13: whatever is in
+    the comment starting with that shop's tag belongs in the compare
+    message — even before the price is filled, e.g. a video post the
+    sweep could not read)."""
+    lines: list = []
+    if not comments:
+        return lines
+    for shop in SHOP_TAGS:
+        if shop in priced_shops:
+            continue
+        note = _shop_note(comments, shop)
+        if note:
+            lines.append((f"{_SHOP_ICONS.get(shop, '·')} "
+                          f"{_shop_label(shop)}", note))
+    return lines
+
+
 def _local_lines(result: dict) -> list:
     """Aligned per-shop price lines (kit: aligned price columns).
     Quote records (local_quotes) carry the sheet's unit markers —
@@ -730,8 +768,10 @@ def _local_lines(result: dict) -> list:
                    _quote_price_text(q)
                    + {"special": " (special)", "permanent": ""}[
                        q["kind"]]
-                   + (_note_text(q["note"]) if q.get("note") else ""))
+                   + (_note_text(q["note"]) if q.get("note") else "")
+                   + _reg_text(q))
                   for q in ordered]
+        priced_shops = {q["shop"] for q in ordered}
     else:
         entries = sorted(result["local"].items(),
                          key=lambda kv: kv[1][0])
@@ -739,6 +779,9 @@ def _local_lines(result: dict) -> list:
                    f"${price:.2f}"
                    + {"special": " (special)", "permanent": ""}[kind])
                   for shop, (price, kind) in entries]
+        priced_shops = {shop for shop, _ in entries}
+    tagged.extend(_note_only_lines(str(result.get("comments") or ""),
+                                   priced_shops))
     width = max((_cells(label) for label, _ in tagged), default=0)
     lines: list = []
     for label, price_text in tagged:

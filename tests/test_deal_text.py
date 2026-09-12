@@ -469,11 +469,19 @@ class TestDailyScan(unittest.TestCase):
         refs = {}
         offsets = {}     # ref -> seconds ago it was created
 
+        # validity is always FUTURE relative to the REAL Sydney clock
+        # (the sweep compares against the real today — a hard-coded
+        # '12 September' expired on 2026-09-13 and rotted this test)
+        from core.sydney_time import sydney_today as _syd_today
+        _end = _syd_today() + _td(days=5)
+        _valid_txt = f"Valid until {_end.day} {_end:%B}"
+        _valid_stamp = f"valid until {_end:%a %d %b}"
+
         class _P:
             def __init__(self, ref, created):
                 self.post_ref = ref
                 self.creation_time = created
-                self.text = ("Valid until 12 September\n"
+                self.text = (_valid_txt + "\n"
                              "Cos Lettuce \u2013 99\u00a2 each")
                 self.image_urls: list = []
 
@@ -529,7 +537,7 @@ class TestDailyScan(unittest.TestCase):
         self.assertEqual(len(first), 1)
         self.assertIn("Cos Lettuce", first[0])
         self.assertIn("$0.99/ea", first[0])
-        self.assertIn("valid until Sat 12 Sep", first[0])
+        self.assertIn(_valid_stamp, first[0])
         self.assertNotIn("done", first[0].lower())   # word retired
         delta = [t for t in sent if "FRU0709260917" in t]
         self.assertEqual(len(delta), 1)
@@ -711,15 +719,22 @@ class TestDailyScan(unittest.TestCase):
                                  or {"ok": True}):
                 ld._save_scan_state({})
                 ld.run_daily_scan(send=True, force=True)  # baseline p1
+                clock.now += _td(hours=6)                 # 15:07
                 # Missed windows: the shop posts p3 (14:00) and p2
                 # (11:00) with DIFFERENT validity periods; the 15:07
-                # scan sees both, none reported.
-                clock.now += _td(hours=6)                 # 15:07
+                # scan sees both, none reported. Validity dates stay
+                # future relative to the REAL Sydney clock (a
+                # hard-coded '12 September' rotted on 2026-09-13).
+                from core.sydney_time import sydney_today as _syd_today
+                _end1 = _syd_today() + _td(days=5)
+                _end2 = _syd_today() + _td(days=12)
                 state_refs = {
-                    "p3": (4020.0, "Valid until 12 September\n"
-                                  "Cos Lettuce \u2013 99\u00a2 each"),
-                    "p2": (14820.0, "Valid until 19 September\n"
-                                   "Carrots \u2013 $1.20/kg"),
+                    "p3": (4020.0, f"Valid until {_end1.day} "
+                                   f"{_end1:%B}\n"
+                                   "Cos Lettuce \u2013 99\u00a2 each"),
+                    "p2": (14820.0, f"Valid until {_end2.day} "
+                                    f"{_end2:%B}\n"
+                                    "Carrots \u2013 $1.20/kg"),
                 }
                 ld.run_daily_scan(send=True, force=True)
         # AI-M5 (2026-09-11): ONE digest for the window carries BOTH
@@ -729,8 +744,8 @@ class TestDailyScan(unittest.TestCase):
         self.assertIn("FRU0709261507", digest[0])      # p3 newest
         self.assertIn("FRU0709261507_2", digest[0])    # p2 next
         # each post keeps its OWN validity period
-        self.assertIn("valid until Sat 12 Sep", digest[0])
-        self.assertIn("valid until Sat 19 Sep", digest[0])
+        self.assertIn(f"valid until {_end1:%a %d %b}", digest[0])
+        self.assertIn(f"valid until {_end2:%a %d %b}", digest[0])
         self.assertIn("2 new items", digest[0])
         self.assertNotIn("done", digest[0].lower())
 
@@ -966,13 +981,16 @@ class TestIngestFlow(unittest.TestCase):
 
     def test_ingest_updates_sheet_and_frees_code(self):
         import tempfile as tf
+        from datetime import timedelta
         from core import local_deals as ld
+        from core.sydney_time import sydney_today
 
+        end = sydney_today() + timedelta(days=5)   # never expires
         with tf.TemporaryDirectory() as tmp:
             inbox = Path(tmp) / "FRUT"
             inbox.mkdir(parents=True)
             (inbox / "board.txt").write_text(
-                "Valid until 12 September\n"
+                f"Valid until {end.day} {end:%B}\n"
                 "Cos Lettuce \u2013 99\u00a2 each\n", encoding="utf-8")
             state = {"stores": {"fruitopia": {
                 "baselined": True,
@@ -1055,13 +1073,16 @@ class TestIngestFlow(unittest.TestCase):
         """User rule 2026-09-07: the >20% master-sheet standout check
         runs AT ingest — its result is part of the summary message."""
         import tempfile as tf
+        from datetime import timedelta
         from core import local_deals as ld
+        from core.sydney_time import sydney_today
 
+        end = sydney_today() + timedelta(days=5)   # never expires
         with tf.TemporaryDirectory() as tmp:
             inbox = Path(tmp) / "FRU0709260907"
             inbox.mkdir(parents=True)
             (inbox / "board.txt").write_text(
-                "Valid until 12 September\n"
+                f"Valid until {end.day} {end:%B}\n"
                 "Cos Lettuce \u2013 99\u00a2 each\n", encoding="utf-8")
             state = {"stores": {"fruitopia": {
                 "baselined": True,
@@ -1486,6 +1507,81 @@ class TestScanWindowsAndCutoff(unittest.TestCase):
         self.assertEqual(n1, 1)      # AI-M5: backfill digest = ONE msg
         self.assertEqual(n2, n1 + 1) # pre-alert post silent -> heartbeat
         self.assertEqual(n3, n1 + 2) # between-alerts digest + heartbeat
+
+
+class TestCaptionDealTerms(unittest.TestCase):
+    """2026-09-13 Dunya video post: caption prices with a lead-in and
+    a trailing CONDITION ('only $24.99 per kg when you buy the whole
+    slab!') parsed as NOTHING before today — the strict grammar
+    required the price part to be ONLY a price. The post recorded as
+    'notice only, no prices' and the $24.99 was never captured."""
+
+    DUNYA_CAPTION = (
+        "🥩 Beef Sirloin - only $24.99 per kg when you buy the whole "
+        "slab!\n"
+        "Come in, buy bulk, and save on quality Halal meat at Dunya "
+        "Butchery.\n"
+        "📍 4a/11 Zoe Place, Mt Druitt\n"
+        "⏰ Open 7 days a week\n"
+        "🚚 Delivery available\n"
+        "📞 0450 245 625")
+
+    def test_only_per_kg_condition_line_parses(self):
+        deals = parse_fruitopia_deals(
+            "🥩 Beef Sirloin - only $24.99 per kg when you buy the "
+            "whole slab!")
+        self.assertEqual(len(deals), 1)
+        self.assertEqual(deals[0]["item"], "Beef Sirloin")
+        self.assertEqual(deals[0]["price"], 24.99)
+        self.assertEqual(deals[0]["unit"], "kg")
+        self.assertEqual(deals[0]["terms"],
+                         "when you buy the whole slab")
+
+    def test_full_dunya_caption_one_deal(self):
+        deals = parse_fruitopia_deals(self.DUNYA_CAPTION)
+        self.assertEqual(len(deals), 1)      # address/phone lines skip
+        self.assertEqual(deals[0]["item"], "Beef Sirloin")
+
+    def test_condition_rides_vision_notes(self):
+        """The condition becomes the deal's notes — the sheet Comments
+        segment ('[DUN] …') and compare-message note, same path as
+        the multibuy 'min order …' terms."""
+        import core.local_deals as ld
+        deal = parse_fruitopia_deals(self.DUNYA_CAPTION)[0]
+        converted = ld._to_vision_deal(deal, "butchery")
+        self.assertEqual(converted["notes"],
+                         "when you buy the whole slab")
+        self.assertEqual(converted["price_kind"], "single")
+
+    def test_each_unit_with_condition(self):
+        deals = parse_fruitopia_deals(
+            "🥩 Rump - $13.99 each when you buy 2+")
+        self.assertEqual(len(deals), 1)
+        self.assertEqual(deals[0]["unit"], "ea")
+        self.assertEqual(deals[0]["terms"], "when you buy 2+")
+
+    def test_unitless_trailing_text_never_a_deal(self):
+        # "$5 off this week" — a DISCOUNT phrasing with no unit marker
+        # must not become a $5.00 item (false-positive guard).
+        self.assertEqual(
+            parse_fruitopia_deals("Big Sale - $5 off this week!"), [])
+        self.assertEqual(
+            parse_fruitopia_deals(
+                "Merry Christmas - come see our new store!"), [])
+
+    def test_runon_trailing_text_rejected(self):
+        # a sentence-length tail is narrative, not a deal condition
+        self.assertEqual(
+            parse_fruitopia_deals(
+                "Specials - $9.99 per kg while you wait for the "
+                "weekend specials that arrive every Saturday morning!"),
+            [])
+
+    def test_strict_forms_keep_terms_none(self):
+        deals = parse_fruitopia_deals("🥬 Cos Lettuce – 99¢ each\n"
+                                      "🥒 Chokos – $1.99/kg")
+        self.assertEqual([d["terms"] for d in deals], [None, None])
+        self.assertEqual(deals[1]["unit"], "kg")
 
 
 if __name__ == "__main__":

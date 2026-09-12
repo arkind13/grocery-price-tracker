@@ -53,7 +53,10 @@ without you:
   arrives within minutes. A burst of files forms ONE post (90s settle window); the
   same file twice = one ingest (sha256 dedupe); network down = files
   queue until the push succeeds (60s retry); single-instance lock —
-  never two writers.
+  never two writers. **Video posts** (the FB post plays a video) can
+  never be auto-read — save a SCREENSHOT of the video frame that
+  shows the price, or the post's text, into the shop's subfolder
+  (the sweep's digest says so itself when it hits one).
 - **Retention** (no image buildup): processed images auto-delete
   after 14 days on ALL three stores — the desktop `.sent\` folders,
   the VPS inbox code folders, and the sweep's downloaded post
@@ -98,8 +101,14 @@ render). What actually runs for each of the four shops:
   JSON — post id, creation time, message text, and the post's own
   image urls. Post TEXT is parsed first (`extractors/deal_text.py`);
   vision runs only for image-only posts (one call, max 4 images, on
-  the post's own images). Signed CDN urls are downloaded EXACTLY as
-  captured — any param mutation → 403.
+  the post's own images). Caption prices with a lead-in and a
+  condition ("Beef Sirloin - only $24.99 per kg when you buy the
+  whole slab!") parse since 2026-09-13: the condition becomes the
+  deal's terms (sheet Comments segment → the compare message's
+  note). A video post has NO image urls, so a caption that parses to
+  nothing records as "notice only" with a screenshot hint. Signed
+  CDN urls are downloaded EXACTLY as captured — any param mutation
+  → 403.
 - **Optional logged-in route** (user-approved 2026-09-06): the user's
   own FB session pair (`FB_COOKIE_C_USER` + `FB_COOKIE_XS` — .env
   secrets, set by the user, never logged/committed) unlocks older

@@ -83,7 +83,9 @@ Wednesday re-sorts them every run.
    post's images/text into the PC watch-folder (`Desktop\shop-posts`)
    — the four shop subfolders are created for you (Dunya / Merjan /
    Fruitopia / Abu Salim); the watcher pushes them to the VPS and
-   the digest arrives within minutes. The digest IS the action;
+   the digest arrives within minutes. A VIDEO post can never be
+   auto-read — save a screenshot of the video frame that shows the
+   price (or the post's text) instead. The digest IS the action;
    questions are the only thing you ever answer.
 2. Wednesday: paste your Woolworths list into `Woolworths.docx` and
    the specials into `Woolworths_Specials.docx`, run `wednesday`.

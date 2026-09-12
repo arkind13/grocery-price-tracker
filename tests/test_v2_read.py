@@ -615,3 +615,110 @@ class TestPackRouting(unittest.TestCase):
         result = lookup_item("Halal Turkish Kofta – (5kg)",
                              self.master, self.ld)
         self.assertEqual(result["code"], "KWM")
+
+
+class TestRegularPriceWithSpecial(unittest.TestCase):
+    """User directive 2026-09-13: whenever the compare message shows a
+    special price it also shows the shop's NORMAL (permanent) price —
+    'Beef Sirloin special price at Dunya … @$24.99. Regular price
+    $29.99. Nazr has this at $39.50' (live KMC row)."""
+
+    LD = {"row": 30, "name": "Halal Beef Sirloin Steak /kg",
+          "prices": {"dunya": (24.99, "special"),
+                     "nazar": (39.50, "permanent")},
+          "perm_prices": {"dunya": 29.99, "nazar": 39.50},
+          "comments": "[DUN] special price when you buy whole slab",
+          "code": "KMC"}
+
+    def test_quote_carries_reg_from_perm_cell(self):
+        from core.v2_read import _ld_quotes
+        quotes = {q["shop"]: q for q in _ld_quotes(self.LD)}
+        self.assertEqual(quotes["dunya"]["reg"], 29.99)
+        self.assertEqual(quotes["nazar"]["reg"], 39.50)
+
+    def test_compare_shows_special_note_and_reg(self):
+        from core.v2_read import _ld_quotes, render_lookup
+        result = {"status": "meat-local-only", "master": None,
+                  "local": self.LD["prices"],
+                  "best": ("dunya", 24.99, "special"),
+                  "best_label": "$24.99/kg",
+                  "local_quotes": _ld_quotes(self.LD),
+                  "comments": self.LD["comments"], "code": "KMC",
+                  "non_halal_twins": [], "query": "halal beef sirloin"}
+        text = render_lookup(result)
+        self.assertIn("$24.99/kg (special)", text)
+        self.assertIn("special price when you buy whole slab", text)
+        self.assertIn("reg $29.99", text)
+        self.assertIn("$39.50/kg", text)
+        # the permanent-kind Nazar quote never gets a reg suffix
+        nazar_line = next(ln for ln in text.splitlines()
+                          if "Nazar" in ln)
+        self.assertNotIn("reg", nazar_line)
+
+    def test_no_reg_when_no_perm_or_equal(self):
+        from core.v2_read import _ld_quotes, _reg_text
+        quotes = _ld_quotes(dict(self.LD, perm_prices={}))
+        self.assertEqual(_reg_text(quotes[0]), "")
+        equal = _ld_quotes(dict(self.LD,
+                                perm_prices={"dunya": 24.99}))[0]
+        self.assertEqual(_reg_text(equal), "")
+        perm_kind = _ld_quotes(dict(self.LD,
+                                    prices={"dunya": (29.99,
+                                                       "permanent")},
+                                    perm_prices={"dunya": 29.99}))[0]
+        self.assertEqual(_reg_text(perm_kind), "")
+
+    def test_parse_ld_row_collects_perm_prices(self):
+        from core.v2_read import parse_ld_row
+        row = [""] * 13
+        row[0] = "Halal Beef Sirloin Steak /kg"
+        row[2], row[3], row[10] = "29.99", "24.99", "39.5"
+        row[11] = "[DUN] special price when you buy whole slab"
+        row[12] = "KMC"
+        parsed = parse_ld_row(30, row, today=None)
+        self.assertEqual(parsed["perm_prices"],
+                         {"dunya": 29.99, "nazar": 39.5})
+        self.assertEqual(parsed["prices"]["dunya"], (24.99, "special"))
+
+
+class TestNoteOnlyCommentLines(unittest.TestCase):
+    """User directive 2026-09-13: whatever is in the Comments cell
+    starting with that shop's tag appears in the compare message —
+    ALSO when the shop has no price on the row yet (the exact state
+    after a video post: the user filed the comment before any price
+    existed, and nothing about Dunya showed)."""
+
+    def test_comment_without_price_still_renders(self):
+        from core.v2_read import _local_lines
+        result = {"local": {}, "local_quotes": [],
+                  "comments": "[DUN] special price when you buy "
+                              "whole slab"}
+        lines = _local_lines(result)
+        self.assertEqual(len(lines), 1)
+        self.assertIn("Dunya", lines[0])
+        self.assertIn("special price when you buy whole slab", lines[0])
+        self.assertNotIn("$", lines[0])
+
+    def test_priced_shop_never_duplicated(self):
+        from core.v2_read import _ld_quotes, _local_lines
+        ld = {"row": 30, "name": "Halal Beef Sirloin Steak /kg",
+              "prices": {"dunya": (24.99, "special")},
+              "perm_prices": {},
+              "comments": "[DUN] special price when you buy whole slab",
+              "code": "KMC"}
+        lines = _local_lines({"local": ld["prices"],
+                              "local_quotes": _ld_quotes(ld),
+                              "comments": ld["comments"]})
+        dunya_lines = [ln for ln in lines if "Dunya" in ln]
+        self.assertEqual(len(dunya_lines), 1)
+        self.assertIn("special price when you buy whole slab",
+                      dunya_lines[0])
+
+    def test_unrelated_tags_stay_hidden(self):
+        from core.v2_read import _local_lines
+        result = {"local": {}, "local_quotes": [],
+                  "comments": "[NAZ] site price per 100g"}
+        lines = _local_lines(result)
+        self.assertEqual(len(lines), 1)      # Nazar note shows alone
+        self.assertIn("Nazar", lines[0])
+        self.assertNotIn("Dunya", "".join(lines))

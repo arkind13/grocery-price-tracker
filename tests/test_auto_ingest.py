@@ -595,6 +595,39 @@ class TestWindowDigest(unittest.TestCase):
         for m in msgs:
             self.assertLessEqual(len(m), 4000)
 
+    def test_notice_hint_names_the_watch_folder(self):
+        """2026-09-13 Dunya video post: a post with caption text but
+        NO images can only be read from its caption — when that also
+        yields nothing, the digest teaches the manual fallback
+        (screenshot -> Desktop\\shop-posts\\<Shop>) instead of a bare
+        'notice only' line. AI-M4/M5 never ask the user to save
+        anything UNPROMPTED — this hint only fires on the
+        unparseable-caption case."""
+        sections = [{
+            "shop_label": "Dunya", "shop": "Dunya",
+            "posts": [{"code": "DUN1309260507",
+                       "file": "fb:1082815720777506", "valid_txt": "",
+                       "items": [], "notice_only": True,
+                       "unreadable": False,
+                       "hint": "video/text post with no readable "
+                               "prices — if it shows prices, drop a "
+                               "screenshot into "
+                               "Desktop\\shop-posts\\Dunya"}]}]
+        msgs = ld._render_window_digest(sections, [], "Sweep 05:00")
+        self.assertIn("notice only, no prices", msgs[0])
+        self.assertIn("Desktop\\shop-posts\\Dunya", msgs[0])
+
+    def test_plain_notice_stays_bare(self):
+        sections = [{
+            "shop_label": "Fruitopia", "shop": "Fruitopia",
+            "posts": [{"code": "FRU1309260508", "file": "fb:123",
+                       "valid_txt": "", "items": [],
+                       "notice_only": True, "unreadable": False}]}]
+        msgs = ld._render_window_digest(sections, [], "Sweep 05:00")
+        self.assertIn("📋 FRU1309260508 fb:123 — notice only",
+                      msgs[0])
+        self.assertNotIn("↳", msgs[0])
+
     def test_notice_and_nonfood_render(self):
         """S11 notice line; S12 butchery non-food items ingest with
         the halal prefix (Q17) — they appear as digest items."""
@@ -670,11 +703,15 @@ class TestSweepAutoIngest(unittest.TestCase):
 
         def fake_extract(post_, run_dir, key):
             price = 11.99 if post_.post_ref == "m2" else 12.99
-            from datetime import date
+            # validity must be FUTURE vs the REAL Sydney clock (a
+            # hard-coded 2026-09-12 rotted the test on 2026-09-13)
+            from datetime import timedelta
+            from core.sydney_time import sydney_today
+            soon = sydney_today() + timedelta(days=5)
             return ([_vision_deal(item="Halal Lamb Necks",
                                   price=price,
-                                  valid_until=date(2026, 9, 12))],
-                    "vision", date(2026, 9, 12))
+                                  valid_until=soon)],
+                    "vision", soon)
 
         ws = FakeWorksheet()
         master = FakeWorksheet(title="Products_Master")
@@ -729,6 +766,60 @@ class TestSweepAutoIngest(unittest.TestCase):
         self.assertEqual(ws.rows, [])            # nothing written
         self.assertIn("image unreadable", sent[0])
         self.assertIn("1 image(s) unreadable", sent[0])
+
+    def test_caption_only_video_post_gets_watch_folder_hint(self):
+        """2026-09-13 Dunya video post: text but NO images, and the
+        caption parses to nothing -> the digest notice carries the
+        Desktop\\shop-posts\\<Shop> screenshot hint (the exact miss
+        that hid the $24.99/kg sirloin price that morning)."""
+        stores = self._stores()
+        post = _FakePost("d1", "🥩 Beef Sirloin - call the shop!")
+        new_posts = [(stores["dunya"], post, "DUN1309260507", "")]
+
+        def fake_extract(post_, run_dir, key):
+            return [], "none", None
+
+        sent = []
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(ld, "QUESTIONS_PATH",
+                             Path(tmp) / "q.json"), \
+                patch.object(ld, "extract_post_deals",
+                             side_effect=fake_extract), \
+                patch("core.sheets_client.connect_spreadsheet",
+                      return_value=FakeSpreadsheet()), \
+                patch.object(ld, "_post_digest",
+                             side_effect=lambda m: sent.extend(m)):
+            ld._sweep_auto_ingest(new_posts, "Sweep 05:00")
+        self.assertTrue(any("notice only, no prices" in m
+                            for m in sent))
+        self.assertTrue(any("Desktop\\shop-posts\\Dunya" in m
+                            for m in sent))
+
+    def test_image_post_notice_gets_no_hint(self):
+        """The hint is ONLY for no-image posts — an image post whose
+        deals came back empty keeps the bare notice line."""
+        stores = self._stores()
+        post = _FakePost("m9", "specials this week")
+        post.image_urls = ["u1"]
+        new_posts = [(stores["merjan"], post, "MER1309260507", "")]
+
+        def fake_extract(post_, run_dir, key):
+            return [], "vision", None
+
+        sent = []
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(ld, "QUESTIONS_PATH",
+                             Path(tmp) / "q.json"), \
+                patch.object(ld, "extract_post_deals",
+                             side_effect=fake_extract), \
+                patch("core.sheets_client.connect_spreadsheet",
+                      return_value=FakeSpreadsheet()), \
+                patch.object(ld, "_post_digest",
+                             side_effect=lambda m: sent.extend(m)):
+            ld._sweep_auto_ingest(new_posts, "Sweep 05:00")
+        self.assertTrue(any("notice only, no prices" in m
+                            for m in sent))
+        self.assertFalse(any("shop-posts" in m for m in sent))
 
 
 # ---------------------------------------------------------------------------
