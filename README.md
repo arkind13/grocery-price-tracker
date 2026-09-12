@@ -76,6 +76,72 @@ without you:
   strip-then-append per shop (no `[MER] [MER]`, untagged segments
   never crash).
 
+## How the FB extraction works (and why the manual phase existed)
+
+The sweep's Facebook fetch is two modules: `extractors/fb_flyer_fetch.py`
+(the `STORES` list + the Scrape.do render) and
+`extractors/fb_timeline_fetch.py` (post text + images out of the
+render). What actually runs for each of the four shops:
+
+- **Scrape.do renders the shop's PUBLIC Facebook page, logged out**
+  (photos tab primary, root page fallback; the last-3 posts per shop
+  are in scope; ≤40 render credits per run, shared with the Dunya
+  catalogue). Direct scraping was ruled out early: Facebook blocks
+  headless browsers and non-browser TLS outright (the same wall the
+  Woolworths cookie investigation hit), and the logged-out timeline
+  render exposes only the NEWEST post — two independent renders
+  (plain + scrolled) on 2026-09-06 proved scrolling never surfaces
+  older stories.
+- **Text-first, vision second**: the render embeds each post as Comet
+  JSON — post id, creation time, message text, and the post's own
+  image urls. Post TEXT is parsed first (`extractors/deal_text.py`);
+  vision runs only for image-only posts (one call, max 4 images, on
+  the post's own images). Signed CDN urls are downloaded EXACTLY as
+  captured — any param mutation → 403.
+- **Optional logged-in route** (user-approved 2026-09-06): the user's
+  own FB session pair (`FB_COOKIE_C_USER` + `FB_COOKIE_XS` — .env
+  secrets, set by the user, never logged/committed) unlocks older
+  posts; auto mode tries it first and falls back gracefully to the
+  logged-out render.
+
+**Why there was a manual "save the images" phase:** the failed first
+build (2026-09-05) only DETECTED new FB posts — every post triggered
+a "save the image into the inbox folder" round trip for the user, and
+the ingest itself was fragile on top (the 2026-09-11 morning Merjan
+board took 45+ minutes of manual rescue: duplicate rows, doubled
+comments, wrong pack-deal maths). The 2026-09-11 zero-step redesign
+retired that detector wording entirely — the sweep now auto-ingests
+every new post, and the watch-folder (`Desktop\shop-posts`) is the
+only manual path left, needing no commands either. The post-mortem
+and the three ingest defects (ID-1/2/3) live in
+`old md/auto-ingest-spec.md`.
+
+### Adding a fifth FB shop
+
+Yes — the fetcher handles any PUBLIC Facebook page, and each of the
+current four was onboarded with the same one-store-at-a-time checklist
+(Fruitopia first, end-to-end confirmed, then the rest). It is a small
+project, not a config flip, because the shops are pinned in several
+regression-tested places:
+
+1. `extractors/fb_flyer_fetch.py` → `STORES`: key, name, fb_page_id,
+   kind (`butchery` / `fruits`), 3-letter code. Text-post boards need
+   nothing else; image-only boards go through the vision chain.
+2. `core/local_deals.py` → `TAB_COLUMNS` (a `<shop>_perm` +
+   `<shop>_sp` column pair), `SHOP_TAGS` + the comment-tag regex,
+   `SHORT_SHOP_NAMES`, the domain-gate kind sets, and a one-time sheet
+   migration adding the two columns (row parity is untouched: rows
+   are items, not shops). A butchery-kind shop's items auto-carry the
+   `halal` prefix; a fruit-shop's never do.
+3. `tools/inbox_watcher.py` → `SHOP_SUBFOLDERS` (the watch-folder
+   subfolder auto-created for the shop).
+4. Every behavior above is pinned by tests — the suite stays fully
+   green (v2 rule).
+
+Cost note: each store adds Scrape.do renders to every sweep window;
+the 40-credit per-run cap is shared across all stores + the Dunya
+catalogue.
+
 ## The sheet
 
 - **Products_Master** (13 cols, Woolworths-only): name, category, size,
