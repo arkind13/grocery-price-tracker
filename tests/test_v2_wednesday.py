@@ -39,10 +39,11 @@ MASTER_HEADER = ["Product_Name", "Category", "Size",
                  "Item_Code", "Preferred"]
 
 
-def _master_row(name, code, ww="", keyword="", specials=""):
+def _master_row(name, code, ww="", keyword="", specials="",
+                category=""):
     row = [""] * 13
-    row[0], row[3], row[6], row[7], row[10], row[11] = (
-        name, ww, keyword, specials, "butchery", code)
+    row[0], row[1], row[3], row[6], row[7], row[10], row[11] = (
+        name, category, ww, keyword, specials, "butchery", code)
     return row
 
 
@@ -93,21 +94,29 @@ def _fixture():
     LD price -> missing list)."""
     master = [MASTER_HEADER,
               _master_row("Tomato", "EYF", ww="$0.54",
-                          keyword="woolworths tomato"),
+                          keyword="woolworths tomato",
+                          category="vegetables"),
               _master_row("Halal Beef Mince 500g", "AUG",
-                          keyword="halal beef mince"),
+                          keyword="halal beef mince",
+                          category="beef"),
               _master_row("Woolworths Cheddar Block 1kg", "CHD",
-                          ww="GONE", keyword="cheddar cheese block"),
-              _master_row("Halal Lamb Shoulder", "HLS")]
-    ld = [["Product", "", "", "", "", "", "", "", "", "", "", ""],
-          ["Tomato", "", "", "", "", "0.90", "", "", "", "", "",
-           "EYF"],
-          ["Halal Beef Mince 500g", "", "9.20", "", "", "", "", "",
-           "", "", "", "AUG"],
-          ["Woolworths Cheddar Block 1kg", "", "", "", "", "", "",
-           "", "", "", "", "CHD"],
-          ["Halal Lamb Shoulder", "12.99", "", "", "", "", "", "",
-           "", "", "", "HLS"]]
+                          ww="GONE", keyword="cheddar cheese block",
+                          category="Non food"),
+              _master_row("Halal Lamb Shoulder", "HLS",
+                          category="lamb")]
+    ld = [["Product", "Category", "Dunya perm (site)",
+           "Dunya special (FB)", "Merjan perm", "Merjan special",
+           "Fruitopia perm", "Fruitopia special", "Abu Salim perm",
+           "Abu Salim special", "Nazar perm", "Comments",
+           "Item_Code"],
+          ["Tomato", "vegetables", "", "", "", "", "0.90", "", "",
+           "", "", "", "EYF"],
+          ["Halal Beef Mince 500g", "beef", "", "9.20", "", "", "",
+           "", "", "", "", "", "AUG"],
+          ["Woolworths Cheddar Block 1kg", "Non food", "", "", "",
+           "", "", "", "", "", "", "", "CHD"],
+          ["Halal Lamb Shoulder", "lamb", "12.99", "", "", "", "",
+           "", "", "", "", "", "HLS"]]
     return FakeWS(master), FakeWS(ld)
 
 
@@ -287,16 +296,16 @@ class TestParityStep(unittest.TestCase):
         self.assertIn("mirrored -> LD row 6: New User Row", report)
         new_ld = ld._values[-1]
         self.assertEqual(new_ld[0], "New User Row")
-        self.assertTrue(item_codes.is_valid_code(new_ld[11]))
+        self.assertTrue(item_codes.is_valid_code(new_ld[12]))
         # the code is the PAIR KEY: stamped on BOTH sides
-        self.assertEqual(master._values[-1][11], new_ld[11])
-        self.assertIn(new_ld[11],
+        self.assertEqual(master._values[-1][11], new_ld[12])
+        self.assertIn(new_ld[12],
                       item_codes.retired_codes(
                           item_codes.load_registry()))
         self.assertEqual(audit_fn(master._values, ld._values)
                          ["status"], "aligned")
         self.assertEqual(ld.clears, 1)
-        self.assertEqual(ld.updates, ["A1:L6"])
+        self.assertEqual(ld.updates, ["A1:M6"])
         self.assertEqual(master.clears, 1)
         self.assertEqual(master.updates, ["A1:M6"])
 
@@ -304,7 +313,7 @@ class TestParityStep(unittest.TestCase):
         # master mirror reusing that code (EXL).
         master, ld = _fixture()
         ld._values.append(["Extra Local Item", "", "", "", "", "",
-                           "", "", "", "", "", "EXL"])
+                           "", "", "", "", "", "", "EXL"])
         self.assertEqual(audit_fn(master._values, ld._values)
                          ["status"], "bottom_append")
         report = parity_step(master._values, ld._values, ld,
@@ -326,15 +335,18 @@ class TestParityStep(unittest.TestCase):
         self.assertEqual(master.updates, ["A1:M6"])
         self.assertEqual(ld.clears, 0)
 
-    def test_middle_insert_prints_verbatim_alert_and_aborts(self):
+    def test_code_mutation_prints_verbatim_alert_and_aborts(self):
+        """A CODE MUTATION (a row's Item_Code changed in the sheet)
+        is NOT an order drift — the resort cannot repair it: the
+        verbatim A2 alert prints and the run aborts, no writes."""
         master, ld = _fixture()
-        ld._values[3][11] = "ZZQ"          # code break mid-sequence
+        ld._values[3][12] = "ZZQ"          # code break mid-sequence
         buf = io.StringIO()
         with redirect_stdout(buf):
             report = parity_step(master._values, ld._values, ld,
                                  master_ws=master)
         self.assertEqual(report, "ABORT")
-        self.assertIn(MIDDLE_INSERT_ALERT.format(n=4), buf.getvalue())
+        self.assertIn(MIDDLE_INSERT_ALERT.format(n=6), buf.getvalue())
         self.assertEqual(master.clears, 0)
         self.assertEqual(ld.clears, 0)
 
@@ -359,8 +371,8 @@ class TestParityStep(unittest.TestCase):
         by the parity step — LD mirrors the master row-for-row."""
         master, ld = _fixture()
         ld._values.insert(1, ["Prices valid until",
-                              "n/a (live site)"] + [""] * 10)
-        ld._values.insert(3, ["FRUITS"] + [""] * 11)
+                              "n/a (live site)"] + [""] * 11)
+        ld._values.insert(3, ["FRUITS"] + [""] * 12)
         report = parity_step(master._values, ld._values, ld,
                              master_ws=master)
         self.assertIn("structural row 'Prices valid until' removed",
@@ -381,33 +393,31 @@ class TestParityStep(unittest.TestCase):
         # A new item inserted in the MIDDLE of the LD tab (code new,
         # not yet mirrored): rows 3.. shift down by one.
         ld._values.insert(2, ["Halal Chicken Mince", "", "", "", "",
-                              "", "", "", "", "", "", "NEW1"])
+                              "", "", "", "", "", "", "", "NEW1"])
         buf = io.StringIO()
         with redirect_stdout(buf):
             report = parity_step(master._values, ld._values, ld,
                                  master_ws=master)
-        self.assertIn("healed: LD row 3 ('Halal Chicken Mince') "
-                      "moved to the bottom", report)
+        self.assertIn("category resort:", report)
         self.assertIn("BOTTOM_APPEND", report)   # mirror followed
         self.assertEqual(ld._values[-1][0], "Halal Chicken Mince")
         self.assertEqual(audit_fn(master._values, ld._values)
                          ["status"], "aligned")
         self.assertEqual(ld.clears, 1)   # the single mirror write
 
-    def test_middle_insert_swap_is_never_auto_repaired(self):
-        """A code SWAP (reorder/deletion class) is not a single-row
-        insert: no move, verbatim alert, ABORT — no writes."""
+    def test_middle_insert_swap_is_repaired_by_resort(self):
+        """A code SWAP (reorder class) is fixed by the category
+        resort: both tabs re-sort identically, parity aligned."""
         master, ld = _fixture()
-        ld._values[2][11], ld._values[3][11] = \
-            ld._values[3][11], ld._values[2][11]     # AUG <-> CHD
+        ld._values[2][12], ld._values[3][12] = \
+            ld._values[3][12], ld._values[2][12]     # AUG <-> CHD
         buf = io.StringIO()
         with redirect_stdout(buf):
             report = parity_step(master._values, ld._values, ld,
                                  master_ws=master)
-        self.assertEqual(report, "ABORT")
-        self.assertIn(MIDDLE_INSERT_ALERT.format(n=4), buf.getvalue())
-        self.assertEqual(master.clears, 0)
-        self.assertEqual(ld.clears, 0)
+        self.assertNotEqual(report, "ABORT")
+        self.assertEqual(audit_fn(master._values, ld._values)
+                         ["status"], "aligned")
 
 
 class TestRunPipeline(unittest.TestCase):
@@ -450,11 +460,17 @@ class TestRunPipeline(unittest.TestCase):
         self.assertIn("No active specials", self.sends[0]["text"])
         self.assertIn("[HLS] Halal Lamb Shoulder",
                       self.sends[1]["text"])
-        self.assertEqual(self.master.updates, ["A1:M5"])
-        self.assertEqual(self.master._values[1][3], "$0.60")
+        # apply_writes + the category step (writes both tabs)
+        self.assertEqual(self.master.updates, ["A1:M5", "A1:M5"])
+        # the resort filed the rows into the category blocks:
+        # lamb, beef, vegetables, Non food
+        self.assertEqual([r[0] for r in self.master._values[1:]],
+                         ["Halal Lamb Shoulder", "Halal Beef Mince 500g",
+                          "Tomato", "Woolworths Cheddar Block 1kg"])
+        self.assertEqual(self.master._values[3][3], "$0.60")
 
     def test_11_middle_insert_aborts_run_no_writes_no_posts(self):
-        self.ld._values[3][11] = "ZZQ"
+        self.ld._values[3][12] = "ZZQ"
         rc = run()
         self.assertEqual(rc, 1)
         self.assertEqual(self.sends, [])
@@ -480,7 +496,8 @@ class TestRunPipeline(unittest.TestCase):
         rc = run(send=False)
         self.assertEqual(rc, 0)
         self.assertEqual(self.sends, [])
-        self.assertEqual(self.master.updates, ["A1:M5"])
+        # apply_writes + the category step both write the master tab
+        self.assertEqual(self.master.updates, ["A1:M5", "A1:M5"])
 
 
 class TestListPostSplit(unittest.TestCase):
@@ -490,18 +507,18 @@ class TestListPostSplit(unittest.TestCase):
             parse_master_row, render_list
 
         master = [MASTER_HEADER]
-        ld = [["Product", "", "", "", "", "", "", "", "", "", "", ""],
+        ld = [["Product"] + [""] * 12,
               ["Prices valid until", "", "", "", "", "", "", "",
                "", "", "", ""],
-              ["FRUITS"] + [""] * 11]
+              ["FRUITS"] + [""] * 12]
         for i in range(120):
             code = f"C{i:03d}"
             name = f"Item Number {i:03d} Large Family Pack 1kg"
             row = [""] * 13
             row[0], row[10], row[11] = name, "butchery", code
             master.append(row)
-            ld.append([name, "", "", "", "", f"{i}.49", "", "", "",
-                       "", "", code])
+            ld.append([name, "", "", "", "", "", f"{i}.49", "",
+                       "", "", "", "", code])
         master_rows = [m for m in (parse_master_row(i, r)
                                    for i, r in
                                    enumerate(master[1:], 2)) if m]

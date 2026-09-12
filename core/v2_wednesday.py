@@ -19,12 +19,12 @@ from core.local_deals import grid_range
 
 MASTER_TAB = "Products_Master"
 MASTER_CODE_IDX = 11          # 13-col layout: col L
-LD_CODE_IDX = 11              # 12-col layout: col L (Nazar added 1)
+LD_CODE_IDX = 12              # 13-col layout: col M (Category added 1)
 PRICE_IDX = 3                 # col D — Woolworths_Price
 KEYWORD_IDX = 6               # col G — the sync keyword
 SPECIALS_IDX = 7              # col H — Woolworths_Specials
 MASTER_COLS = 13              # A..M
-LD_COLS = 12                  # A..L (Nazar perm added 2026-09-12)
+LD_COLS = 13                  # A..M (Category col added 2026-09-12)
 
 SPECIALS_TOPIC_ID = 206       # env override TELEGRAM_SPECIALS_TOPIC_ID
 LISTS_TOPIC_ID = 208          # env override TELEGRAM_LISTS_TOPIC_ID
@@ -288,52 +288,6 @@ def _heal_ld_layout(ld_grid: list[list],
     return lines
 
 
-def _move_inserted_row(master_grid: list[list],
-                       ld_grid: list[list],
-                       miss: dict) -> tuple[bool, bool, list[str]]:
-    """Attempt ONE deterministic middle-insert repair (user directive
-    2026-09-12: 'anything not in order to be fixed by' the sync).
-
-    The audit break names the first code-pair mismatch. The side whose
-    NEXT row carries the other side's break code is the side holding
-    the inserted row — that row is moved to that tab's bottom (the
-    layout's append convention), realigning every later pair.
-
-    Returns (master_moved, ld_moved, report_lines) — all False/[]
-    when the break is not a single-row insert (deletion/reorder):
-    the caller then aborts with the verbatim alert.
-    """
-    m_sheet = int(miss.get("master_sheet_row") or 0)
-    l_sheet = int(miss.get("ld_sheet_row") or 0)
-    m_code = str(miss.get("master_code") or "").strip().upper()
-    l_code = str(miss.get("ld_code") or "").strip().upper()
-    if not (m_sheet and l_sheet):
-        return False, False, []
-
-    def _code(grid: list, idx: int) -> str:
-        row = grid[idx] if 0 <= idx < len(grid) else []
-        return _cell(row, MASTER_CODE_IDX if grid is master_grid
-                     else LD_CODE_IDX).upper()
-
-    # Master-side insert: LD's break row pairs with master's NEXT row.
-    if l_code and _code(master_grid, m_sheet) == l_code:
-        row = master_grid.pop(m_sheet - 1)
-        master_grid.append(row)
-        return True, False, [
-            f"  healed: master row {m_sheet} "
-            f"('{_cell(row, 0) or m_code}') moved to the bottom "
-            f"(mid-tab insert)"]
-    # LD-side insert: master's break row pairs with LD's NEXT row.
-    if m_code and _code(ld_grid, l_sheet) == m_code:
-        row = ld_grid.pop(l_sheet - 1)
-        ld_grid.append(row)
-        return False, True, [
-            f"  healed: LD row {l_sheet} "
-            f"('{_cell(row, 0) or m_code}') moved to the bottom "
-            f"(mid-tab insert)"]
-    return False, False, []
-
-
 def parity_step(master_grid: list[list], ld_grid: list[list],
                 ld_ws, master_ws=None) -> str:
     """tools/parity_audit.audit on the two grids (§18/A2):
@@ -365,12 +319,15 @@ def parity_step(master_grid: list[list], ld_grid: list[list],
         return "\n".join(heal_lines + [report]) if heal_lines \
             else report
     if result["status"] == "middle_insert":
-        moved_m, moved_l, fix_lines = _move_inserted_row(
-            master_grid, ld_grid, result["misses"][0])
-        master_changed, ld_changed = moved_m, moved_l
-        heal_lines.extend(fix_lines)
-        if moved_m or moved_l:
-            result = audit(master_grid, ld_grid)
+        # user directive 2026-09-12: the CATEGORY RESORT replaces the
+        # old single-row-insert repair + hard alert — any order drift
+        # is fixed by re-deriving the category order on BOTH tabs.
+        from core.local_deals import load_category_review,             resort_tabs_by_category
+        master_grid[:], ld_grid[:], resort_lines =             resort_tabs_by_category(master_grid, ld_grid,
+                                    load_category_review())
+        heal_lines.extend(resort_lines)
+        master_changed = ld_changed = True
+        result = audit(master_grid, ld_grid)
     if result["status"] == "middle_insert":
         print(result["alert"])     # VERBATIM (§18/A2.2) — never edit
         return "ABORT"
@@ -531,6 +488,84 @@ def _receipt(tag: str, receipt: dict, thread) -> None:
               f"(failure line above)")
 
 
+def category_step(master_ws, ld_ws) -> list:
+    """User directive 2026-09-12: every run files the sheet into the
+    category blocks — blank master-B rows are auto-classified (the
+    parked review codes from data/category_review.json are NEVER
+    auto-filed), every label mirrors into the Local_Deals Category
+    column, and BOTH tabs resort row-for-row (pairing by Item_Code).
+    Master col B is the source of truth: the user's manual category
+    edits always win. Returns report lines; owns its writes."""
+    from core.local_deals import (
+        TAB_COLUMNS, _ensure_grid_capacity, _grid_col,
+        classify_category, ensure_shop_columns, grid_range,
+        load_category_review, resort_tabs_by_category,
+        _norm_category,
+    )
+
+    ensure_shop_columns(ld_ws)      # layout self-heal (idempotent)
+    master_grid = [list(r) for r in
+                   (master_ws.get_all_values() or [])]
+    ld_grid = [list(r) for r in (ld_ws.get_all_values() or [])]
+    review = load_category_review()
+    lcode = _grid_col("item_code")
+    ld_width = len(TAB_COLUMNS) + 1
+    butchery_cols = [c for c in (_grid_col(f"{k}_perm")
+                                 for k in ("dunya", "merjan",
+                                           "nazar")) if c]
+    ld_by_code: dict = {}
+    for i in range(1, len(ld_grid)):
+        r = list((ld_grid[i] + [""] * ld_width)[:ld_width])
+        code = str(r[lcode]).strip().upper() if len(r) > lcode else ""
+        if code:
+            ld_by_code[code] = r
+
+    assigned = 0
+    for i in range(1, len(master_grid)):
+        m = master_grid[i]
+        while len(m) < 13:
+            m.append("")
+        code = str(m[11]).strip().upper()
+        current = str(m[1]).strip()
+        known = _norm_category(current)
+        if known:
+            m[1] = known                # user's label wins (normalised)
+            continue
+        if code and code in review:
+            continue                    # parked blank for review
+        ld_row = ld_by_code.get(code, [])
+        butchery = any(len(ld_row) > c and str(ld_row[c]).strip()
+                       for c in butchery_cols)             or str(m[10]).strip().lower() == "butchery"
+        m[1] = classify_category(str(m[0]), butchery)
+        assigned += 1
+
+    # mirror master B -> the LD Category column (paired by code)
+    for i in range(1, len(ld_grid)):
+        r = ld_grid[i]
+        while len(r) < ld_width:
+            r.append("")
+        code = str(r[lcode]).strip().upper()
+        if code:
+            mm = next((x for x in master_grid[1:]
+                       if str(x[11]).strip().upper() == code), None)
+            if mm is not None:
+                r[_grid_col("category")] = str(mm[1]).strip()
+
+    master_grid, ld_grid, resort_lines = resort_tabs_by_category(
+        master_grid, ld_grid, review)
+    _ensure_grid_capacity(master_ws, len(master_grid), 13)
+    master_ws.clear()
+    master_ws.freeze(rows=1)
+    master_ws.update(values=master_grid,
+                     range_name=f"A1:M{len(master_grid)}")
+    _ensure_grid_capacity(ld_ws, len(ld_grid), ld_width)
+    ld_ws.clear()
+    ld_ws.freeze(rows=1)
+    ld_ws.update(values=ld_grid, range_name=grid_range(len(ld_grid)))
+    return ([f"category step: {assigned} row(s) auto-classified"]
+            + resort_lines)
+
+
 def run(dry_run: bool = False, send: bool = True,
         specials_only: bool = False) -> int:
     """Full pipeline: parse -> read both tabs -> parity_step ->
@@ -577,6 +612,10 @@ def run(dry_run: bool = False, send: bool = True,
               "untouched (no N/A sweep; manual prices survive)")
     if not dry_run:
         apply_writes(master_ws, master_grid, plan["writes"])
+        # the category step files every row into its block and
+        # re-sorts BOTH tabs (user directive 2026-09-12)
+        for line in category_step(master_ws, ld_ws):
+            print(line)
 
     if send and not dry_run:
         bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")

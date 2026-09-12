@@ -24,8 +24,8 @@ from tests.test_local_deals import (  # noqa: E402
     FakeSpreadsheet, FakeWorksheet, _v2_ws,
 )
 
-MER_SP = 4      # merjan_sp column index (0-based grid rows)
-DUN_SP = 2      # dunya_sp column index
+MER_SP = 5      # merjan_sp column index (Category col added 1)
+DUN_SP = 3      # dunya_sp column index
 
 
 def _vision_deal(item="Lamb Necks", price=32.99, unit="kg",
@@ -66,7 +66,7 @@ class TestID1PackDealSemantics(unittest.TestCase):
                                          qty=3, price=32.99)])
         row = next(r for r in ws.rows
                    if str(r[0]).startswith("Lamb Necks"))
-        self.assertEqual(row[10], "[MER] multi buy 3kg for $32.99")
+        self.assertEqual(row[11], "[MER] multi buy 3kg for $32.99")
 
     def test_multibuy_divides_exactly_once(self):
         """Single-divider rule: the cell is round(total/qty, 2) =
@@ -93,7 +93,7 @@ class TestID1PackDealSemantics(unittest.TestCase):
         row = next(r for r in ws.rows
                    if str(r[0]).startswith("Celery"))
         self.assertEqual(
-            row[10],
+            row[11],
             "[FRU] multi buy 2 for $2.99 — $1.50/ea")
 
     def test_multibuy_kg_read_side_min_order(self):
@@ -136,9 +136,8 @@ class TestID2ReuseGuard(unittest.TestCase):
         """On match -> reuse the existing row + Item_Code: col K is
         NOT re-minted and no master mirror row is created."""
         ws = _v2_ws([
-            ["BUTCHERY", "", "", "", "", "", "", "", "", ""],
-            ["Halal Sliced Lamb Neck /kg", "", "", "", "", "",
-             "", "", "", "", "YCQ"],
+            ["BUTCHERY"] + [""] * 12,
+            ["Halal Sliced Lamb Neck /kg"] + [""] * 10 + ["YCQ"],
         ])
         master = FakeWorksheet(title="Products_Master")
         master.rows = [["Name"] + [""] * 12]
@@ -147,7 +146,7 @@ class TestID2ReuseGuard(unittest.TestCase):
             master_ws=master)
         self.assertEqual(len(master.rows), 1)    # no mirror append
         row = next(r for r in ws.rows if "Lamb Neck" in str(r[0]))
-        self.assertEqual(row[10], "YCQ")         # code preserved
+        self.assertEqual(row[12], "YCQ")         # code preserved
 
     def test_pack_vs_kg_stay_separate_rows(self):
         """S9 BY DESIGN: 'Goat Curry /kg' and 'Goat Curry 5kg' are
@@ -211,8 +210,8 @@ class TestID3CommentIdempotence(unittest.TestCase):
         ld.merge_store_tab(ws, "merjan", deals)
         row = next(r for r in ws.rows
                    if "Lamb Necks" in str(r[0]))
-        self.assertEqual(row[10], "[MER] multi buy 3kg for $32.99")
-        self.assertNotIn("[MER] [MER]", str(row[10]))
+        self.assertEqual(row[11], "[MER] multi buy 3kg for $32.99")
+        self.assertNotIn("[MER] [MER]", str(row[11]))
 
     def test_pretagged_note_single_tag(self):
         """A caller passing an already-tagged note never stacks tags
@@ -235,9 +234,9 @@ class TestID3CommentIdempotence(unittest.TestCase):
                          kind="multibuy", qty=3)])
         row = next(r for r in ws.rows
                    if "Lamb Necks" in str(r[0]))
-        self.assertIn("[DUN]", str(row[10]))
-        self.assertIn("[MER]", str(row[10]))
-        self.assertNotIn("[MER] [MER]", str(row[10]))
+        self.assertIn("[DUN]", str(row[11]))
+        self.assertIn("[MER]", str(row[11]))
+        self.assertNotIn("[MER] [MER]", str(row[11]))
 
 
 # ---------------------------------------------------------------------------
@@ -371,9 +370,10 @@ class TestQuestionsLifecycle(unittest.TestCase):
         import tempfile as tf
         with tf.TemporaryDirectory() as tmp:
             stamped = []
-            grid = [["Product"], ["Prices valid until"],
-                    ["Halal Lamb Necks /kg", "", "", "",
-                     "15.99", "", "", "", "", ""]]
+            grid = [["Product"] + [""] * 12,
+                    ["Prices valid until"] + [""] * 12,
+                    ["Halal Lamb Necks /kg", "", "", "", "",
+                     "15.99", "", "", "", "", "", "", ""]]
 
             class _Tab:
                 def get_all_values(self):

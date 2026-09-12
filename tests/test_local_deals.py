@@ -166,10 +166,10 @@ class TestSheetRebuild(unittest.TestCase):
         self.assertEqual(len(fruit_rows), 1)
         row = fruit_rows[0]
         self.assertIn("multi buy 5kg for $2.99", str(row))
-        # 10-col layout v2: abusalim special = idx 8 (bulk price),
-        # fruitopia special = idx 6 on the SAME canonical row.
-        self.assertEqual(row[8], 2.99)
-        self.assertEqual(row[6], 3.00)
+        # 13-col layout: abusalim special = idx 9 (bulk price),
+        # fruitopia special = idx 7 on the SAME canonical row.
+        self.assertEqual(row[9], 2.99)
+        self.assertEqual(row[7], 3.00)
 
     def test_out_of_domain_items_recorded_under_other(self):
         """Out-of-domain items are recorded (never dropped) under
@@ -446,8 +446,8 @@ class TestReport(unittest.TestCase):
         # Layout v2: numeric specials price in the shop's SPECIAL
         # column (abusalim = idx 8), the bulk note shop-tagged in
         # Comments (idx 9).
-        self.assertEqual(rows["FRUITS"][0][8], 2.99)
-        self.assertEqual(rows["FRUITS"][0][10],
+        self.assertEqual(rows["FRUITS"][0][9], 2.99)
+        self.assertEqual(rows["FRUITS"][0][11],
                          "[ABS] multi buy 5kg for $2.99")
         results = ld.match_and_detect([deal], [], {})
         self.assertEqual(results[0].multibuy_note,
@@ -456,8 +456,8 @@ class TestReport(unittest.TestCase):
                    unit="pack", multibuy_qty=2)
         rows2 = ld.build_rows({"dunya_fb": [mb]})
         # Layout v2: dunya special (FB) = idx 2, Comments = idx 9.
-        self.assertEqual(rows2["BUTCHERY"][0][2], 7.5)
-        self.assertEqual(rows2["BUTCHERY"][0][10],
+        self.assertEqual(rows2["BUTCHERY"][0][3], 7.5)
+        self.assertEqual(rows2["BUTCHERY"][0][11],
                          "[DUN] multi buy 2 for $15.00 — $7.50/ea")
 
     def test_no_prices_warn_line(self):
@@ -860,16 +860,20 @@ class TestFreshness(unittest.TestCase):
 # Layout v2: validity stamps, sweep, special-first reads, manual entry
 # ---------------------------------------------------------------------------
 def _v2_grid():
-    """Header + validity row of the 10-column layout v2."""
+    """Header + validity row of the layout v2 (13 cols)."""
     return [["Product"] + [n for _k, n in ld.TAB_COLUMNS],
             ["Prices valid until", "n/a (live site)",
-             "", "", "", "", "", "", "", ""]]
+             "", "", "", "", "", "", "", "", "", "", ""]]
 
 
 def _v2_ws(data_rows):
-    """FakeWorksheet preloaded with a layout-v2 tab."""
+    """FakeWorksheet preloaded with a layout-v2 tab. Data rows are
+    written in the PRE-category shape (name + shop cells) — the
+    helper inserts the Category cell (index 1) so the literals stay
+    readable; comments sit at index 11, Item_Code at 12."""
     ws = FakeWorksheet()
-    ws.rows = _v2_grid() + [list(r) for r in data_rows]
+    ws.rows = _v2_grid() + [
+        [r[0], ""] + list(r[1:]) for r in data_rows]
     return ws
 
 
@@ -911,14 +915,15 @@ class TestTabStorePrice(unittest.TestCase):
     TODAY = datetime(2026, 9, 7).date()
 
     def test_special_wins_over_permanent(self):
-        row = ["Carrots /kg", "", "", "", "", 6.50, 0.75, "", "", ""]
+        row = ["Carrots /kg", "", "", "", "", "", 6.50, 0.75, "",
+               "", ""]
         price, source = ld.tab_store_price(row, "fruitopia",
                                            today=self.TODAY)
         self.assertEqual(price, pytest.approx(0.75))
         self.assertEqual(source, "special")
 
     def test_expired_special_skipped_permanent_fallback(self):
-        row = ["Carrots /kg", "", "", "", "", 6.50,
+        row = ["Carrots /kg", "", "", "", "", "", 6.50,
                "0.75 (till 6 Sep)", "", "", ""]
         price, source = ld.tab_store_price(row, "fruitopia",
                                            today=self.TODAY)
@@ -926,7 +931,7 @@ class TestTabStorePrice(unittest.TestCase):
         self.assertEqual(source, "permanent")
 
     def test_non_numeric_offer_text_is_none(self):
-        row = ["Carrots /ea", "", "", "", "", "",
+        row = ["Carrots /ea", "", "", "", "", "", "",
                "[multi buy 2 for $1.50 — $0.75/ea]", "", "", ""]
         price, source = ld.tab_store_price(row, "fruitopia",
                                            today=self.TODAY)
@@ -934,7 +939,8 @@ class TestTabStorePrice(unittest.TestCase):
         self.assertEqual(source, "")
 
     def test_other_shops_cells_invisible(self):
-        row = ["Carrots /kg", "", "", "", "", 6.50, 0.75, "", "", ""]
+        row = ["Carrots /kg", "", "", "", "", "", 6.50, 0.75, "",
+               "", ""]
         price, _src = ld.tab_store_price(row, "merjan",
                                          today=self.TODAY)
         self.assertIsNone(price)
@@ -963,8 +969,8 @@ class TestSweepExpiredSpecials(unittest.TestCase):
         grid = ws.get_all_values()
         self.assertEqual(grid[3][0], "Carrots /ea")   # row KEPT
         self.assertEqual(grid[3][6], "")              # cell cleared
-        self.assertNotIn("[FRU]", grid[3][10])         # FRU segment died
-        self.assertIn("[MER]", grid[3][9])            # MER untouched
+        self.assertNotIn("[FRU]", grid[3][11])         # FRU segment died
+        self.assertIn("[MER]", grid[3][10])           # MER untouched
 
     def test_future_dated_and_undated_specials_kept(self):
         ws = _v2_ws([
@@ -976,8 +982,8 @@ class TestSweepExpiredSpecials(unittest.TestCase):
         self.assertEqual(ld.sweep_expired_specials(
             ws, today=self.TODAY), [])
         grid = ws.get_all_values()
-        self.assertEqual(grid[3][6], "0.75 (till 12 Sep)")
-        self.assertEqual(grid[4][6], 2.50)
+        self.assertEqual(grid[3][7], "0.75 (till 12 Sep)")
+        self.assertEqual(grid[4][7], 2.50)
 
     def test_permanent_cell_never_swept_even_if_stamped(self):
         ws = _v2_ws([
@@ -988,7 +994,7 @@ class TestSweepExpiredSpecials(unittest.TestCase):
         ])
         self.assertEqual(ld.sweep_expired_specials(
             ws, today=self.TODAY), [])
-        self.assertEqual(ws.get_all_values()[2][5],
+        self.assertEqual(ws.get_all_values()[2][6],
                          "6.50 (till 1 Sep)")
 
     def test_expired_row2_summary_stamp_cleared(self):
@@ -1018,10 +1024,10 @@ class TestSweepExpiredSpecials(unittest.TestCase):
             ["FRUITS", "", "", "", "", "", "", "", "", ""],
             ["Carrots /ea", "", "", "", "", "", 0.75, "", "", ""],
         ])
-        ws.rows[1][6] = "valid until Sun 06 Sep"   # expired stamp
+        ws.rows[1][7] = "valid until Sun 06 Sep"   # expired stamp
         lines = ld.sweep_expired_specials(ws, today=self.TODAY)
         self.assertEqual(lines, [])
-        self.assertEqual(ws.get_all_values()[1][6],
+        self.assertEqual(ws.get_all_values()[1][7],
                          "valid until Sun 06 Sep")
 
     def test_no_write_when_nothing_expired(self):
@@ -1050,9 +1056,9 @@ class TestSweepExpiredSpecials(unittest.TestCase):
         grid = ws.get_all_values()
         self.assertEqual(len(lines), 1)
         self.assertIn("legacy summary stamp text", lines[0])
-        self.assertEqual(grid[2][6], "")           # defect cleared
-        self.assertEqual(grid[2][1], "13.99")      # perm untouched
-        self.assertEqual(grid[3][6], "0.99 (till 20 Sep)")
+        self.assertEqual(grid[2][7], "")           # defect cleared
+        self.assertEqual(grid[2][2], "13.99")      # perm untouched
+        self.assertEqual(grid[3][7], "0.99 (till 20 Sep)")
 
 
 class TestSweepStampReDerivationR2_6(unittest.TestCase):
@@ -1084,8 +1090,8 @@ class TestSweepStampReDerivationR2_6(unittest.TestCase):
         lines = ld.sweep_expired_specials(ws, today=self.TODAY)
         grid = ws.get_all_values()
         self.assertEqual(grid[5][4], "")            # expired cell gone
-        self.assertEqual(grid[4][4], "8.99 (till 11 Sep)")
-        self.assertEqual(grid[3][4], "27.99 (till 11 Sep)")
+        self.assertEqual(grid[4][5], "8.99 (till 11 Sep)")
+        self.assertEqual(grid[3][5], "27.99 (till 11 Sep)")
         # Legacy stamp row is never modified by the sweep.
         self.assertEqual(grid[1][4], "valid until Fri 11 Sep")
         self.assertTrue(all("stamp" not in ln for ln in lines))
@@ -1114,7 +1120,7 @@ class TestSetStorePrices(unittest.TestCase):
         grid = ws.get_all_values()
         # Q17 (Round 3): the butchery entry is 'Halal '-prefixed at
         # normalization — the note contract is unchanged by it.
-        comment = next(r[10] for r in grid if str(r[0]).lower()
+        comment = next(r[11] for r in grid if str(r[0]).lower()
                         .startswith("halal beef mince"))
         self.assertEqual(comment, "[MER] multi buy 2 for $15")
 
@@ -1126,7 +1132,7 @@ class TestSetStorePrices(unittest.TestCase):
               "note": "deal $2x this week only"}],
             till=self.TILL)
         grid = ws.get_all_values()
-        comment = next(r[10] for r in grid if str(r[0]).lower()
+        comment = next(r[11] for r in grid if str(r[0]).lower()
                         .startswith("halal beef mince"))
         self.assertEqual(comment, "[MER] deal $2x this week only")
 
@@ -1142,7 +1148,7 @@ class TestSetStorePrices(unittest.TestCase):
                                     till=self.TILL)
         grid = ws.get_all_values()
         self.assertEqual(grid[-1][0], "Carrots /ea")   # grid end
-        self.assertEqual(grid[-1][6], "0.75 (till 12 Sep)")
+        self.assertEqual(grid[-1][7], "0.75 (till 12 Sep)")
         stamp_rows = [r for r in grid
                       if str(r[0]).strip() == "Prices valid until"]
         self.assertEqual(stamp_rows, [])
@@ -1158,7 +1164,7 @@ class TestSetStorePrices(unittest.TestCase):
                                       "price": 0.75, "unit": "ea"}])
         grid = ws.get_all_values()
         self.assertEqual(len(grid), 4)            # no row appended
-        self.assertEqual(grid[3][6], 0.75)
+        self.assertEqual(grid[3][7], 0.75)
         self.assertIn("[row 4]", lines[0])
 
     def test_permanent_write_has_no_stamp(self):
@@ -1167,9 +1173,9 @@ class TestSetStorePrices(unittest.TestCase):
                             [{"item": "Carrots", "price": 6.50,
                               "unit": "kg"}])
         grid = ws.get_all_values()
-        self.assertEqual(grid[-1][5], 6.50)       # fruitopia PERM
-        self.assertEqual(grid[1][5], "")          # no validity stamp
-        self.assertEqual(grid[-1][6], "")         # special untouched
+        self.assertEqual(grid[-1][6], 6.50)       # fruitopia PERM
+        self.assertEqual(grid[1][6], "")          # no validity stamp
+        self.assertEqual(grid[-1][7], "")         # special untouched
 
     def test_notes_shop_tagged_and_merged_across_shops(self):
         ws = _v2_ws([
@@ -1184,7 +1190,7 @@ class TestSetStorePrices(unittest.TestCase):
                               "note": "bulk 3 for $2"}])
         grid = ws.get_all_values()
         self.assertEqual(
-            grid[3][10],
+            grid[3][11],
             "[FRU] multi buy 2 for $1.50 — $0.75/ea; "
             "[ABS] bulk 3 for $2")
 
@@ -1206,8 +1212,8 @@ class TestSetStorePrices(unittest.TestCase):
                                     [{"item": "beef diced",
                                       "price": 8.99, "unit": "kg"}])
         grid = ws.get_all_values()
-        self.assertEqual(grid[3][3], 9.50)   # dunya perm untouched
-        self.assertEqual(grid[3][4], 8.99)   # merjan special REUSES
+        self.assertEqual(grid[3][4], 9.50)   # dunya perm untouched
+        self.assertEqual(grid[3][5], 8.99)   # merjan special REUSES
         self.assertEqual(grid[3][0], "Beef Diced /kg")  # name kept
         self.assertEqual(len(grid), 4)       # NO near-duplicate row
 
@@ -1242,8 +1248,8 @@ class TestRebuildPreservation(unittest.TestCase):
         self._rebuild(ws, deals, ["fruitopia"])
         grid = ws.get_all_values()
         carrot = next(r for r in grid if r[0] == "Carrots /kg")
-        self.assertEqual(carrot[1], 6.49)         # dunya PERM kept
-        self.assertEqual(carrot[6], "0.8 (till 12 Sep)")
+        self.assertEqual(carrot[2], 6.49)         # dunya PERM kept
+        self.assertEqual(carrot[7], "0.8 (till 12 Sep)")
         stamp_rows = [r for r in grid
                       if str(r[0]).strip() == "Prices valid until"]
         self.assertEqual(stamp_rows, [])          # no summary row
@@ -1260,8 +1266,8 @@ class TestRebuildPreservation(unittest.TestCase):
         self._rebuild(ws, deals, ["dunya_fb"])
         grid = ws.get_all_values()
         beef = next(r for r in grid if r[0] == "Beef Diced /kg")
-        self.assertEqual(beef[2], 11.99)          # this run rebuilt
-        self.assertEqual(beef[4], 9.50)           # MERJAN special kept
+        self.assertEqual(beef[3], 11.99)          # this run rebuilt
+        self.assertEqual(beef[5], 9.50)           # MERJAN special kept
 
     def test_comment_segments_merge_both_directions(self):
         ws = _v2_ws([
@@ -1275,9 +1281,9 @@ class TestRebuildPreservation(unittest.TestCase):
         self._rebuild(ws, deals, ["fruitopia"])
         grid = ws.get_all_values()
         carrot = next(r for r in grid if r[0] == "Carrots /ea")
-        self.assertIn("[MER] bulk 3 for $2", carrot[10])
-        self.assertIn("[FRU]", carrot[10])
-        self.assertIn("multi buy 2 for", carrot[10])
+        self.assertIn("[MER] bulk 3 for $2", carrot[11])
+        self.assertIn("[FRU]", carrot[11])
+        self.assertIn("multi buy 2 for", carrot[11])
 
     def test_row_only_other_shop_data_reappended(self):
         ws = _v2_ws([
@@ -1290,7 +1296,7 @@ class TestRebuildPreservation(unittest.TestCase):
         self._rebuild(ws, deals, ["fruitopia"])
         grid = ws.get_all_values()
         mango = next(r for r in grid if r[0] == "Mangoes /ea")
-        self.assertEqual(mango[4], 3.00)   # merjan-only row survives
+        self.assertEqual(mango[5], 3.00)   # merjan-only row survives
 
     def test_stale_special_of_run_shop_cleared(self):
         ws = _v2_ws([
@@ -1353,8 +1359,8 @@ class TestValidUntilAttach(unittest.TestCase):
                                      valid_until=datetime(
                                          2026, 9, 12).date())]}
         rows = ld.build_rows(deals)
-        self.assertEqual(rows["FRUITS"][0][6], "0.75 (till 12 Sep)")
-        self.assertEqual(rows["FRUITS"][0][10], "")  # no note, no tag
+        self.assertEqual(rows["FRUITS"][0][7], "0.75 (till 12 Sep)")
+        self.assertEqual(rows["FRUITS"][0][11], "")  # no note, no tag
 
 
 class TestFridayGateRetired(unittest.TestCase):
@@ -1464,15 +1470,15 @@ class TestRestampUndated(unittest.TestCase):
 
     def _grid(self):
         return [
-            ["Product"] + [""] * 9,
-            ["Prices valid until", "n/a (live site)"] + [""] * 8,
-            ["FRUITS"] + [""] * 9,
-            ["Cos Lettuce /ea", "", "", "", "", "", "0.99",
-             "", "", ""],
-            ["Celery /ea", "", "", "", "", "", "2 for $2.99",
-             "", "", ""],
-            ["Carrots /kg", "", "", "", "", "",
-             "0.75 (till 5 Sep)", "", "", ""],
+            ["Product"] + [""] * 12,
+            ["Prices valid until", "n/a (live site)"] + [""] * 11,
+            ["FRUITS"] + [""] * 12,
+            ["Cos Lettuce /ea", "", "", "", "", "", "", "0.99",
+             "", "", "", ""],
+            ["Celery /ea", "", "", "", "", "", "", "2 for $2.99",
+             "", "", "", ""],
+            ["Carrots /kg", "", "", "", "", "", "",
+             "0.75 (till 5 Sep)", "", "", "", ""],
         ]
 
     def test_undated_cells_stamped_row2_updated(self):
@@ -1480,11 +1486,11 @@ class TestRestampUndated(unittest.TestCase):
         grid, n = ld._restamp_undated(self._grid(), "fruitopia",
                                       date(2026, 9, 11))
         self.assertEqual(n, 2)                    # 2 undated cells
-        self.assertIn("(till 11 Sep)", grid[3][6])
-        self.assertIn("(till 11 Sep)", grid[4][6])
+        self.assertIn("(till 11 Sep)", grid[3][7])
+        self.assertIn("(till 11 Sep)", grid[4][7])
         # legacy stamp row untouched (retired layout)
-        self.assertEqual(grid[1][6], "")
-        self.assertIn("(till 5 Sep)", grid[5][6])  # dated kept
+        self.assertEqual(grid[1][7], "")
+        self.assertIn("(till 5 Sep)", grid[5][7])  # dated kept
 
     def test_new_layout_items_all_stamped(self):
         """On the 2026-09-12 layout (no stamp/section rows) every
@@ -1492,17 +1498,17 @@ class TestRestampUndated(unittest.TestCase):
         row-2 guard never blocked stamping."""
         from datetime import date
         grid_in = [
-            ["Product"] + [""] * 9,
-            ["Cos Lettuce /ea", "", "", "", "", "", "0.99",
-             "", "", ""],
-            ["Celery /ea", "", "", "", "", "", "2 for $2.99",
-             "", "", ""],
+            ["Product"] + [""] * 12,
+            ["Cos Lettuce /ea", "", "", "", "", "", "", "0.99",
+             "", "", "", ""],
+            ["Celery /ea", "", "", "", "", "", "", "2 for $2.99",
+             "", "", "", ""],
         ]
         grid, n = ld._restamp_undated(grid_in, "fruitopia",
                                       date(2026, 9, 11))
         self.assertEqual(n, 2)
-        self.assertIn("(till 11 Sep)", grid[1][6])
-        self.assertIn("(till 11 Sep)", grid[2][6])
+        self.assertIn("(till 11 Sep)", grid[1][7])
+        self.assertIn("(till 11 Sep)", grid[2][7])
 
     def test_unknown_store_noop(self):
         from datetime import date
@@ -1621,7 +1627,7 @@ class TestTabDedupWordOrder(unittest.TestCase):
         self.assertEqual(len(potatoes), 1)        # ONE row, merged
         self.assertEqual(potatoes[0][0],
                          "Washed Potatoes 5kg Bag")  # name kept
-        self.assertEqual(potatoes[0][6], 2.99)     # newest price wins
+        self.assertEqual(potatoes[0][7], 2.99)     # newest price wins
 
     def test_royal_gala_stays_apart_from_generic_apples(self):
         ws = self._tab(["Apples", "", "", "", "", "", "4.50", "",
@@ -1650,7 +1656,7 @@ class TestTabDedupWordOrder(unittest.TestCase):
         grid = ws.get_all_values()
         lettuce = [r for r in grid if "lettuce" in str(r[0]).lower()]
         self.assertEqual(len(lettuce), 1)
-        self.assertEqual(lettuce[0][6], 1.29)
+        self.assertEqual(lettuce[0][7], 1.29)
 
 
 class TestCommentLifecycleRound1(unittest.TestCase):
@@ -1669,8 +1675,8 @@ class TestCommentLifecycleRound1(unittest.TestCase):
                             [{"item": "Carrots", "price": 0.60,
                               "unit": "ea"}])
         grid = ws.get_all_values()
-        self.assertEqual(str(grid[3][6]), "0.6")
-        self.assertEqual(grid[3][10], "")
+        self.assertEqual(str(grid[3][7]), "0.6")
+        self.assertEqual(grid[3][11], "")
 
     def test_manual_reprice_with_note_replaces_segment(self):
         ws = _v2_ws([
@@ -1683,7 +1689,7 @@ class TestCommentLifecycleRound1(unittest.TestCase):
                             [{"item": "Carrots", "price": 0.60,
                               "unit": "ea", "note": "3 for $1.80"}])
         self.assertEqual(
-            ws.get_all_values()[3][10], "[FRU] 3 for $1.80")
+            ws.get_all_values()[3][11], "[FRU] 3 for $1.80")
 
     def test_manual_new_row_note_still_tags_shop(self):
         ws = _v2_ws([["FRUITS", "", "", "", "", "", "", "", "", ""]])
@@ -1691,7 +1697,7 @@ class TestCommentLifecycleRound1(unittest.TestCase):
                             [{"item": "Celery", "price": 1.20,
                               "unit": "ea", "note": "fresh cut"}])
         self.assertEqual(
-            ws.get_all_values()[3][10], "[FRU] fresh cut")
+            ws.get_all_values()[3][11], "[FRU] fresh cut")
 
     def test_merge_plain_reprice_clears_segment(self):
         # A2 merge-level pin (FIX-4 was parser-level tested).
@@ -1706,8 +1712,8 @@ class TestCommentLifecycleRound1(unittest.TestCase):
              "price_kind": "single", "price": 0.6, "unit": "ea"}])
         grid = ws.get_all_values()
         row = next(r for r in grid if str(r[0]).startswith("Carrots"))
-        self.assertEqual(str(row[6]), "0.6")
-        self.assertEqual(row[10], "")
+        self.assertEqual(str(row[7]), "0.6")
+        self.assertEqual(row[11], "")
 
     def test_merge_dropped_item_keeps_cell_and_comment_together(self):
         # A3 design pin: a post that no longer lists the item leaves
@@ -1724,8 +1730,8 @@ class TestCommentLifecycleRound1(unittest.TestCase):
              "price_kind": "single", "price": 2.5, "unit": "kg"}])
         row = next(r for r in ws.get_all_values()
                    if str(r[0]).startswith("Carrots"))
-        self.assertEqual(row[6], "0.75 (till 12 Sep)")
-        self.assertIn("[FRU]", row[10])
+        self.assertEqual(row[7], "0.75 (till 12 Sep)")
+        self.assertIn("[FRU]", row[11])
 
     def test_repair_strips_orphan_segments(self):
         # A7: the live residue shape (rows 115/116) — empty FRU cells.
@@ -1739,8 +1745,8 @@ class TestCommentLifecycleRound1(unittest.TestCase):
         lines = ld.repair_orphan_comments(ws)
         self.assertEqual(len(lines), 2)
         grid = ws.get_all_values()
-        self.assertEqual(grid[3][10], "")
-        self.assertEqual(grid[4][10], "")
+        self.assertEqual(grid[3][11], "")
+        self.assertEqual(grid[4][11], "")
         self.assertEqual(grid[3][0], "Celery /ea")   # row KEPT
         self.assertEqual(ld.repair_orphan_comments(ws), [])  # idem.
 
@@ -1750,7 +1756,7 @@ class TestCommentLifecycleRound1(unittest.TestCase):
              "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
         ])
         self.assertEqual(ld.repair_orphan_comments(ws), [])
-        self.assertIn("[FRU]", ws.get_all_values()[2][10])
+        self.assertIn("[FRU]", ws.get_all_values()[2][11])
 
     def test_repair_preserves_untagged_text_and_other_shops(self):
         ws = _v2_ws([
@@ -1759,7 +1765,7 @@ class TestCommentLifecycleRound1(unittest.TestCase):
         ])
         lines = ld.repair_orphan_comments(ws)
         self.assertEqual(len(lines), 1)          # only MER stripped
-        self.assertEqual(ws.get_all_values()[2][10],
+        self.assertEqual(ws.get_all_values()[2][11],
                          "[FRU] note; loose text")
 
     def test_repair_no_tags_writes_nothing(self):

@@ -19,11 +19,11 @@ MASTER_HEADER = ["Product_Name", "Category", "Size",
                  "Search_Keyword_Woolworths", "Woolworths_Specials",
                  "Rewards_Points", "Keywords", "Sub_Category",
                  "Item_Code", "Preferred"]
-LD_HEADER = ["Product", "Dunya perm (site)", "Dunya special (FB)",
-             "Merjan perm", "Merjan special", "Fruitopia perm",
-             "Fruitopia special", "Abu Salim perm",
-             "Abu Salim special", "Nazar perm", "Comments",
-             "Item_Code"]
+LD_HEADER = ["Product", "Category", "Dunya perm (site)",
+             "Dunya special (FB)", "Merjan perm", "Merjan special",
+             "Fruitopia perm", "Fruitopia special",
+             "Abu Salim perm", "Abu Salim special", "Nazar perm",
+             "Comments", "Item_Code"]
 
 
 def _mrow(name, code, price=""):
@@ -33,15 +33,15 @@ def _mrow(name, code, price=""):
 
 
 def _lrow(name, code, prices=""):
-    row = [""] * 12
-    row[0], row[1], row[11] = name, prices, code
+    row = [""] * 13
+    row[0], row[2], row[12] = name, prices, code
     return row
 
 
 def _aligned(n=3):
     """master grid + LD grid whose first n item rows pair by code."""
     master = [MASTER_HEADER]
-    ld = [LD_HEADER, ["Prices valid until"] + [""] * 11]
+    ld = [LD_HEADER, ["Prices valid until"] + [""] * 12]
     codes = [f"AB{i}".ljust(3, "H") for i in range(n)]
     for i, code in enumerate(codes):
         master.append(_mrow(f"Item {i}", code))
@@ -61,21 +61,21 @@ class TestAligned(unittest.TestCase):
     def test_structural_rows_exempt(self):
         """Section titles + the validity row never break pairing."""
         master, ld, codes = _aligned(3)
-        ld.insert(2, ["BUTCHERY"] + [""] * 11)      # title above items
-        ld.append(["FRUITS"] + [""] * 11)           # title at the end
+        ld.insert(2, ["BUTCHERY"] + [""] * 12)      # title above items
+        ld.append(["FRUITS"] + [""] * 12)           # title at the end
         result = audit(master, ld)
         self.assertEqual(result["status"], "aligned")
 
     def test_blank_uncoded_rows_ignored(self):
         master, ld, _codes = _aligned(2)
-        ld.append([""] * 12)
+        ld.append([""] * 13)
         self.assertEqual(audit(master, ld)["status"], "aligned")
 
     def test_is_ld_item_row_classification(self):
         self.assertFalse(is_ld_item_row(0, LD_HEADER))
         self.assertFalse(is_ld_item_row(
-            1, ["Prices valid until"] + [""] * 11))
-        self.assertFalse(is_ld_item_row(2, ["BUTCHERY"] + [""] * 11))
+            1, ["Prices valid until"] + [""] * 12))
+        self.assertFalse(is_ld_item_row(2, ["BUTCHERY"] + [""] * 12))
         self.assertTrue(is_ld_item_row(3, _lrow("Beef", "ABC")))
         self.assertTrue(is_ld_item_row(4, _lrow("", "ABC")))  # mirror
 

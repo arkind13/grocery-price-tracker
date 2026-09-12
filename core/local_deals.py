@@ -1549,10 +1549,13 @@ def friday_gate_mark_fired(now: datetime | None = None) -> None:
 
 SECTION_ORDER = ("FRUITS", "BUTCHERY", "OTHER")
 
-TAB_COLUMNS = [  # Local_Deals tab layout v2.1 (user rule 2026-09-07,
-    # + Round-2 col K): every shop gets a PERMANENT column (no
-    # validity) and a SPECIAL column (validity-stamped cells);
-    # comparisons read special first, then permanent.
+TAB_COLUMNS = [  # Local_Deals tab layout v2.2 (user rule 2026-09-12:
+    # a CATEGORY column at B — master B is the source of truth, this
+    # one is the Wednesday-written mirror). Every shop gets a
+    # PERMANENT column (no validity) and a SPECIAL column
+    # (validity-stamped cells); comparisons read special first, then
+    # permanent.
+    ("category", "Category"),
     ("dunya_perm", "Dunya perm (site)"),   # dunyabutchery.com.au
     ("dunya_sp", "Dunya special (FB)"),    # Facebook post prices
     ("merjan_perm", "Merjan perm"),
@@ -1991,6 +1994,13 @@ def build_rows(all_store_deals: dict) -> dict:
             slot = row_index.get((section, key))
             if slot is None:
                 grid_row = [display] + [""] * (len(TAB_COLUMNS))
+                # new rows arrive PRE-categorised (user directive
+                # 2026-09-12: the Wednesday resort files them into
+                # their category block)
+                grid_row[_grid_col("category")] = classify_category(
+                    str(deal.get("item") or ""),
+                    butchery_source=_store_kind(store_key)
+                    == "butchery")
                 rows_by_section[section].append(grid_row)
                 row_index[(section, key)] = \
                     len(rows_by_section[section]) - 1
@@ -3432,7 +3442,8 @@ PRODUCE_WORDS = frozenset({
     "avocado", "lemon", "lime", "orange", "grape", "spinach",
     "silverbeet", "bean", "pea", "cabbage", "chilli", "ginger",
     "garlic", "plum", "peach", "nectarine", "melon", "watermelon",
-    "papaya", "pawpaw", "kiwi", "fig", "date", "salad", "greens"})
+    "papaya", "pawpaw", "kiwi", "fig", "date", "salad", "greens",
+    "beetroot", "fennel", "choy", "oregano", "basil", "mint"})
 BUTCHERY_STORE_KEYS = frozenset({"merjan", "dunya_fb", "dunya",
                                  "nazar"})
 FRUITVEG_STORE_KEYS = frozenset({"fruitopia", "abusalim"})
@@ -3512,6 +3523,11 @@ def ensure_shop_columns(worksheet) -> bool:
         raise RuntimeError(
             f"[layout] unknown Local_Deals column(s) {unknown} — "
             f"column migration aborted (never guesses)")
+    if any(not c for c in header[:len(expected)]):
+        # Blank header cells = a legacy/fake grid whose columns are
+        # not name-addressable — splicing would be a guess. The
+        # writers normalise width themselves; never splice.
+        return False
     changed = False
     for i, name in enumerate(expected):
         if i < len(header) and header[i] == name:
@@ -3535,6 +3551,512 @@ def ensure_shop_columns(worksheet) -> bool:
     _ensure_grid_capacity(worksheet, len(grid), len(expected))
     worksheet.update(values=grid, range_name=grid_range(len(grid)))
     return True
+
+
+# --- category engine (user directive 2026-09-12) ---------------------
+# The sheets are arranged in CATEGORY BLOCKS, in this exact order;
+# The master tab's col B holds the label (source of truth) and the
+# Local_Deals Category column mirrors it. Blank-category rows (the
+# Nazar review set) always sort BELOW every block until the user
+# assigns them.
+CATEGORY_ORDER = ("chicken", "goat", "lamb", "beef",
+                  "misc - butchery", "unclassified - butchery",
+                  "vegetables", "fruits", "unclassified - f&v",
+                  "Non food")
+REVIEW_SENTINEL_ORDER = len(CATEGORY_ORDER) + 1   # blanks sort last
+
+_SPICE_WORDS = frozenset({
+    "spice", "spices", "spiced", "marinade", "marinated", "seasoning",
+    "seasoned", "rub", "salt"})
+# Culinary fruit vocabulary (the produce half of PRODUCE_WORDS).
+_FRUIT_WORDS = frozenset({
+    "apple", "banana", "mango", "strawberry", "blueberry", "raspberry",
+    "grape", "melon", "watermelon", "plum", "peach", "nectarine",
+    "papaya", "pawpaw", "kiwi", "fig", "date", "pear", "orange",
+    "lemon", "lime", "avocado"})
+# Processed/prepared meat-product words — a name carrying one is a
+# butcher's product even without a species word ("Lemon & Pepper
+# Shish", "Sucuk").
+_MEAT_PRODUCT_WORDS = frozenset({
+    "shish", "kebab", "kebabs", "nugget", "nuggets", "schnitzel",
+    "patty", "patties", "salami", "pastrami", "sucuk", "kafta",
+    "kofte", "kavurma", "shawarma", "lahmacun", "kibbeh", "quail",
+    "duck", "turkey", "tripe", "tongue", "tongues", "brains",
+    "kidney", "liver", "heart", "hearts", "tail", "tails", "feet",
+    "neck", "necks"})
+
+
+def _norm_category(label: str) -> str:
+    """Sheet label -> canonical CATEGORY_ORDER label ('' when it is
+    not one of the known labels). Case/space forgiving so the user's
+    manual edits always win when they name a real category."""
+    low = re.sub(r"\s+", " ", str(label or "").strip().lower())
+    if not low:
+        return ""
+    for cat in CATEGORY_ORDER:
+        if low == cat.lower():
+            return cat
+    return ""
+
+
+def _word_stems(words: set) -> set:
+    """Words plus their plural-folded stems ('mangoes' -> mango,
+    'blueberries' -> blueberry, 'wings' -> wing) so plural sheet
+    names classify like their singular entries."""
+    out = set(words)
+    for w in words:
+        if len(w) > 4 and w.endswith("ies"):
+            out.add(w[:-3] + "y")
+        if len(w) > 3 and w.endswith("oes"):
+            out.add(w[:-2])
+        if len(w) > 3 and w.endswith("s") and not w.endswith("ss"):
+            out.add(w[:-1])
+    return out
+
+
+def classify_category(item_name: str,
+                      butchery_source: bool = False) -> str:
+    """One row's category from its NAME (plus a source hint).
+
+    Order: species word (chicken/goat/lamb/beef) -> spice/seasoning
+    -> prepared meat product -> fruit -> vegetable -> the source's
+    unclassified bucket (butchery rows -> 'unclassified - butchery',
+    everything else -> 'unclassified - f&v'). Nothing is auto-filed
+    into 'Non food' — that block is user-assigned only.
+    """
+    words = _word_stems(_item_words(item_name))
+    for sp in ("chicken", "goat", "lamb", "beef"):
+        if sp in words:
+            return sp
+    if words & _SPICE_WORDS and not words & _MEAT_PRODUCT_WORDS:
+        return "misc - butchery"
+    if words & _MEAT_PRODUCT_WORDS or is_meat_item(item_name):
+        return "unclassified - butchery"
+    if words & _FRUIT_WORDS:
+        return "fruits"
+    if words & PRODUCE_WORDS:
+        return "vegetables"
+    if butchery_source:
+        return "unclassified - butchery"
+    return "unclassified - f&v"
+
+
+def category_sort_key(label: str) -> int:
+    """Sort index for a category label — blanks (review rows) last."""
+    cat = _norm_category(label)
+    if not cat:
+        return REVIEW_SENTINEL_ORDER
+    return CATEGORY_ORDER.index(cat)
+
+
+CATEGORY_REVIEW_PATH = (Path(__file__).resolve().parent.parent
+                        / "data" / "category_review.json")
+
+
+def load_category_review(path=None) -> set:
+    """Item_Codes parked for the user's review — never auto-filed by
+    the category step until the user's go-ahead clears them."""
+    path = Path(path) if path else CATEGORY_REVIEW_PATH
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    if isinstance(data, list):
+        return {str(c).strip().upper() for c in data if str(c).strip()}
+    return set()
+
+
+def save_category_review(codes, path=None) -> None:
+    path = Path(path) if path else CATEGORY_REVIEW_PATH
+    path.write_text(json.dumps(sorted({str(c).upper() for c in codes}),
+                               indent=2), encoding="utf-8")
+
+
+def resort_tabs_by_category(master_grid: list, ld_grid: list,
+                            review_codes=None) -> tuple[list, list, list]:
+    """Order BOTH tabs row-for-row into the category blocks.
+
+    Pairs the tabs by Item_Code (row parity invariant), sorts the
+    PAIRS by (category, current relative order) — stable, idempotent
+    — and keeps blank-category rows (the review set) at the very
+    bottom in their current order. The MASTER B cell is the category
+    source of truth. Returns (master_out, ld_out, report_lines); the
+    caller owns the sheet writes.
+    """
+    review = {str(c).upper() for c in (review_codes or set())}
+    mcode = 11                                   # 13-col master: col L
+    lcode = _grid_col("item_code")               # derived LD code col
+    ld_width = len(TAB_COLUMNS) + 1
+
+    ld_by_code: dict = {}
+    for i in range(1, len(ld_grid)):
+        r = list((ld_grid[i] + [""] * ld_width)[:ld_width])
+        code = str(r[lcode]).strip().upper() if len(r) > lcode else ""
+        if code and code not in ld_by_code:
+            ld_by_code[code] = r
+
+    pairs: list = []
+    for i in range(1, len(master_grid)):
+        m = list((master_grid[i] + [""] * 13)[:13])
+        code = str(m[mcode]).strip().upper() if len(m) > mcode else ""
+        pairs.append({
+            "m": m, "code": code,
+            "cat": str(m[1]).strip() if len(m) > 1 else "",
+            "ld": ld_by_code.pop(code, [""] * ld_width)})
+    # LD rows with no master twin (parity break) keep a place at the
+    # end rather than being dropped.
+    for code, r in ld_by_code.items():
+        pairs.append({"m": [""] * 13, "code": code, "cat": "",
+                      "ld": r})
+
+    def _sort_key(p: dict) -> int:
+        if p["code"] and p["code"] in review:
+            return REVIEW_SENTINEL_ORDER      # parked for user review
+        return category_sort_key(p["cat"])
+
+    prev_order = {str(r[mcode]).strip().upper(): i
+                  for i, r in enumerate(master_grid[1:], 2)
+                  if len(r) > mcode and str(r[mcode]).strip()}
+    pairs.sort(key=_sort_key)                 # stable: ties keep order
+
+    master_out = [list((master_grid[0] + [""] * 13)[:13])]         if master_grid else [[]]
+    ld_out = [list((ld_grid[0] + [""] * ld_width)[:ld_width])]         if ld_grid else [[]]
+    moved = 0
+    for pos, p in enumerate(pairs, start=2):
+        master_out.append(p["m"])
+        ld_out.append(p["ld"])
+        old = prev_order.get(p["code"])
+        if old is not None and old != pos:
+            moved += 1
+    lines = ([f"category resort: {moved} row pair(s) moved"] if moved
+             else ["category resort: sheet already ordered"])
+    return master_out, ld_out, lines
+
+
+# --- one-time Nazar duplicate merge + category setup ------------------
+
+NAZAR_MERGE_PAIRS = [
+    # (duplicate row -> surviving row): same product, SAME unit basis
+    # only — user-approved safe list 2026-09-12. The duplicate's
+    # Nazar price moves onto the surviving row; the duplicate row is
+    # archived + deleted on BOTH tabs.
+    ("Halal Beef Curry (with bone) /kg", "Halal Beef Curry /kg"),
+    ("Halal Giglio’s Spicy Wings /ea", "Halal Spicy Wings /ea"),
+    ("Halal Lamb Blade (approx1.5kg) /ea", "Halal Lamb Blade 1.3 /ea"),
+    ("Halal Lamb Steak/Biftek (Made from Backstraps) /kg",
+     "Halal Lamb Backstrap /kg"),
+]
+
+# Nazar-append rows that are near-variants of an existing row but
+# were NOT safe auto-merges (different variant, different unit basis,
+# different grade). They stay BLANK-category at the sheet bottom for
+# the user's verdicts (go-ahead -> --set-category files them).
+NAZAR_REVIEW_ROWS = [
+    ("Halal Diced Beef (No Fat) /kg", "Halal Diced Beef /kg"),
+    ("Halal Lamb Necks /kg", "Halal Lamb Neck Fillet (BBQ) /kg"),
+    ("Halal Beef Best Mince /kg", "Halal Beef Mince /kg"),
+    ("Halal Lamb Leg (3kg) /ea", "Halal Boneless Lamb Leg (2kg) /ea"),
+    ("Halal BBQ Steak /kg", "Halal BBQ Blade Steak /kg"),
+    ("Halal Chicken Mini Drumstick /kg", "Halal Chicken Drumsticks /kg"),
+    ("Halal Chicken Wings /kg", "Halal Chicken mid-wings /kg"),
+    ("Halal Lamb Shanks /kg", "Halal Lamb Shank – each /ea"),
+    ("Halal Eye Fillet /kg", "Halal Beef eye-fillet 1.5 /ea"),
+    ("Halal Skinless Drumsticks /kg", "Halal Chicken Drumsticks /kg"),
+    ("Halal Skinless Maryland /kg", "Halal Maryland /kg"),
+    ("Halal Sausages (Plain) /kg", "Halal chicken Sausage /kg"),
+    ("Halal Lamb Mince (Course Size)", "Halal Lamb Mince /kg"),
+    ("Halal Course Mince (Beef)", "Halal Beef Mince /kg"),
+]
+
+# The Nazar sync appended its items after the original 158 item rows
+# (sheet rows 2..159 pre-Nazar). Used ONCE by --setup-categories to
+# tell original rows from Nazar appends.
+PRE_NAZAR_ITEM_COUNT = 158
+
+
+def _grid_row_canonical_index(grid: list, name: str) -> int | None:
+    """First ITEM row whose canonical base name equals name's."""
+    target = canonical_key(_base_name(name))
+    for i in range(1, len(grid)):
+        first = str(grid[i][0]).strip()
+        if not first or first in SECTION_ORDER \
+                or first == "Prices valid until":
+            continue
+        if canonical_key(_base_name(first)) == target:
+            return i
+    return None
+
+
+def _archive_merge_rows(entries: list, archive_path=None) -> None:
+    """deleted_rows.json append (v2_batch schema, source=nazar-merge)."""
+    from datetime import datetime as _dt
+    path = archive_path or (Path(__file__).resolve().parent.parent
+                            / "data" / "deleted_rows.json")
+    archive: list = []
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(loaded, list):
+            archive = loaded
+    except (OSError, ValueError):
+        archive = []
+    stamp = _dt.now().isoformat(timespec="seconds")
+    for e in entries:
+        e = dict(e)
+        e["deleted_at"] = stamp
+        e["source"] = "nazar-merge"
+        archive.append(e)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(archive, indent=2, ensure_ascii=False),
+                    encoding="utf-8")
+
+
+def merge_nazar_duplicates(master_grid: list, ld_grid: list,
+                           archive_path=None) -> tuple[list, list, list]:
+    """Merge the SAFE Nazar duplicate pairs (NAZAR_MERGE_PAIRS).
+
+    The duplicate's Nazar price (+ any [NAZ] comment segment) moves
+    onto the surviving row; the duplicate row is archived and
+    dropped from BOTH grids (row parity). Pure grid-in/grids-out —
+    the caller owns reads, writes and Telegram. Returns (master_out,
+    ld_out, report_lines)."""
+    mcode, lcode = 11, _grid_col("item_code")
+    ncol = _grid_col("nazar_perm")
+    ccol = _grid_col("comments")
+    ld_width = len(TAB_COLUMNS) + 1
+    master = [list((r + [""] * 13)[:13]) for r in master_grid]
+    ld = [list((r + [""] * ld_width)[:ld_width]) for r in ld_grid]
+    lines: list = []
+    drop_codes: set = set()
+    entries: list = []
+    for src_name, dst_name in NAZAR_MERGE_PAIRS:
+        si = _grid_row_canonical_index(ld, src_name)
+        di = _grid_row_canonical_index(ld, dst_name)
+        if si is None:
+            lines.append(f"merge: '{src_name}' not found (already "
+                         f"merged?) — skipped")
+            continue
+        if di is None:
+            lines.append(f"merge: survivor '{dst_name}' not found "
+                         f"— skipped")
+            continue
+        code = str(ld[si][lcode]).strip()
+        if str(ld[di][lcode]).strip() == code:
+            lines.append(f"merge: '{src_name}' and '{dst_name}' "
+                         f"share one row — skipped")
+            continue
+        price = ld[si][ncol]
+        dst_price = str(ld[di][ncol]).strip()
+        if dst_price and str(price).strip() \
+                and dst_price != str(price).strip():
+            lines.append(f"merge: '{dst_name}' already carries a "
+                         f"Nazar price — skipped")
+            continue
+        ld[di][ncol] = price
+        note = ""
+        segs = [s.strip() for s in str(ld[si][ccol]).split(";")
+                if s.strip()]
+        for s in segs:
+            if _TAG_RE.match(s):
+                note = _TAG_RE.sub("", s, count=1).strip()
+        if note:
+            ld[di][ccol] = _merge_comment_cell(
+                ld[di][ccol], "nazar", note)
+        drop_codes.add(code)
+        m_i = next((j for j in range(1, len(master))
+                    if str(master[j][mcode]).strip().upper()
+                    == code.upper()), None)
+        if m_i is not None:
+            entries.append({"side": "master", "code": code,
+                            "row_index": m_i + 1,
+                            "row": [str(c) for c in master[m_i]]})
+        entries.append({"side": "local_deals", "code": code,
+                        "row_index": si + 1,
+                        "row": [str(c) for c in ld[si]]})
+        lines.append(f"merged '{src_name}' -> '{dst_name}' "
+                     f"({price if price != '' else 'no price'}) "
+                     f"[{code}]")
+    if drop_codes:
+        master = [r for j, r in enumerate(master)
+                  if not (j and str(r[mcode]).strip().upper()
+                          in drop_codes)]
+        ld = [r for r in ld
+              if not (str(r[lcode]).strip().upper() in drop_codes)]
+        _archive_merge_rows(entries, archive_path)
+    return master, ld, lines
+
+
+def setup_categories(master_ws, ld_ws,
+                     dry_run: bool = False) -> tuple[int, list]:
+    """ONE-TIME (user directive 2026-09-12): merge the safe Nazar
+    duplicates, assign every item a Category (master col B — source
+    of truth; existing non-blank labels WIN), mirror the labels into
+    the Local_Deals Category column, and resort BOTH tabs into the
+    category blocks with the review rows parked blank at the bottom.
+
+    Returns (rc, report_lines)."""
+    report: list = []
+
+    # 1. splice the Category column into the live LD tab when the
+    #    grid still lacks it (idempotent; header-driven) — BEFORE the
+    #    merge, so the merge works on the final layout.
+    ensure_shop_columns(ld_ws)
+
+    # 2. merge the safe duplicates (grid-level; writes happen below)
+    master_grid = [list(r) for r in
+                   (master_ws.get_all_values() or [])]
+    ld_grid = [list(r) for r in (ld_ws.get_all_values() or [])]
+    master_grid, ld_grid, merge_lines = merge_nazar_duplicates(
+        master_grid, ld_grid)
+    report.extend(merge_lines)
+
+    # 3. identify the parked review rows: Nazar appends that are
+    #    known near-variants (NAZAR_REVIEW_ROWS).
+    lcode = _grid_col("item_code")
+    ld_width = len(TAB_COLUMNS) + 1
+    review_codes: set = set()
+    for name, _partner in NAZAR_REVIEW_ROWS:
+        i = _grid_row_canonical_index(ld_grid, name)
+        if i is not None:
+            code = str(ld_grid[i][lcode]).strip()
+            if code:
+                review_codes.add(code.upper())
+
+    # 4. classify: master B filled where blank (existing labels WIN);
+    #    review rows stay BLANK. The butchery-source hint comes from
+    #    the paired LD row's butchery-shop prices or the master's own
+    #    subcategory.
+    butchery_cols = [c for c in (_grid_col(f"{k}_perm")
+                                 for k in ("dunya", "merjan",
+                                           "nazar")) if c]
+    mcat = 1
+    counts: dict = {}
+    ld_by_code: dict = {}
+    for i in range(1, len(ld_grid)):
+        r = list((ld_grid[i] + [""] * ld_width)[:ld_width])
+        code = str(r[lcode]).strip().upper() if len(r) > lcode else ""
+        if code:
+            ld_by_code[code] = r
+    for i in range(1, len(master_grid)):
+        m = master_grid[i]
+        while len(m) < 13:
+            m.append("")
+        code = str(m[11]).strip().upper()
+        ld_row = ld_by_code.get(code, [])
+        current = str(m[mcat]).strip()
+        known = _norm_category(current)
+        if known:
+            if current != known:
+                m[mcat] = known          # normalise case only
+            counts[known] = counts.get(known, 0) + 1
+            continue
+        if code and code in review_codes:
+            continue                     # parked blank for review
+        butchery = any(len(ld_row) > c and str(ld_row[c]).strip()
+                       for c in butchery_cols) \
+            or str(m[10]).strip().lower() == "butchery"
+        label = classify_category(str(m[0]), butchery)
+        m[mcat] = label
+        counts[label] = counts.get(label, 0) + 1
+    report.append("category assignment: " + ", ".join(
+        f"{k}={v}" for k, v in sorted(counts.items())))
+
+    # 5. mirror master B into the LD Category column (paired by code)
+    for i in range(1, len(ld_grid)):
+        r = ld_grid[i]
+        while len(r) < ld_width:
+            r.append("")
+        code = str(r[lcode]).strip().upper()
+        m = next((mm for mm in master_grid[1:]
+                  if str(mm[11]).strip().upper() == code), None)
+        if m is not None:
+            r[_grid_col("category")] = m[mcat]
+
+    # 6. resort both tabs (review rows parked at the bottom)
+    master_grid, ld_grid, resort_lines = resort_tabs_by_category(
+        master_grid, ld_grid, review_codes)
+    report.extend(resort_lines)
+
+    if dry_run:
+        report.append("DRY-RUN — nothing written")
+        return 0, report
+
+    _ensure_grid_capacity(master_ws, len(master_grid), 13)
+    master_ws.clear()
+    master_ws.freeze(rows=1)
+    master_ws.update(values=master_grid,
+                     range_name=f"A1:M{len(master_grid)}")
+    _ensure_grid_capacity(ld_ws, len(ld_grid), ld_width)
+    ld_ws.clear()
+    ld_ws.freeze(rows=1)
+    ld_ws.update(values=ld_grid, range_name=grid_range(len(ld_grid)))
+    save_category_review(review_codes)
+    report.append(f"review rows parked at the bottom: "
+                  f"{len(review_codes)} (data/category_review.json)")
+    return 0, report
+
+
+def set_category_verdicts(verdicts: list, master_ws,
+                          ld_ws) -> tuple[int, list]:
+    """File the reviewed rows: 'CODE=category' pairs (the go-ahead
+    step after the user reviews the parked rows). Sets master col B
+    (source of truth), mirrors LD B, resorts, and clears the parked
+    codes that got a category. Unknown category labels are rejected
+    loudly — never guessed."""
+    mcat = 1
+    lcode = _grid_col("item_code")
+    ld_width = len(TAB_COLUMNS) + 1
+    master_grid = [list(r) for r in
+                   (master_ws.get_all_values() or [])]
+    ld_grid = [list(r) for r in (ld_ws.get_all_values() or [])]
+    lines: list = []
+    filed: set = set()
+    for v in verdicts:
+        code, _, label = str(v).partition("=")
+        code = code.strip().upper()
+        label = _norm_category(label.strip())
+        if not label:
+            lines.append(f"[{code or '?'}] ✗ unknown category in "
+                         f"'{v}' — allowed: "
+                         f"{', '.join(CATEGORY_ORDER)}")
+            continue
+        m_i = next((j for j in range(1, len(master_grid))
+                    if str(master_grid[j][11]).strip().upper()
+                    == code), None)
+        if m_i is None:
+            lines.append(f"[{code}] ✗ unknown code")
+            continue
+        master_grid[m_i][mcat] = label
+        filed.add(code)
+        lines.append(f"[{code}] ✓ {label} — "
+                     f"{str(master_grid[m_i][0]).strip()}")
+    if filed:
+        for i in range(1, len(ld_grid)):
+            r = ld_grid[i]
+            while len(r) < ld_width:
+                r.append("")
+            code = str(r[lcode]).strip().upper()
+            if code in filed:
+                m = next((mm for mm in master_grid[1:]
+                          if str(mm[11]).strip().upper() == code),
+                         None)
+                if m is not None:
+                    r[_grid_col("category")] = m[mcat]
+        review = load_category_review() - filed
+        save_category_review(review)
+        master_grid, ld_grid, resort_lines = resort_tabs_by_category(
+            master_grid, ld_grid, review)
+        _ensure_grid_capacity(master_ws, len(master_grid), 13)
+        master_ws.clear()
+        master_ws.freeze(rows=1)
+        master_ws.update(values=master_grid,
+                         range_name=f"A1:M{len(master_grid)}")
+        _ensure_grid_capacity(ld_ws, len(ld_grid), ld_width)
+        ld_ws.clear()
+        ld_ws.freeze(rows=1)
+        ld_ws.update(values=ld_grid,
+                     range_name=grid_range(len(ld_grid)))
+        lines.extend(resort_lines)
+    return 0, lines
 
 
 def merge_store_tab(worksheet, store_key: str, deals: list[dict],
@@ -4158,6 +4680,7 @@ def sync_dunya_site(dry_run: bool = False, send: bool = True,
 
     spreadsheet = connect_spreadsheet()
     worksheet = ensure_local_deals_tab(spreadsheet)
+    ensure_shop_columns(worksheet)   # layout self-heal (Category col)
     grid_before = worksheet.get_all_values() or []
     dunya_col = _perm_column_for("dunya")     # site prices column
     before = {str(r[0]).strip(): r[dunya_col]

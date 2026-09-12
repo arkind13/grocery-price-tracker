@@ -877,14 +877,14 @@ class TestMergeStoreTab(unittest.TestCase):
         grid = tab.grid
         apples = next(r for r in grid
                       if r and str(r[0]).strip() == "Apples")
-        self.assertEqual(apples[6], 3.2)   # updated (Fruitopia special)
+        self.assertEqual(apples[7], 3.2)   # updated (Fruitopia special)
         self.assertEqual(apples[1], "")             # Dunya perm intact
         beef = next(r for r in grid
                     if r and str(r[0]).strip() == "Beef Diced")
-        self.assertEqual(beef[1], 12.99)            # untouched
+        self.assertEqual(beef[2], 12.99)            # untouched
         lettuce = next(r for r in grid
                        if str(r[0]).strip().startswith("Cos Lettuce"))
-        self.assertEqual(lettuce[6], 0.99)          # appended
+        self.assertEqual(lettuce[7], 0.99)          # appended
         # Round 3 (Q27): the new row BOTTOM-APPENDS at grid end —
         # never a mid-tab insert inside its section block.
         self.assertEqual(new_rows,
@@ -1153,7 +1153,7 @@ class TestIngestFlow(unittest.TestCase):
         lettuce = next(r for r in tab.grid
                        if r and str(r[0]).strip().startswith(
                            "Cos Lettuce"))
-        self.assertEqual(lettuce[6], "0.99 (till 19 Sep)")
+        self.assertEqual(lettuce[7], "0.99 (till 19 Sep)")
         # NEWEST post's price, stamped with ITS OWN post's validity
         # (no row-2 summary stamp — layout 2026-09-12)
         stamp_rows = [r for r in tab.grid
@@ -1208,7 +1208,7 @@ class TestIngestFlow(unittest.TestCase):
         self.assertEqual(rc, 0)
         carrots = next(r for r in tab.grid
                        if r and str(r[0]).strip() == "Carrots /ea")
-        self.assertEqual(carrots[6], "1.2 (till 19 Sep)")
+        self.assertEqual(carrots[7], "1.2 (till 19 Sep)")
         self.assertEqual(carrots[9], "")   # promo comment GONE
 
     def test_set_date_records_and_archives(self):
@@ -1295,11 +1295,12 @@ class TestDunyaSiteSync(unittest.TestCase):
             "Chicken Skewer (each)")
         ghost_name = "Halal Totally Absent Product"
         tab = self._FakeTab([
-            ["Product", "", "", "", "", "", "", "", "", "", ""],
-            ["Prices valid until", "n/a (live site)", "", "", "",
-             "", "", "", "", "", ""],
-            [beef_name, "", "", "", "", "", "", "", "", "", "DUN1"],
-            [skewer_name, "", "", "", "", "", "", "", "", "", "DUN2"],
+            ["Product"] + [n for _k, n in ld.TAB_COLUMNS],
+            ["Prices valid until", "n/a (live site)"] + [""] * 11,
+            [beef_name, "", "", "", "", "", "", "", "", "", "",
+             "DUN1"],
+            [skewer_name, "", "", "", "", "", "", "", "", "", "",
+             "DUN2"],
         ])
         catalogue = [dict(d) for d in self.CATALOGUE]
         catalogue.append({"name": "TOTALLY ABSENT PRODUCT",
@@ -1310,9 +1311,9 @@ class TestDunyaSiteSync(unittest.TestCase):
         grid = tab.grid
         self.assertEqual(len(grid), 4)          # NO new rows (A1)
         beef = next(r for r in grid if r[0] == beef_name)
-        self.assertEqual(beef[1], 64.99)        # 6499 cents -> $64.99
+        self.assertEqual(beef[2], 64.99)        # 6499 cents -> $64.99
         skewer = next(r for r in grid if r[0] == skewer_name)
-        self.assertEqual(skewer[1], 2.99)       # sale price lands
+        self.assertEqual(skewer[2], 2.99)       # sale price lands
         self.assertIn("site sync: 2 items", sent[0])
         self.assertIn("1 on offer", sent[0])
         self.assertIn("Not tracked — add via an FB post or a "
@@ -1329,18 +1330,19 @@ class TestDunyaSiteSync(unittest.TestCase):
         skewer_name = "Halal " + ld._clean_site_name(
             "Chicken Skewer (each)") + " /ea"
         tab = self._FakeTab([
-            ["Product", "", "", "", "", "", "", "", "", "", ""],
-            ["Prices valid until", "n/a (live site)", "", "", "",
-             "", "", "", "", "", ""],
-            [beef_name, 64.99, "", "", "", "", "", "", "", "", "DUN1"],
-            [skewer_name, 2.99, "", "", "", "", "", "", "", "", "DUN2"],
+            ["Product"] + [n for _k, n in ld.TAB_COLUMNS],
+            ["Prices valid until", "n/a (live site)"] + [""] * 11,
+            [beef_name, "", 64.99, "", "", "", "", "", "", "", "",
+             "", "DUN1"],
+            [skewer_name, "", 2.99, "", "", "", "", "", "", "", "",
+             "", "DUN2"],
         ])
         cheaper = [dict(d) for d in self.CATALOGUE]
         cheaper[0]["price"] = 5999             # mince on sale
         rc, sent = self._sync(tab, catalogue=cheaper)
         self.assertEqual(rc, 0)
         beef = next(r for r in tab.grid if r[0] == beef_name)
-        self.assertEqual(beef[1], 59.99)       # updated in place
+        self.assertEqual(beef[2], 59.99)       # updated in place
         self.assertIn("Price changes", sent[0])
         self.assertIn("59.99", sent[0])
 
@@ -1362,10 +1364,10 @@ class TestDunyaSiteSync(unittest.TestCase):
                          "Lamb Leg Roast &#8211; 2.5-3kg 2 FOR $30")
                      + " /ea")
         tab = self._FakeTab([
-            ["Product", "", "", "", "", "", "", "", "", "", ""],
-            ["Prices valid until", "n/a (live site)", "", "", "",
-             "", "", "", "", "", ""],
-            [lamb_name, "", "", "", "", "", "", "", "", "", "DUN1"],
+            ["Product"] + [n for _k, n in ld.TAB_COLUMNS],
+            ["Prices valid until", "n/a (live site)"] + [""] * 11,
+            [lamb_name, "", "", "", "", "", "", "", "", "", "",
+             "", "DUN1"],
         ])
         catalogue = [
             {"name": "Lamb Leg Roast &#8211; 2.5-3kg 2 FOR $30",
@@ -1380,10 +1382,10 @@ class TestDunyaSiteSync(unittest.TestCase):
         # matched row keeps its Col A text; only cells update
         self.assertEqual(lamb[0], lamb_name)
         # PERM cell (site prices are permanent) = effective unit rate
-        self.assertEqual(lamb[1], 15.0)
+        self.assertEqual(lamb[2], 15.0)
         # comments = the shop-tagged bundle note (idx 10: the Nazar
         # column moved Comments one right, 2026-09-12)
-        self.assertEqual(lamb[10],
+        self.assertEqual(lamb[11],
                          "[DUN] multi buy 2 for $30.00 — $15.00/ea")
         self.assertIn("1 on offer", sent[0])
 

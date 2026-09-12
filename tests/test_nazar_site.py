@@ -65,7 +65,7 @@ def _sheet():
     master.append(m)
     ld = [LD_HEADER,
           ["Halal Lamb Mince /kg", "", "", "", "", "", "", "", "",
-           "", "", "LAM1"]]
+           "", "", "", "LAM1"]]
     return FakeWS(master), FakeWS(ld)
 
 
@@ -74,15 +74,15 @@ class TestSiteReuseMatch(unittest.TestCase):
     GRID = [
         ["Product"] + [n for _k, n in ld.TAB_COLUMNS],
         ["Halal Lamb Mince /kg", "", "", "", "", "", "", "", "",
-         "", "", "LAM1"],
+         "", "", "", "LAM1"],
         ["Halal Beef Osso Bucco /kg", "", "", "", "", "", "", "",
-         "", "", "", "OBB1"],
+         "", "", "", "", "OBB1"],
         ["Halal Whole chicken s14 /ea", "", "", "", "", "", "", "",
-         "", "", "", "WC14"],
+         "", "", "", "", "WC14"],
         ["Halal Lamb Shank – each /ea", "", "", "", "", "", "", "",
-         "", "", "", "LSH1"],
+         "", "", "", "", "LSH1"],
         ["Lebanese Bread /ea", "", "", "", "", "", "", "", "",
-         "", "", "LBR1"],
+         "", "", "", "LBR1"],
     ]
 
     def _match(self, name):
@@ -118,7 +118,7 @@ class TestSiteReuseMatch(unittest.TestCase):
         # a 'BBQ Blade Steak' row; 'Whole Chicken' reuses the s14 row
         grid = list(self.GRID) + [
             ["Halal BBQ Blade Steak /kg", "", "", "", "", "", "", "",
-             "", "", "", "BBS1"]]
+             "", "", "", "", "BBS1"]]
         self.assertEqual(
             ld._site_reuse_match(grid, "Halal Blade Steak /kg"), 6)
         self.assertEqual(
@@ -127,7 +127,7 @@ class TestSiteReuseMatch(unittest.TestCase):
     def test_pack_sizes_stay_separate(self):
         grid = list(self.GRID) + [
             ["Halal Lamb Leg /kg", "", "", "", "", "", "", "", "",
-             "", "", "LLG1"]]
+             "", "", "", "LLG1"]]
         self.assertEqual(
             ld._site_reuse_match(grid, "Halal Lamb Leg (3kg) /ea"),
             None)
@@ -135,7 +135,7 @@ class TestSiteReuseMatch(unittest.TestCase):
     def test_bare_rows_only_take_bare_items(self):
         grid = list(self.GRID) + [
             ["Halal Whole Lamb", "", "", "", "", "", "", "", "",
-             "", "", "WLM1"]]
+             "", "", "", "WLM1"]]
         # a per-item price MAY fill a bare row (same pack semantics)
         self.assertEqual(
             ld._site_reuse_match(grid, "Halal Whole Lamb /ea"), 6)
@@ -161,10 +161,11 @@ class TestEnsureShopColumns(unittest.TestCase):
         self.assertTrue(ld.ensure_shop_columns(ws))
         self.assertEqual(ws.grid[0],
                          ["Product"] + [n for _k, n in ld.TAB_COLUMNS])
-        self.assertEqual(ws.grid[0][9], "Nazar perm")
-        # existing data kept its column meaning: Comments+code moved
-        self.assertEqual(ws.grid[1][1], "13.99")
-        self.assertEqual(ws.grid[1][11], "XJA")
+        self.assertEqual(ws.grid[0][1], "Category")
+        self.assertEqual(ws.grid[0][10], "Nazar perm")
+        # existing data kept its column meaning: all shop cells +2
+        self.assertEqual(ws.grid[1][2], "13.99")
+        self.assertEqual(ws.grid[1][12], "XJA")
 
     def test_idempotent(self):
         ws = FakeWS([LD_HEADER])
@@ -214,7 +215,7 @@ class TestSyncNazarSite(unittest.TestCase):
         cat = [_cat("Lamb Mince", 1990, "per kg", ["Lamb"])]
         rc, master, ldtab, _sent, _out = self._run(cat)
         self.assertEqual(rc, 0)
-        self.assertEqual(ldtab.grid[1][9], 19.9)   # Nazar perm col
+        self.assertEqual(ldtab.grid[1][10], 19.9)   # Nazar perm col
         self.assertEqual(len(ldtab.grid), 2)       # NO new row
         self.assertEqual(master.grid[1][3], "")    # master untouched
 
@@ -224,12 +225,12 @@ class TestSyncNazarSite(unittest.TestCase):
                     3690, "per kg", ["Lamb"])]
         rc, master, ldtab, _sent, _out = self._run(cat)
         self.assertEqual(rc, 0)
-        self.assertEqual(ldtab.grid[1][9], 19.9)
+        self.assertEqual(ldtab.grid[1][10], 19.9)
         self.assertEqual(ldtab.grid[2][0],
                          "Halal Kusbasi (boneless lamb shoulder "
                          "diced small) /kg")
-        self.assertEqual(ldtab.grid[2][9], 36.9)
-        code = ldtab.grid[2][11]
+        self.assertEqual(ldtab.grid[2][10], 36.9)
+        code = ldtab.grid[2][12]
         self.assertTrue(code and len(code) == 3)   # fresh Item_Code
         # master mirror: blank price + keyword, butchery sub-category
         self.assertEqual(master.grid[2][0],
@@ -246,22 +247,22 @@ class TestSyncNazarSite(unittest.TestCase):
         rc, _master, ldtab, _sent, _out = self._run(cat)
         self.assertEqual(rc, 0)
         self.assertEqual(ldtab.grid[2][0], "Halal Turkey (Spicy) /kg")
-        self.assertEqual(ldtab.grid[2][9], 50.0)   # $5/100g = $50/kg
+        self.assertEqual(ldtab.grid[2][10], 50.0)   # $5/100g = $50/kg
         self.assertIn("site price per 100g",
-                      str(ldtab.grid[2][10]))
+                      str(ldtab.grid[2][11]))
 
     def test_price_range_noted(self):
         cat = [_cat("Whole Chicken", 1290, "per item", ["Chicken"],
                     price_range="12.90-14.90")]
         rc, _master, ldtab, _sent, _out = self._run(cat)
-        self.assertEqual(ldtab.grid[2][9], 12.9)
-        self.assertIn("12.90-14.90", str(ldtab.grid[2][10]))
+        self.assertEqual(ldtab.grid[2][10], 12.9)
+        self.assertIn("12.90-14.90", str(ldtab.grid[2][11]))
 
     def test_duplicate_listing_keeps_categorised(self):
         cat = [_cat("Lamb Mince", 1690, "per kg", []),        # stray
                _cat("Lamb Mince", 1990, "per kg", ["Lamb"])]  # canon
         rc, _master, ldtab, _sent, out = self._run(cat)
-        self.assertEqual(ldtab.grid[1][9], 19.9)   # canonical wins
+        self.assertEqual(ldtab.grid[1][10], 19.9)   # canonical wins
         self.assertEqual(len(ldtab.grid), 2)
         self.assertIn("duplicate", out)
 
@@ -289,7 +290,7 @@ class TestSyncNazarSite(unittest.TestCase):
 class TestNazarReadPath(unittest.TestCase):
     def test_parse_ld_row_reads_nazar_column(self):
         row = ["Halal Lamb Mince /kg", "", "", "", "", "", "", "",
-               "", 19.9, "", "LAM1"]
+               "", "", 19.9, "", "LAM1"]
         parsed = parse_ld_row(2, row)
         self.assertEqual(parsed["prices"]["nazar"],
                          (19.9, "permanent"))
@@ -300,7 +301,7 @@ class TestNazarReadPath(unittest.TestCase):
             "", "butchery", "LAM1", ""])]
         ld_row = parse_ld_row(2, [
             "Halal Lamb Mince /kg", "", "", "", "", "", "", "",
-            "", 19.9, "", "LAM1"])
+            "", "", 19.9, "", "LAM1"])
         result = lookup_item("halal lamb mince", master, [ld_row])
         # a /kg-named row answers via the halal locals pool (§8)
         self.assertEqual(result["status"], "meat-local-only")
@@ -317,11 +318,11 @@ class TestNazarReadPath(unittest.TestCase):
         self.assertEqual(ws.grid[1][9], 19.9)      # perm survives
 
     def test_grid_range_is_full_width(self):
-        self.assertEqual(ld.grid_range(6), "A1:L6")
+        self.assertEqual(ld.grid_range(6), "A1:M6")
 
     def test_target_column_is_perm(self):
         col, kind = ld._target_column("nazar")
-        self.assertEqual((col, kind), (9, "perm"))
+        self.assertEqual((col, kind), (10, "perm"))
 
 
 if __name__ == "__main__":

@@ -42,8 +42,8 @@ def _m(name, code, ww="", sub="", alias=""):
 
 
 def _l(name, code, dunya="", merjan=""):
-    row = [""] * 12          # 12-col layout (Nazar 2026-09-12)
-    row[0], row[1], row[3], row[11] = name, dunya, merjan, code
+    row = [""] * 13          # 13-col layout (Category B 2026-09-12)
+    row[0], row[2], row[4], row[12] = name, dunya, merjan, code
     return parse_ld_row(3, row, today=None)
 
 

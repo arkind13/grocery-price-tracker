@@ -29,10 +29,11 @@ MASTER_HEADER_19 = [
     "Coles_Specials", "Rewards_Points", "Keywords", "Sub_Category",
     "Item_Code", "Preferred",
 ]
-LD_HEADER_10 = ["Product", "Dunya perm (site)", "Dunya special (FB)",
-                "Merjan perm", "Merjan special", "Fruitopia perm",
-                "Fruitopia special", "Abu Salim perm",
-                "Abu Salim special", "Nazar perm", "Comments"]
+LD_HEADER_10 = ["Product", "Category", "Dunya perm (site)",
+                "Dunya special (FB)", "Merjan perm", "Merjan special",
+                "Fruitopia perm", "Fruitopia special",
+                "Abu Salim perm", "Abu Salim special", "Nazar perm",
+                "Comments"]
 
 
 def _mrow19(name, code, sub=""):
@@ -61,14 +62,14 @@ def master19():
 
 
 def ld10():
-    rows = [LD_HEADER_10, ["Prices valid until"] + [""] * 10]
-    rows.append(["BUTCHERY"] + [""] * 10)
-    rows.append(["BEEF MINCE (5KG) /ea", "64.99"] + [""] * 9)
-    rows.append(["Whole chicken /ea"] + [""] * 10)
-    rows.append(["Halal Sausages /kg"] + [""] * 10)  # already prefixed
-    rows.append(["FRUITS"] + [""] * 10)
-    rows.append(["Tomatoes /kg", "", "3.99"] + [""] * 8)
-    rows.append(["Grapes /ea"] + [""] * 10)
+    rows = [LD_HEADER_10, ["Prices valid until"] + [""] * 11]
+    rows.append(["BUTCHERY"] + [""] * 11)
+    rows.append(["BEEF MINCE (5KG) /ea", "", "64.99"] + [""] * 10)
+    rows.append(["Whole chicken /ea"] + [""] * 11)
+    rows.append(["Halal Sausages /kg"] + [""] * 11)  # already prefixed
+    rows.append(["FRUITS"] + [""] * 11)
+    rows.append(["Tomatoes /kg", "", "", "3.99"] + [""] * 9)
+    rows.append(["Grapes /ea"] + [""] * 11)
     return rows
 
 
@@ -297,17 +298,17 @@ class TestNewMasterRows(unittest.TestCase):
         self.assertEqual(code_map[3], ("ZWX", "matched"))
         self.assertEqual(code_map[4], ("ZGK", "matched"))
         # alignment accepts the distinct pairing …
-        ld11 = [list(r) + [""] * (12 - len(r)) for r in ld]
-        ld11[0][11] = "Item_Code"
+        ld11 = [list(r) + [""] * (13 - len(r)) for r in ld]
+        ld11[0][12] = "Item_Code"
         for idx, (code, _k) in code_map.items():
-            ld11[idx][11] = code
+            ld11[idx][12] = code
         master_out, ld_out = align_grids(
             m13 + [blank_master_row("Apples", "AP1", "fruit & veg")],
             ld11)
         codes = [r[11] for r in master_out[1:]]
         self.assertEqual(sorted(codes), ["AP1", "ZGK", "ZWX"])
         # … and REJECTS a duplicate-code grid loudly.
-        ld11[4][11] = "ZWX"                # re-create the defect
+        ld11[4][12] = "ZWX"                # re-create the defect
         with self.assertRaises(ValueError):
             align_grids(m13, ld11)
 
@@ -331,7 +332,7 @@ class TestAlignGrids(unittest.TestCase):
         self.assertEqual(len(master_out) - 1, len(ld_items))
         # per-position code pairing
         for m, l in zip(master_out[1:], ld_items):
-            self.assertEqual(m[11], l[11])
+            self.assertEqual(m[11], l[12])
             self.assertTrue(m[11])
         # section titles preserved on the LD side only
         firsts = [r[0] for r in ld_out]
@@ -341,7 +342,7 @@ class TestAlignGrids(unittest.TestCase):
             self.assertNotIn(m[0], ("BUTCHERY", "FRUITS", "OTHER"))
         # Wool-only rows mirrored by BLANK LD rows at the END
         self.assertEqual(ld_items[-1][0], "")
-        self.assertEqual(ld_items[-1][11], "WP1")
+        self.assertEqual(ld_items[-1][12], "WP1")
         self.assertEqual(master_out[-1][0], "Wool Only Peas")
 
     def test_raises_on_unresolvable_ld_code(self):
@@ -427,7 +428,7 @@ class TestApplyIdempotence(unittest.TestCase):
             if i and row[0] and row[0] not in ("BUTCHERY", "FRUITS",
                                                "OTHER") \
                     and row[0] != "Prices valid until":
-                self.assertTrue(str(row[11]).strip(), f"row {i}")
+                self.assertTrue(str(row[12]).strip(), f"row {i}")
 
 
 if __name__ == "__main__":

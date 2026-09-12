@@ -49,7 +49,7 @@ OLD_ITEM_CODE_IDX = 17         # col R
 NEW_SUBCATEGORY_IDX = 10       # col K
 NEW_ITEM_CODE_IDX = 11         # col L
 # Local_Deals v2.1 layout: Item_Code in col K (0-based idx 10).
-LD_CODE_IDX = 11         # 12-col layout (Nazar added 1)
+LD_CODE_IDX = 12         # 13-col layout (Category added 1)
 
 # Produce-adjacent labels OUTSIDE the strict keep sets — the user
 # rules on these at G1 (default: NOT kept).
@@ -338,11 +338,11 @@ def align_grids(master_grid_13: list,
             0, 13 - len(row))
         master_order.append(code)
 
-    header = (list(ld_grid_11[0]) + [""] * 12)[:12]
+    header = (list(ld_grid_11[0]) + [""] * 13)[:13]
     validity = None
     if len(ld_grid_11) > 1 and _cell(ld_grid_11[1], 0) == \
             "Prices valid until":
-        validity = (list(ld_grid_11[1]) + [""] * 12)[:12]
+        validity = (list(ld_grid_11[1]) + [""] * 13)[:13]
 
     master_out: list = [list(NEW_MASTER_HEADERS)]
     ld_out: list = [header]
@@ -358,7 +358,7 @@ def align_grids(master_grid_13: list,
             continue
         if first in SECTION_ORDER:
             section = first
-            ld_out.append((list(row) + [""] * 12)[:12])
+            ld_out.append((list(row) + [""] * 13)[:13])
             continue
         if not first and not _cell(row, LD_CODE_IDX):
             continue
@@ -374,7 +374,7 @@ def align_grids(master_grid_13: list,
                 f"Local_Deals row {i + 1} ({first!r}) carries code "
                 f"{code or '—'} with no master counterpart")
         master_out.append(master_row)
-        ld_out.append((list(row) + [""] * 12)[:12])
+        ld_out.append((list(row) + [""] * 13)[:13])
         used.add(code)
         emitted.add(code)
 
@@ -383,7 +383,7 @@ def align_grids(master_grid_13: list,
         if code in used:
             continue
         master_out.append(master_by_code[code])
-        blank = [""] * 12
+        blank = [""] * 13
         blank[LD_CODE_IDX] = code
         ld_out.append(blank)
     return master_out, ld_out
@@ -545,10 +545,10 @@ def build_parity_plan(master_grid_13: list, ld_grid: list) -> dict:
     planned = plan_new_master_rows(ld_grid, master_grid_13)
     code_map = ld_row_code_map(ld_grid, master_grid_13, planned)
 
-    ld11 = _pad(ld_renamed, 12)
-    ld11[0][11] = "Item_Code"
+    ld11 = _pad(ld_renamed, 13)
+    ld11[0][12] = "Item_Code"
     for idx, (code, _kind) in code_map.items():
-        ld11[idx][11] = code
+        ld11[idx][12] = code
     master_padded = _pad(master_grid_13, 13)
     master_with_new = master_padded + [
         blank_master_row(p["name"], p["code"], p["subcategory"])
@@ -583,7 +583,7 @@ def apply_parity(spreadsheet=None) -> int:
     code_map = plan["code_map"]
 
     if not renames and not planned \
-            and _cell(ld[0], 11) == "Item_Code":
+            and _cell(ld[0], LD_CODE_IDX) == "Item_Code":
         result = audit(_read_master(spreadsheet), _read_ld(spreadsheet))
         if result["status"] == "aligned":
             print("[G3] already applied (audit: ALIGNED) — no changes")
@@ -653,7 +653,20 @@ def apply_parity(spreadsheet=None) -> int:
           f"rows <-> {ld_item_count} LD item rows "
           "(LD structural rows exempt)")
 
-    # 5. audit → must print ALIGNED.
+    # 5. category resort (2026-09-12 layout) — re-pairs both tabs
+    # by Item_Code and orders them into the category blocks, then
+    # audit → must print ALIGNED.
+    from core.local_deals import resort_tabs_by_category
+    master_final, ld_final, resort_lines = resort_tabs_by_category(
+        master_final, ld_final)
+    if any("moved" in ln for ln in resort_lines):
+        # write only when the resort actually reordered (idempotence)
+        master_ws.clear()
+        master_ws.update(values=master_final,
+                         range_name=f"A1:M{len(master_final)}")
+        ld_ws.clear()
+        ld_ws.update(values=ld_final,
+                     range_name=f"A1:M{len(ld_final)}")
     result = audit(_read_master(spreadsheet), _read_ld(spreadsheet))
     print(f"[G3] 5. audit: {format_report(result)}")
     return 0 if result["status"] == "aligned" else 1

@@ -118,6 +118,23 @@ only manual path left, needing no commands either. The post-mortem
 and the three ingest defects (ID-1/2/3) live in
 `old md/auto-ingest-spec.md`.
 
+### Category blocks (user setup, 2026-09-12)
+
+Both tabs carry a **Category** column (Products_Master col B is the
+source of truth; the Local_Deals Category column mirrors it) and the
+rows are arranged in blocks, in this exact order: chicken, goat,
+lamb, beef, misc - butchery (spices etc), unclassified - butchery,
+vegetables, fruits, unclassified - f&v, Non food. Blank-category
+rows (the Nazar review set) always sort below every block. The
+Wednesday run **resorts BOTH tabs into these blocks every time**
+(paired by Item_Code): rows added during the week are auto-filed by
+the name classifier, and any category the user edits manually wins
+on the next run. The old mid-tab-insert hard alert is retired —
+order drift is fixed by the resort; only a true code mutation still
+aborts with the verbatim alert. One-time setup + review verdicts:
+`local-deals --setup-categories` and
+`local-deals --set-category CODE=CATEGORY …`.
+
 ### Nazar — the site-only shop (2026-09-12)
 
 Nazar Butchery (nazarbutchery.com.au) has NO Facebook board and NO

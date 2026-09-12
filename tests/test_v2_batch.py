@@ -14,6 +14,7 @@ _PROJECT = _HERE.parent
 if str(_PROJECT) not in sys.path:
     sys.path.insert(0, str(_PROJECT))
 
+from core.local_deals import TAB_COLUMNS          # noqa: E402
 from core.v2_batch import (                       # noqa: E402
     apply_verdicts, parse_verdicts,
 )
@@ -68,17 +69,17 @@ def _fixture():
                           keyword="woolworths tomato"),
               _master_row("Halal Beef Mince 500g", "AUG"),
               _master_row("Halal Lamb Shoulder", "HLS")]
-    ld = [["Product", "", "", "", "", "", "", "", "", "", "", ""],
+    ld = [["Product"] + [n for _k, n in TAB_COLUMNS],
           ["Prices valid until", "n/a (live site)", "", "", "", "",
-           "", "", "", "", "", ""],
-          ["FRUITS"] + [""] * 11,
-          ["Tomato", "", "", "", "", "0.90", "", "", "", "", "",
+           "", "", "", "", "", "", ""],
+          ["FRUITS"] + [""] * 12,
+          ["Tomato", "", "", "", "", "", "0.90", "", "", "", "", "",
            "EYF"],
-          ["BUTCHERY"] + [""] * 11,
-          ["Halal Beef Mince 500g", "", "9.20", "", "", "", "", "",
-           "", "", "", "AUG"],
-          ["Halal Lamb Shoulder", "12.99", "", "", "", "", "", "",
-           "", "", "", "HLS"]]
+          ["BUTCHERY"] + [""] * 12,
+          ["Halal Beef Mince 500g", "", "", "9.20", "", "", "", "",
+           "", "", "", "", "AUG"],
+          ["Halal Lamb Shoulder", "", "12.99", "", "", "", "", "",
+           "", "", "", "", "HLS"]]
     return FakeWS(master), FakeWS(ld)
 
 
@@ -161,7 +162,7 @@ class TestVerdicts(unittest.TestCase):
         self.assertEqual(self.ld._values[5][0],
                          "halal lamb shoulder")
         self.assertEqual(self.master._values[2][11], "AUG")
-        self.assertEqual(self.ld._values[5][2], "9.20")
+        self.assertEqual(self.ld._values[5][3], "9.20")   # dunya_sp
 
     def test_remove_archives_before_deleting(self):
         replies = self._run("AUG remove")
@@ -175,7 +176,7 @@ class TestVerdicts(unittest.TestCase):
         self.assertEqual(entries[0]["source"], "v2-batch-remove")
         self.assertEqual(entries[0]["row"][0],
                          "Halal Beef Mince 500g")
-        self.assertEqual(entries[1]["row"][11], "AUG")
+        self.assertEqual(entries[1]["row"][12], "AUG")
         codes = [r[11] for r in self.master._values[1:]]
         self.assertEqual(codes, ["EYF", "HLS"])
         self.assertEqual([r[0] for r in self.ld._values[1:]],

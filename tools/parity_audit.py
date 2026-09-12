@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core.local_deals import SECTION_ORDER  # noqa: E402
 
 MASTER_CODE_IDX = 11        # 13-col layout: col L
-LD_CODE_IDX = 11            # 12-col layout: col L (Nazar added 1)
+LD_CODE_IDX = 12            # 13-col layout: col M (Category added 1)
 VALIDITY_LABEL = "Prices valid until"
 
 MIDDLE_INSERT_ALERT = (

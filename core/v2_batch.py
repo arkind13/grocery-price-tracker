@@ -13,7 +13,7 @@ from core.v2_read import IGNORED_PATH, TAB_NAME, VALIDITY_LABEL
 
 MASTER_TAB = "Products_Master"
 MASTER_CODE_IDX = 11          # 13-col layout: col L
-LD_CODE_IDX = 11              # 12-col layout: col L (Nazar added 1)
+LD_CODE_IDX = 12              # 13-col layout: col M (Category added 1)
 MASTER_COLS = 13              # A..M
 LD_COLS = 11                  # A..K
 

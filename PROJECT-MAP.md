@@ -59,11 +59,14 @@ Woolworths twin.
 - **Products_Master** — your Woolworths tab: name, size, price
   (or `GONE`), brand, keyword (the magic word that matches your pasted
   list — you maintain it), specials, sub-category, item code.
-- **Local_Deals** — the local shops tab: one row per item, one column
-  pair per shop (permanent + special price, stamped with validity),
-  comments, item code. Nazar has a permanent column only — no
-  specials. Filled automatically from the shops' Facebook posts and
-  the Dunya + Nazar websites.
+- **Local_Deals** — the local shops tab: one row per item, a Category
+column, one column pair per shop (permanent + special price, stamped
+with validity), comments, item code. Nazar has a permanent column
+only — no specials. Filled automatically from the shops' Facebook
+posts and the Dunya + Nazar websites. Both tabs are arranged in
+category blocks (chicken → goat → lamb → beef → butchery misc →
+unclassified → vegetables → fruits → unclassified → Non food);
+Wednesday re-sorts them every run.
 - **Archive** — the 100-ish rows that left the project in the v2
   migration. Nothing is ever hard-deleted.
 
