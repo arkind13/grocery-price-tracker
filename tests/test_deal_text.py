@@ -1381,8 +1381,9 @@ class TestDunyaSiteSync(unittest.TestCase):
         self.assertEqual(lamb[0], lamb_name)
         # PERM cell (site prices are permanent) = effective unit rate
         self.assertEqual(lamb[1], 15.0)
-        # comments = the shop-tagged bundle note
-        self.assertEqual(lamb[9],
+        # comments = the shop-tagged bundle note (idx 10: the Nazar
+        # column moved Comments one right, 2026-09-12)
+        self.assertEqual(lamb[10],
                          "[DUN] multi buy 2 for $30.00 — $15.00/ea")
         self.assertIn("1 on offer", sent[0])
 

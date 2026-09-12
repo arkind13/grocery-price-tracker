@@ -71,14 +71,20 @@ def parse_master_row(sheet_row: int, row: list) -> dict | None:
 
 def parse_ld_row(sheet_row: int, row: list,
                  today=None) -> dict | None:
-    """One 11-col Local_Deals row → {row, name, prices, code}.
+    """One Local_Deals row → {row, name, prices, code}.
 
     prices: {shop_key: (price, 'special' | 'permanent')} via
     core.local_deals.tab_store_price (special-first, expiry-aware).
-    Structural rows (header / validity / section titles) → None.
+    The Comments/Item_Code positions come from the tab layout
+    (TAB_COLUMNS) — never pinned indices (the Nazar column moved
+    them, 2026-09-12). Structural rows (header / validity / section
+    titles) → None.
     """
+    from core.local_deals import _grid_col
+
     name = str(row[0]).strip() if row else ""
-    code = str(row[10]).strip() if len(row) > 10 else ""
+    code = str(row[_grid_col("item_code")]).strip() \
+        if len(row) > (_grid_col("item_code") or 0) else ""
     if not name and not code:
         return None
     if name in (VALIDITY_LABEL, "Product") or \
@@ -89,7 +95,9 @@ def parse_ld_row(sheet_row: int, row: list,
         price, kind = tab_store_price(row, shop, today=today)
         if price is not None:
             prices[shop] = (price, kind)
-    comments = str(row[9]).strip() if len(row) > 9 else ""
+    ccol = _grid_col("comments")
+    comments = str(row[ccol]).strip() if len(row) > (ccol or 0) \
+        else ""
     return {"row": sheet_row, "name": name, "prices": prices,
             "comments": comments, "code": code}
 
@@ -680,7 +688,7 @@ def _shop_label(shop_key: str) -> str:
 # §11 emoji section headers: local shops by domain (butchery 🔪 /
 # fruit shop 🍎); Woolworths itself is 🟢 (kit SECTION_ICONS).
 _SHOP_ICONS = {"dunya": "🔪", "dunya_fb": "🔪", "merjan": "🔪",
-               "fruitopia": "🍎", "abusalim": "🍎"}
+               "fruitopia": "🍎", "abusalim": "🍎", "nazar": "🔪"}
 
 
 def _quote_price_text(q: dict) -> str:

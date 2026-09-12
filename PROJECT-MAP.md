@@ -5,7 +5,9 @@
 
 ## The 30-second version
 
-Four local shops post prices on Facebook (and one has a website). You
+Four local shops post prices on Facebook, and Nazar Butchery lists
+its whole catalogue (permanent prices, no deals) on its own website.
+You
 buy mutton, chicken and fruit & veg. Woolworths is your fallback store
 (your team discount usually wins). This project keeps ONE sheet with
 both sides and tells you where each item is cheaper — in seconds, from
@@ -59,8 +61,9 @@ Woolworths twin.
   list — you maintain it), specials, sub-category, item code.
 - **Local_Deals** — the local shops tab: one row per item, one column
   pair per shop (permanent + special price, stamped with validity),
-  comments, item code. Filled automatically from the shops' Facebook
-  posts and the Dunya website.
+  comments, item code. Nazar has a permanent column only — no
+  specials. Filled automatically from the shops' Facebook posts and
+  the Dunya + Nazar websites.
 - **Archive** — the 100-ish rows that left the project in the v2
   migration. Nothing is ever hard-deleted.
 

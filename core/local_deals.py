@@ -1042,7 +1042,7 @@ def set_date_cmd(code: str, filename: "str | None",
             tab.clear()
             tab.freeze(rows=1)
             tab.update(values=grid,
-                       range_name=f"A1:K{len(grid)}")
+                       range_name=grid_range(len(grid)))
         except Exception as exc:  # noqa: BLE001 — log update already safe
             print(f"[set-date] ⚠️ sheet re-stamp failed: {exc}")
     outcome = (f"valid until {valid_until:%a %d %b}"
@@ -1561,15 +1561,19 @@ TAB_COLUMNS = [  # Local_Deals tab layout v2.1 (user rule 2026-09-07,
     ("fruitopia_sp", "Fruitopia special"),
     ("abusalim_perm", "Abu Salim perm"),
     ("abusalim_sp", "Abu Salim special"),
+    # Nazar (2026-09-12): site-only shop (nazarbutchery.com.au), no
+    # specials anywhere on the site — ONE permanent column, no _sp.
+    ("nazar_perm", "Nazar perm"),
     ("comments", "Comments"),       # shop-tagged multibuy/bulk notes
-    ("item_code", "Item_Code"),     # col K: paired master code (v2)
+    ("item_code", "Item_Code"),     # paired master code (v2)
 ]
-# Kept for callers that reason about the four physical shops.
+# Kept for callers that reason about the physical shops.
 STORE_COLUMNS = [
     ("dunya", "Dunya (site)"),
     ("merjan", "Merjan Brothers Quality Meats"),
     ("fruitopia", "Fruitopia Mt Druitt"),
     ("abusalim", "Abu Salim Fruit Market"),
+    ("nazar", "Nazar"),
 ]
 TAB_NAME = "Local_Deals"
 # The master tab is opened by NAME through THIS constant only
@@ -1577,14 +1581,41 @@ TAB_NAME = "Local_Deals"
 # counts the literal: read-helper docstring + this line).
 MASTER_TAB = "Products_Master"
 SHOP_TAGS = {"dunya": "DUN", "merjan": "MER",
-             "fruitopia": "FRU", "abusalim": "ABS"}
+             "fruitopia": "FRU", "abusalim": "ABS",
+             "nazar": "NAZ"}
 
 
 def _grid_col(key: str) -> int | None:
     """Row-list index for a TAB_COLUMNS key (0 = Product name;
-    'comments' -> 9). Sheet column = index + 1 (A1 range is fixed)."""
+    'comments' -> 10 since the Nazar column, 2026-09-12). Sheet
+    column = index + 1 (A1 range is fixed)."""
     return next((i + 1 for i, (k, _n) in enumerate(TAB_COLUMNS)
                  if k == key), None)
+
+
+def grid_range(last_row: int) -> str:
+    """The full-width update range for the Local_Deals tab
+    ('A1:L<n>' — one wider column per TAB_COLUMNS entry). Always
+    DERIVED: a pinned 'A1:K' broke silently when the Nazar column
+    was added (2026-09-12)."""
+    n = len(TAB_COLUMNS) + 1
+    letter = chr(ord("A") + n - 1)
+    return f"A1:{letter}{max(1, int(last_row))}"
+
+
+def _ensure_grid_capacity(worksheet, rows: int, cols: int) -> None:
+    """Grow the real sheet grid when a full-tab write would exceed
+    it (a gspread update beyond the grid fails). Fake worksheets
+    (tests) carry no row_count/col_count and are skipped."""
+    try:
+        rc = int(getattr(worksheet, "row_count", 0) or 0)
+        cc = int(getattr(worksheet, "col_count", 0) or 0)
+    except Exception:                       # noqa: BLE001 — fakes
+        return
+    if rc and rows > rc:
+        worksheet.add_rows(rows - rc + 10)
+    if cc and cols > cc:
+        worksheet.add_cols(cols - cc + 2)
 
 
 def _perm_column_for(store_key: str) -> int | None:
@@ -1600,11 +1631,12 @@ def _special_column_for(store_key: str) -> int | None:
 def _target_column(store_key: str) -> tuple[int | None, str]:
     """(1-based column, kind) a deals store_key writes to.
 
-    'dunya' (site catalogue) -> permanent column; every FB-post key
-    ('dunya_fb', or a plain shop key) -> the SPECIAL column.
+    'dunya' and 'nazar' (site-catalogue shops) -> the PERMANENT
+    column; every FB-post key ('dunya_fb', or a plain FB-shop key)
+    -> the SPECIAL column.
     """
-    if store_key == "dunya":
-        return _perm_column_for("dunya"), "perm"
+    if store_key in ("dunya", "nazar"):
+        return _perm_column_for(store_key), "perm"
     if store_key == "dunya_fb":
         return _special_column_for("dunya"), "special"
     return _special_column_for(store_key), "special"
@@ -1631,9 +1663,10 @@ def _tag_note(store_key: str, note: str) -> str:
     return f"[{_comment_tag(store_key)}] {clean}"
 
 
-_TAG_RE = re.compile(r"\[(DUN|MER|FRU|ABS)\]\s*")
+_TAG_RE = re.compile(r"\[(DUN|MER|FRU|ABS|NAZ)\]\s*")
 _TAG_TO_SHOP = {"DUN": "dunya", "MER": "merjan",
-                "FRU": "fruitopia", "ABS": "abusalim"}
+                "FRU": "fruitopia", "ABS": "abusalim",
+                "NAZ": "nazar"}
 
 
 def _shop_key_for_tag(tag: str) -> str:
@@ -1787,7 +1820,7 @@ def ensure_local_deals_tab(spreadsheet) -> "Worksheet":
 def _store_kind(store_key: str) -> str:
     """'butchery' | 'fruits' for a store key ('' when unknown)."""
     from extractors.fb_flyer_fetch import STORES
-    if store_key in ("dunya", "dunya_fb"):
+    if store_key in ("dunya", "dunya_fb", "nazar"):
         return "butchery"        # dunya_fb = Dunya's Facebook posts
     return next((s["kind"] for s in STORES if s["key"] == store_key),
                 "")
@@ -1898,6 +1931,12 @@ def _cell_for(deal: dict) -> tuple:
     comment = note
     if comment.startswith("[") and comment.endswith("]"):
         comment = comment[1:-1]
+    # Site-catalogue basis notes ('site price per 100g', a weight
+    # range) ride the deal's notes on SINGLE deals only — multibuy/
+    # bulk deals already own their comment text.
+    extra = str(deal.get("notes") or "").strip()
+    if extra and kind not in ("bulk_pack", "multibuy"):
+        comment = f"{comment}; {extra}" if comment else extra
     return cell, comment
 
 
@@ -1998,6 +2037,7 @@ def rebuild_tab(worksheet, rows_by_section: dict,
     """
     run_keys = {k.strip() for k in (store_keys or []) if k and
                 k.strip()}
+    ensure_shop_columns(worksheet)   # layout self-heal (Nazar 2026-09-12)
     # Grid key -> the TAB_COLUMNS key this run's shop writes to.
     run_cols = {}
     for key in run_keys:
@@ -2079,7 +2119,7 @@ def rebuild_tab(worksheet, rows_by_section: dict,
         grid.append(row)
     worksheet.clear()
     worksheet.freeze(rows=1)
-    worksheet.update(values=grid, range_name=f"A1:K{len(grid)}")
+    worksheet.update(values=grid, range_name=grid_range(len(grid)))
 
 
 @dataclass
@@ -2654,7 +2694,7 @@ def _env_int(name: str) -> int | None:
 
 SHORT_SHOP_NAMES = {"dunya": "Dunya", "dunya_fb": "Dunya",
                     "merjan": "Merjan", "fruitopia": "Fruitopia",
-                    "abusalim": "Abu Salim"}
+                    "abusalim": "Abu Salim", "nazar": "Nazar"}
 
 
 def _digest_shop_summary(shop_label: str, posts: list[dict]) -> str:
@@ -3298,6 +3338,91 @@ def _reuse_match_index(grid: list, name: str) -> int | None:
     return None
 
 
+# --- shop-site catalogue absorb: STRICT unit-aware reuse matcher ----
+# (Nazar 2026-09-12 — the FB-ingest ID-2 matcher is too loose for a
+# 152-item catalogue walk: 'Seekh Kebab (lamb mince marinated ...)'
+# would reuse the 'Halal Lamb Mince /kg' row and per-kg prices would
+# land on per-each rows.)
+
+_SITE_SPECIES_WORDS = frozenset({"beef", "lamb", "chicken", "goat"})
+_SITE_SIZE_RE = re.compile(r"\d+(?:[.,]\d+)?kg\b", re.IGNORECASE)
+
+
+def _row_unit_kind(name: str) -> str:
+    """'kg' | 'ea' | 'bare' from a display name's unit suffix."""
+    low = str(name or "").strip().lower()
+    if low.endswith("/kg"):
+        return "kg"
+    if low.endswith("/ea"):
+        return "ea"
+    return "bare"
+
+
+def _site_identity_tokens(text: str) -> set:
+    """Identity tokens for the STRICT matcher: the ID-2 tokens
+    (halal/unit markers/stopwords/numbers dropped, plural-folded)
+    MINUS pure style words ('bbq', 'whole', 's14' — style never
+    splits or merges products)."""
+    return {t for t in _reuse_tokens(text)
+            if t not in _GATE_STYLE_WORDS}
+
+
+def _site_reuse_match(grid: list, name: str) -> int | None:
+    """STRICT reuse matcher for the shop-site catalogue absorb
+    (user rule 2026-09-12: reuse the same item; a NEW row only when
+    the item is 100% not found).
+
+    A catalogue item reuses an existing row only when
+
+    1. the UNIT kind agrees — a /kg price never enters a /ea or
+       bare row and vice versa ('per item'/'per pack' may fill a
+       bare row: same pack semantics),
+    2. the pack sizes match on both sides when either is stated
+       (S9 discipline — a 3kg pack never merges into a /kg row), and
+    3. the identity tokens are EQUAL, or the smaller set (>= 2
+       tokens) is contained in the larger with every extra token a
+       pure species word — 'Osso Bucco' reuses 'Halal Beef Osso
+       Bucco /kg'; 'Seekh Kebab (lamb mince ...)' never reuses
+       'Halal Lamb Mince /kg'.
+
+    Returns the matching row index or None (new row).
+    """
+    kind = _row_unit_kind(name)
+    incoming = _site_identity_tokens(name)
+    inc_sizes = {t for t in _reuse_tokens(name)
+                 if _SITE_SIZE_RE.fullmatch(t)}
+    target = canonical_key(_base_name(name))
+    for i in range(1, len(grid)):
+        first = str(grid[i][0]).strip()
+        if not first or first in SECTION_ORDER \
+                or first == "Prices valid until":
+            continue
+        row_kind = _row_unit_kind(first)
+        if kind == "kg" and row_kind != "kg":
+            continue
+        if kind == "ea" and row_kind == "kg":
+            continue
+        if kind == "bare" and row_kind != "bare":
+            continue
+        row_tokens = _site_identity_tokens(first)
+        row_sizes = {t for t in _reuse_tokens(first)
+                     if _SITE_SIZE_RE.fullmatch(t)}
+        if (inc_sizes or row_sizes) and inc_sizes != row_sizes:
+            continue
+        if target == canonical_key(_base_name(first)):
+            return i                       # exact canonical reuse
+        if not incoming or not row_tokens:
+            continue
+        if incoming == row_tokens:
+            return i                       # identity equality
+        smaller, larger = sorted((incoming, row_tokens), key=len)
+        extra = larger - smaller
+        if len(smaller) >= 2 and smaller < larger \
+                and extra <= _SITE_SPECIES_WORDS:
+            return i                       # species-word containment
+    return None
+
+
 PRODUCE_WORDS = frozenset({
     "lettuce", "onion", "pumpkin", "tomato", "apple", "banana",
     "cucumber", "capsicum", "carrot", "broccoli", "cauliflower",
@@ -3308,7 +3433,8 @@ PRODUCE_WORDS = frozenset({
     "silverbeet", "bean", "pea", "cabbage", "chilli", "ginger",
     "garlic", "plum", "peach", "nectarine", "melon", "watermelon",
     "papaya", "pawpaw", "kiwi", "fig", "date", "salad", "greens"})
-BUTCHERY_STORE_KEYS = frozenset({"merjan", "dunya_fb", "dunya"})
+BUTCHERY_STORE_KEYS = frozenset({"merjan", "dunya_fb", "dunya",
+                                 "nazar"})
 FRUITVEG_STORE_KEYS = frozenset({"fruitopia", "abusalim"})
 
 
@@ -3359,9 +3485,62 @@ def domain_gate_skip(item_name: str, store_key: str) -> str | None:
     return None
 
 
+def ensure_shop_columns(worksheet) -> bool:
+    """Idempotent Local_Deals LAYOUT migration: make the live tab's
+    header EXACTLY ['Product'] + the current TAB_COLUMNS names,
+    splicing any missing shop column in at its expected position
+    with blank cells (added for Nazar 2026-09-12 — ONE permanent
+    column, no special column: the shop has no specials).
+
+    Never guesses: a header carrying an unknown column name, or an
+    expected name sitting OUT of position, aborts with a
+    RuntimeError instead of writing. Returns True when the grid was
+    rewritten."""
+    expected = ["Product"] + [name for _k, name in TAB_COLUMNS]
+    grid = [list(r) for r in (worksheet.get_all_values() or [])]
+    if not grid:
+        return False
+    first_cell = str(grid[0][0]).strip().lower() \
+        if grid[0] else ""
+    if first_cell != "product":
+        # No header grid (legacy fakes / structural-only shapes) —
+        # the writers normalise width themselves; never splice.
+        return False
+    header = [str(c).strip() for c in grid[0]]
+    unknown = [c for c in header if c and c not in expected]
+    if unknown:
+        raise RuntimeError(
+            f"[layout] unknown Local_Deals column(s) {unknown} — "
+            f"column migration aborted (never guesses)")
+    changed = False
+    for i, name in enumerate(expected):
+        if i < len(header) and header[i] == name:
+            continue
+        if name in header:
+            raise RuntimeError(
+                f"[layout] column '{name}' is out of position "
+                f"({header.index(name) + 1} != {i + 1}) — column "
+                f"migration aborted (never guesses)")
+        for r in grid:
+            while len(r) < i:
+                r.append("")
+            r.insert(i, "")
+        grid[0][i] = name
+        header.insert(i, name)
+        changed = True
+    if not changed:
+        return False
+    worksheet.clear()
+    worksheet.freeze(rows=1)
+    _ensure_grid_capacity(worksheet, len(grid), len(expected))
+    worksheet.update(values=grid, range_name=grid_range(len(grid)))
+    return True
+
+
 def merge_store_tab(worksheet, store_key: str, deals: list[dict],
                     valid_until=None,
-                    master_ws=None) -> tuple[int, list[str]]:
+                    master_ws=None,
+                    reuse_fn=None) -> tuple[int, list[str]]:
     """Merge ONE store's deals into the existing Local_Deals tab.
 
     The ingest flow must NOT touch the other stores' cells: the
@@ -3396,6 +3575,10 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
             prices — no validity period).
         master_ws: optional handle for the master tab — enables
             the parity auto-create mirror (spec §4.2).
+        reuse_fn: optional custom reuse matcher (grid, name) ->
+            row index | None. Defaults to the FB-ingest ID-2
+            matcher; the site-catalogue sync passes the STRICT
+            unit-aware matcher (_site_reuse_match).
 
     Returns:
         (int, list[str]): number of grid rows written (header
@@ -3404,6 +3587,8 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
     rows_by_section = build_rows({store_key: deals})
     col, kind = _target_column(store_key)
     comments_col = _grid_col("comments")
+    reuse_fn = reuse_fn or _reuse_match_index
+    ensure_shop_columns(worksheet)   # layout self-heal (Nazar 2026-09-12)
 
     grid = worksheet.get_all_values() or [["Product"] + [
         name for _k, name in TAB_COLUMNS]]
@@ -3439,7 +3624,7 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
             # drift ("Halal Sliced Lamb Neck" vs "Halal Lamb Necks").
             # Round 3: matching is GRID-WIDE — new rows bottom-append
             # outside their section block (Q27).
-            match = _reuse_match_index(grid, row[0])
+            match = reuse_fn(grid, row[0])
             if match is None:
                 grid.append(list(row))
                 appended.append(grid[-1])
@@ -3461,7 +3646,8 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
                                          master_ws)
     worksheet.clear()
     worksheet.freeze(rows=1)
-    worksheet.update(values=grid, range_name=f"A1:K{len(grid)}")
+    _ensure_grid_capacity(worksheet, len(grid), len(TAB_COLUMNS) + 1)
+    worksheet.update(values=grid, range_name=grid_range(len(grid)))
     if domain_skips:
         new_row_lines = ([f"[domain gate] {len(domain_skips)} "
                           f"out-of-domain deal(s) skipped"] +
@@ -3500,7 +3686,7 @@ def _mirror_new_rows(store_key: str, appended: list,
         code = item_codes.generate_codes(
             taken, 1, seed=f"merge:{store_key}:{ld_row[0]}")[0]
         taken.add(code)
-        ld_row[10] = code                        # col K
+        ld_row[_grid_col("item_code")] = code
         m_row = [""] * 13
         m_row[0] = str(ld_row[0])
         m_row[10] = sub
@@ -3596,6 +3782,8 @@ def sweep_expired_specials(worksheet, today: "date | None" = None
             continue
         for key in SHOP_TAGS:
             col = _special_column_for(key)
+            if col is None:
+                continue      # perm-only shop (nazar) — no specials
             cell = row[col]
             if not _special_expired(cell, today):
                 continue
@@ -3637,7 +3825,7 @@ def sweep_expired_specials(worksheet, today: "date | None" = None
 
     if changed:
         worksheet.clear()
-        worksheet.update(values=grid, range_name=f"A1:K{len(grid)}")
+        worksheet.update(values=grid, range_name=grid_range(len(grid)))
     return lines
 
 
@@ -3705,7 +3893,7 @@ def repair_orphan_comments(worksheet) -> list[str]:
     if changed:
         worksheet.clear()
         worksheet.update(values=grid,
-                         range_name=f"A1:K{len(grid)}")
+                         range_name=grid_range(len(grid)))
     return lines
 
 
@@ -3810,7 +3998,7 @@ def set_store_prices(worksheet, store_key: str, kind: str,
         lines.extend(_mirror_new_rows(store_key, appended,
                                       master_ws))
     worksheet.clear()
-    worksheet.update(values=grid, range_name=f"A1:K{len(grid)}")
+    worksheet.update(values=grid, range_name=grid_range(len(grid)))
     return lines
 
 
@@ -4032,6 +4220,205 @@ def sync_dunya_site(dry_run: bool = False, send: bool = True,
                             thread_id=topic_id or TELEGRAM_CHAT_ID)
     if not receipt.get("ok"):
         print("[dunya-site] telegram delivery failed")
+    return 0
+
+
+def sync_nazar_site(dry_run: bool = False, send: bool = True,
+                    force: bool = False) -> int:
+    """Build/update the Local_Deals tab from nazarbutchery.com.au
+    (user-directed 2026-09-12).
+
+    Nazar is a SITE-ONLY shop: no Facebook board, and no specials
+    anywhere on the site (every product is its everyday price), so
+    it has ONE permanent column ('Nazar perm') and no special
+    column. The WooCommerce Store API answers a direct fetch.
+
+    Matching is the STRICT unit-aware catalogue matcher
+    (_site_reuse_match): the same item reuses its existing row; a
+    NEW row is created only when the item is 100% not found (user
+    rule 2026-09-12), bottom-appended and mirrored to the master
+    tab with a fresh Item_Code like any FB-post new row.
+    Per-100g deli prices are converted to the per-kg rate with the
+    basis kept in the Comments note; weight ranges are noted.
+
+    Args:
+        dry_run: fetch + print the reuse/new diff; no sheet write,
+            no Telegram.
+        send: post the summary to the local-deals topic.
+        force: bypass the site-catalogue cache (28-day).
+
+    Returns:
+        int: 0 synced, 1 no catalogue / no items.
+    """
+    from extractors.shop_site_catalogue import (
+        get_normalised_catalogue,
+    )
+    from core.sheets_client import (connect_spreadsheet,
+                                    connect_worksheet, _load_env)
+
+    _load_env()
+    raw = get_normalised_catalogue("nazar", force=force)
+    quote_only = [i for i in raw
+                  if not isinstance(i.get("price"), (int, float))
+                  or i["price"] <= 0]
+    items = [i for i in raw
+             if isinstance(i.get("price"), (int, float))
+             and i["price"] > 0]
+    if not items:
+        print("[nazar-site] no catalogue items (fetch failed?)")
+        return 1
+
+    # Group by (canonical name, unit kind): the site carries stray
+    # duplicate listings ('Lamb Mince' twice — an uncategorized 5kg
+    # lot and the categorized everyday product). Keep the
+    # CATEGORIZED listing when one exists; the others are reported.
+    groups: dict[tuple, list[dict]] = {}
+    for i in items:
+        i["_clean"] = _clean_site_name(i["name"])
+        # _normalise yields the bare unit ('kg'); tolerate the full
+        # phrase ('per kg') in case a cache was written by hand.
+        i["_unit_raw"] = (i.get("display_unit") or "").lower() \
+            .replace("per ", "")
+        kind = {"kg": "kg", "100g": "kg", "pack": "ea",
+                "item": "ea", "each": "ea"}.get(i["_unit_raw"], "bare")
+        i["_kind"] = kind
+        groups.setdefault((canonical_key(i["_clean"]), kind),
+                          []).append(i)
+
+    deals: list[dict] = []
+    dup_lines: list[str] = []
+    for (ckey, kind), group in groups.items():
+        chosen = next((g for g in group if g.get("categories")),
+                      group[0])
+        name = chosen["_clean"]
+        # WC Store API prices are minor units (cents) — always.
+        price = round(float(chosen["price"]) / 100, 2)
+        notes: list[str] = []
+        unit_raw = chosen["_unit_raw"]
+        if kind == "kg":
+            unit = "kg"
+            if unit_raw == "100g":
+                price = round(price * 10, 2)
+                notes.append("site price per 100g")
+        else:
+            unit = "ea" if kind == "ea" else ""
+        if chosen.get("price_range"):
+            notes.append(f"site shows ${chosen['price_range']} "
+                         f"per item (by weight)")
+        for g in group:
+            if g is chosen:
+                continue
+            dup_lines.append(f"{g['_clean']} "
+                             f"(${float(g['price']) / 100:.2f}) — "
+                             f"duplicate listing of '{name}'")
+        deals.append({
+            "item": name,
+            "raw_text": chosen["name"],
+            "price": price,
+            "unit": unit,
+            "price_kind": "single",
+            "multibuy_qty": None,
+            "bulk_size": None,
+            "category": "butchery",
+            "notes": "; ".join(notes),
+        })
+
+    # Q17: Nazar is a butchery source — every item is prefixed at
+    # normalization (the prefix is what makes items match the tab).
+    deals = _prefix_butcher_deals("nazar", deals)
+
+    if dry_run:
+        from core.sheets_client import connect_spreadsheet
+        worksheet = ensure_local_deals_tab(connect_spreadsheet())
+        grid = worksheet.get_all_values() or []
+        reuse, fresh = [], []
+        for d in deals:
+            display = _display_name(d)
+            if _site_reuse_match(grid, display) is not None:
+                reuse.append(display)
+            else:
+                fresh.append(display)
+        print(f"[nazar-site] {len(deals)} items — dry-run, sheet "
+              f"untouched")
+        print(f"  reuse existing rows: {len(reuse)}")
+        for n in reuse:
+            print(f"    = {n}")
+        print(f"  NEW rows: {len(fresh)}")
+        for n in fresh:
+            print(f"    + {n}")
+        for line in dup_lines:
+            print(f"  dup: {line}")
+        if quote_only:
+            names = ", ".join(str(i.get("name") or "?")
+                              for i in quote_only)
+            print(f"  quote-only (no site price, skipped): "
+                  f"{names}")
+        return 0
+
+    spreadsheet = connect_spreadsheet()
+    worksheet = ensure_local_deals_tab(spreadsheet)
+    ensure_shop_columns(worksheet)
+    master_ws = connect_worksheet()
+    grid_before = worksheet.get_all_values() or []
+    nazar_col = _perm_column_for("nazar")
+    before = {str(r[0]).strip(): r[nazar_col]
+              for r in grid_before[1:] if len(r) > nazar_col}
+    rows, new_lines = merge_store_tab(worksheet, "nazar", deals,
+                                      master_ws=master_ws,
+                                      reuse_fn=_site_reuse_match)
+    print(f"[nazar-site] synced {len(deals)} items "
+          f"({rows} grid rows); {len(new_lines)} new row(s)")
+    for line in dup_lines:
+        print(f"[nazar-site] dup: {line}")
+    if quote_only:
+        names = ", ".join(str(i.get("name") or "?")
+                          for i in quote_only)
+        print(f"[nazar-site] quote-only (no site price, skipped): "
+              f"{names}")
+
+    changes = []
+    for d in deals:
+        prev = before.get(_display_name(d).strip())
+        if prev in ("", None) or str(prev) == str(d["price"]):
+            continue
+        try:
+            old = float(str(prev).replace("$", ""))
+        except ValueError:
+            continue
+        if abs(old - d["price"]) >= 0.01:
+            changes.append((d["item"], old, d["price"]))
+
+    lines = [f"🥩 Nazar Butchery site sync: {len(deals)} items — "
+             f"Local_Deals updated",
+             f"reused rows: {len(deals) - len(new_lines)} · "
+             f"new rows: {len(new_lines)}"]
+    if new_lines:
+        lines.append("New rows (Woolworths side still blank — they "
+                     "join the ONE list):")
+        lines.extend(f"  • {ln}" for ln in new_lines[:10])
+        if len(new_lines) > 10:
+            lines.append(f"  … and {len(new_lines) - 10} more")
+    if changes:
+        lines.append(f"Price changes since last sync: "
+                     f"{len(changes)}")
+        for name, old, new in changes[:10]:
+            arrow = "🔻" if new < old else "🔺"
+            lines.append(f"  {arrow} {name}: {_money(old)} -> "
+                         f"{_money(new)}")
+    if dup_lines:
+        lines.append("Duplicate site listings skipped: "
+                     f"{len(dup_lines)}")
+    if quote_only:
+        names = ", ".join(str(i.get("name") or "?")
+                          for i in quote_only)
+        lines.append(f"Quote-only items (no site price): {names}")
+    bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
+    topic_id = _env_int(LOCAL_DEALS_TOPIC_ENV)
+    receipt = _send_message(bot_token, TELEGRAM_CHAT_ID,
+                            "\n".join(lines),
+                            thread_id=topic_id or TELEGRAM_CHAT_ID)
+    if not receipt.get("ok"):
+        print("[nazar-site] telegram delivery failed")
     return 0
 
 

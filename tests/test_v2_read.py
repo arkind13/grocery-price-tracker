@@ -36,13 +36,15 @@ def _m(name, code, ww="", keyword="", sub="", alias="", brand="",
 
 def _l(name, code, **prices):
     """prices: shop_key -> (cell_value). Special-first parsing is
-    tab_store_price's job — feed raw cells through parse_ld_row."""
-    row = [""] * 11
+    tab_store_price's job — feed raw cells through parse_ld_row.
+    12-col layout (Nazar perm added 2026-09-12): comments idx 10,
+    Item_Code idx 11."""
+    row = [""] * 12
     row[0] = name
-    row[10] = code
+    row[11] = code
     col = {"dunya_perm": 1, "dunya_sp": 2, "merjan_perm": 3,
            "merjan_sp": 4, "fruitopia_perm": 5, "fruitopia_sp": 6,
-           "abusalim_perm": 7, "abusalim_sp": 8}
+           "abusalim_perm": 7, "abusalim_sp": 8, "nazar_perm": 9}
     for key, value in prices.items():
         row[col[key]] = value
     return parse_ld_row(3, row, today=None)

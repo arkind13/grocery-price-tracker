@@ -447,7 +447,7 @@ class TestReport(unittest.TestCase):
         # column (abusalim = idx 8), the bulk note shop-tagged in
         # Comments (idx 9).
         self.assertEqual(rows["FRUITS"][0][8], 2.99)
-        self.assertEqual(rows["FRUITS"][0][9],
+        self.assertEqual(rows["FRUITS"][0][10],
                          "[ABS] multi buy 5kg for $2.99")
         results = ld.match_and_detect([deal], [], {})
         self.assertEqual(results[0].multibuy_note,
@@ -457,7 +457,7 @@ class TestReport(unittest.TestCase):
         rows2 = ld.build_rows({"dunya_fb": [mb]})
         # Layout v2: dunya special (FB) = idx 2, Comments = idx 9.
         self.assertEqual(rows2["BUTCHERY"][0][2], 7.5)
-        self.assertEqual(rows2["BUTCHERY"][0][9],
+        self.assertEqual(rows2["BUTCHERY"][0][10],
                          "[DUN] multi buy 2 for $15.00 — $7.50/ea")
 
     def test_no_prices_warn_line(self):
@@ -963,7 +963,7 @@ class TestSweepExpiredSpecials(unittest.TestCase):
         grid = ws.get_all_values()
         self.assertEqual(grid[3][0], "Carrots /ea")   # row KEPT
         self.assertEqual(grid[3][6], "")              # cell cleared
-        self.assertNotIn("[FRU]", grid[3][9])         # FRU segment died
+        self.assertNotIn("[FRU]", grid[3][10])         # FRU segment died
         self.assertIn("[MER]", grid[3][9])            # MER untouched
 
     def test_future_dated_and_undated_specials_kept(self):
@@ -1114,8 +1114,8 @@ class TestSetStorePrices(unittest.TestCase):
         grid = ws.get_all_values()
         # Q17 (Round 3): the butchery entry is 'Halal '-prefixed at
         # normalization — the note contract is unchanged by it.
-        comment = next(r[9] for r in grid if str(r[0]).lower()
-                       .startswith("halal beef mince"))
+        comment = next(r[10] for r in grid if str(r[0]).lower()
+                        .startswith("halal beef mince"))
         self.assertEqual(comment, "[MER] multi buy 2 for $15")
 
         # Second write on the same row replaces the segment — still
@@ -1126,8 +1126,8 @@ class TestSetStorePrices(unittest.TestCase):
               "note": "deal $2x this week only"}],
             till=self.TILL)
         grid = ws.get_all_values()
-        comment = next(r[9] for r in grid if str(r[0]).lower()
-                       .startswith("halal beef mince"))
+        comment = next(r[10] for r in grid if str(r[0]).lower()
+                        .startswith("halal beef mince"))
         self.assertEqual(comment, "[MER] deal $2x this week only")
 
     def test_new_row_appended_in_shop_section_with_stamp(self):
@@ -1174,7 +1174,7 @@ class TestSetStorePrices(unittest.TestCase):
     def test_notes_shop_tagged_and_merged_across_shops(self):
         ws = _v2_ws([
             ["FRUITS", "", "", "", "", "", "", "", "", ""],
-            ["Carrots /ea", "", "", "", "", "", 0.75, "", "",
+            ["Carrots /ea", "", "", "", "", "", 0.75, "", "", "",
              "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
         ])
         # abusalim is a FRUITS shop -> same section block -> merge
@@ -1184,7 +1184,7 @@ class TestSetStorePrices(unittest.TestCase):
                               "note": "bulk 3 for $2"}])
         grid = ws.get_all_values()
         self.assertEqual(
-            grid[3][9],
+            grid[3][10],
             "[FRU] multi buy 2 for $1.50 — $0.75/ea; "
             "[ABS] bulk 3 for $2")
 
@@ -1266,7 +1266,7 @@ class TestRebuildPreservation(unittest.TestCase):
     def test_comment_segments_merge_both_directions(self):
         ws = _v2_ws([
             ["FRUITS", "", "", "", "", "", "", "", "", ""],
-            ["Carrots /ea", "", "", "", "", "", 0.75, "", "",
+            ["Carrots /ea", "", "", "", "", "", 0.75, "", "", "",
              "[MER] bulk 3 for $2"],
         ])
         deals = {"fruitopia": [_deal(
@@ -1275,9 +1275,9 @@ class TestRebuildPreservation(unittest.TestCase):
         self._rebuild(ws, deals, ["fruitopia"])
         grid = ws.get_all_values()
         carrot = next(r for r in grid if r[0] == "Carrots /ea")
-        self.assertIn("[MER] bulk 3 for $2", carrot[9])
-        self.assertIn("[FRU]", carrot[9])
-        self.assertIn("multi buy 2 for", carrot[9])
+        self.assertIn("[MER] bulk 3 for $2", carrot[10])
+        self.assertIn("[FRU]", carrot[10])
+        self.assertIn("multi buy 2 for", carrot[10])
 
     def test_row_only_other_shop_data_reappended(self):
         ws = _v2_ws([
@@ -1354,7 +1354,7 @@ class TestValidUntilAttach(unittest.TestCase):
                                          2026, 9, 12).date())]}
         rows = ld.build_rows(deals)
         self.assertEqual(rows["FRUITS"][0][6], "0.75 (till 12 Sep)")
-        self.assertEqual(rows["FRUITS"][0][9], "")  # no note, no tag
+        self.assertEqual(rows["FRUITS"][0][10], "")  # no note, no tag
 
 
 class TestFridayGateRetired(unittest.TestCase):
@@ -1662,7 +1662,7 @@ class TestCommentLifecycleRound1(unittest.TestCase):
         ws = _v2_ws([
             ["FRUITS", "", "", "", "", "", "", "", "", ""],
             ["Carrots /ea", "", "", "", "", "",
-             "0.75 (till 12 Sep)", "", "",
+             "0.75 (till 12 Sep)", "", "", "",
              "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
         ])
         ld.set_store_prices(ws, "fruitopia", "special",
@@ -1670,20 +1670,20 @@ class TestCommentLifecycleRound1(unittest.TestCase):
                               "unit": "ea"}])
         grid = ws.get_all_values()
         self.assertEqual(str(grid[3][6]), "0.6")
-        self.assertEqual(grid[3][9], "")
+        self.assertEqual(grid[3][10], "")
 
     def test_manual_reprice_with_note_replaces_segment(self):
         ws = _v2_ws([
             ["FRUITS", "", "", "", "", "", "", "", "", ""],
             ["Carrots /ea", "", "", "", "", "",
-             "0.75 (till 12 Sep)", "", "",
+             "0.75 (till 12 Sep)", "", "", "",
              "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
         ])
         ld.set_store_prices(ws, "fruitopia", "special",
                             [{"item": "Carrots", "price": 0.60,
                               "unit": "ea", "note": "3 for $1.80"}])
         self.assertEqual(
-            ws.get_all_values()[3][9], "[FRU] 3 for $1.80")
+            ws.get_all_values()[3][10], "[FRU] 3 for $1.80")
 
     def test_manual_new_row_note_still_tags_shop(self):
         ws = _v2_ws([["FRUITS", "", "", "", "", "", "", "", "", ""]])
@@ -1691,14 +1691,14 @@ class TestCommentLifecycleRound1(unittest.TestCase):
                             [{"item": "Celery", "price": 1.20,
                               "unit": "ea", "note": "fresh cut"}])
         self.assertEqual(
-            ws.get_all_values()[3][9], "[FRU] fresh cut")
+            ws.get_all_values()[3][10], "[FRU] fresh cut")
 
     def test_merge_plain_reprice_clears_segment(self):
         # A2 merge-level pin (FIX-4 was parser-level tested).
         ws = _v2_ws([
             ["FRUITS", "", "", "", "", "", "", "", "", ""],
             ["Carrots /ea", "", "", "", "", "",
-             "0.75 (till 12 Sep)", "", "",
+             "0.75 (till 12 Sep)", "", "", "",
              "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
         ])
         ld.merge_store_tab(ws, "fruitopia", [
@@ -1707,7 +1707,7 @@ class TestCommentLifecycleRound1(unittest.TestCase):
         grid = ws.get_all_values()
         row = next(r for r in grid if str(r[0]).startswith("Carrots"))
         self.assertEqual(str(row[6]), "0.6")
-        self.assertEqual(row[9], "")
+        self.assertEqual(row[10], "")
 
     def test_merge_dropped_item_keeps_cell_and_comment_together(self):
         # A3 design pin: a post that no longer lists the item leaves
@@ -1716,7 +1716,7 @@ class TestCommentLifecycleRound1(unittest.TestCase):
         ws = _v2_ws([
             ["FRUITS", "", "", "", "", "", "", "", "", ""],
             ["Carrots /ea", "", "", "", "", "",
-             "0.75 (till 12 Sep)", "", "",
+             "0.75 (till 12 Sep)", "", "", "",
              "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
         ])
         ld.merge_store_tab(ws, "fruitopia", [
@@ -1725,47 +1725,47 @@ class TestCommentLifecycleRound1(unittest.TestCase):
         row = next(r for r in ws.get_all_values()
                    if str(r[0]).startswith("Carrots"))
         self.assertEqual(row[6], "0.75 (till 12 Sep)")
-        self.assertIn("[FRU]", row[9])
+        self.assertIn("[FRU]", row[10])
 
     def test_repair_strips_orphan_segments(self):
         # A7: the live residue shape (rows 115/116) — empty FRU cells.
         ws = _v2_ws([
             ["FRUITS", "", "", "", "", "", "", "", "", ""],
-            ["Celery /ea", "", "", "", "", "", "", "", "",
+            ["Celery /ea", "", "", "", "", "", "", "", "", "",
              "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
-            ["Carrots 1kg Bag /ea", "", "", "", "", "", "", "", "",
+            ["Carrots 1kg Bag /ea", "", "", "", "", "", "", "", "", "",
              "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
         ])
         lines = ld.repair_orphan_comments(ws)
         self.assertEqual(len(lines), 2)
         grid = ws.get_all_values()
-        self.assertEqual(grid[3][9], "")
-        self.assertEqual(grid[4][9], "")
+        self.assertEqual(grid[3][10], "")
+        self.assertEqual(grid[4][10], "")
         self.assertEqual(grid[3][0], "Celery /ea")   # row KEPT
         self.assertEqual(ld.repair_orphan_comments(ws), [])  # idem.
 
     def test_repair_keeps_segment_when_shop_priced(self):
         ws = _v2_ws([
-            ["Carrots /ea", "", "", "", "", 6.50, "", "", "",
+            ["Carrots /ea", "", "", "", "", 6.50, "", "", "", "",
              "[FRU] multi buy 2 for $1.50 — $0.75/ea"],
         ])
         self.assertEqual(ld.repair_orphan_comments(ws), [])
-        self.assertIn("[FRU]", ws.get_all_values()[2][9])
+        self.assertIn("[FRU]", ws.get_all_values()[2][10])
 
     def test_repair_preserves_untagged_text_and_other_shops(self):
         ws = _v2_ws([
-            ["Carrots /ea", "", "", "", "", 6.50, "", "", "",
+            ["Carrots /ea", "", "", "", "", 6.50, "", "", "", "",
              "[FRU] note; loose text; [MER] orphan note"],
         ])
         lines = ld.repair_orphan_comments(ws)
         self.assertEqual(len(lines), 1)          # only MER stripped
-        self.assertEqual(ws.get_all_values()[2][9],
+        self.assertEqual(ws.get_all_values()[2][10],
                          "[FRU] note; loose text")
 
     def test_repair_no_tags_writes_nothing(self):
         ws = _v2_ws([
             ["FRUITS", "", "", "", "", "", "", "", "", ""],
-            ["Carrots /ea", "", "", "", "", 6.50, "", "", "",
+            ["Carrots /ea", "", "", "", "", 6.50, "", "", "", "",
              "loose text only"],
         ])
         self.assertEqual(ld.repair_orphan_comments(ws), [])

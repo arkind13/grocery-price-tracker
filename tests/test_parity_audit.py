@@ -22,7 +22,8 @@ MASTER_HEADER = ["Product_Name", "Category", "Size",
 LD_HEADER = ["Product", "Dunya perm (site)", "Dunya special (FB)",
              "Merjan perm", "Merjan special", "Fruitopia perm",
              "Fruitopia special", "Abu Salim perm",
-             "Abu Salim special", "Comments", "Item_Code"]
+             "Abu Salim special", "Nazar perm", "Comments",
+             "Item_Code"]
 
 
 def _mrow(name, code, price=""):
@@ -32,15 +33,15 @@ def _mrow(name, code, price=""):
 
 
 def _lrow(name, code, prices=""):
-    row = [""] * 11
-    row[0], row[1], row[10] = name, prices, code
+    row = [""] * 12
+    row[0], row[1], row[11] = name, prices, code
     return row
 
 
 def _aligned(n=3):
     """master grid + LD grid whose first n item rows pair by code."""
     master = [MASTER_HEADER]
-    ld = [LD_HEADER, ["Prices valid until"] + [""] * 10]
+    ld = [LD_HEADER, ["Prices valid until"] + [""] * 11]
     codes = [f"AB{i}".ljust(3, "H") for i in range(n)]
     for i, code in enumerate(codes):
         master.append(_mrow(f"Item {i}", code))
@@ -60,21 +61,21 @@ class TestAligned(unittest.TestCase):
     def test_structural_rows_exempt(self):
         """Section titles + the validity row never break pairing."""
         master, ld, codes = _aligned(3)
-        ld.insert(2, ["BUTCHERY"] + [""] * 10)      # title above items
-        ld.append(["FRUITS"] + [""] * 10)           # title at the end
+        ld.insert(2, ["BUTCHERY"] + [""] * 11)      # title above items
+        ld.append(["FRUITS"] + [""] * 11)           # title at the end
         result = audit(master, ld)
         self.assertEqual(result["status"], "aligned")
 
     def test_blank_uncoded_rows_ignored(self):
         master, ld, _codes = _aligned(2)
-        ld.append([""] * 11)
+        ld.append([""] * 12)
         self.assertEqual(audit(master, ld)["status"], "aligned")
 
     def test_is_ld_item_row_classification(self):
         self.assertFalse(is_ld_item_row(0, LD_HEADER))
         self.assertFalse(is_ld_item_row(
-            1, ["Prices valid until"] + [""] * 10))
-        self.assertFalse(is_ld_item_row(2, ["BUTCHERY"] + [""] * 10))
+            1, ["Prices valid until"] + [""] * 11))
+        self.assertFalse(is_ld_item_row(2, ["BUTCHERY"] + [""] * 11))
         self.assertTrue(is_ld_item_row(3, _lrow("Beef", "ABC")))
         self.assertTrue(is_ld_item_row(4, _lrow("", "ABC")))  # mirror
 

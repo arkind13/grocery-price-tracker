@@ -1,9 +1,10 @@
 """Parity audit (spec §18/A2 semantics; Round 4 wires it into Wednesday).
 
 Pairs master data row N (Item_Code col L, 0-based idx 11) with the Nth
-Local_Deals ITEM row (code col K, idx 10). LD structural rows — the
-header, the "Prices valid until" stamp row, and the FRUITS/BUTCHERY/
-OTHER section-title rows — are exempt (spec §3.3 offsets around them).
+Local_Deals ITEM row (code col L, idx 11 — the Nazar column moved it
+from K, 2026-09-12). LD structural rows — the header, the "Prices
+valid until" stamp row, and the FRUITS/BUTCHERY/OTHER section-title
+rows — are exempt (spec §3.3 offsets around them).
 
 Three outcomes (A2):
   aligned        — silence (a single clean line at most)
@@ -26,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core.local_deals import SECTION_ORDER  # noqa: E402
 
 MASTER_CODE_IDX = 11        # 13-col layout: col L
-LD_CODE_IDX = 10            # 11-col layout: col K
+LD_CODE_IDX = 11            # 12-col layout: col L (Nazar added 1)
 VALIDITY_LABEL = "Prices valid until"
 
 MIDDLE_INSERT_ALERT = (

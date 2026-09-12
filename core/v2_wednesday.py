@@ -15,14 +15,16 @@ import os
 import time
 from datetime import date
 
+from core.local_deals import grid_range
+
 MASTER_TAB = "Products_Master"
 MASTER_CODE_IDX = 11          # 13-col layout: col L
-LD_CODE_IDX = 10              # 11-col layout: col K
+LD_CODE_IDX = 11              # 12-col layout: col L (Nazar added 1)
 PRICE_IDX = 3                 # col D — Woolworths_Price
 KEYWORD_IDX = 6               # col G — the sync keyword
 SPECIALS_IDX = 7              # col H — Woolworths_Specials
 MASTER_COLS = 13              # A..M
-LD_COLS = 11                  # A..K
+LD_COLS = 12                  # A..L (Nazar perm added 2026-09-12)
 
 SPECIALS_TOPIC_ID = 206       # env override TELEGRAM_SPECIALS_TOPIC_ID
 LISTS_TOPIC_ID = 208          # env override TELEGRAM_LISTS_TOPIC_ID
@@ -351,8 +353,9 @@ def parity_step(master_grid: list[list], ld_grid: list[list],
         ld_ws.clear()
         ld_ws.freeze(rows=1)
         ld_ws.update(values=ld_grid,
-                     range_name=f"A1:K{len(ld_grid)}")
+                     range_name=grid_range(len(ld_grid)))
 
+    from core.local_deals import grid_range as _grid_range
     from tools.parity_audit import audit, format_report
 
     master_changed = ld_changed = False
@@ -442,7 +445,7 @@ def parity_step(master_grid: list[list], ld_grid: list[list],
     if ld_changed:
         ld_ws.clear()
         ld_ws.freeze(rows=1)
-        ld_ws.update(values=ld_grid, range_name=f"A1:K{len(ld_grid)}")
+        ld_ws.update(values=ld_grid, range_name=grid_range(len(ld_grid)))
     # Confirm AFTER the write succeeded (item_codes discipline D-IC4).
     for code, row_index in pending:
         item_codes.confirm_code(code, row_index,

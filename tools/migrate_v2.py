@@ -49,7 +49,7 @@ OLD_ITEM_CODE_IDX = 17         # col R
 NEW_SUBCATEGORY_IDX = 10       # col K
 NEW_ITEM_CODE_IDX = 11         # col L
 # Local_Deals v2.1 layout: Item_Code in col K (0-based idx 10).
-LD_CODE_IDX = 10
+LD_CODE_IDX = 11         # 12-col layout (Nazar added 1)
 
 # Produce-adjacent labels OUTSIDE the strict keep sets — the user
 # rules on these at G1 (default: NOT kept).
@@ -338,11 +338,11 @@ def align_grids(master_grid_13: list,
             0, 13 - len(row))
         master_order.append(code)
 
-    header = (list(ld_grid_11[0]) + [""] * 11)[:11]
+    header = (list(ld_grid_11[0]) + [""] * 12)[:12]
     validity = None
     if len(ld_grid_11) > 1 and _cell(ld_grid_11[1], 0) == \
             "Prices valid until":
-        validity = (list(ld_grid_11[1]) + [""] * 11)[:11]
+        validity = (list(ld_grid_11[1]) + [""] * 12)[:12]
 
     master_out: list = [list(NEW_MASTER_HEADERS)]
     ld_out: list = [header]
@@ -358,7 +358,7 @@ def align_grids(master_grid_13: list,
             continue
         if first in SECTION_ORDER:
             section = first
-            ld_out.append((list(row) + [""] * 11)[:11])
+            ld_out.append((list(row) + [""] * 12)[:12])
             continue
         if not first and not _cell(row, LD_CODE_IDX):
             continue
@@ -374,7 +374,7 @@ def align_grids(master_grid_13: list,
                 f"Local_Deals row {i + 1} ({first!r}) carries code "
                 f"{code or '—'} with no master counterpart")
         master_out.append(master_row)
-        ld_out.append((list(row) + [""] * 11)[:11])
+        ld_out.append((list(row) + [""] * 12)[:12])
         used.add(code)
         emitted.add(code)
 
@@ -383,7 +383,7 @@ def align_grids(master_grid_13: list,
         if code in used:
             continue
         master_out.append(master_by_code[code])
-        blank = [""] * 11
+        blank = [""] * 12
         blank[LD_CODE_IDX] = code
         ld_out.append(blank)
     return master_out, ld_out
@@ -545,10 +545,10 @@ def build_parity_plan(master_grid_13: list, ld_grid: list) -> dict:
     planned = plan_new_master_rows(ld_grid, master_grid_13)
     code_map = ld_row_code_map(ld_grid, master_grid_13, planned)
 
-    ld11 = _pad(ld_renamed, 11)
-    ld11[0][10] = "Item_Code"
+    ld11 = _pad(ld_renamed, 12)
+    ld11[0][11] = "Item_Code"
     for idx, (code, _kind) in code_map.items():
-        ld11[idx][10] = code
+        ld11[idx][11] = code
     master_padded = _pad(master_grid_13, 13)
     master_with_new = master_padded + [
         blank_master_row(p["name"], p["code"], p["subcategory"])
@@ -583,7 +583,7 @@ def apply_parity(spreadsheet=None) -> int:
     code_map = plan["code_map"]
 
     if not renames and not planned \
-            and _cell(ld[0], 10) == "Item_Code":
+            and _cell(ld[0], 11) == "Item_Code":
         result = audit(_read_master(spreadsheet), _read_ld(spreadsheet))
         if result["status"] == "aligned":
             print("[G3] already applied (audit: ALIGNED) — no changes")
@@ -623,16 +623,16 @@ def apply_parity(spreadsheet=None) -> int:
 
     # 3. LD col K: header + the paired master code on every item row.
     # The values API auto-grows ROWS but never COLUMNS — widen the
-    # tab grid to 11 first or the K-range write 400s.
-    if getattr(ld_ws, "col_count", 11) < 11:
-        ld_ws.add_cols(11 - ld_ws.col_count)
-    ld11 = _pad(ld, 11)
-    ld11[0][10] = "Item_Code"
+    # tab grid to 12 first or the L-range write 400s.
+    if getattr(ld_ws, "col_count", 12) < 12:
+        ld_ws.add_cols(12 - ld_ws.col_count)
+    ld11 = _pad(ld, 12)
+    ld11[0][11] = "Item_Code"
     for idx, (code, _kind) in code_map.items():
-        ld11[idx][10] = code
-    ld_ws.update(values=[[row[10]] for row in ld11],
-                 range_name=f"K1:K{len(ld11)}")
-    print(f"[G3] 3. Local_Deals col K: header + {len(code_map)} "
+        ld11[idx][11] = code
+    ld_ws.update(values=[[row[11]] for row in ld11],
+                 range_name=f"L1:L{len(ld11)}")
+    print(f"[G3] 3. Local_Deals col L: header + {len(code_map)} "
           "item code(s) backfilled")
 
     # 4. S7 alignment: one clear() + one update() per tab.
@@ -645,7 +645,7 @@ def apply_parity(spreadsheet=None) -> int:
     ld_ws.clear()
     ld_ws.freeze(rows=2)
     ld_ws.update(values=ld_final,
-                 range_name=f"A1:K{len(ld_final)}")
+                 range_name=f"A1:L{len(ld_final)}")
     from tools.parity_audit import is_ld_item_row
     ld_item_count = sum(1 for i, r in enumerate(ld_final)
                         if is_ld_item_row(i, r))

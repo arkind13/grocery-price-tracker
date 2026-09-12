@@ -66,7 +66,7 @@ class TestID1PackDealSemantics(unittest.TestCase):
                                          qty=3, price=32.99)])
         row = next(r for r in ws.rows
                    if str(r[0]).startswith("Lamb Necks"))
-        self.assertEqual(row[9], "[MER] multi buy 3kg for $32.99")
+        self.assertEqual(row[10], "[MER] multi buy 3kg for $32.99")
 
     def test_multibuy_divides_exactly_once(self):
         """Single-divider rule: the cell is round(total/qty, 2) =
@@ -93,7 +93,7 @@ class TestID1PackDealSemantics(unittest.TestCase):
         row = next(r for r in ws.rows
                    if str(r[0]).startswith("Celery"))
         self.assertEqual(
-            row[9],
+            row[10],
             "[FRU] multi buy 2 for $2.99 — $1.50/ea")
 
     def test_multibuy_kg_read_side_min_order(self):
@@ -211,8 +211,8 @@ class TestID3CommentIdempotence(unittest.TestCase):
         ld.merge_store_tab(ws, "merjan", deals)
         row = next(r for r in ws.rows
                    if "Lamb Necks" in str(r[0]))
-        self.assertEqual(row[9], "[MER] multi buy 3kg for $32.99")
-        self.assertNotIn("[MER] [MER]", str(row[9]))
+        self.assertEqual(row[10], "[MER] multi buy 3kg for $32.99")
+        self.assertNotIn("[MER] [MER]", str(row[10]))
 
     def test_pretagged_note_single_tag(self):
         """A caller passing an already-tagged note never stacks tags
@@ -235,9 +235,9 @@ class TestID3CommentIdempotence(unittest.TestCase):
                          kind="multibuy", qty=3)])
         row = next(r for r in ws.rows
                    if "Lamb Necks" in str(r[0]))
-        self.assertIn("[DUN]", str(row[9]))
-        self.assertIn("[MER]", str(row[9]))
-        self.assertNotIn("[MER] [MER]", str(row[9]))
+        self.assertIn("[DUN]", str(row[10]))
+        self.assertIn("[MER]", str(row[10]))
+        self.assertNotIn("[MER] [MER]", str(row[10]))
 
 
 # ---------------------------------------------------------------------------

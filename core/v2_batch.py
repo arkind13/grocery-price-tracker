@@ -7,12 +7,13 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from core.local_deals import SECTION_ORDER, _numeric_price
+from core.local_deals import SECTION_ORDER, _numeric_price, \
+    grid_range
 from core.v2_read import IGNORED_PATH, TAB_NAME, VALIDITY_LABEL
 
 MASTER_TAB = "Products_Master"
 MASTER_CODE_IDX = 11          # 13-col layout: col L
-LD_CODE_IDX = 10              # 11-col layout: col K
+LD_CODE_IDX = 11              # 12-col layout: col L (Nazar added 1)
 MASTER_COLS = 13              # A..M
 LD_COLS = 11                  # A..K
 
@@ -241,7 +242,7 @@ def apply_verdicts(verdicts: list, *, master_ws=None, ld_ws=None,
         ld_ws.clear()
         ld_ws.freeze(rows=1)
         ld_ws.update(values=ld_grid,
-                     range_name=f"A1:K{len(ld_grid)}")
+                     range_name=grid_range(len(ld_grid)))
 
     result = audit_fn(master_grid, ld_grid)
     if result.get("status") != "aligned":

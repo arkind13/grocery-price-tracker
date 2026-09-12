@@ -1,9 +1,11 @@
 # grocery-price-tracker v2 — local shops vs Woolworths
 
 One Google Sheet, one Telegram bot, one list. This project compares the
-prices of four local Mt Druitt shops (two halal butcheries, two fruit &
-veg stores) against Woolworths for **mutton, chicken, fruits &
-vegetables** — and tells you, in under 10 seconds, where to buy.
+prices of five local Mt Druitt shops — four that post deals on
+Facebook (two halal butcheries, two fruit & veg stores) plus Nazar
+Butchery, whose full catalogue lives on its own website — against
+Woolworths for **mutton, chicken, fruits & vegetables** — and tells
+you, in under 10 seconds, where to buy.
 
 Everything that made v1 slow (Coles/Aldi tracking, auto-keywords,
 queues, ledgers, resolve sessions, 30-minute agent investigations) was
@@ -22,7 +24,7 @@ deleted in the v2 rebuild. What remains is measured: **price lookup
 | `batch <codes+verdicts>` | ONE call: `ABC done; DEF gone; GHI rename halal lamb shoulder; JKL remove; MNO ignore`. Per-code replies. The agent never pre-investigates | ≤10s |
 | `ignored` | Reveals the hidden ignore list | ≤10s |
 | `wednesday` | THE weekly run: Woolworths.docx → overwrite prices; specials docx → deal rates; parity check; specials message (topic 206) + the ONE list (topic 208). `--specials-only` skips the main pass | ≤30s |
-| `local-deals …` | Local-shop machinery: twice-daily AUTO-INGESTING sweep (vision + merge + parity + ONE digest per window), watch-folder inbox ingest (image→vision / text→parser), open-question flow (undated boards / shop-less drops), Dunya site sync, expire sweep, set-permanent/special, resolve-shop | — |
+| `local-deals …` | Local-shop machinery: twice-daily AUTO-INGESTING sweep (vision + merge + parity + ONE digest per window), watch-folder inbox ingest (image→vision / text→parser), open-question flow (undated boards / shop-less drops), Dunya + Nazar site syncs (`--dunya-site` / `--nazar-site`), expire sweep, set-permanent/special, resolve-shop | — |
 
 Scheduled alongside these: `aldi-specials` (cron `8 * * * *`, self-gated
 to Wed/Sat 05:xx Sydney, once per date) — posts the whole day's Aldi
@@ -116,6 +118,25 @@ only manual path left, needing no commands either. The post-mortem
 and the three ingest defects (ID-1/2/3) live in
 `old md/auto-ingest-spec.md`.
 
+### Nazar — the site-only shop (2026-09-12)
+
+Nazar Butchery (nazarbutchery.com.au) has NO Facebook board and NO
+specials — its WooCommerce site lists every everyday price. It gets
+ONE `Nazar perm` column (no special column; `--set-special nazar` is
+rejected), sits in `TAB_COLUMNS` before Comments, and syncs with
+`local-deals --nazar-site` (direct fetch — the site answers plain
+requests, Scrape.do only as fallback). The catalogue walk REUSES
+every row whose item already exists via the STRICT unit-aware matcher
+(`_site_reuse_match`: identity tokens equal-or-species-contained,
+unit kinds must agree, pack sizes stay separate — the FB-ingest
+matcher is too loose for a 152-item walk and would e.g. land
+'Seekh Kebab (lamb mince…)' on the lamb mince row). A new row is
+appended + master-mirrored ONLY when the item is 100% not found.
+Per-100g deli prices are converted to the per-kg rate with the basis
+in the Comments note. The tab layout is DERIVED everywhere
+(`grid_range()`, `ensure_shop_columns()` self-heal) — never pin a
+column letter again.
+
 ### Adding a fifth FB shop
 
 Yes — the fetcher handles any PUBLIC Facebook page, and each of the
@@ -148,9 +169,10 @@ catalogue.
   WW price (D), brand, last-updated, **WW keyword (G — the sync key,
   filled only by you)**, specials terms, rewards, aliases, sub-category,
   Item_Code, preferred.
-- **Local_Deals** (11 cols): product + per-shop permanent/special price
+- **Local_Deals** (12 cols): product + per-shop permanent/special price
   columns with validity stamps + comments + **Item_Code** — the parity
-  key pairing it to master.
+  key pairing it to master. Nazar has a permanent column only (no
+  specials on its site).
 - **Archive** tab: every row retired in the v2 migration, full copy.
   Plus untouched `User_Shopping_Lists` and `Price_History`.
 

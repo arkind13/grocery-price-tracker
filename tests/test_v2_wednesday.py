@@ -99,14 +99,15 @@ def _fixture():
               _master_row("Woolworths Cheddar Block 1kg", "CHD",
                           ww="GONE", keyword="cheddar cheese block"),
               _master_row("Halal Lamb Shoulder", "HLS")]
-    ld = [["Product", "", "", "", "", "", "", "", "", "", ""],
-          ["Tomato", "", "", "", "", "0.90", "", "", "", "", "EYF"],
+    ld = [["Product", "", "", "", "", "", "", "", "", "", "", ""],
+          ["Tomato", "", "", "", "", "0.90", "", "", "", "", "",
+           "EYF"],
           ["Halal Beef Mince 500g", "", "9.20", "", "", "", "", "",
-           "", "", "AUG"],
+           "", "", "", "AUG"],
           ["Woolworths Cheddar Block 1kg", "", "", "", "", "", "",
-           "", "", "", "CHD"],
+           "", "", "", "", "CHD"],
           ["Halal Lamb Shoulder", "12.99", "", "", "", "", "", "",
-           "", "", "HLS"]]
+           "", "", "", "HLS"]]
     return FakeWS(master), FakeWS(ld)
 
 
@@ -286,16 +287,16 @@ class TestParityStep(unittest.TestCase):
         self.assertIn("mirrored -> LD row 6: New User Row", report)
         new_ld = ld._values[-1]
         self.assertEqual(new_ld[0], "New User Row")
-        self.assertTrue(item_codes.is_valid_code(new_ld[10]))
+        self.assertTrue(item_codes.is_valid_code(new_ld[11]))
         # the code is the PAIR KEY: stamped on BOTH sides
-        self.assertEqual(master._values[-1][11], new_ld[10])
-        self.assertIn(new_ld[10],
+        self.assertEqual(master._values[-1][11], new_ld[11])
+        self.assertIn(new_ld[11],
                       item_codes.retired_codes(
                           item_codes.load_registry()))
         self.assertEqual(audit_fn(master._values, ld._values)
                          ["status"], "aligned")
         self.assertEqual(ld.clears, 1)
-        self.assertEqual(ld.updates, ["A1:K6"])
+        self.assertEqual(ld.updates, ["A1:L6"])
         self.assertEqual(master.clears, 1)
         self.assertEqual(master.updates, ["A1:M6"])
 
@@ -303,7 +304,7 @@ class TestParityStep(unittest.TestCase):
         # master mirror reusing that code (EXL).
         master, ld = _fixture()
         ld._values.append(["Extra Local Item", "", "", "", "", "",
-                           "", "", "", "", "EXL"])
+                           "", "", "", "", "", "EXL"])
         self.assertEqual(audit_fn(master._values, ld._values)
                          ["status"], "bottom_append")
         report = parity_step(master._values, ld._values, ld,
@@ -327,7 +328,7 @@ class TestParityStep(unittest.TestCase):
 
     def test_middle_insert_prints_verbatim_alert_and_aborts(self):
         master, ld = _fixture()
-        ld._values[3][10] = "ZZQ"          # code break mid-sequence
+        ld._values[3][11] = "ZZQ"          # code break mid-sequence
         buf = io.StringIO()
         with redirect_stdout(buf):
             report = parity_step(master._values, ld._values, ld,
@@ -358,8 +359,8 @@ class TestParityStep(unittest.TestCase):
         by the parity step — LD mirrors the master row-for-row."""
         master, ld = _fixture()
         ld._values.insert(1, ["Prices valid until",
-                              "n/a (live site)"] + [""] * 9)
-        ld._values.insert(3, ["FRUITS"] + [""] * 10)
+                              "n/a (live site)"] + [""] * 10)
+        ld._values.insert(3, ["FRUITS"] + [""] * 11)
         report = parity_step(master._values, ld._values, ld,
                              master_ws=master)
         self.assertIn("structural row 'Prices valid until' removed",
@@ -380,7 +381,7 @@ class TestParityStep(unittest.TestCase):
         # A new item inserted in the MIDDLE of the LD tab (code new,
         # not yet mirrored): rows 3.. shift down by one.
         ld._values.insert(2, ["Halal Chicken Mince", "", "", "", "",
-                              "", "", "", "", "", "NEW1"])
+                              "", "", "", "", "", "", "NEW1"])
         buf = io.StringIO()
         with redirect_stdout(buf):
             report = parity_step(master._values, ld._values, ld,
@@ -397,8 +398,8 @@ class TestParityStep(unittest.TestCase):
         """A code SWAP (reorder/deletion class) is not a single-row
         insert: no move, verbatim alert, ABORT — no writes."""
         master, ld = _fixture()
-        ld._values[2][10], ld._values[3][10] = \
-            ld._values[3][10], ld._values[2][10]     # AUG <-> CHD
+        ld._values[2][11], ld._values[3][11] = \
+            ld._values[3][11], ld._values[2][11]     # AUG <-> CHD
         buf = io.StringIO()
         with redirect_stdout(buf):
             report = parity_step(master._values, ld._values, ld,
@@ -453,7 +454,7 @@ class TestRunPipeline(unittest.TestCase):
         self.assertEqual(self.master._values[1][3], "$0.60")
 
     def test_11_middle_insert_aborts_run_no_writes_no_posts(self):
-        self.ld._values[3][10] = "ZZQ"
+        self.ld._values[3][11] = "ZZQ"
         rc = run()
         self.assertEqual(rc, 1)
         self.assertEqual(self.sends, [])
@@ -489,10 +490,10 @@ class TestListPostSplit(unittest.TestCase):
             parse_master_row, render_list
 
         master = [MASTER_HEADER]
-        ld = [["Product", "", "", "", "", "", "", "", "", "", ""],
+        ld = [["Product", "", "", "", "", "", "", "", "", "", "", ""],
               ["Prices valid until", "", "", "", "", "", "", "",
-               "", "", ""],
-              ["FRUITS"] + [""] * 10]
+               "", "", "", ""],
+              ["FRUITS"] + [""] * 11]
         for i in range(120):
             code = f"C{i:03d}"
             name = f"Item Number {i:03d} Large Family Pack 1kg"
@@ -500,7 +501,7 @@ class TestListPostSplit(unittest.TestCase):
             row[0], row[10], row[11] = name, "butchery", code
             master.append(row)
             ld.append([name, "", "", "", "", f"{i}.49", "", "", "",
-                       "", code])
+                       "", "", code])
         master_rows = [m for m in (parse_master_row(i, r)
                                    for i, r in
                                    enumerate(master[1:], 2)) if m]

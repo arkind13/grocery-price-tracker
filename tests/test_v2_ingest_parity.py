@@ -142,7 +142,7 @@ class TestBottomAppendParity(unittest.TestCase):
         ld_tab = _ld_grid(
             [[LD_HEADER[0]] + LD_HEADER[1:],
              ["Prices valid until", "n/a (live site)", "", "", "",
-              "", "", "", "", "", ""],
+              "", "", "", "", "", "", ""],
              ["FRUITS"] + [""] * 10]
             + ld_rows
             + [["BUTCHERY"] + [""] * 10])
@@ -155,11 +155,11 @@ class TestBottomAppendParity(unittest.TestCase):
 
     def test_new_row_mirrors_to_master_both_tabs_aligned(self):
         ld_item = ["Halal Beef Mince 500g", "", "", "", "", "", "",
-                   "", "", "", ""]
+                   "", "", "", "", ""]
         master = _aligned_pair(["EYF"])
         master[1][0] = "Tomato"           # the EYF row named
         ld_rows = [["Tomato", "", "", "", "", "0.90", "", "", "",
-                    "", "EYF"]]
+                    "", "", "EYF"]]
         worksheet, master_tab, rows, new_lines = self._merged(
             master, ld_rows,
             [{"item": "Halal Beef Mince 500g", "raw_text": "x",
@@ -172,7 +172,7 @@ class TestBottomAppendParity(unittest.TestCase):
         # LD: appended at GRID END with the code in col K
         grid = worksheet.grid
         self.assertEqual(grid[-1][0], "Halal Beef Mince 500g")
-        code = grid[-1][10]
+        code = grid[-1][11]
         self.assertRegex(code, r"^[A-Z]{3}$")
         self.assertEqual(rows, len(grid))
         # Master: blank counterpart appended, same code, D/G blank
@@ -191,7 +191,7 @@ class TestBottomAppendParity(unittest.TestCase):
 
     def test_fruit_shop_new_row_gets_fruit_domain(self):
         ld_rows = [["Tomato", "", "", "", "", "0.90", "", "", "",
-                    "", "EYF"]]
+                    "", "", "EYF"]]
         master = _aligned_pair(["EYF"])
         master[1][0] = "Tomato"
         worksheet, master_tab, _rows, _lines = self._merged(
@@ -208,7 +208,7 @@ class TestBottomAppendParity(unittest.TestCase):
 
     def test_matched_row_update_appends_nothing(self):
         ld_rows = [["Tomato", "", "", "", "", "0.90", "", "", "",
-                    "", "EYF"]]
+                    "", "", "EYF"]]
         master = _aligned_pair(["EYF"])
         master[1][0] = "Tomato"
         worksheet, master_tab, _rows, new_lines = self._merged(
@@ -230,10 +230,10 @@ class TestSetStorePricesMirror(unittest.TestCase):
         ws = FakeWS([
             [LD_HEADER[0]] + LD_HEADER[1:],
             ["Prices valid until", "n/a (live site)", "", "", "",
-             "", "", "", "", "", ""],
-            ["BUTCHERY"] + [""] * 10,
+             "", "", "", "", "", "", ""],
+            ["BUTCHERY"] + [""] * 11,
             ["Halal Beef Mince 500g", "", "9.20", "", "", "", "",
-             "", "", "", "AUG"],
+             "", "", "", "", "AUG"],
         ])
         master = _aligned_pair(["AUG"])
         master[1][0] = "Halal Beef Mince 500g"
@@ -246,7 +246,7 @@ class TestSetStorePricesMirror(unittest.TestCase):
         self.assertIn("[new row]", lines[0])
         grid = ws.get_all_values()
         self.assertEqual(grid[-1][0], "Halal lamb shoulder /kg")
-        code = grid[-1][10]
+        code = grid[-1][11]
         self.assertRegex(code, r"^[A-Z]{3}$")
         m = master_tab.grid[-1]
         self.assertEqual(m[0], "Halal lamb shoulder /kg")
