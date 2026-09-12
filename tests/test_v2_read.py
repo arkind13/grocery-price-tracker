@@ -426,17 +426,24 @@ class TestUnitAwareQuotes(unittest.TestCase):
 class TestLocalSpecialsReport(unittest.TestCase):
     """`specials --store local` (user decision 2026-09-12): the four
     shops' CURRENT specials, read-only — kind 'special' only, grouped
-    per shop, multibuy terms rewritten 'min order …', permanent
-    prices never shown, empty → honest no-specials line."""
+    per shop, multibuy terms rewritten 'min order …', empty → honest
+    no-specials line. REGULAR PRICE (2026-09-13 user directive): the
+    special's normal price rides the SAME line as 'reg $X' — 'what I
+    said yesterday was I don't need it in a separate line; the
+    compare-message format is exactly right'. A shop with no special
+    still never shows its permanent price (that's the catalogue)."""
 
     def _report(self, ld):
         from core.v2_read import local_specials_report
         return local_specials_report(ld)
 
     def test_specials_only_grouped_with_min_order(self):
+        from datetime import timedelta
+        from core.sydney_time import sydney_today
+        till = sydney_today() + timedelta(days=2)   # never expires
         ld = [
             _l("Halal Lamb Mince /kg", "GVJ",
-               merjan_sp="15 (till 13 Sep)",
+               merjan_sp=f"15 (till {till.day} {till:%b})",
                merjan_perm="16.99", dunya_perm="15.99"),
             _l("Halal Drumstick", "VCK", merjan_sp="4"),
             _l("Cos Lettuce /ea", "COS", fruitopia_perm="0.99"),
@@ -445,15 +452,22 @@ class TestLocalSpecialsReport(unittest.TestCase):
         self.assertIn("Merjan Brothers Quality Meats", out)
         self.assertIn("Halal Lamb Mince — $15.00/kg (special)", out)
         self.assertIn("Halal Drumstick — $4.00 (special)", out)
-        # permanent prices never appear in the specials answer
-        self.assertNotIn("16.99", out)
+        # 2026-09-13 directive: the regular price joins the special's
+        # OWN line — never a separate line
+        lamb_line = next(ln for ln in out.splitlines()
+                         if "$15.00/kg (special)" in ln)
+        self.assertIn("reg $16.99", lamb_line)
+        # a shop with NO special never shows its permanent price
         self.assertNotIn("15.99", out)
         self.assertNotIn("Fruitopia", out)
         self.assertIn("📊 2 local special(s) across 1 shop(s)", out)
 
     def test_min_order_terms_rendered(self):
+        from datetime import timedelta
+        from core.sydney_time import sydney_today
+        till = sydney_today() + timedelta(days=2)   # never expires
         ld = [_l("Halal Goat Curry /kg", "NZH",
-                 merjan_sp="15 (till 13 Sep)")]
+                 merjan_sp=f"15 (till {till.day} {till:%b})")]
         ld[0]["comments"] = "[MER] multi buy 2kg for $29.99"
         out = self._report(ld)
         self.assertIn("min order 2kg for $29.99", out)

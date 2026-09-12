@@ -909,9 +909,12 @@ def local_specials_report(ld_rows: list) -> str:
 
     One sheet-side source: every Local_Deals quote whose resolved
     kind is 'special' (validity-aware), grouped per shop with the
-    multibuy terms ('min order …') next to the price. Permanent
-    prices are excluded — this is the SPECIALS answer, not the
-    catalogue."""
+    multibuy terms ('min order …') next to the price. The shop's
+    REGULAR price rides the SAME line as 'reg $X' (user directive
+    2026-09-13: 'when an item is on specials I don't need it in a
+    separate line — the compare-message format is exactly right');
+    a shop with no special never shows its permanent price here —
+    this is the SPECIALS answer, not the catalogue."""
     groups: dict = {}
     for ld in ld_rows:
         display = re.sub(r"\s*/(kg|ea)\s*$", "", str(ld["name"] or ""),
@@ -924,7 +927,8 @@ def local_specials_report(ld_rows: list) -> str:
                 else ""
             suffix = f" · {note}" if note else ""
             groups.setdefault(q["shop"], []).append(
-                f"  {display} — {price_text} (special){suffix}")
+                f"  {display} — {price_text} (special){suffix}"
+                + _reg_text(q))
     if not groups:
         return "No active local specials right now."
     lines: list = []
