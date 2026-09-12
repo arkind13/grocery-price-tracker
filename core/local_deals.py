@@ -3910,16 +3910,33 @@ def setup_categories(master_ws, ld_ws,
     report.extend(merge_lines)
 
     # 3. identify the parked review rows: Nazar appends that are
-    #    known near-variants (NAZAR_REVIEW_ROWS).
+    #    known near-variants (NAZAR_REVIEW_ROWS). The NAZAR-PRICED
+    #    row is the one parked — canonical matches can also hit the
+    #    ORIGINAL row it was paired against (2026-09-12 Lamb Shanks
+    #    fix: NYV the original stayed categorised, HVZ the Nazar row
+    #    parked).
     lcode = _grid_col("item_code")
+    ncol = _grid_col("nazar_perm")
     ld_width = len(TAB_COLUMNS) + 1
     review_codes: set = set()
+
+    def _canonical_matches(name: str) -> list:
+        target = canonical_key(_base_name(name))
+        return [i for i in range(1, len(ld_grid))
+                if str(ld_grid[i][0]).strip()
+                and canonical_key(_base_name(ld_grid[i][0])) == target]
+
     for name, _partner in NAZAR_REVIEW_ROWS:
-        i = _grid_row_canonical_index(ld_grid, name)
-        if i is not None:
-            code = str(ld_grid[i][lcode]).strip()
-            if code:
-                review_codes.add(code.upper())
+        matches = _canonical_matches(name)
+        if not matches:
+            continue
+        priced = [i for i in matches
+                  if len(ld_grid[i]) > ncol
+                  and str(ld_grid[i][ncol]).strip()]
+        pick = (priced or matches)[0]
+        code = str(ld_grid[pick][lcode]).strip()
+        if code:
+            review_codes.add(code.upper())
 
     # 4. classify: master B filled where blank (existing labels WIN);
     #    review rows stay BLANK. The butchery-source hint comes from
@@ -3943,14 +3960,17 @@ def setup_categories(master_ws, ld_ws,
         code = str(m[11]).strip().upper()
         ld_row = ld_by_code.get(code, [])
         current = str(m[mcat]).strip()
+        if code and code in review_codes:
+            # parked rows ALWAYS reset to blank — a re-run must be
+            # able to park a row that an earlier run mis-filed
+            m[mcat] = ""
+            continue
         known = _norm_category(current)
         if known:
             if current != known:
                 m[mcat] = known          # normalise case only
             counts[known] = counts.get(known, 0) + 1
             continue
-        if code and code in review_codes:
-            continue                     # parked blank for review
         butchery = any(len(ld_row) > c and str(ld_row[c]).strip()
                        for c in butchery_cols) \
             or str(m[10]).strip().lower() == "butchery"
