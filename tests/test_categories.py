@@ -16,6 +16,9 @@ if str(_PROJECT) not in sys.path:
     sys.path.insert(0, str(_PROJECT))
 
 from core import local_deals as ld                 # noqa: E402
+from core.v2_read import (family_search,          # noqa: E402
+                          parse_ld_row,
+                          render_family_search)
 from tools.parity_audit import audit as audit_fn   # noqa: E402
 
 LD_HEADER = ["Product"] + [n for _k, n in ld.TAB_COLUMNS]
@@ -332,3 +335,58 @@ class TestMergeMemoryAndGate(unittest.TestCase):
         # meat from a fruit shop is still gated
         self.assertTrue(ld.domain_gate_skip(
             "Halal Lamb Chops /kg", "fruitopia"))
+
+
+class TestFamilySearch(unittest.TestCase):
+    """Family search (user ask 2026-09-13): 'give me all shish' /
+    'all sausages' / 'all chicken items' — the LLM translates the
+    phrase into flags, the CLI matches deterministically."""
+
+    def _rows(self):
+        return [
+            parse_ld_row(2, _l_row("Halal Turkish chicken /kg", "BVK",
+                                   cat="chicken", nazar=31.9)),
+            parse_ld_row(3, _l_row("Halal Beef Sausages /kg", "TGK",
+                                   cat="beef", dunya=12.99)),
+            parse_ld_row(4, _l_row("Halal Lamb Stirfry /kg", "EWC",
+                                   cat="lamb")),
+            parse_ld_row(5, _l_row("Woolworths Chicken Wings 1kg",
+                                   "VZU", cat="chicken")),
+        ]
+
+    def test_category_filter(self):
+        rows = family_search(["chicken"], [], self._rows())
+        self.assertEqual([r["code"] for r in rows], ["BVK", "VZU"])
+
+    def test_word_filter_plural_folds(self):
+        rows = family_search([], ["sausages"], self._rows())
+        self.assertEqual([r["code"] for r in rows], ["TGK"])
+
+    def test_prefix_match_minced(self):
+        rows = family_search([], ["mince"], [
+            parse_ld_row(2, _l_row("Halal Beef Mince /kg", "X1",
+                                   cat="beef")),
+            parse_ld_row(3, _l_row("Halal Beef Minced /kg", "X2",
+                                   cat="beef")),
+        ])
+        self.assertEqual(sorted(r["code"] for r in rows),
+                         ["X1", "X2"])
+
+    def test_words_and_category_and_together(self):
+        rows = family_search(["beef"], ["sausage"], self._rows())
+        self.assertEqual([r["code"] for r in rows], ["TGK"])
+
+    def test_no_filters_returns_nothing(self):
+        self.assertEqual(family_search([], [], self._rows()), [])
+
+    def test_render_smoke(self):
+        rows = family_search([], ["shish"], [])
+        self.assertIn("0 item(s)", render_family_search("shish",
+                                                           rows))
+
+
+def _l_row(name, code, cat="", nazar="", dunya=""):
+    row = [""] * 13
+    row[0], row[1], row[2], row[10], row[12] = (
+        name, cat, dunya, nazar, code)
+    return row

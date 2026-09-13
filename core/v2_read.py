@@ -102,9 +102,11 @@ def parse_ld_row(sheet_row: int, row: list,
     ccol = _grid_col("comments")
     comments = str(row[ccol]).strip() if len(row) > (ccol or 0) \
         else ""
+    catcol = _grid_col("category")
+    category = str(row[catcol]).strip()         if len(row) > (catcol or 0) else ""
     return {"row": sheet_row, "name": name, "prices": prices,
             "perm_prices": perm_prices, "comments": comments,
-            "code": code}
+            "code": code, "category": category}
 
 
 def read_tabs() -> tuple:
@@ -671,6 +673,71 @@ def lookup_item(query: str, master_rows, ld_rows) -> dict:
     return {"status": "not-tracked", "master": None, "local": {},
             "best": None, "code": "", "non_halal_twins": twins,
             "query": q}
+
+
+_SEARCH_FILLERS = ("all", "every", "list", "show", "give", "me",
+                   "the", "items", "item")
+
+
+def _word_matches(word: str, name_stems: set) -> bool:
+    """One search word against a row's plural-folded name stems:
+    exact stem hit, or prefix match from 4+ letters ('mince' finds
+    'minced'; 'pea' never matches 'peanut')."""
+    cands = _stem_candidates(str(word or ""))
+    for s in name_stems:
+        if s in cands:
+            return True
+        for c in cands:
+            if len(c) >= 4 and s.startswith(c):
+                return True
+    return False
+
+
+def family_search(categories: list, words: list, ld_rows) -> list:
+    """FAMILY SEARCH (user ask 2026-09-13): every Local_Deals row
+    matching the translated phrase. The claw's LLM reads the user's
+    own words ('give me all chicken items', 'all diced beef',
+    'marinated') and translates them: category names -> --category,
+    product/descriptor words -> --contains. Categories AND words
+    together; words plural-fold + prefix-match against the row name.
+    One sheet read, no LLM inside the CLI — the speed budget holds."""
+    cats = {str(c).strip().lower() for c in (categories or [])
+            if str(c).strip()}
+    words = [str(w).strip().lower() for w in (words or [])
+             if str(w).strip() and str(w).strip().lower()
+             not in _SEARCH_FILLERS]
+    if not cats and not words:
+        return []
+    out = []
+    for ld in ld_rows:
+        if cats and str(ld.get("category") or "").strip().lower()                 not in cats:
+            continue
+        if words:
+            name_stems = _stems(str(ld["name"] or ""))
+            if not all(_word_matches(w, name_stems) for w in words):
+                continue
+        out.append(ld)
+    return out
+
+
+def render_family_search(term: str, rows: list) -> str:
+    """Compact render: one line per match — code, name, category,
+    per-shop prices (specials marked). Sorted by category block."""
+    from core.local_deals import category_sort_key
+    ordered = sorted(rows, key=lambda r: category_sort_key(
+        str(r.get("category") or "")))
+    lines = [f'🔎 Family search "{term}": {len(rows)} item(s)']
+    for ld in ordered:
+        name = str(ld["name"] or "")
+        cat = str(ld.get("category") or "").strip() or "unlabelled"
+        bits = []
+        for shop, (p, kind) in sorted(ld["prices"].items()):
+            bits.append(f"{_shop_label(shop)} ${p:.2f}"
+                        + (" (special)" if kind == "special" else ""))
+        prices = " · ".join(bits) or "no local price yet"
+        lines.append(f"[{ld.get('code') or '—'}] {name} ({cat})"
+                     f" — {prices}")
+    return chr(10).join(lines)
 
 
 def ignored_codes(path=None) -> set:
