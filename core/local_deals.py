@@ -3315,6 +3315,9 @@ def _reuse_match_index(grid: list, name: str) -> int | None:
             return False
         return first != "Prices valid until"
 
+    redirected = _merge_redirect_index(grid, name)
+    if redirected is not None:
+        return redirected           # a recorded user merge wins
     incoming = _reuse_tokens(_base_name(name))
     SIZE_RE = re.compile(r"\d+(?:[.,]\d+)?kg\b")
     incoming_id = {t for t in incoming if not SIZE_RE.fullmatch(t)}
@@ -3359,6 +3362,70 @@ def _reuse_match_index(grid: list, name: str) -> int | None:
         return best_pack[1]               # pack-aware reuse wins
     if best_id is not None:
         return best_id[1]                 # identity-only reuse
+    return None
+
+
+# --- row-merge memory (user directive 2026-09-13) --------------------
+# Every user merge is remembered as src-canonical -> dst-canonical so
+# FUTURE syncs (Nazar site walk, FB ingest, manual entries) reuse the
+# SURVIVOR row instead of re-appending the merged-away item as a
+# duplicate. Without this, the next --nazar-site would resurrect the
+# merged rows (their names differ from the survivors on purpose).
+MERGE_MAP_PATH = (Path(__file__).resolve().parent.parent
+                  / "data" / "row_merges.json")
+
+
+def load_merge_map(path=None) -> dict:
+    """{src_canonical_key: dst_canonical_key} from row_merges.json."""
+    path = Path(path) if path else MERGE_MAP_PATH
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    out: dict = {}
+    for e in data if isinstance(data, list) else []:
+        if isinstance(e, dict) and e.get("src_key") and e.get("dst_key"):
+            out[str(e["src_key"])] = str(e["dst_key"])
+    return out
+
+
+def record_merge(src_name: str, dst_name: str, path=None) -> None:
+    """Remember one merge (canonical keys; display names kept for
+    humans). Idempotent; chains A->B then B->C resolve to A->C."""
+    path = Path(path) if path else MERGE_MAP_PATH
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, list):
+            data = []
+    except (OSError, ValueError):
+        data = []
+    s_key = canonical_key(_base_name(src_name))
+    d_key = canonical_key(_base_name(dst_name))
+    data = [e for e in data if e.get("src_key") != s_key]
+    data.append({"src": str(src_name), "dst": str(dst_name),
+                 "src_key": str(s_key), "dst_key": str(d_key)})
+    # chain-fold: anything pointing AT src now points at dst
+    for e in data:
+        if e.get("dst_key") == s_key and e.get("src_key") != s_key:
+            e["dst_key"] = d_key
+            e["dst"] = str(dst_name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False),
+                    encoding="utf-8")
+
+
+def _merge_redirect_index(grid: list, name: str) -> int | None:
+    """The row a merged-away name must reuse (its survivor), or None."""
+    dst_key = load_merge_map().get(str(canonical_key(_base_name(name))))
+    if not dst_key:
+        return None
+    for i in range(1, len(grid)):
+        first = str(grid[i][0]).strip()
+        if not first or first in SECTION_ORDER \
+                or first == "Prices valid until":
+            continue
+        if str(canonical_key(_base_name(first))) == dst_key:
+            return i
     return None
 
 
@@ -3411,6 +3478,9 @@ def _site_reuse_match(grid: list, name: str) -> int | None:
 
     Returns the matching row index or None (new row).
     """
+    redirected = _merge_redirect_index(grid, name)
+    if redirected is not None:
+        return redirected           # a recorded user merge wins
     kind = _row_unit_kind(name)
     incoming = _site_identity_tokens(name)
     inc_sizes = {t for t in _reuse_tokens(name)
@@ -3498,9 +3568,13 @@ def domain_gate_skip(item_name: str, store_key: str) -> str | None:
     produce; fruit & veg shops do not stock meat. A deal outside its
     source shop's domain is SKIPPED with a logged line — never written
     to the tab, never compared. Unclassifiable items pass (recorded,
-    per the original out-of-domain design)."""
+    per the original out-of-domain design). A prepared meat product
+    ('Lahmacun ... mince', 'Lemon & Pepper Shish') is a butcher's
+    goods even when its marinade name carries produce words — the
+    meat-product vocabulary overrides the produce test (2026-09-13:
+    two Nazar catalogue items were being wrongly gated)."""
     produce = is_produce_item(item_name)
-    meat = is_meat_item(item_name)
+    meat = is_meat_item(item_name) or         bool(_item_words(item_name) & _MEAT_PRODUCT_WORDS)
     if store_key in BUTCHERY_STORE_KEYS and produce and not meat:
         return (f"[domain gate] '{item_name[:40]}' skipped — produce "
                 f"item from a butchery source")
@@ -4114,6 +4188,18 @@ def apply_row_merges(pairs: list, master_ws, ld_ws,
         ld_grid = [r for r in ld_grid
                    if not (str(r[lcode]).strip().upper() in drop)]
         _archive_merge_rows(entries, archive_path)
+        # remember every merge so FUTURE syncs reuse the survivor
+        for pair in pairs:
+            s, _, d = str(pair).partition("=")
+            s = s.strip().upper()
+            d = d.strip().upper()
+            s_entry = next((e for e in entries
+                            if e["code"] == s
+                            and e["side"] == "local_deals"), None)
+            d_name = next((str(r[0]).strip() for r in ld_grid
+                           if str(r[lcode]).strip().upper() == d), d)
+            if s_entry is not None:
+                record_merge(s_entry["row"][0], d_name)
         # parked review codes that merged away clear themselves
         review = load_category_review() - drop
         save_category_review(review)

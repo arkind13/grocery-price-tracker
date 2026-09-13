@@ -297,3 +297,38 @@ class TestBuildRowsPreCategory(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMergeMemoryAndGate(unittest.TestCase):
+    """2026-09-13: merges are REMEMBERED (row_merges.json) so future
+    syncs reuse the survivor row instead of resurrecting duplicates;
+    the domain gate passes prepared meat products whose marinade
+    names carry produce words."""
+
+    def test_record_and_redirect(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "row_merges.json"
+            ld.record_merge("Halal Lamb Stir Fry /kg",
+                            "Halal Lamb Stirfry /kg", path=path)
+            grid = [LD_HEADER,
+                    _l("Halal Lamb Stirfry /kg", "EWC")]
+            self.assertEqual(
+                ld._merge_redirect_index(
+                    grid, "Halal Lamb Stir Fry /kg"), 1)
+            # an unrelated name passes through untouched
+            self.assertIsNone(
+                ld._merge_redirect_index(
+                    grid, "Halal Brand New Item /kg"))
+
+    def test_gate_passes_prepared_meat_with_produce_words(self):
+        self.assertIsNone(ld.domain_gate_skip(
+            "Halal Lahmacun/Lahm bi Ajeen mince (onion, capsicum "
+            "& spices) /kg", "nazar"))
+        self.assertIsNone(ld.domain_gate_skip(
+            "Halal Lemon and Pepper Shish /ea", "nazar"))
+        # true produce from a butchery is still gated
+        self.assertTrue(ld.domain_gate_skip(
+            "Halal Lettuce /ea", "nazar"))
+        # meat from a fruit shop is still gated
+        self.assertTrue(ld.domain_gate_skip(
+            "Halal Lamb Chops /kg", "fruitopia"))

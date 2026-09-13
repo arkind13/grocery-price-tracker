@@ -1,0 +1,92 @@
+[
+  {
+    "src": "Halal Beef Curry (with bone) /kg",
+    "dst": "Halal Beef Curry /kg",
+    "src_key": "(('beef', 'bone', 'curry', 'halal', 'with'), ())",
+    "dst_key": "(('beef', 'curry', 'halal'), ())"
+  },
+  {
+    "src": "Halal Giglio’s Spicy Wings /ea",
+    "dst": "Halal Spicy Wings /ea",
+    "src_key": "(('giglio', 'halal', 'spicy', 'wing'), ())",
+    "dst_key": "(('halal', 'spicy', 'wing'), ())"
+  },
+  {
+    "src": "Halal Lamb Blade (approx1.5kg) /ea",
+    "dst": "Halal Lamb Blade 1.3 /ea",
+    "src_key": "(('5kg', 'approx1', 'blade', 'halal', 'lamb'), ())",
+    "dst_key": "(('blade', 'halal', 'lamb'), ())"
+  },
+  {
+    "src": "Halal Lamb Steak/Biftek (Made from Backstraps) /kg",
+    "dst": "Halal Lamb Backstrap /kg",
+    "src_key": "(('backstrap', 'biftek', 'from', 'halal', 'lamb', 'made', 'steak'), ())",
+    "dst_key": "(('backstrap', 'halal', 'lamb'), ())"
+  },
+  {
+    "src": "Halal Lamb Stir Fry /kg",
+    "dst": "Halal Lamb Stirfry /kg",
+    "src_key": "(('fry', 'halal', 'lamb', 'stir'), ())",
+    "dst_key": "(('halal', 'lamb', 'stirfry'), ())"
+  },
+  {
+    "src": "Halal Mediterranean Lamb Chops /kg",
+    "dst": "Halal Greek Chops /ea",
+    "src_key": "(('chop', 'halal', 'lamb', 'mediterranean'), ())",
+    "dst_key": "(('chop', 'greek', 'halal'), ())"
+  },
+  {
+    "src": "Halal Turkish Lamb Shish /kg",
+    "dst": "Halal Turkish chicken /kg",
+    "src_key": "(('halal', 'lamb', 'shish', 'turkish'), ())",
+    "dst_key": "(('chicken', 'halal', 'turkish'), ())"
+  },
+  {
+    "src": "Halal Adana kebab /kg",
+    "dst": "Halal Turkish Adana /kg",
+    "src_key": "(('adana', 'halal', 'kebab'), ())",
+    "dst_key": "(('adana', 'halal', 'turkish'), ())"
+  },
+  {
+    "src": "Halal Kafta/Kofte /kg",
+    "dst": "Halal Turkish Kofte /kg",
+    "src_key": "(('halal', 'kafta', 'kofte'), ())",
+    "dst_key": "(('halal', 'kofte', 'turkish'), ())"
+  },
+  {
+    "src": "Halal Chicken Mini Drumstick /kg",
+    "dst": "Halal Drumstick /kg",
+    "src_key": "(('chicken', 'drumstick', 'halal', 'mini'), ())",
+    "dst_key": "(('drumstick', 'halal'), ())"
+  },
+  {
+    "src": "Halal Diced Beef (No Fat) /kg",
+    "dst": "Halal Diced Beef /kg",
+    "src_key": "(('beef', 'diced', 'fat', 'halal', 'no'), ())",
+    "dst_key": "(('beef', 'diced', 'halal'), ())"
+  },
+  {
+    "src": "Halal Lamb Necks /kg",
+    "dst": "Halal Sliced Lamb Neck /kg",
+    "src_key": "(('halal', 'lamb', 'neck'), ())",
+    "dst_key": "(('halal', 'lamb', 'neck', 'sliced'), ())"
+  },
+  {
+    "src": "Halal Sausages (Plain) /kg",
+    "dst": "Halal Beef Sausages /kg",
+    "src_key": "(('halal', 'plain', 'sausage'), ())",
+    "dst_key": "(('beef', 'halal', 'sausage'), ())"
+  },
+  {
+    "src": "Halal Skinless Maryland /kg",
+    "dst": "Halal Chicken maryland /kg",
+    "src_key": "(('halal', 'maryland', 'skinless'), ())",
+    "dst_key": "(('chicken', 'halal', 'maryland'), ())"
+  },
+  {
+    "src": "Halal Skin Off Drum /kg",
+    "dst": "Halal Skinless Drumsticks /kg",
+    "src_key": "(('drum', 'halal', 'off', 'skin'), ())",
+    "dst_key": "(('drumstick', 'halal', 'skinless'), ())"
+  }
+]
