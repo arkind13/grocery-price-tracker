@@ -3577,7 +3577,12 @@ CATEGORY_ORDER = ("chicken", "goat", "lamb", "beef",
                   "misc - butchery", "unclassified - butchery",
                   "vegetables", "fruits", "unclassified - f&v",
                   "Non food")
-REVIEW_SENTINEL_ORDER = len(CATEGORY_ORDER) + 1   # blanks sort last
+# Temporary user markers (2026-09-12): unclassified rows the user
+# has LOOKED at and deliberately left — they sort after Non food.
+CHECKED_BUTCHERY = "checked unclassified - butchery"
+CHECKED_FV = "checked unclassified - f&v"
+_CHECKED_LABELS = (CHECKED_BUTCHERY, CHECKED_FV)
+REVIEW_SENTINEL_ORDER = len(CATEGORY_ORDER) + 3   # blanks sort last
 
 _SPICE_WORDS = frozenset({
     "spice", "spices", "spiced", "marinade", "marinated", "seasoning",
@@ -3608,6 +3613,9 @@ def _norm_category(label: str) -> str:
     if not low:
         return ""
     for cat in CATEGORY_ORDER:
+        if low == cat.lower():
+            return cat
+    for cat in _CHECKED_LABELS:
         if low == cat.lower():
             return cat
     return ""
@@ -3656,10 +3664,13 @@ def classify_category(item_name: str,
 
 
 def category_sort_key(label: str) -> int:
-    """Sort index for a category label — blanks (review rows) last."""
+    """Sort index for a category label — blanks (review rows) last;
+    the 'checked unclassified' markers sit just before them."""
     cat = _norm_category(label)
     if not cat:
         return REVIEW_SENTINEL_ORDER
+    if cat in _CHECKED_LABELS:
+        return len(CATEGORY_ORDER) + 1 + _CHECKED_LABELS.index(cat)
     return CATEGORY_ORDER.index(cat)
 
 
@@ -4027,6 +4038,95 @@ def setup_categories(master_ws, ld_ws,
     report.append(f"review rows parked at the bottom: "
                   f"{len(review_codes)} (data/category_review.json)")
     return 0, report
+
+
+def apply_row_merges(pairs: list, master_ws, ld_ws,
+                     archive_path=None) -> tuple[int, list]:
+    """User verdict merges (2026-09-12): 'CODE=DESTCODE' pairs — the
+    two rows become ONE. The DEST row survives (keeps its name and
+    codes); every price cell the SRC row holds moves into the DEST
+    row's EMPTY cell (a filled DEST cell is never overwritten), the
+    SRC row's shop-tagged comment segments move across, and the SRC
+    row is archived (deleted_rows.json, source=user-merge) and
+    deleted from BOTH tabs. Parked review codes that merge away are
+    cleared. Returns (rc, report lines)."""
+    mcode, lcode = 11, _grid_col("item_code")
+    ld_width = len(TAB_COLUMNS) + 1
+    master_grid = [list(r) for r in
+                   (master_ws.get_all_values() or [])]
+    ld_grid = [list(r) for r in (ld_ws.get_all_values() or [])]
+    lines: list = []
+    drop: set = set()
+    entries: list = []
+    for pair in pairs:
+        src, _, dst = str(pair).partition("=")
+        src, dst = src.strip().upper(), dst.strip().upper()
+        if not src or not dst or src == dst:
+            lines.append(f"merge: '{pair}' unreadable — skipped")
+            continue
+        s_i = next((j for j in range(1, len(ld_grid))
+                    if str(ld_grid[j][lcode]).strip().upper() == src),
+                   None)
+        d_i = next((j for j in range(1, len(ld_grid))
+                    if str(ld_grid[j][lcode]).strip().upper() == dst),
+                   None)
+        if s_i is None or d_i is None:
+            lines.append(f"merge: [{src} -> {dst}] code not found "
+                         f"— skipped")
+            continue
+        s_row, d_row = ld_grid[s_i], ld_grid[d_i]
+        moved = []
+        for c in range(1, ld_width):
+            if c in (lcode, _grid_col("category"), _grid_col("comments")):
+                continue
+            if str(d_row[c]).strip() == "" and str(s_row[c]).strip():
+                d_row[c] = s_row[c]
+                moved.append(c)
+        ccol = _grid_col("comments")
+        for seg in [s.strip() for s in str(s_row[ccol]).split(";")
+                    if s.strip()]:
+            if _TAG_RE.match(seg) and seg not in str(d_row[ccol]):
+                tag = _TAG_RE.match(seg).group(1)
+                d_row[ccol] = _merge_comment_cell(
+                    d_row[ccol], _shop_key_for_tag(tag),
+                    _TAG_RE.sub("", seg, count=1).strip())
+        drop.add(src)
+        m_s = next((j for j in range(1, len(master_grid))
+                    if str(master_grid[j][mcode]).strip().upper()
+                    == src), None)
+        m_d = next((j for j in range(1, len(master_grid))
+                    if str(master_grid[j][mcode]).strip().upper()
+                    == dst), None)
+        if m_s is not None:
+            entries.append({"side": "master", "code": src,
+                            "row_index": m_s + 1,
+                            "row": [str(c) for c in master_grid[m_s]]})
+        entries.append({"side": "local_deals", "code": src,
+                        "row_index": s_i + 1,
+                        "row": [str(c) for c in s_row]})
+        lines.append(f"merged [{src}] {str(s_row[0]).strip()} -> "
+                     f"[{dst}] {str(d_row[0]).strip()} "
+                     f"({len(moved)} price cell(s) moved)")
+    if drop:
+        master_grid = [r for j, r in enumerate(master_grid)
+                       if not (j and str(r[mcode]).strip().upper()
+                               in drop)]
+        ld_grid = [r for r in ld_grid
+                   if not (str(r[lcode]).strip().upper() in drop)]
+        _archive_merge_rows(entries, archive_path)
+        # parked review codes that merged away clear themselves
+        review = load_category_review() - drop
+        save_category_review(review)
+    _ensure_grid_capacity(master_ws, len(master_grid), 13)
+    master_ws.clear()
+    master_ws.freeze(rows=1)
+    master_ws.update(values=master_grid,
+                     range_name=f"A1:M{len(master_grid)}")
+    _ensure_grid_capacity(ld_ws, len(ld_grid), ld_width)
+    ld_ws.clear()
+    ld_ws.freeze(rows=1)
+    ld_ws.update(values=ld_grid, range_name=grid_range(len(ld_grid)))
+    return 0, lines
 
 
 def set_category_verdicts(verdicts: list, master_ws,

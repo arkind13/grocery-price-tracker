@@ -493,14 +493,47 @@ def _domain_master_hit(tokens: list, master_rows: list):
     return _best_token_row(candidates, tokens)
 
 
+def _cousin_ld_rows(hit_code: str, q: str, ld_rows) -> list:
+    """Other Local_Deals rows matching the SAME query tokens (user
+    ask 2026-09-13: the same item can live on TWO rows — one shop
+    prices it /kg, another /ea — and the compare must mention BOTH
+    stores). Same discipline as the §8 row-3 pool: every query token
+    must be present in the row name (plural-folded, word-boundary
+    safe), halal rows only for meat queries, priced rows only."""
+    tokens = _query_tokens(q)
+    if not tokens:
+        return []
+    meat = is_meat_query(q)
+    out: list = []
+    for ld in ld_rows:
+        if ld["code"] and ld["code"] == hit_code:
+            continue
+        if not ld["prices"]:
+            continue
+        name = str(ld["name"] or "").lower()
+        if meat and "halal" not in name:
+            continue
+        if _name_has_all(name, tokens):
+            out.append(ld)
+    return out
+
+
 def lookup_item_hit(hit: dict, master_rows, ld_rows, twins: list,
                     q: str) -> dict:
     """The §8 answer dict for a RESOLVED master row (status derived
-    from the row's own cells; locals from its code-paired LD row)."""
+    from the row's own cells; locals from its code-paired LD row
+    PLUS same-item cousin rows — a /kg row and a /ea row of one item
+    are separate rows by design (S9), and the answer must mention
+    every store that sells the item)."""
     ld = next((ld for ld in ld_rows
                if ld["code"] and ld["code"] == hit["code"]), None)
-    prices = dict(ld["prices"]) if ld else {}
-    quotes, best_q, best_label = _quotes_and_best([ld] if ld else [])
+    rows = ([ld] if ld else []) + _cousin_ld_rows(
+        hit["code"], q, ld_rows)
+    prices: dict = {}
+    for row in rows:
+        for shop, (price, kind) in row["prices"].items():
+            prices.setdefault(shop, (price, kind))
+    quotes, best_q, best_label = _quotes_and_best(rows)
     best = ((best_q["shop"], best_q["price"], best_q["kind"])
             if best_q else None)
     base = {"master": hit, "local": prices, "best": best,
