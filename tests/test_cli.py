@@ -116,6 +116,40 @@ class TestReadVerbs(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("[LST] Listed", out)
 
+    def test_find_code_renders_row_and_status(self):
+        """Bench H5/H6 (2026-09-14): 'what is code AUG' renders the
+        one row + verify status — not a price render."""
+        from grocery_price_cli import _cmd_find
+        master = [{"name": "Halal Beef Mince", "code": "AUG",
+                   "ww_num": None, "keyword": "", "gone": False,
+                   "na_marker": None}]
+        lds = [{"name": "Halal Beef Mince /kg", "code": "AUG",
+                "category": "beef",
+                "prices": {"dunya": (15.99, "permanent")}}]
+        with patch("grocery_price_cli._load_env",
+                   return_value=None), \
+                patch("core.v2_read.read_tabs",
+                      return_value=(master, lds)):
+            code, out = _capture(
+                _cmd_find, argparse.Namespace(code="AUG",
+                                              category=[], contains=[]))
+        self.assertEqual(code, 0)
+        self.assertIn("🔎 Code lookup [AUG]", out)
+        self.assertIn("[AUG] Halal Beef Mince /kg (beef)", out)
+        self.assertIn("still blank", out)
+
+    def test_find_code_unknown(self):
+        from grocery_price_cli import _cmd_find
+        with patch("grocery_price_cli._load_env",
+                   return_value=None), \
+                patch("core.v2_read.read_tabs",
+                      return_value=([], [])):
+            code, out = _capture(
+                _cmd_find, argparse.Namespace(code="ZZZ",
+                                              category=[], contains=[]))
+        self.assertEqual(code, 0)
+        self.assertIn("[ZZZ] ✗ unknown code", out)
+
 
 class TestLiveVerb(unittest.TestCase):
     """live: prices only, exit 0 even when a store errors."""

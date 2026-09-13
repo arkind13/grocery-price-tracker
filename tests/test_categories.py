@@ -16,8 +16,11 @@ if str(_PROJECT) not in sys.path:
     sys.path.insert(0, str(_PROJECT))
 
 from core import local_deals as ld                 # noqa: E402
-from core.v2_read import (family_search,          # noqa: E402
+from core.v2_read import (code_lookup,            # noqa: E402
+                          family_search,
                           parse_ld_row,
+                          parse_master_row,
+                          render_code_lookup,
                           render_family_search)
 from tools.parity_audit import audit as audit_fn   # noqa: E402
 
@@ -390,3 +393,70 @@ def _l_row(name, code, cat="", nazar="", dunya=""):
     row[0], row[1], row[2], row[10], row[12] = (
         name, cat, dunya, nazar, code)
     return row
+
+
+def _m_row(name, code, ww="", keyword="", size=""):
+    row = [""] * 13
+    row[0], row[2], row[3], row[6], row[11] = (
+        name, size, ww, keyword, code)
+    return row
+
+
+class TestCodeLookup(unittest.TestCase):
+    """Code questions (bench H5/H6 2026-09-14): 'what is code AUG' /
+    'what item is DRW' — one row + a status line in the SAME wording
+    as the batch `done` verify. Never a price render, never an
+    essay."""
+
+    def _tabs(self):
+        master = [
+            parse_master_row(2, _m_row("Halal Beef Mince /kg", "AUG",
+                                       ww="", keyword="")),
+            parse_master_row(3, _m_row("Woolworths Tomato Truss",
+                                       "EYF", ww="0.54",
+                                       keyword="tomato truss")),
+            parse_master_row(4, _m_row("Halal Lamb Shoulder /kg",
+                                       "HLS", ww="GONE")),
+        ]
+        lds = [
+            parse_ld_row(2, _l_row("Halal Beef Mince /kg", "AUG",
+                                   cat="beef", nazar=17.9, dunya=15.99)),
+            parse_ld_row(3, _l_row("Woolworths Tomato Truss", "EYF",
+                                   cat="vegetables")),
+            parse_ld_row(4, _l_row("Halal Lamb Shoulder /kg", "HLS",
+                                   cat="lamb", nazar=20.9)),
+        ]
+        return master, lds
+
+    def test_unknown_code_renders_batch_unknown_line(self):
+        master, lds = self._tabs()
+        out = render_code_lookup("ZZZ", code_lookup("ZZZ", master, lds))
+        self.assertEqual(out, "[ZZZ] ✗ unknown code")
+
+    def test_missing_list_code_row_plus_still_blank(self):
+        master, lds = self._tabs()
+        hit = code_lookup("AUG", master, lds)
+        self.assertEqual(hit["code"], "AUG")
+        out = render_code_lookup("AUG", hit)
+        self.assertIn("🔎 Code lookup [AUG]", out)
+        self.assertIn("[AUG] Halal Beef Mince /kg (beef)", out)
+        self.assertIn("$15.99", out)
+        self.assertIn("still blank: Woolworths price (col D) and "
+                      "search keyword (col G)", out)
+        self.assertIn("— on the missing list", out)
+
+    def test_tracked_code_renders_done(self):
+        master, lds = self._tabs()
+        out = render_code_lookup("EYF", code_lookup("EYF", master, lds))
+        self.assertIn("✓ done — off the list", out)
+        self.assertNotIn("still blank", out)
+
+    def test_gone_code_renders_gone(self):
+        master, lds = self._tabs()
+        out = render_code_lookup("HLS", code_lookup("HLS", master, lds))
+        self.assertIn("GONE at Woolworths (row kept)", out)
+
+    def test_case_insensitive_and_lowercase_in(self):
+        master, lds = self._tabs()
+        self.assertEqual(code_lookup("aug", master, lds)["code"],
+                         "AUG")

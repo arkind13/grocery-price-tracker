@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import difflib
 import importlib
+import re
+from concurrent.futures import ThreadPoolExecutor
 
 # §15: adding ALDI/AMAZON later = one entry here + one extractor
 # mapping in _PROVIDER_FN. Nothing else may change.
@@ -20,6 +22,50 @@ _PROVIDER_FN = {
 
 _RESULTS_PER_STORE = 3      # spec §7: ≤3 compact lines per store
 _FETCH_PAGE_SIZE = 10       # fetch a few extra so ranking can pick
+
+# Store mentions inside the user's own phrase ("live chicken breast
+# woolworths and aldi", "beef mince ww vs aldi"). Token -> provider.
+# Detected mentions BOTH narrow the search to those stores AND come
+# out of the item query — "chicken breast woolworths and aldi" must
+# search "chicken breast", never the whole phrase (bench M1–M3
+# 2026-09-13: 3-store sequential worst case ~290 s blew the 240 s
+# turn budget; named-store queries now skip Coles entirely and the
+# fetches run in parallel).
+_STORE_TOKENS = {
+    "woolworths": "woolworths", "woolworth": "woolworths",
+    "woolies": "woolworths", "ww": "woolworths",
+    "coles": "coles", "cole": "coles",
+    "aldi": "aldi",
+}
+# Connectors that only glue store names together; dropped alongside
+# a detected store mention ("woolworths AND aldi", "ww VS coles").
+# Stripped ONLY when a store was detected — a plain query keeps
+# every word ("no results" honesty for odd product names).
+_STORE_CONNECTORS = {"and", "or", "vs", "versus", "at", "from",
+                     "in", "both", "only", "just", "please", "+"}
+
+
+def parse_store_mentions(query: str) -> tuple:
+    """'chicken breast woolworths and aldi' -> (['woolworths',
+    'aldi'], 'chicken breast'). No store mentioned -> ([], the
+    original query stripped only of outer whitespace)."""
+    text = str(query or "").strip()
+    if not text:
+        return [], ""
+    tokens = re.findall(r"[a-z0-9]+", text.lower())
+    hits = []
+    for tok in tokens:
+        provider = _STORE_TOKENS.get(tok)
+        if provider and provider not in hits:
+            hits.append(provider)
+    if not hits:
+        return [], text
+    keep = [tok for tok in tokens
+            if tok not in _STORE_TOKENS
+            and tok not in _STORE_CONNECTORS]
+    # keep original casing of words that weren't tokenised away
+    clean = " ".join(keep)
+    return [p for p in LIVE_PROVIDERS if p in hits], clean
 
 
 def _provider_fn(provider: str):
@@ -94,20 +140,28 @@ def _search_provider(provider: str, query: str) -> list:
 def live_search(query: str) -> dict:
     """{provider: [≤3 × {'name','price','size'}], 'errors': {...}}.
 
-    Woolworths: extractors.woolworths_extractor no-auth search.
-    Coles: extractors.coles_extractor Scrape.do credit-guarded search
-    (existing chain, unchanged). Providers run in LIVE_PROVIDERS
-    order; a provider failure degrades to an errors entry — never an
-    exception, never silence.
+    The query is first stripped of any store mentions — named stores
+    narrow the search to themselves (the user asked "woolworths and
+    aldi", not Coles); no mention means all three (LIVE_PROVIDERS
+    order). Providers fetch IN PARALLEL so the wall time is the
+    slowest single store, never the sum of three sequential scrapes
+    (each has its own retry ladder — worst cases stack to ~5 min
+    serialised). A provider failure degrades to an errors entry —
+    never an exception, never silence.
     """
+    providers, clean_query = parse_store_mentions(query)
+    providers = providers or list(LIVE_PROVIDERS)
     results: dict = {}
     errors: dict = {}
-    for provider in LIVE_PROVIDERS:      # §15 iteration order
-        try:
-            results[provider] = _search_provider(provider, query)
-        except Exception as exc:         # noqa: BLE001 — per-store guard
-            results[provider] = []
-            errors[provider] = exc.__class__.__name__
+    with ThreadPoolExecutor(max_workers=len(providers)) as pool:
+        futures = {p: pool.submit(_search_provider, p, clean_query)
+                   for p in providers}
+        for provider, fut in futures.items():
+            try:
+                results[provider] = fut.result()
+            except Exception as exc:     # noqa: BLE001 — per-store guard
+                results[provider] = []
+                errors[provider] = exc.__class__.__name__
     results["errors"] = errors
     return results
 
@@ -118,12 +172,14 @@ def render_live(results: dict, tracked_note: str | None) -> str:
     fetch it via v2_read.lookup_item — this module stays sheet-free).
 
     A store error renders a ⚠️ degradation line (never silence); an
-    empty result list renders a "no results" line.
+    empty result list renders a "no results" line. Only the stores
+    actually searched render — an excluded-by-mention store (the
+    "woolworths and aldi" phrasing) is absent, never "no results".
     """
     from core.telegram_format import section_header, warn
 
     lines: list = []
-    for provider in LIVE_PROVIDERS:
+    for provider in [p for p in LIVE_PROVIDERS if p in results]:
         lines.append(section_header(
             provider.capitalize(),
             icon="🟢" if provider == "woolworths"

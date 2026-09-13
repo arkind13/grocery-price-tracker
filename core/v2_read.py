@@ -740,6 +740,76 @@ def render_family_search(term: str, rows: list) -> str:
     return chr(10).join(lines)
 
 
+def code_lookup(code: str, master_rows, ld_rows) -> dict:
+    """One Item_Code -> {'code', 'master', 'ld'} (bench H5/H6
+    2026-09-14: "what is code AUG" needs a row lookup, not a price
+    essay). master is None only for orphan LD codes; ld is None when
+    the master row has no LD pairing. Unknown code -> {}."""
+    want = str(code or "").strip().upper()
+    if not want:
+        return {}
+    master = next((m for m in master_rows
+                   if str(m.get("code") or "").upper() == want), None)
+    ld = next((r for r in ld_rows
+               if str(r.get("code") or "").upper() == want), None)
+    if master is None and ld is None:
+        return {}
+    return {"code": want, "master": master, "ld": ld}
+
+
+def render_code_lookup(code: str, hit: dict) -> str:
+    """Verify-style render for a code question — the row line in the
+    family-render format + a Woolworths status line using the SAME
+    wording as the batch `done` verify, so a code answer and a batch
+    reply can never disagree. Unknown code -> the batch's unknown
+    line verbatim."""
+    if not hit:
+        return f"[{str(code or '').strip().upper()}] ✗ unknown code"
+    want = hit["code"]
+    ld, master = hit.get("ld"), hit.get("master")
+    lines = [f"🔎 Code lookup [{want}]"]
+    if ld is not None:
+        name = str(ld["name"] or "")
+        if not name and master is not None:
+            name = str(master.get("name") or "")
+        cat = str(ld.get("category") or "").strip() or "unlabelled"
+        bits = []
+        for shop, (p, kind) in sorted(ld["prices"].items()):
+            bits.append(f"{_shop_label(shop)} ${p:.2f}"
+                        + (" (special)" if kind == "special" else ""))
+        prices = " · ".join(bits) or "no local price yet"
+        lines.append(f"[{want}] {name} ({cat}) — {prices}")
+    else:
+        lines.append(f"[{want}] {master.get('name') or ''}")
+    if master is None:
+        lines.append(f"[{want}] ✗ no master-sheet row for this code")
+        return chr(10).join(lines)
+    if master.get("gone"):
+        lines.append(f"[{want}] GONE at Woolworths (row kept)")
+    elif master.get("na_marker"):
+        lines.append(f"[{want}] ✓ tracked at Woolworths — currently "
+                     f"unavailable ({master['na_marker']})")
+    else:
+        price = master.get("ww_num")
+        keyword = str(master.get("keyword") or "").strip()
+        if price is not None and keyword:
+            lines.append(f"[{want}] ✓ done — off the list "
+                         f"(Woolworths price + search keyword filled)")
+        else:
+            blank = []
+            if price is None:
+                blank.append("Woolworths price (col D)")
+            if not keyword:
+                blank.append("search keyword (col G)")
+            note = (f"[{want}] ✗ not done — still blank: "
+                    f"{' and '.join(blank)}")
+            if price is None and not keyword and ld \
+                    and ld.get("prices"):
+                note += " — on the missing list"
+            lines.append(note)
+    return chr(10).join(lines)
+
+
 def ignored_codes(path=None) -> set:
     """Codes hidden by the `ignore` verdict (spec §6).
 

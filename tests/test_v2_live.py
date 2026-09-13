@@ -15,7 +15,7 @@ if str(_PROJECT) not in sys.path:
 
 from extractors.models import ProductItem          # noqa: E402
 from core.v2_live import (                         # noqa: E402
-    LIVE_PROVIDERS, live_search, render_live,
+    LIVE_PROVIDERS, live_search, parse_store_mentions, render_live,
 )
 
 
@@ -81,8 +81,12 @@ class TestSearchSemantics(unittest.TestCase):
              patch("extractors.aldi_extractor.fetch_aldi_search",
                    return_value=[]):
             results = live_search("chicken breast")
-        # iteration order: woolworths ran first
-        self.assertEqual(order, ["woolworths", "coles"])
+        # providers fetch in parallel now (bench M 2026-09-13: the
+        # 240 s turn budget) — execution order is not asserted, the
+        # RESULTS key order is the §15 contract
+        self.assertEqual(sorted(order), ["coles", "woolworths"])
+        self.assertEqual(list(results.keys()),
+                         ["woolworths", "coles", "aldi", "errors"])
         self.assertEqual(results["woolworths"][0]["price"], 11.5)
         self.assertEqual(results["coles"][0]["name"],
                          "Coles Chicken Breast Schnitzel")
@@ -172,6 +176,67 @@ class TestSearchSemantics(unittest.TestCase):
                          "3 Star Beef Mince")
 
 
+class TestStoreMentionParsing(unittest.TestCase):
+    """Bench M1–M3 (2026-09-13): 'live X woolworths and aldi' turns
+    died at the 240 s runner timeout (three sequential scrapes). A
+    store mention narrows the search to the named stores AND leaves
+    the item query clean."""
+
+    def test_no_stores_keeps_query_verbatim(self):
+        self.assertEqual(parse_store_mentions("chicken breast"),
+                         ([], "chicken breast"))
+
+    def test_ww_and_aldi(self):
+        stores, clean = parse_store_mentions(
+            "chicken breast woolworths and aldi")
+        self.assertEqual(stores, ["woolworths", "aldi"])
+        self.assertEqual(clean, "chicken breast")
+
+    def test_vs_connector_and_ww_alias(self):
+        stores, clean = parse_store_mentions("beef mince ww vs aldi")
+        self.assertEqual(stores, ["woolworths", "aldi"])
+        self.assertEqual(clean, "beef mince")
+
+    def test_all_three_named(self):
+        stores, clean = parse_store_mentions(
+            "bread loaf woolworths aldi and coles")
+        self.assertEqual(stores, ["woolworths", "coles", "aldi"])
+        self.assertEqual(clean, "bread loaf")
+
+    def test_connector_kept_without_store(self):
+        # "fish and chips" names no store — every word stays
+        stores, clean = parse_store_mentions("fish and chips")
+        self.assertEqual((stores, clean), ([], "fish and chips"))
+
+    def test_named_stores_skip_unnamed_provider(self):
+        ran: list = []
+
+        def _ww(query, page_size=10):
+            ran.append(("woolworths", query))
+            return _items(("Wool Chicken Breast", 11.5))
+
+        def _aldi(query, page_size=10):
+            ran.append(("aldi", query))
+            return _items(("Aldi Chicken Breast", 9.0), store="aldi")
+
+        with patch("extractors.woolworths_extractor."
+                   "fetch_woolworths_search_noauth",
+                   side_effect=_ww), \
+             patch("extractors.coles_extractor.fetch_coles_search",
+                   side_effect=AssertionError(
+                       "coles must not run for a WW+aldi ask")), \
+             patch("extractors.aldi_extractor.fetch_aldi_search",
+                   side_effect=_aldi):
+            results = live_search(
+                "chicken breast woolworths and aldi")
+        self.assertEqual(sorted(ran), [("aldi", "chicken breast"),
+                                       ("woolworths", "chicken breast")])
+        self.assertEqual(list(results.keys()),
+                         ["woolworths", "aldi", "errors"])
+        self.assertEqual(results["woolworths"][0]["price"], 11.5)
+        self.assertEqual(results["aldi"][0]["price"], 9.0)
+
+
 class TestRender(unittest.TestCase):
     def test_render_stores_and_lines(self):
         results = {
@@ -208,6 +273,17 @@ class TestRender(unittest.TestCase):
         out = render_live(results, None)
         self.assertIn("🔵 Aldi", out)
         self.assertIn("$3.39", out)
+
+    def test_render_excluded_store_absent(self):
+        """A store excluded by the user's mention ("woolworths and
+        aldi") renders NOTHING — not "no results", not an error."""
+        results = {"woolworths": [{"name": "W", "price": 1.0,
+                                   "size": ""}],
+                   "aldi": [], "errors": {}}
+        out = render_live(results, None)
+        self.assertIn("🟢 Woolworths", out)
+        self.assertIn("🔵 Aldi", out)
+        self.assertNotIn("Coles", out)
 
 
 if __name__ == "__main__":
