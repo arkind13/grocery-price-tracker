@@ -30,6 +30,12 @@ STORES = [
     {"key": "abusalim",  "name": "Abu Salim Fruit Market",
      "fb_page_id": "61592534263358",  "kind": "fruits",
      "code": "ABS"},
+    # 2026-09-15 user ruling: JB Hi-Fi catalogues arrive via the
+    # watch-folder (user downloads the PDF from jbhifi.com.au) —
+    # mall-deals marked it GONE; this is its extraction home now
+    {"key": "jbhifi",    "name": "JB Hi-Fi Mt Druitt",
+     "fb_page_id": "",                "kind": "other",
+     "code": "JBH"},
 ]
 
 FB_FETCH_MAX_ATTEMPTS = 3     # 5xx/timeout only, fresh session each
