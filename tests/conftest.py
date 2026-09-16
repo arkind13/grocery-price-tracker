@@ -44,6 +44,27 @@ _STATE_ATTRS = [
     # fail_streak flipped 2 tests red with zero code regressions).
     ("extractors.coles_extractor", "SCRAPEDO_HEALTH_PATH",
      "scrapedo_health.json"),
+    # 2026-09-16: v2_batch's archive path joins the redirected set.
+    ("core.v2_batch", "DELETED_ROWS_PATH", "deleted_rows.json"),
+    # 2026-09-16: local_deals' nazar/user-merge archive (reached via
+    # setup_categories -> merge_nazar_duplicates) and v2_wednesday's
+    # persisted specials report — both previously wrote the REAL
+    # files from suite runs.
+    ("core.local_deals", "DELETED_ROWS_ARCHIVE_PATH",
+     "deleted_rows_ld.json"),
+    ("core.v2_wednesday", "REPORT_PATH", "ww_specials_report.txt"),
+]
+
+# Canary-only files (NOT redirected — their writers compute the path
+# inline, e.g. core/local_deals.py::_archive_merge_rows and
+# core/v2_wednesday.py's report persistence, so a patch.object redirect
+# cannot reach them). The teardown digest assert catches any test that
+# writes them for real. Proven necessary 2026-09-16:
+# test_categories' idempotent nazar-merge test appended 8 entries to
+# the user's REAL deleted_rows.json across two suite runs.
+_CANARY_FILES = [
+    _PROJECT / "data" / "deleted_rows.json",
+    _PROJECT / "data" / "ww_specials_report.txt",
 ]
 
 
@@ -70,6 +91,8 @@ def isolate_state_files():
             real = Path(getattr(mod, attr))
             before[str(real)] = _digest(real)
             stack.enter_context(patch.object(mod, attr, tmp / fname))
+        for canary in _CANARY_FILES:
+            before[str(canary)] = _digest(canary)
 
         yield
 

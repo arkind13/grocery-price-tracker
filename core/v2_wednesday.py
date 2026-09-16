@@ -17,6 +17,13 @@ from datetime import date
 
 from core.local_deals import grid_range
 
+# Persisted Wednesday specials report (the `specials` verb's "Latest
+# Wednesday report" view) — module constant so the test conftest can
+# redirect it (2026-09-16: suite runs were overwriting the real file).
+from pathlib import Path as _P
+REPORT_PATH = (_P(__file__).resolve().parent.parent
+               / "data" / "ww_specials_report.txt")
+
 MASTER_TAB = "Products_Master"
 MASTER_CODE_IDX = 11          # 13-col layout: col L
 LD_CODE_IDX = 12              # 13-col layout: col M (Category added 1)
@@ -634,9 +641,7 @@ def run(dry_run: bool = False, send: bool = True,
         # persist for the `specials` verb's "Latest Wednesday report"
         # view (fresh < 7 days)
         try:
-            from pathlib import Path
-            report_path = (Path(__file__).resolve().parent.parent
-                           / "data" / "ww_specials_report.txt")
+            report_path = REPORT_PATH
             report_path.write_text(
                 f"# generated {sydney_today().isoformat()}\n{post}\n",
                 encoding="utf-8")

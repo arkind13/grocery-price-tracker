@@ -3751,6 +3751,13 @@ def category_sort_key(label: str) -> int:
 CATEGORY_REVIEW_PATH = (Path(__file__).resolve().parent.parent
                         / "data" / "category_review.json")
 
+# Merge archive (nazar/user) — module constant so the test
+# conftest can redirect it (2026-09-16: suite runs were appending
+# test entries to the REAL deleted_rows.json through
+# setup_categories -> merge_nazar_duplicates).
+DELETED_ROWS_ARCHIVE_PATH = (Path(__file__).resolve().parent.parent
+                             / "data" / "deleted_rows.json")
+
 
 def load_category_review(path=None) -> set:
     """Item_Codes parked for the user's review — never auto-filed by
@@ -3889,8 +3896,7 @@ def _grid_row_canonical_index(grid: list, name: str) -> int | None:
 def _archive_merge_rows(entries: list, archive_path=None) -> None:
     """deleted_rows.json append (v2_batch schema, source=nazar-merge)."""
     from datetime import datetime as _dt
-    path = archive_path or (Path(__file__).resolve().parent.parent
-                            / "data" / "deleted_rows.json")
+    path = archive_path or DELETED_ROWS_ARCHIVE_PATH
     archive: list = []
     try:
         loaded = json.loads(path.read_text(encoding="utf-8"))

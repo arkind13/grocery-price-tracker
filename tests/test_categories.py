@@ -189,9 +189,16 @@ class TestMergeNazarDuplicates(unittest.TestCase):
                              "aligned")
 
     def test_idempotent_when_already_merged(self):
+        # archive_path is MANDATORY in tests: the default writes the
+        # REAL data/deleted_rows.json (proven 2026-09-16 — two suite
+        # runs appended 8 test entries to the user's archive).
         master, ld_tab = self._pair()
-        m_out, l_out, lines = ld.merge_nazar_duplicates(master, ld_tab)
-        m2, l2, lines2 = ld.merge_nazar_duplicates(m_out, l_out)
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = Path(tmp) / "deleted_rows.json"
+            m_out, l_out, lines = ld.merge_nazar_duplicates(
+                master, ld_tab, archive_path=archive)
+            m2, l2, lines2 = ld.merge_nazar_duplicates(
+                m_out, l_out, archive_path=archive)
         self.assertEqual(l2, l_out)
         self.assertTrue(any("not found" in ln or "already" in ln
                             for ln in lines2))
@@ -211,7 +218,8 @@ class TestSetupCategories(unittest.TestCase):
                       _l("Carrots /ea", "CRT")]
             ld_tab[2][ld._grid_col("nazar_perm")] = 18.9
             master_ws, ld_ws = FakeWS(master), FakeWS(ld_tab)
-            with patch.object(ld, "CATEGORY_REVIEW_PATH", review_path):
+            with patch.object(ld, "CATEGORY_REVIEW_PATH", review_path),                  patch.object(ld, "DELETED_ROWS_ARCHIVE_PATH",
+                              Path(tmp) / "deleted_rows.json"):
                 rc, report = ld.setup_categories(master_ws, ld_ws)
             self.assertEqual(rc, 0)
             # the duplicate merged; 2 rows survive on BOTH tabs
@@ -241,7 +249,8 @@ class TestSetupCategories(unittest.TestCase):
             self.assertTrue(any(n == "Halal Chicken Wings /kg"
                                 for n, _p in ld.NAZAR_REVIEW_ROWS))
             master_ws, ld_ws = FakeWS(master), FakeWS(ld_tab)
-            with patch.object(ld, "CATEGORY_REVIEW_PATH", review_path):
+            with patch.object(ld, "CATEGORY_REVIEW_PATH", review_path),                  patch.object(ld, "DELETED_ROWS_ARCHIVE_PATH",
+                              Path(tmp) / "deleted_rows.json"):
                 ld.setup_categories(master_ws, ld_ws)
             # parked row stays BLANK and sorts BELOW every block
             self.assertEqual(ld_ws.grid[1][0], "Carrots /ea")
@@ -265,7 +274,8 @@ class TestSetCategoryVerdicts(unittest.TestCase):
                       _l("Carrots /ea", "CRT", "vegetables"),
                       _l("Halal Chicken Wings /kg", "CWG")]
             master_ws, ld_ws = FakeWS(master), FakeWS(ld_tab)
-            with patch.object(ld, "CATEGORY_REVIEW_PATH", review_path):
+            with patch.object(ld, "CATEGORY_REVIEW_PATH", review_path),                  patch.object(ld, "DELETED_ROWS_ARCHIVE_PATH",
+                              Path(tmp) / "deleted_rows.json"):
                 rc, lines = ld.set_category_verdicts(
                     ["CWG=chicken"], master_ws, ld_ws)
             self.assertEqual(rc, 0)
