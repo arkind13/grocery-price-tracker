@@ -40,6 +40,46 @@ def _capture(fn, *args, **kwargs):
     return result, buf.getvalue()
 
 
+class TestPylibsSelfHeal(unittest.TestCase):
+    """2026-09-15 live-search incident (session 6072a078): OpenClaw's
+    agent exec spawns commands with a sanitized env — the container's
+    PYTHONPATH=/app/pylibs is dropped, so the skill-doc command
+    `cd /app/tasks/ai-tools && python3 grocery_price_cli.py live …`
+    failed ALL THREE stores on the first attempt (ModuleNotFoundError:
+    requests / curl_cffi, wrapped as AldiAPIError for Aldi) and only
+    the model's own retry with an explicit PYTHONPATH prefix worked.
+    The CLI now self-heals sys.path before any third-party import."""
+
+    def test_selfheal_precedes_first_heavy_import(self):
+        src = (_ROOT / "grocery_price_cli.py").read_text(encoding="utf-8")
+        heal = src.find('_PYLIBS = Path("/app/pylibs")')
+        first_import = src.find("from core.sheets_client import")
+        self.assertGreater(heal, 0, "self-heal block missing from CLI")
+        self.assertLess(heal, first_import,
+                        "self-heal must run before the first import "
+                        "that can need /app/pylibs")
+
+    @unittest.skipIf(not Path("/app/pylibs").is_dir(),
+                     "needs the container's /app/pylibs (VPS only)")
+    def test_stripped_env_cli_imports(self):
+        """Exact incident replay: sanitized env (no PYTHONPATH), import
+        the CLI then the store extractors — no ModuleNotFoundError."""
+        import subprocess
+        code = ("import sys; sys.path.insert(0, %r); "
+                "import grocery_price_cli; "
+                "import extractors.woolworths_extractor; "
+                "import extractors.coles_extractor; "
+                "from extractors.aldi_extractor import fetch_aldi_search; "
+                "print('imports-ok')") % str(_ROOT)
+        proc = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True, text=True, timeout=120,
+            env={"HOME": "/home/node", "PATH": "/usr/bin:/bin"},
+        )
+        self.assertIn("imports-ok", proc.stdout,
+                      f"stderr: {proc.stderr[-800:]}")
+
+
 class TestParserSurface(unittest.TestCase):
     """spec §7/§13: NOTHING else exists — the retired surface is gone."""
 

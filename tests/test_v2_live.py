@@ -286,5 +286,113 @@ class TestRender(unittest.TestCase):
         self.assertNotIn("Coles", out)
 
 
+class TestRelevanceFloor(unittest.TestCase):
+    """2026-09-15 bepanthen incident (user paste, live transcript):
+    'Is bepanthen cream on offer anywhere live search' — Aldi's fuzzy
+    search answered with same-category junk (Thickened Cream 600ml
+    $5.19 …) and the old take-top-3 ranker relayed it as prices. The
+    fixture is the REAL Aldi payload captured from
+    api.aldi.com.au/v3/product-search?q=bepanthen+cream on
+    2026-09-16T00:00Z — never an idealised one (live-fire rule b)."""
+
+    _FIXTURE = _HERE / "fixtures" / "aldi" / \
+        "real_search_bepanthen_cream_2026-09-15.json"
+
+    def _aldi_items(self):
+        from extractors.aldi_extractor import _to_product_item
+        payload = __import__("json").loads(
+            self._FIXTURE.read_text(encoding="utf-8"))
+        return [i for i in (_to_product_item(p)
+                            for p in payload["payload"]["data"])
+                if i is not None]
+
+    def _bepanthen_ww_items(self):
+        # names exactly as the 2026-09-15 20:57 live reply rendered them
+        return _items(("Bepanthen Antiseptic Cream 50g", 10.87),
+                      ("Bepanthen First Aid Antiseptic Cream 30g", 6.77),
+                      ("Bepanthen Antiseptic Soothing Cream 100g", 17.50))
+
+    def test_real_aldi_junk_never_relayed(self):
+        with patch("extractors.woolworths_extractor."
+                   "fetch_woolworths_search_noauth",
+                   return_value=self._bepanthen_ww_items()), \
+             patch("extractors.coles_extractor.fetch_coles_search",
+                   return_value=[]), \
+             patch("extractors.aldi_extractor.fetch_aldi_search",
+                   return_value=self._aldi_items()):
+            results = live_search("bepanthen cream")
+        self.assertEqual(results["aldi"], [])
+        self.assertEqual(results["skipped"]["aldi"], 12)
+        self.assertEqual(len(results["woolworths"]), 3)
+        self.assertNotIn("Thickened Cream",
+                         [h["name"] for h in results["woolworths"]])
+
+    def test_real_aldi_junk_rendered_as_no_close_matches(self):
+        with patch("extractors.woolworths_extractor."
+                   "fetch_woolworths_search_noauth",
+                   return_value=self._bepanthen_ww_items()), \
+             patch("extractors.coles_extractor.fetch_coles_search",
+                   return_value=[]), \
+             patch("extractors.aldi_extractor.fetch_aldi_search",
+                   return_value=self._aldi_items()):
+            results = live_search("bepanthen cream")
+        out = render_live(results, None)
+        self.assertIn("no close matches", out)
+        self.assertIn("loose store hits skipped", out)
+        self.assertNotIn("Thickened Cream", out)
+        self.assertNotIn("Ceramide Cream", out)
+        self.assertIn("Bepanthen Antiseptic Cream 50g", out)
+
+    def test_full_agent_phrase_incident_replay(self):
+        """The agent passed the WHOLE user phrase (filler included) on
+        the failed first attempt; the floor must survive filler words
+        ('on offer anywhere') and store-brand rescue must keep WW's
+        brand-only names admissible."""
+        brand_named = []
+        for name, price in (("Antiseptic Cream 50g", 10.87),
+                            ("First Aid Cream 30g", 6.77)):
+            brand_named.append(
+                ProductItem(store="woolworths", raw_name=name,
+                            price=price, brand="Bepanthen"))
+        with patch("extractors.woolworths_extractor."
+                   "fetch_woolworths_search_noauth",
+                   return_value=brand_named), \
+             patch("extractors.coles_extractor.fetch_coles_search",
+                   return_value=[]), \
+             patch("extractors.aldi_extractor.fetch_aldi_search",
+                   return_value=self._aldi_items()):
+            results = live_search("bepanthen cream on offer anywhere")
+        self.assertEqual(len(results["woolworths"]), 2)
+        self.assertEqual(results["aldi"], [])
+        self.assertEqual(results["skipped"]["aldi"], 12)
+
+    def test_legit_partial_matches_still_admitted(self):
+        """The floor must NOT eat honest results: full coverage
+        (laundry powder for laundry powder), distinctive-word matches
+        (chicken in Chicken Stock Cube), and near-miss spellings
+        (yoghurt vs yogurt)."""
+        from core.v2_live import _admissible
+
+        def _item(name, brand=""):
+            return ProductItem(store="woolworths", raw_name=name,
+                               price=1.0, brand=brand)
+
+        self.assertTrue(_admissible("laundry powder",
+                                    _item("Laundry Powder 4kg")))
+        self.assertTrue(_admissible("chicken breast",
+                                    _item("Chicken Stock Cube")))
+        self.assertTrue(_admissible("yoghurt",
+                                    _item("Yogurt Vanilla 700g")))
+        self.assertTrue(_admissible("thickened cream",
+                                    _item("Thickened Cream 600ml")))
+        # the incident junk: brand query, category-only junk hit
+        self.assertFalse(_admissible("bepanthen cream",
+                                     _item("Thickened Cream 600ml")))
+        self.assertFalse(_admissible("bepanthen cream",
+                                     _item("Ceramide Cream 500g")))
+        self.assertFalse(_admissible("bepanthen cream on offer anywhere",
+                                     _item("Irish Country Cream 700ml")))
+
+
 if __name__ == "__main__":
     unittest.main()
