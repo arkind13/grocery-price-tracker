@@ -101,7 +101,14 @@ render). What actually runs for each of the four shops:
   JSON — post id, creation time, message text, and the post's own
   image urls. Post TEXT is parsed first (`extractors/deal_text.py`);
   vision runs only for image-only posts (one call, max 4 images, on
-  the post's own images). Caption prices with a lead-in and a
+  the post's own images). The validity grammar accepts ordinal
+  suffixes, abbreviated months and "of"-phrasings ("valid for 22nd
+  and 23rd Sep" → ends 23 Sep; "23rd of October"; pinned on the
+  2026-09-22 FRU2209260507 incident, when the strict full-month-only
+  grammar asked the user a question the post text had already
+  answered), and a date-less post that says "weekend" (e.g. "Weekend
+  Special") ends on the coming Sunday — explicit dates always win
+  (user directive 2026-09-22). Caption prices with a lead-in and a
   condition ("Beef Sirloin - only $24.99 per kg when you buy the
   whole slab!") parse since 2026-09-13: the condition becomes the
   deal's terms (sheet Comments segment → the compare message's
@@ -290,9 +297,12 @@ Google Drive cloud copies are impossible for the service account
 
 - Anaconda python (`anaconda3/python.exe`) — the default python3.13
   lacks curl_cffi.
-- Tests: `anaconda3/python.exe -m pytest tests/ -q` → **732 passed,
-  0 skipped**. Every behavioral rule has a pinned regression test; the
-  suite must stay fully green (no xfails, no skips).
+- Tests: `anaconda3/python.exe -m pytest tests/ -q` → **835 passed,
+  1 skipped** (the skip needs the VPS container's `/app/pylibs`).
+  Every behavioral rule has a pinned regression test; the
+  suite must stay fully green (no xfails). Clock-dependent ingest
+  fixtures freeze `core.sydney_time.sydney_today` — patch the SOURCE
+  module, never `ld.sydney_today` (ingest re-imports it locally).
 - `tests/test_py311_syntax.py` guards every `core/` + `tools/` file
   against py3.12-only syntax (PEP 701 f-strings) — the VPS container
   runs Python 3.11 and a container-breaking syntax once shipped.

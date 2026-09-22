@@ -8,6 +8,7 @@ import contextlib
 import sys
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -103,6 +104,8 @@ class TestHalalPrefix(unittest.TestCase):
                     patch.object(ld, "_save_scan_state"), \
                     patch.object(ld, "_load_scan_state",
                                  return_value=state), \
+                    patch("core.sydney_time.sydney_today",
+                          return_value=date(2026, 9, 9)), \
                     patch("core.sheets_client."
                           "connect_spreadsheet"), \
                     patch("core.sheets_client."

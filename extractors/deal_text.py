@@ -3,27 +3,51 @@
 Pure functions (no network) for the text-first local-deals pipeline
 (TODO-local-deals-gaps Tasks 2-3). The grammar is pinned against the
 REAL Fruitopia anniversary post (2026-09-04: "📅 Saturday & Sunday,
-5 & 6 September" + 24 "Emoji Item – price" lines).
+5 & 6 September" + 24 "Emoji Item – price" lines) and the REAL
+undated-board incident post FRU2209260507 (2026-09-22: the text said
+"valid for 22nd and 23rd Sep" — ordinal suffix + abbreviated month —
+but the parser only knew bare-day + full-month forms, so the sweep
+asked the user a question the post had already answered).
 
 All date comparisons use SYDNEY dates — pass ``today=sydney_today()``.
 """
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, timedelta
 
 MONTHS = {
     "january": 1, "february": 2, "march": 3, "april": 4, "may": 5,
     "june": 6, "july": 7, "august": 8, "september": 9,
     "october": 10, "november": 11, "december": 12,
 }
-_MONTH_RE = "|".join(MONTHS)
-# "5 & 6 September" / "5-6 September" / "6 September"
+# Month words accepted in post text / date replies: full names PLUS
+# 3- and 4-letter abbreviations ("Sep", "Sept"). Longest-first so the
+# alternation prefers 'september' over 'sept' over 'sep'.
+_MONTH_WORDS = sorted(
+    set(MONTHS) | {"jan", "feb", "mar", "apr", "jun", "jul", "aug",
+                   "sep", "sept", "oct", "nov", "dec"},
+    key=len, reverse=True)
+_MONTH_RE = "|".join(_MONTH_WORDS)
+# Captured month word (full or abbreviated) -> month number; every
+# accepted word has a unique 3-letter prefix, so slicing to 3 works.
+_MONTH_NUM = {name[:3]: num for name, num in MONTHS.items()}
+# "22nd" / "23rd" / "1st" / "2nd" — real boards write ordinal suffixes.
+_ORDINAL_RE = r"(?:st|nd|rd|th)?"
+# "5 & 6 September" / "22nd and 23rd Sep" / "22nd-23rd Sep" /
+# "5-6 September" / "6 September" / "23rd Sep" / "3rd of October"
 # (optionally preceded by weekday words — captured as a whole match
 # so callers can show the phrase; only day numbers + month matter).
 VALIDITY_RE = re.compile(
-    rf"\b(\d{{1,2}})\s*(?:&|and|-|–|to)\s*(\d{{1,2}})\s+({_MONTH_RE})"
-    rf"\b|\b(\d{{1,2}})\s+({_MONTH_RE})\b", re.IGNORECASE)
+    rf"\b(\d{{1,2}}){_ORDINAL_RE}\s*(?:&|and|,|-|–|to)\s*"
+    rf"(\d{{1,2}}){_ORDINAL_RE}\s+(?:of\s+)?({_MONTH_RE})\b"
+    rf"|\b(\d{{1,2}}){_ORDINAL_RE}\s+(?:of\s+)?({_MONTH_RE})\b",
+    re.IGNORECASE)
+
+# "Weekend Special" boards (user directive 2026-09-22): a post that
+# says "weekend" and shows NO explicit date ends on the coming Sunday
+# — the user is never asked for a date the post already implies.
+_WEEKEND_RE = re.compile(r"\bweekend\b", re.IGNORECASE)
 
 # "Item – price" / "Item - price" (FB uses the en dash).
 DEAL_LINE_RE = re.compile(r"^\s*[^\w&()]*\s*(.+?)\s*[–—-]\s*(.+?)\s*$")
@@ -48,10 +72,18 @@ _DOLLAR_PRICE_RE = re.compile(
 def parse_validity_end(text: str, *, today: date) -> date | None:
     """Latest validity date mentioned in a post's text.
 
-    Extracts day-month phrases ("5 & 6 September" -> ends 6 Sep);
-    the year is today's Sydney year, rolled forward when that would
+    Extracts day-month phrases ("5 & 6 September" -> ends 6 Sep;
+    "valid for 22nd and 23rd Sep" -> ends 23 Sep; "23rd Sep" ->
+    23 Sep; "3rd of October" -> 3 Oct) — ordinals, abbreviated
+    months and an "of" between day and month are all accepted.
+    The year is today's Sydney year, rolled forward when that would
     land more than 180 days in the past (posts live ~1 week; this
     only guards a December post read in January).
+
+    "Weekend" boards (user directive 2026-09-22): when the text has
+    NO explicit date but says "weekend" (e.g. "Weekend Special"),
+    the end date is the coming Sunday (today, when today IS Sunday).
+    An explicit date phrase always wins over the weekend rule.
 
     Args:
         text: the decoded post text (may be "").
@@ -64,12 +96,12 @@ def parse_validity_end(text: str, *, today: date) -> date | None:
     """
     end: date | None = None
     for m in VALIDITY_RE.finditer(text or ""):
-        if m.group(1):                      # "5 & 6 September" shape
+        if m.group(1):                      # "22nd and 23rd Sep" shape
             days = [int(m.group(1)), int(m.group(2))]
-            month = MONTHS[m.group(3).lower()]
-        else:                               # "6 September" shape
+            month = _MONTH_NUM[m.group(3)[:3].lower()]
+        else:                               # "23rd Sep" shape
             days = [int(m.group(4))]
-            month = MONTHS[m.group(5).lower()]
+            month = _MONTH_NUM[m.group(5)[:3].lower()]
         for day in days:
             try:
                 candidate = date(today.year, month, day)
@@ -83,6 +115,8 @@ def parse_validity_end(text: str, *, today: date) -> date | None:
                     continue
             if end is None or candidate > end:
                 end = candidate
+    if end is None and _WEEKEND_RE.search(text or ""):
+        end = today + timedelta(days=(6 - today.weekday()) % 7)
     return end
 
 

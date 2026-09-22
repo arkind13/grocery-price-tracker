@@ -91,6 +91,79 @@ class TestValidityParsing(unittest.TestCase):
             date(2027, 9, 6))
 
 
+class TestValiditySmartFormsIncident20260922(unittest.TestCase):
+    """The FRU2209260507 incident (2026-09-22): the Fruitopia post
+    text said "valid for 22nd and 23rd Sep" — ordinal suffix +
+    abbreviated month — but the grammar only knew bare-day +
+    full-month, so the sweep asked the user a question the post had
+    already answered (and the user's "23 sep" REPLY then failed the
+    same parser too). Ordinals, abbreviated months, "of"-phrasings
+    and weekend-Sunday inference (user directive 2026-09-22) are all
+    pinned here against the real incident date.
+    """
+
+    TODAY = date(2026, 9, 22)           # Tuesday — the sweep 05:00
+
+    def test_incident_post_ordinals_and_abbrev_month(self):
+        # User-quoted verbatim phrase from the real post.
+        self.assertEqual(
+            parse_validity_end("Deal valid for 22nd and 23rd Sep",
+                               today=self.TODAY),
+            date(2026, 9, 23))
+
+    def test_incident_user_reply_form_parses(self):
+        # The reply that set-date receives verbatim from Telegram.
+        for reply in ("23 Sep", "23rd Sep", "23 sep 2026",
+                      "23 September"):
+            self.assertEqual(
+                parse_validity_end("valid until " + reply,
+                                   today=self.TODAY),
+                date(2026, 9, 23), reply)
+
+    def test_sept_four_letter_abbreviation(self):
+        self.assertEqual(
+            parse_validity_end("Valid 22nd Sept", today=self.TODAY),
+            date(2026, 9, 22))
+
+    def test_of_between_day_and_month(self):
+        self.assertEqual(
+            parse_validity_end("3rd of October only", today=self.TODAY),
+            date(2026, 10, 3))
+
+    def test_weekend_special_ends_coming_sunday(self):
+        for caption in ("Weekend Special!",
+                        "weekend specials that arrive every Saturday "
+                        "morning!"):
+            self.assertEqual(
+                parse_validity_end(caption, today=self.TODAY),
+                date(2026, 9, 27), caption)
+
+    def test_weekend_read_on_sunday_ends_today(self):
+        self.assertEqual(
+            parse_validity_end("Weekend Special",
+                               today=date(2026, 9, 27)),
+            date(2026, 9, 27))
+
+    def test_explicit_date_beats_weekend_word(self):
+        # The real anniversary post says BOTH "this weekend!" and
+        # "5 & 6 September" — the explicit date wins, never Sunday.
+        self.assertEqual(
+            parse_validity_end(ANNIVERSARY_TEXT, today=SUNDAY_6SEP),
+            date(2026, 9, 6))
+
+    def test_typo_weekend_word_not_matched(self):
+        # "WEKEND" (no 'ek') must not infer a Sunday — and with no
+        # explicit date the board still asks the user.
+        self.assertIsNone(
+            parse_validity_end("WEKEND SPECIALS! Heat Beads 4KG Bag",
+                               today=self.TODAY))
+
+    def test_undated_text_without_weekend_word_still_none(self):
+        self.assertIsNone(
+            parse_validity_end("Freshness Unleashed! While stocks "
+                               "last.", today=self.TODAY))
+
+
 class TestFruitopiaDealGrammar(unittest.TestCase):
     """The real post's line shapes, one way or another each."""
 
@@ -1159,6 +1232,8 @@ class TestIngestFlow(unittest.TestCase):
                     patch.object(ld, "_save_scan_state"), \
                     patch.object(ld, "_load_scan_state",
                                  return_value=state), \
+                    patch("core.sydney_time.sydney_today",
+                          return_value=date(2026, 9, 9)), \
                     patch("core.sheets_client."
                           "connect_spreadsheet"), \
                     patch("core.sheets_client."
@@ -1215,6 +1290,8 @@ class TestIngestFlow(unittest.TestCase):
                     patch.object(ld, "_save_scan_state"), \
                     patch.object(ld, "_load_scan_state",
                                  return_value=state), \
+                    patch("core.sydney_time.sydney_today",
+                          return_value=date(2026, 9, 9)), \
                     patch("core.sheets_client."
                           "connect_spreadsheet"), \
                     patch("core.sheets_client."
