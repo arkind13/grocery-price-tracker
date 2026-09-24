@@ -19,7 +19,10 @@ DATA_DIR = _TRACKER / "data"
 STATE_PATH = DATA_DIR / "aldi_specials_state.json"
 
 SYDNEY_TZ = "Australia/Sydney"
-FIRE_HOUR = 5                      # 05:xx Sydney window (verdict V4)
+FIRE_HOUR = 5                      # first attempt 05:xx Sydney (V4)
+LAST_HOUR = 10                     # last hourly retry 10:xx (the
+                                   # 2026-09-24 delivery-truth ruling:
+                                   # a 5 AM blip must not eat the drop)
 FIRE_WEEKDAYS = (2, 5)             # Wed, Sat (verdict V3)
 MAX_MSG_CHARS = 4000               # pre-checked split cap (V8)
 
@@ -51,6 +54,15 @@ def _topic_id() -> int:
         return SPECIALS_TOPIC_ID
 
 
+def _log(msg: str) -> None:
+    """Timestamped log line (2026-09-24 ruling: every cron log line
+    carries a Sydney timestamp so a miss is diagnosable at a
+    glance)."""
+    stamp = datetime.now(ZoneInfo(SYDNEY_TZ)) \
+        .strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[aldi-specials {stamp} Sydney] {msg}")
+
+
 def _load_state() -> dict:
     """Read the posted-dates state; missing/corrupt = {}."""
     try:
@@ -68,13 +80,15 @@ def _save_state(state: dict) -> None:
 
 def should_fire(now: datetime | None = None,
                 state: dict | None = None) -> tuple[bool, str]:
-    """(fire, date_iso) — fire only when Sydney hour == 5, weekday in
-    {Wed, Sat}, and today's date is not already posted (V3/V4)."""
+    """(fire, date_iso) — fire when Sydney hour is in the 05-10
+    retry window, weekday in {Wed, Sat}, and today's date is not
+    already in the state (posted OR terminal-failed — V3/V4 plus
+    the 2026-09-24 delivery-truth ruling)."""
     now_syd = (now or datetime.now(ZoneInfo(SYDNEY_TZ))) \
         .astimezone(ZoneInfo(SYDNEY_TZ))
     date_iso = now_syd.date().isoformat()
     state = state if state is not None else _load_state()
-    fire = (now_syd.hour == FIRE_HOUR
+    fire = (FIRE_HOUR <= now_syd.hour <= LAST_HOUR
             and now_syd.weekday() in FIRE_WEEKDAYS
             and date_iso not in state)
     return fire, date_iso
@@ -177,28 +191,13 @@ def render_warning(day_name: str, exc: Exception) -> str:
 
 
 def _send_message(bot_token: str, text: str, thread_id: int) -> dict:
-    """One sendMessage to the topic; parsed response; never raises
-    (mirrors local_deals._send_message discipline, stdlib only)."""
-    result = {"ok": False}
-    if not bot_token:
-        print("[aldi-specials] no bot token — not sent")
-        return result
-    body = {"chat_id": TELEGRAM_CHAT_ID, "text": text,
-            "message_thread_id": thread_id}
-    try:
-        req = urllib.request.Request(
-            f"https://api.telegram.org/bot{bot_token}/sendMessage",
-            data=json.dumps(body).encode("utf-8"),
-            headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        result["ok"] = bool(data.get("ok"))
-        result["message_id"] = (data.get("result") or {}) \
-            .get("message_id")
-    except Exception as exc:                  # noqa: BLE001
-        print(f"[aldi-specials] send failed: "
-              f"{exc.__class__.__name__}")
-    return result
+    """One sendMessage to the topic; CLASSIFIED receipt; never
+    raises (2026-09-24 ruling: the caller must know WHY a send
+    failed — retry vs permanent — not just that it failed)."""
+    from core.telegram_send import send_classified
+
+    return send_classified(bot_token, TELEGRAM_CHAT_ID, text,
+                           thread_id=thread_id)
 
 
 def _send_photo(bot_token: str, photo_url: str, caption: str,
@@ -257,7 +256,12 @@ def run_scan(now: datetime | None = None, force: bool = False,
     if date_iso:
         today = date_iso
     if today in _load_state():
-        print(f"[aldi-specials] {today} already posted — no-op")
+        entry = _load_state().get(today) or {}
+        if entry.get("terminal"):
+            print(f"[aldi-specials] {today} terminal-failed — not "
+                  f"retrying: {entry.get('error')}")
+        else:
+            print(f"[aldi-specials] {today} already posted — no-op")
         return 0
 
     try:
@@ -271,8 +275,11 @@ def run_scan(now: datetime | None = None, force: bool = False,
         warning = render_warning(day_name, exc)
         print(warning)                     # log line always
         if send:
-            _send_message(os.getenv("TELEGRAM_CLAW_BOT", ""),
-                          warning, _topic_id())
+            receipt = _send_message(
+                os.getenv("TELEGRAM_CLAW_BOT", ""), warning,
+                _topic_id())
+            _log(f"warning delivery "
+                 f"{'ok' if receipt.get('ok') else 'FAILED: ' + str(receipt.get('error'))}")
         return 1
 
     if not items:
@@ -290,13 +297,57 @@ def run_scan(now: datetime | None = None, force: bool = False,
     thread = _topic_id()
     hero = _hero_url(items)
     if hero:
-        _send_photo(bot_token, hero, blocks[0].split("\n")[0], thread)
-    for b in blocks:
-        receipt = _send_message(bot_token, b, thread)
-        print(f"[aldi-specials] {'ok' if receipt.get('ok') else 'FAIL'}"
-              f" message_id={receipt.get('message_id')} "
-              f"thread={thread}")
+        photo_receipt = _send_photo(bot_token, hero,
+                                    blocks[0].split("\n")[0], thread)
+        if not photo_receipt.get("ok"):
+            _log(f"hero photo not delivered: "
+                 f"{photo_receipt.get('error') or 'unknown'}")
+
+    receipts = [_send_message(bot_token, b, thread) for b in blocks]
+    for r in receipts:
+        if r.get("ok"):
+            _log(f"ok message_id={r.get('message_id')} "
+                 f"thread={thread}")
+        else:
+            _log(f"send failed ({r.get('error_class') or '?'}): "
+                 f"{r.get('error') or 'unknown'}")
+
+    # Delivery truth (2026-09-24 ruling): the date is marked posted
+    # ONLY when at least one block was CONFIRMED by Telegram. All-
+    # failed sends leave the state clean for the hourly retry (until
+    # 10:xx Sydney) — except PERMANENT errors, which retrying cannot
+    # fix: those are terminal, with the reason recorded.
+    oks = [r for r in receipts if r.get("ok")]
     state = _load_state()
-    state[today] = {"posted": True}
-    _save_state(state)
-    return 0
+    sent_at = datetime.now(ZoneInfo(SYDNEY_TZ)) \
+        .isoformat(timespec="seconds")
+    if oks:
+        entry = {"posted": True,
+                 "message_ids": [r.get("message_id") for r in oks],
+                 "failed_blocks": len(receipts) - len(oks),
+                 "sent_at": sent_at}
+        failed = [r for r in receipts if not r.get("ok")]
+        if failed:
+            entry["last_error"] = str(failed[0].get("error"))
+        state[today] = entry
+        _save_state(state)
+        return 0
+    permanent = next((r for r in receipts
+                      if r.get("error_class") == "permanent"), None)
+    if permanent is not None:
+        _log(f"PERMANENT {today} — no retry, reason: "
+             f"{permanent.get('error')}")
+        state[today] = {"posted": False, "terminal": True,
+                        "error": str(permanent.get("error")),
+                        "failed_at": sent_at}
+        _save_state(state)
+        return 2
+    transient = receipts[0] if receipts else {}
+    hint = ""
+    if transient.get("retry_after"):
+        hint = f" (telegram says retry after " \
+               f"{transient.get('retry_after')}s)"
+    _log(f"RETRYABLE {today} — "
+         f"{transient.get('error') or 'unknown'}{hint}; hourly cron "
+         f"retries until {LAST_HOUR}:59 Sydney")
+    return 1

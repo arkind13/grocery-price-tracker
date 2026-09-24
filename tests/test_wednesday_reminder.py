@@ -91,13 +91,14 @@ class TestGate(unittest.TestCase):
 
         def fake_send(token, chat, text, thread_id=None):
             sent.append(text)
-            return {"ok": True, "message_id": 77}
+            return {"ok": True, "message_id": 77, "error_class": "",
+                    "error": ""}
 
         with patch.object(wr, "STATE_PATH",
                           Path(self.id() + ".json")), \
              patch.object(wr, "_read_grids",
                           return_value=_grids()), \
-             patch("core.local_deals._send_message", fake_send):
+             patch("core.telegram_send.send_classified", fake_send):
             rc = wr.run_scan(now=THU_0509, force=True)
         self.assertEqual(rc, 0)
         self.assertEqual(len(sent), 1)
@@ -137,9 +138,12 @@ class TestBuildMessage(unittest.TestCase):
 
 
 class TestRunScanDeliveryTruth(unittest.TestCase):
-    """The 2026-09-24 ruling: state is written ONLY on a Telegram-ok
+    """The 2026-09-24 rulings: state is written ONLY on a Telegram-ok
     receipt — the 'fired on VPS but never sent' class can no longer
-    eat a week silently."""
+    eat a week silently. TRANSIENT failures retry (no state, exit 1);
+    PERMANENT failures (2026-09-24: 'if it failed for a valid reason
+    1000s of retries will not fix it') are terminal: retries stop,
+    the reason is recorded, exit 2."""
 
     def setUp(self):
         self.state_path = Path(self.id() + ".json")
@@ -148,26 +152,56 @@ class TestRunScanDeliveryTruth(unittest.TestCase):
     def tearDown(self):
         self.state_path.unlink(missing_ok=True)
 
-    def test_failed_send_writes_no_state(self):
+    def test_transient_failure_writes_no_state(self):
         def fake_send(token, chat, text, thread_id=None):
-            return {"ok": False, "message_id": None}
+            return {"ok": False, "message_id": None,
+                    "error_class": "retry",
+                    "error": "network: URLError"}
 
         with patch.object(wr, "STATE_PATH", self.state_path), \
              patch.object(wr, "_read_grids",
                           return_value=_grids()), \
-             patch("core.local_deals._send_message", fake_send):
+             patch("core.telegram_send.send_classified", fake_send):
             rc = wr.run_scan(now=WED_0509)
         self.assertEqual(rc, 1)
         self.assertFalse(self.state_path.exists())
 
-    def test_ok_send_writes_state_with_message_id(self):
+    def test_permanent_failure_is_terminal_with_reason(self):
+        calls = []
+
         def fake_send(token, chat, text, thread_id=None):
-            return {"ok": True, "message_id": 4242}
+            calls.append(1)
+            return {"ok": False, "message_id": None,
+                    "error_class": "permanent",
+                    "error": "403 Forbidden: bot was kicked"}
 
         with patch.object(wr, "STATE_PATH", self.state_path), \
              patch.object(wr, "_read_grids",
                           return_value=_grids()), \
-             patch("core.local_deals._send_message", fake_send):
+             patch("core.telegram_send.send_classified", fake_send):
+            rc = wr.run_scan(now=WED_0509)
+        self.assertEqual(rc, 2)
+        state = json.loads(self.state_path.read_text(encoding="utf-8"))
+        entry = state["2026-W39"]
+        self.assertTrue(entry["terminal"])
+        self.assertIn("bot was kicked", entry["error"])
+        # the terminal week blocks every later retry attempt
+        self.assertFalse(wr.should_fire(WED_1059, state=state))
+        with patch.object(wr, "STATE_PATH", self.state_path), \
+             patch("core.telegram_send.send_classified", fake_send):
+            rc2 = wr.run_scan(now=WED_1059)
+        self.assertEqual(rc2, 0)
+        self.assertEqual(len(calls), 1)   # sent exactly once, ever
+
+    def test_ok_send_writes_state_with_message_id(self):
+        def fake_send(token, chat, text, thread_id=None):
+            return {"ok": True, "message_id": 4242, "error_class": "",
+                    "error": ""}
+
+        with patch.object(wr, "STATE_PATH", self.state_path), \
+             patch.object(wr, "_read_grids",
+                          return_value=_grids()), \
+             patch("core.telegram_send.send_classified", fake_send):
             rc = wr.run_scan(now=WED_0509)
         self.assertEqual(rc, 0)
         state = json.loads(self.state_path.read_text(encoding="utf-8"))
@@ -181,14 +215,15 @@ class TestRunScanDeliveryTruth(unittest.TestCase):
 
         def fake_send(token, chat, text, thread_id=None):
             captured["text"] = text
-            return {"ok": True, "message_id": 99}
+            return {"ok": True, "message_id": 99, "error_class": "",
+                    "error": ""}
 
         def boom():
             raise RuntimeError("google is down")
 
         with patch.object(wr, "STATE_PATH", self.state_path), \
              patch.object(wr, "_read_grids", boom), \
-             patch("core.local_deals._send_message", fake_send):
+             patch("core.telegram_send.send_classified", fake_send):
             rc = wr.run_scan(now=WED_0509)
         self.assertEqual(rc, 0)
         self.assertIn("grocery_price_cli.py wednesday",
@@ -202,12 +237,13 @@ class TestRunScanDeliveryTruth(unittest.TestCase):
 
         def fake_send(token, chat, text, thread_id=None):
             sent.append(text)
-            return {"ok": True, "message_id": 1}
+            return {"ok": True, "message_id": 1, "error_class": "",
+                    "error": ""}
 
         self.state_path.write_text(
             json.dumps({"2026-W39": {"sent": True}}), encoding="utf-8")
         with patch.object(wr, "STATE_PATH", self.state_path), \
-             patch("core.local_deals._send_message", fake_send):
+             patch("core.telegram_send.send_classified", fake_send):
             rc = wr.run_scan(now=WED_0509)
         self.assertEqual(rc, 0)
         self.assertEqual(sent, [])

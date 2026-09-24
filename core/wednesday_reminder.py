@@ -10,10 +10,12 @@ verdict, posted to the weekly-lists topic (208).
 Design rulings (user ask 2026-09-24 — 'what I'm worried about is
 the message hitting my Telegram at the right time'):
 - Delivery truth: the week is marked sent ONLY when Telegram's API
-  returns ok. A failed send leaves the state untouched, so the
-  hourly cron retries through the same Wednesday morning window
-  (first attempt 05:xx Sydney, last 10:xx) — a 5 AM blip can no
-  longer silently eat the week's reminder.
+  returns ok. A TRANSIENT failure (network, flood wait, 5xx) leaves
+  the state untouched, so the hourly cron retries through the same
+  Wednesday morning window (first attempt 05:xx Sydney, last
+  10:xx). A PERMANENT failure (core.telegram_send: bad token, bot
+  kicked, topic gone, text too long) is terminal: retries stop, the
+  reason lands in the state where --status shows it, exit code 2.
 - The sheet is READ-ONLY here: no writes, no repairs. The parity
   verdict mirrors tools/parity_audit — the same audit the Wednesday
   run acts on.
@@ -225,8 +227,9 @@ def run_scan(now: datetime | None = None, force: bool = False,
     failed send returns 1 and the state stays clean so the next
     hourly cron retries inside the Wednesday window.
     """
-    from core.local_deals import TELEGRAM_CHAT_ID, _send_message
+    from core.local_deals import TELEGRAM_CHAT_ID
     from core.sydney_time import sydney_now
+    from core.telegram_send import send_classified
 
     now_syd = (now or sydney_now()).astimezone(ZoneInfo(SYDNEY_TZ))
     if not force and not should_fire(now_syd):
@@ -252,9 +255,9 @@ def run_scan(now: datetime | None = None, force: bool = False,
         print(text)
         return 0
 
-    receipt = _send_message(os.getenv("TELEGRAM_CLAW_BOT", ""),
-                            TELEGRAM_CHAT_ID, text,
-                            thread_id=_topic_id())
+    receipt = send_classified(os.getenv("TELEGRAM_CLAW_BOT", ""),
+                              TELEGRAM_CHAT_ID, text,
+                              thread_id=_topic_id())
     if receipt.get("ok"):
         _log(f"ok week={key} message_id={receipt.get('message_id')} "
              f"thread={_topic_id()} sheet={'ok' if sheet_ok else 'down'}",
@@ -267,8 +270,26 @@ def run_scan(now: datetime | None = None, force: bool = False,
                       "sheet_ok": sheet_ok}
         _save_state(state)
         return 0
-    _log(f"FAIL week={key} \u2014 NOT marked sent, hourly cron will "
-         f"retry until {LAST_HOUR}:59 Sydney", now_syd)
+    reason = str(receipt.get("error") or "unknown")
+    if receipt.get("error_class") == "permanent":
+        # 2026-09-24 user ruling: a real error (bad token, bot
+        # kicked, topic gone, text too long) will not heal — STOP
+        # retrying, record the reason where --status shows it.
+        _log(f"PERMANENT week={key} \u2014 no retry, reason: "
+             f"{reason}", now_syd)
+        state = _load_state()
+        state[key] = {"sent": False, "terminal": True,
+                      "error": reason,
+                      "failed_at": now_syd.isoformat(
+                          timespec="seconds")}
+        _save_state(state)
+        return 2
+    hint = ""
+    if receipt.get("retry_after"):
+        hint = f" (telegram says retry after " \
+               f"{receipt.get('retry_after')}s)"
+    _log(f"RETRYABLE week={key} \u2014 {reason}{hint}; hourly cron "
+         f"retries until {LAST_HOUR}:59 Sydney", now_syd)
     return 1
 
 
@@ -286,6 +307,10 @@ def print_status() -> None:
           f"{'SENT' if week_key(now_syd) in state else 'pending'}")
     for key in sorted(state)[-3:]:
         entry = state[key]
-        print(f"[wed-reminder] {key}: sent={entry.get('sent')} "
-              f"message_id={entry.get('message_id')} "
-              f"sheet_ok={entry.get('sheet_ok')}")
+        if entry.get("terminal"):
+            print(f"[wed-reminder] {key}: TERMINAL FAIL \u2014 "
+                  f"{entry.get('error')}")
+        else:
+            print(f"[wed-reminder] {key}: sent={entry.get('sent')} "
+                  f"message_id={entry.get('message_id')} "
+                  f"sheet_ok={entry.get('sheet_ok')}")

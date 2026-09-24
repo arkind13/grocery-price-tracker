@@ -1528,8 +1528,11 @@ class TestScanWindowsAndCutoff(unittest.TestCase):
         self.assertEqual(calls, [])   # zero FB contact off-window
 
     def test_between_alerts_window_enforced(self):
-        """A new post created BEFORE the last alert is skipped; one
-        created AFTER it is notified."""
+        """2026-09-24 re-ruling (the missed-Saturday class): a post
+        FIRST SEEN after the last alert is REPORTED even when it was
+        created before it (the render missed it earlier; the
+        notified map is the dedupe). Posts older than 30 days stay
+        silent; posts already notified stay silent."""
         import tempfile as tf
         from core import local_deals as ld
         from core.sydney_time import sydney_now
@@ -1565,8 +1568,9 @@ class TestScanWindowsAndCutoff(unittest.TestCase):
                 ld._save_scan_state({})
                 ld.run_daily_scan(send=True, force=True)
                 n1 = len(sent)
-                # A DIFFERENT post created BEFORE that alert: new
-                # id, but outside the between-alerts window.
+                # A DIFFERENT post created BEFORE that alert, first
+                # time SEEN: the old cutoff skipped it forever (the
+                # missed-Saturday bug) — it is now REPORTED.
                 fake_fetch.ref = "p_old"
                 created_offsets["p_old"] = 7200.0
                 ld.run_daily_scan(send=True, force=True)
@@ -1581,9 +1585,23 @@ class TestScanWindowsAndCutoff(unittest.TestCase):
                 created_offsets["p_new"] = -5.0
                 ld.run_daily_scan(send=True, force=True)
                 n3 = len(sent)
+                # An ANCIENT post (40 days) first seen now: silent —
+                # older than the 30-day report window, never a fresh
+                # deal.
+                fake_fetch.ref = "p_ancient"
+                created_offsets["p_ancient"] = 40 * 86400.0
+                ld.run_daily_scan(send=True, force=True)
+                n4 = len(sent)
         self.assertEqual(n1, 1)      # AI-M5: backfill digest = ONE msg
-        self.assertEqual(n2, n1 + 1) # pre-alert post silent -> heartbeat
-        self.assertEqual(n3, n1 + 2) # between-alerts digest + heartbeat
+        # Reporting runs send a digest; silent runs send the 'no new
+        # posts' heartbeat — both +1 message, so the CONTENT is the
+        # verdict (counts alone proved nothing, the old test included).
+        self.assertEqual(n2, n1 + 1)
+        self.assertNotIn("no new posts", sent[1])   # p_old REPORTED
+        self.assertEqual(n3, n2 + 1)
+        self.assertNotIn("no new posts", sent[2])   # p_new reported
+        self.assertEqual(n4, n3 + 1)
+        self.assertIn("no new posts", sent[3])      # ancient silent
 
 
 class TestCaptionDealTerms(unittest.TestCase):

@@ -2,6 +2,7 @@
 renderer goldens, split cap, failure path, hero non-fatal, and the
 no-sheet guarantee. Offline — everything patched; zero network."""
 from __future__ import annotations
+import json
 import sys, unittest
 from datetime import datetime
 from pathlib import Path
@@ -21,6 +22,8 @@ WED_5AM = datetime(2026, 9, 9, 5, 8, tzinfo=SYD)     # a Wednesday
 SAT_5AM = datetime(2026, 9, 12, 5, 8, tzinfo=SYD)    # a Saturday
 FRI_5AM = datetime(2026, 9, 11, 5, 8, tzinfo=SYD)    # a Friday
 WED_6AM = datetime(2026, 9, 9, 6, 8, tzinfo=SYD)
+WED_10AM = datetime(2026, 9, 9, 10, 8, tzinfo=SYD)
+WED_11AM = datetime(2026, 9, 9, 11, 8, tzinfo=SYD)
 WED_3PM = datetime(2026, 9, 9, 15, 8, tzinfo=SYD)
 
 
@@ -34,9 +37,14 @@ def _item(name, price=9.99, size="500 g", brand="BRAND",
 
 
 class TestGate(unittest.TestCase):
-    def test_gate_matrix_fires_only_wed_sat_5am(self):
+    def test_gate_matrix_retry_window(self):
+        """2026-09-24 delivery-truth ruling: fires Wed/Sat 05:xx
+        through 10:xx Sydney (hourly retries after a failed send),
+        never outside that window."""
         cases = [(WED_5AM, True), (SAT_5AM, True),
-                 (FRI_5AM, False), (WED_6AM, False), (WED_3PM, False)]
+                 (WED_6AM, True), (WED_10AM, True),
+                 (WED_11AM, False), (FRI_5AM, False),
+                 (WED_3PM, False)]
         for now, expected in cases:
             fire, date_iso = aj.should_fire(now, state={})
             self.assertEqual(fire, expected, f"{now}")
@@ -45,6 +53,14 @@ class TestGate(unittest.TestCase):
     def test_gate_already_posted_date_noops(self):
         fire, _ = aj.should_fire(WED_5AM,
                                  state={WED_5AM.date().isoformat(): {}})
+        self.assertFalse(fire)
+
+    def test_gate_terminal_failed_date_noops(self):
+        """A permanent failure blocks pointless retries for the date."""
+        fire, _ = aj.should_fire(
+            WED_5AM,
+            state={WED_5AM.date().isoformat():
+                   {"posted": False, "terminal": True}})
         self.assertFalse(fire)
 
     def test_advance_visibility_no_early_fire(self):
@@ -133,6 +149,20 @@ class TestWarning(unittest.TestCase):
 
 
 class TestRunScan(unittest.TestCase):
+    def setUp(self):
+        """Isolate the state file: these tests must NEVER touch the
+        real data/aldi_specials_state.json (the 2026-09-24 container
+        run polluted + wiped the PRODUCTION state via the old global
+        save/restore pattern)."""
+        import tempfile as tf
+        self._tmp = tf.TemporaryDirectory()
+        state_path = Path(self._tmp.name) / "aldi_state.json"
+        state_path.write_text("{}", encoding="utf-8")
+        patcher = patch.object(aj, "STATE_PATH", state_path)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self._tmp.cleanup)
+
     def _promo(self):
         return {"key": "2026-09-09",
                 "title": "Available from Wed 9th September"}
@@ -210,18 +240,15 @@ class TestRunScan(unittest.TestCase):
 
     def test_same_date_refire_noop(self):
         aj._save_state({"2026-09-09": {"posted": True}})
-        try:
-            fetched = []
-            with patch("core.sydney_time.sydney_now",
-                       return_value=WED_5AM), \
-                 patch("extractors.aldi_extractor.find_promotion",
-                       side_effect=lambda d:
-                       fetched.append(d) or self._promo()):
-                rc = aj.run_scan(send=True)
-            self.assertEqual(rc, 0)
-            self.assertEqual(fetched, [])   # never hit the API
-        finally:
-            aj._save_state({})
+        fetched = []
+        with patch("core.sydney_time.sydney_now",
+                   return_value=WED_5AM), \
+             patch("extractors.aldi_extractor.find_promotion",
+                   side_effect=lambda d:
+                   fetched.append(d) or self._promo()):
+            rc = aj.run_scan(send=True)
+        self.assertEqual(rc, 0)
+        self.assertEqual(fetched, [])   # never hit the API
 
     def test_no_sheet_imports(self):
         source = Path(aj.__file__).read_text(encoding="utf-8")
@@ -237,8 +264,92 @@ class TestRunScan(unittest.TestCase):
                       theme="Grocery Specials", hero=hero)]
 
 
+class TestRunScanDeliveryTruth(unittest.TestCase):
+    """2026-09-24 user ruling: 'it needs to understand WHY it
+    failed — if it failed for a valid reason 1000s of retries will
+    not fix it'. Transient failures retry (state stays clean,
+    exit 1); PERMANENT failures stop for the day with the reason
+    recorded (terminal state, exit 2); the date is marked posted
+    only when Telegram confirmed at least one block."""
+
+    def setUp(self):
+        import tempfile as tf
+        self._tmp = tf.TemporaryDirectory()
+        self.state_path = Path(self._tmp.name) / "aldi_state.json"
+        self.state_path.write_text("{}", encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _run(self, receipt_or_list, hero_receipt=None, n_items=2):
+        items = [_item(f"Item {i} filler name", 10.99 + i)
+                 for i in range(n_items)]
+        receipts = (receipt_or_list if isinstance(receipt_or_list, list)
+                    else [receipt_or_list])
+        calls = {"i": 0}
+
+        def fake_send(t, x, th):
+            idx = min(calls["i"], len(receipts) - 1)
+            calls["i"] += 1
+            return receipts[idx]
+
+        with patch("core.sydney_time.sydney_now",
+                   return_value=WED_5AM), \
+             patch("extractors.aldi_extractor.find_promotion",
+                   return_value={"key": "2026-09-09",
+                                 "title": "Available from Wed"}), \
+             patch("extractors.aldi_extractor.fetch_aldi_specials",
+                   return_value=items), \
+             patch.object(aj, "STATE_PATH", self.state_path), \
+             patch.object(aj, "_send_photo",
+                          return_value=hero_receipt
+                          or {"ok": True}), \
+             patch.object(aj, "_send_message",
+                          side_effect=fake_send):
+            rc = aj.run_scan(send=True)
+        state = json.loads(self.state_path.read_text(encoding="utf-8"))
+        return rc, state, calls["i"]
+
+    def test_transient_failure_keeps_state_clean(self):
+        rc, state, _calls = self._run(
+            {"ok": False, "message_id": None,
+             "error_class": "retry", "error": "network: URLError"})
+        self.assertEqual(rc, 1)
+        self.assertEqual(state, {})   # retried next hour by the cron
+
+    def test_permanent_failure_is_terminal_with_reason(self):
+        rc, state, _calls = self._run(
+            {"ok": False, "message_id": None,
+             "error_class": "permanent",
+             "error": "403 Forbidden: bot kicked"})
+        self.assertEqual(rc, 2)
+        entry = state["2026-09-09"]
+        self.assertFalse(entry["posted"])
+        self.assertTrue(entry["terminal"])
+        self.assertIn("bot kicked", entry["error"])
+        fire, _ = aj.should_fire(WED_6AM, state=state)
+        self.assertFalse(fire)        # no pointless hourly retries
+
+    def test_partial_ok_marks_posted_with_failure_record(self):
+        rc, state, calls = self._run(
+            [{"ok": True, "message_id": 11, "error_class": "",
+              "error": ""},
+             {"ok": False, "message_id": None,
+              "error_class": "retry", "error": "network: timeout"}],
+            n_items=200)              # forces multiple split blocks
+        self.assertGreater(calls, 1)  # at least 2 blocks were sent
+        self.assertEqual(rc, 0)
+        entry = state["2026-09-09"]
+        self.assertTrue(entry["posted"])
+        self.assertGreaterEqual(entry["failed_blocks"], 1)
+        self.assertEqual(entry["message_ids"], [11])
+
+
 class TestCliWiring(unittest.TestCase):
     def test_cmd_scan_flag_wires_run_scan(self):
+        # the CLI lives BESIDE the tracker (workspace root) both
+        # locally and in the VPS container — put that dir on sys.path
+        sys.path.insert(0, str(_PROJECT.parent))
         import grocery_price_cli as cli
         called = {}
         with patch("core.aldi_specials.run_scan",

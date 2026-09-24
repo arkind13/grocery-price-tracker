@@ -27,18 +27,22 @@ deleted in the v2 rebuild. What remains is measured: **price lookup
 | `local-deals …` | Local-shop machinery: twice-daily AUTO-INGESTING sweep (vision + merge + parity + ONE digest per window), watch-folder inbox ingest (image→vision / text→parser), open-question flow (undated boards / shop-less drops), Dunya + Nazar site syncs (`--dunya-site` / `--nazar-site`), expire sweep, set-permanent/special, resolve-shop | — |
 
 Scheduled alongside these: `aldi-specials` (cron `8 * * * *`, self-gated
-to Wed/Sat 05:xx Sydney, once per date) — posts the whole day's Aldi
-Special Buys drop, theme-grouped, to the specials topic (206); and
-`wednesday-reminder` (cron `9 * * * *`, self-gated to Wednesday
-05:xx–10:xx Sydney, once per ISO week) — posts the Woolworths sync
-reminder to the weekly-lists topic (208): the paste instructions,
-the items still missing a Woolworths price, and a read-only
-row-parity verdict. Rebuilt 2026-09-24 (the v1 telegram_gateway
-job's crontab entry was lost in the move to container crons — the
-reminder silently stopped). Delivery-truth discipline: the week is
-marked sent ONLY on a Telegram-ok receipt; a failed send leaves the
-state clean so the hourly cron retries inside the same Wednesday
-window.
+to Wed/Sat 05:xx–10:xx Sydney, once per confirmed date) — posts the
+whole day's Aldi Special Buys drop, theme-grouped, to the specials
+topic (206); and `wednesday-reminder` (cron `9 * * * *`, self-gated to
+Wednesday 05:xx–10:xx Sydney, once per ISO week) — posts the
+Woolworths sync reminder to the weekly-lists topic (208): the paste
+instructions, the items still missing a Woolworths price, and a
+read-only row-parity verdict. Rebuilt 2026-09-24 (the v1
+telegram_gateway job's crontab entry was lost in the move to
+container crons — the reminder silently stopped). Both jobs share the
+delivery-truth discipline (`core/telegram_send.py`, user ruling
+2026-09-24): a date/week is marked sent ONLY on a Telegram-ok
+receipt; TRANSIENT failures (network, flood-wait, 5xx) retry hourly
+inside the morning window; PERMANENT failures (bad token, bot kicked,
+topic gone, text too long) stop retrying immediately with the reason
+recorded in the state and the timestamped cron log — "fired on VPS
+but never sent" is no longer a possible silent state.
 
 ## The zero-step local flow (2026-09-11)
 
@@ -53,7 +57,12 @@ without you:
   pack terms, per-item validity, standout comparisons vs
   Woolworths, and any QUESTIONS (final prices only — user answer
   2026-09-11). Detector messages never say "done" and never ask you
-  to save anything.
+  to save anything. A post is reported the FIRST time the sweep
+  SEES it, even when it was posted before the previous alert
+  (2026-09-24 re-rule: the old between-alerts cutoff buried forever
+  any post a partial logged-out render failed to surface — the
+  missed-Saturday class; only posts older than 30 days stay
+  silent, and the reported-posts log is the dedupe).
 - **Instant path**: the PC watch-folder daemon
   (`tools/inbox_watcher.py`, auto-started at logon by
   `tools/install_inbox_watcher.ps1` — scheduled task with a

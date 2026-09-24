@@ -537,7 +537,6 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
         seen = stores.get(store["key"], {})
         notified = dict(seen.get("notified", {}))   # post_ref -> code
         ignored = seen.get("ignored", [])
-        cutoff_raw = seen.get("last_cutoff")
         newest_age = ((now_syd.timestamp()
                        - (newest.creation_time or 0)) / 86400
                       ) if newest.creation_time else 999
@@ -584,26 +583,29 @@ def run_daily_scan(dry_run: bool = False, send: bool = True,
                       f"reported ({notified[post.post_ref]})")
                 continue
 
-            # Time window: ongoing scans report only posts CREATED
-            # since the previous alert (between-alerts rule); a fresh
-            # first sighting reports only the backfill window.
-            if baselined and cutoff_raw and post.creation_time:
+            # Time window (RE-RULED 2026-09-24 — the missed-Saturday
+            # class): report a post the FIRST time it is SEEN, even
+            # when it was created before the last alert. The old
+            # between-alerts cutoff buried forever any post a
+            # partial logged-out render failed to surface in the
+            # window it was posted (the cutoff advanced anyway); the
+            # notified map is the real dedupe. First scans keep the
+            # backfill window; ongoing scans cap at 30 days — older
+            # than that is never a fresh deal.
+            if post.creation_time:
                 try:
-                    posted_dt = _dt.fromtimestamp(
-                        post.creation_time, ZoneInfo(SYDNEY_TZ))
-                    if posted_dt <= _dt.fromisoformat(cutoff_raw):
-                        print(f"[daily-scan] {store['key']}: post "
-                              f"{post.post_ref} predates the last "
-                              f"alert ({cutoff_raw}) — outside the "
-                              f"between-alerts window")
+                    age_days = ((now_syd.timestamp()
+                                 - post.creation_time) / 86400)
+                    if not baselined and age_days > backfill_days:
                         continue
-                except ValueError:
-                    pass               # bad stored cutoff -> notify
-            elif not baselined and post.creation_time:
-                age_days = ((now_syd.timestamp()
-                             - post.creation_time) / 86400)
-                if age_days > backfill_days:
-                    continue
+                    if baselined and age_days > 30:
+                        print(f"[daily-scan] {store['key']}: post "
+                              f"{post.post_ref} is {age_days:.0f} "
+                              f"days old — outside the 30-day "
+                              f"report window, skipped")
+                        continue
+                except (ValueError, OverflowError, OSError):
+                    pass               # bad timestamp -> report
 
             code = _next_code()
             posted_line = "when posted: unknown"
