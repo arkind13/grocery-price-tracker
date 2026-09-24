@@ -28,7 +28,17 @@ deleted in the v2 rebuild. What remains is measured: **price lookup
 
 Scheduled alongside these: `aldi-specials` (cron `8 * * * *`, self-gated
 to Wed/Sat 05:xx Sydney, once per date) — posts the whole day's Aldi
-Special Buys drop, theme-grouped, to the specials topic (206).
+Special Buys drop, theme-grouped, to the specials topic (206); and
+`wednesday-reminder` (cron `9 * * * *`, self-gated to Wednesday
+05:xx–10:xx Sydney, once per ISO week) — posts the Woolworths sync
+reminder to the weekly-lists topic (208): the paste instructions,
+the items still missing a Woolworths price, and a read-only
+row-parity verdict. Rebuilt 2026-09-24 (the v1 telegram_gateway
+job's crontab entry was lost in the move to container crons — the
+reminder silently stopped). Delivery-truth discipline: the week is
+marked sent ONLY on a Telegram-ok receipt; a failed send leaves the
+state clean so the hourly cron retries inside the same Wednesday
+window.
 
 ## The zero-step local flow (2026-09-11)
 
