@@ -39,13 +39,19 @@ class TestValidator(unittest.TestCase):
         self.assertTrue(any("single deal carries bulk_size" in e
                             for e in errs))
 
-    def test_bulk_size_without_kg_token_rejected(self):
-        """bulk_pack size with no kg/g token is a hard error."""
-        _deals, errs = ffv.validate_payload(
-            {"deals": [_good_deal(item="Mystery Box", price=20.0,
-                                  unit="pack", kind="bulk_pack",
-                                  bulk="BIG BOX")]})
-        self.assertTrue(any("needs a parseable" in e for e in errs))
+    def test_bulk_size_without_kg_token_downgraded(self):
+        """bulk_pack size with no kg/g token is a pack WORD, not a
+        droppable deal (2026-09-27: 'bucket' lines were silently
+        lost) — downgraded to single with the word in notes."""
+        deal = _good_deal(item="Mystery Box", price=20.0,
+                          unit="pack", kind="bulk_pack",
+                          bulk="BIG BOX")
+        deals, errs = ffv.validate_payload({"deals": [deal]})
+        self.assertEqual(len(deals), 1)
+        self.assertFalse(any("needs a parseable" in e for e in errs))
+        self.assertEqual(deal["price_kind"], "single")
+        self.assertEqual(deal["unit"], "pack")   # valid units kept
+        self.assertEqual(deal["notes"], "BIG BOX")
 
     def test_bulk_size_normalised_10kg_box_to_10kg(self):
         """'10kg BOX' is rescued and cleaned to '10kg'."""

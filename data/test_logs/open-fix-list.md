@@ -4,19 +4,38 @@ Carry-over rule: every cycle's CHECK appends its classified defects
 here; the next FIX phase works EXACTLY this list, each item with a
 regression test, then strikes the line with proof.
 
-## OPEN
+## CLOSED 2026-09-27
 
-0. **[INGEST, P1 — new 2026-09-12] "N KG <item> $X" board tiles can
-   write the PACK TOTAL into /kg special cells.** The 2026-09-11
-   08:06 Merjan ingest polluted 14 cells (e.g. "2 KG LAMB MINCE
-   $29.99" → cell 29.99 instead of 15.00/kg + terms) and invented 2
-   tile-less specials (diced 34.99, lamb curry 27.99). DATA
-   corrected by hand 2026-09-12 against the archived boards (proof:
-   `cycle-3/merjan-corrections.md`) — but the PARSER defect remains:
-   next weekend's board will re-pollute. FIX: repro the tile text
-   through the deal-text/vision parse chain, normalise "N kg … $X"
-   to per-kg + terms before the cell write, regression-test all three
-   board layouts (combined grid / chicken view / meat view).
+0. **[INGEST, P1 — opened 2026-09-12, CLOSED 2026-09-27] "N KG
+   <item> $X" board tiles wrote the PACK TOTAL into /kg special
+   cells.** Re-polluted live exactly as predicted (Merjan weekend
+   boards 2026-09-26/27 — the SAME cells as 2026-09-11: beef curry
+   49.99-instead-of-10.00/kg, thigh fillet 21.99, plus 18 more).
+   Root causes found (three, stacked):
+   (a) the vision model FLIP-FLOPS between runs on the same image
+   (single vs multibuy) and sometimes drops the printed quantity from
+   raw_text entirely — fixed by temperature 0 + a deterministic
+   pack-guard (extractors.deal_text.normalise_pack_deals) that
+   re-derives bundle semantics from the verbatim tile text, plus a
+   transcription re-read pass (core.flyer_vision.verify_board_parse:
+   the model only COPIES the lines, code judges);
+   (b) THE WIRING BUG: ingest/sweep pushed vision-schema deals
+   through _to_vision_deal's TEXT branch — price_kind overwritten to
+   single, multibuy_qty dropped, raw_text replaced by the bare item
+   name — so even CORRECT model parses landed as pack totals
+   (_to_vision_deal is now schema-aware);
+   (c) bulk_pack deals with a pack word ('bucket') were silently
+   DROPPED by validation (now downgraded to single with the word in
+   notes — the Povi Masima $49.99 line survived for the first time).
+   Guard rails added: every payload logged
+   (data/diagnostics/vision_payloads, last 50), digest ⚠ flags on
+   verify corrections, MAX_TOKENS 4500 (truncation observed).
+   Pinned: tests/test_pack_guard.py (29 tests on the real boards —
+   Sep-11 user-verified table + Sep-26/27 board + no-op pins).
+   DATA corrected the same day by re-ingesting the real board
+   through the fixed pipeline (21/21 lines, live on VPS; correction
+   digest posted; tools/replay_boards.py replays every surviving
+   board).
 
 1. **[GW agent-layer — CLOSED by user decision 2026-09-12]** On
    compare phrasings where the sheet has NO non-halal twin row, the

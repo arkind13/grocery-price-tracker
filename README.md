@@ -99,6 +99,31 @@ without you:
   /kg row stay separate BY DESIGN); comment merges are idempotent,
   strip-then-append per shop (no `[MER] [MER]`, untagged segments
   never crash).
+- **Pack-deal armour (2026-09-27, the recurring Merjan min-buy
+  defect — open-fix #0 closed)**: the weekend boards print the
+  minimum purchase BEFORE the item ("2KG THIGH FILLET $21.99" =
+  $21.99 for the whole 2kg), and the SAME board flipped between
+  correct and pack-total-as-per-kg parses between runs (model
+  variance, observed live twice in one day). The pipeline now owns
+  the arithmetic in code, not model mood: (1) vision calls run at
+  temperature 0; (2) a deterministic pack-guard
+  (`extractors.deal_text.normalise_pack_deals`) re-derives bundle
+  semantics from the verbatim tile text on BOTH paths (image boards
+  and text posts) — quantity-prefix weights, "min Nkg", "Nkg/N for
+  $X", counted plurals ("2 STEAMER CHICKENS"), while explicit
+  per-kg lines, bird-size specs ("Whole Chicken min 1.9kg") and
+  numbered names ("4 STAR BEEF") stay untouched; (3) a transcription
+  re-read (`verify_board_parse`) has the model only COPY every price
+  line and code judge — a quantity the first pass dropped is
+  recovered and the digest line carries a ⚠; (4) `_to_vision_deal`
+  is schema-aware (the 2026-09-27 wiring bug: vision deals forced
+  through the text branch lost their multibuy classification);
+  (5) pack-word bulk deals ('bucket') downgrade to single instead of
+  vanishing; (6) every model payload is logged to
+  `data/diagnostics/vision_payloads` (last 50) so the next incident
+  has evidence. Pinned in `tests/test_pack_guard.py` on the real
+  boards; `tools/replay_boards.py` replays every surviving board
+  through the pipeline (read-only).
 
 ## How the FB extraction works (and why the manual phase existed)
 

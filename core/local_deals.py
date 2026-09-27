@@ -1183,13 +1183,19 @@ def _digest_items(converted: list[dict]) -> list[dict]:
             price_text = (f"{_money(float(price))}/{unit}"
                           if price else "?")
             per_kg = float(price) if unit == "kg" else None
+            # a pack-guard size spec or site note on a single price
+            # ("min 1.9kg", "bucket") rides the line like terms
+            note = str(c.get("notes") or "").strip()
+            if note:
+                terms = note
         display = _display_name(c)
         items.append({
             "name": display, "price_text": price_text,
             "terms": terms,
             "till": (f"{c['valid_until']:%a %d %b}"
                      if c.get("valid_until") else None),
-            "per_kg": per_kg})
+            "per_kg": per_kg,
+            "review_flag": c.get("review_flag")})
     return items
 
 
@@ -1336,11 +1342,19 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
         print(f"[ingest] {path.name}: {len(deals)} items "
               f"({source}; {valid_txt})")
         for d in deals:
-            note = f" ({d['multibuy_note']})" \
-                if d.get("multibuy_note") else ""
-            print(f"   - {d['item']} — "
-                  f"{_money(d.get('unit_price', d['price']))}"
-                  f"/{d['unit']}{note}")
+            if d.get("price_kind") == "multibuy":
+                qty = int(d.get("multibuy_qty") or 0)
+                total = float(d.get("price") or 0)
+                rate = round(total / qty, 2) if qty else None
+                kg = "kg" if (d.get("unit") or "") == "kg" else ""
+                print(f"   - {d['item']} — {_money(rate)}/{d['unit']}"
+                      f" ({qty}{kg} for {_money(total)})")
+            else:
+                note = f" ({d['multibuy_note']})" \
+                    if d.get("multibuy_note") else ""
+                print(f"   - {d['item']} — "
+                      f"{_money(d.get('unit_price', d['price']))}"
+                      f"/{d['unit']}{note}")
         batches.append({"file": path.name, "deals": deals,
                         "valid_until": valid_until,
                         "valid_txt": valid_txt,
@@ -2804,9 +2818,17 @@ def _render_window_digest(sections: list[dict], questions: list[dict],
             for i in p.get("items") or []:
                 line = f"• {i['name']} — {i.get('price_text') or '?'}"
                 if i.get("terms"):
-                    line += f" (min order {i['terms']})"
+                    # bundle terms ("2kg for $21.99") carry the
+                    # min-order wrapper; size specs / caption notes
+                    # ("min 1.9kg", "when you buy the whole slab")
+                    # stand in their own words
+                    wrap = ("min order "
+                            if " for $" in i["terms"] else "")
+                    line += f" ({wrap}{i['terms']})"
                 if i.get("till"):
                     line += f" · till {i['till']}"
+                if i.get("review_flag"):
+                    line += f" · ⚠ {i['review_flag']}"
                 lines.append(line)
         blocks.append("\n".join(lines))
 
@@ -3219,19 +3241,36 @@ def extract_post_deals(post, run_dir, store_key: str
 
 
 def _to_vision_deal(d: dict, category: str) -> dict:
-    """Text-parser deal -> the vision schema build_rows expects.
+    """Normalise ONE deal to the vision schema build_rows expects.
+
+    Two input schemas reach here and MUST NOT be confused (the
+    2026-09-27 re-pollution: vision deals were pushed through the
+    TEXT branch, whose 'multibuy' key they never carry — every
+    price_kind was overwritten to single and multibuy_qty dropped,
+    so correct bundle parses still landed in the sheet as pack
+    totals):
+
+      - vision-schema deals (parse_board_images output: price_kind,
+        multibuy_qty, bulk_size, raw_text) — passed through as-is,
+        only re-run through the pack-guard;
+      - text-parser deals (parse_fruitopia_deals output: multibuy,
+        multibuy_note, raw) — converted field by field.
 
     Args:
-        d: parse_fruitopia_deals() output (item/price/unit/
-            multibuy/multibuy_note/raw).
+        d: the deal dict (either schema).
         category: "fruits" | "butchery" | "other" (store kind).
 
     Returns:
-        dict: flyer_vision-schema deal (item, raw_text, price, unit,
-        price_kind, multibuy_qty, bulk_size, category, notes).
+        dict: flyer_vision-schema deal, pack-guard applied.
     """
+    from extractors.deal_text import normalise_pack_deal
+    if d.get("price_kind") in ("single", "multibuy", "bulk_pack"):
+        out = normalise_pack_deal(dict(d))
+        if not out.get("category"):
+            out["category"] = category
+        return out
     qty = d.get("multibuy")
-    return {
+    return normalise_pack_deal({
         "item": d["item"],
         "raw_text": d.get("raw") or d["item"],
         "price": d["price"],
@@ -3241,7 +3280,7 @@ def _to_vision_deal(d: dict, category: str) -> dict:
         "bulk_size": None,
         "category": category,
         "notes": d.get("multibuy_note") or d.get("terms") or "",
-    }
+    })
 
 
 def _canonical_match_index(grid: list, name: str) -> int | None:

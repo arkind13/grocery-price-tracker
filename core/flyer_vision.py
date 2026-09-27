@@ -20,7 +20,7 @@ MODEL_CHAIN = [
     {"label": "or-gemini", "model": "google/gemini-2.5-flash",
      "route": "openrouter"},
 ]
-MAX_TOKENS = 3000
+MAX_TOKENS = 4500
 MAX_ATTEMPTS_PER_POST = 2
 
 VALID_UNITS = {"kg", "ea", "pack"}
@@ -56,6 +56,15 @@ Rules:
   counted items. NEVER report a weighted deal as bulk_pack and never
   report its per-unit/per-kg rate as price — price is ALWAYS the
   bundle total.
+- QUANTITY-PREFIX TILES (the Merjan weekend layout): the minimum
+  purchase is printed BEFORE the item name — "2KG THIGH FILLET
+  $21.99" means $21.99 buys the whole 2kg (so multibuy_qty=2,
+  price=21.99, unit kg — NEVER a $21.99/kg single). Same for
+  "2 STEAMER CHICKENS $11.99" (multibuy_qty=2, unit ea). A weight in
+  parentheses AFTER a per-item product ("WHOLE CHICKEN (MIN 1.9KG)
+  $34.99") is a SIZE spec -> single/ea with "min 1.9kg" in notes.
+  Copy the quantity into raw_text VERBATIM — downstream code re-checks
+  every tile's arithmetic from raw_text.
 - "bulk_pack": ONLY a PHYSICAL pack product (a sealed box/bag/tray
   you buy as one article, e.g. "10kg box", "5kg bag") -> bulk_size =
   the pack size string; NEVER report "Nkg for $X" deal wording as
@@ -141,14 +150,24 @@ def _validate_deal(deal: object) -> list[str]:
         else:
             # Normalise: accept a size string that CONTAINS a kg/g
             # token ("10kg BOX" -> "10kg") — the tolerance production
-            # needs; anything with no kg/g token is a hard error.
+            # needs; anything with no kg/g token is a pack WORD, not
+            # a droppable deal: downgrade to single/ea with the word
+            # in notes (2026-09-27: the Povi Masima 'bucket' $49.99
+            # line was silently LOST to the old hard error).
             normalised = normalise_bulk_size(bulk)
-            deal["bulk_size"] = normalised
             if normalised is None:
-                errs.append(
-                    f"bulk_pack needs a parseable kg/g bulk_size "
-                    f"(got {bulk!r})")
-        if qty not in (None, 0):
+                deal["price_kind"] = "single"
+                deal["bulk_size"] = None
+                deal["multibuy_qty"] = None
+                if deal.get("unit") not in VALID_UNITS:
+                    deal["unit"] = "ea"
+                word = bulk.strip()
+                deal["notes"] = (f"{deal['notes']} · {word}"
+                                 if str(deal.get("notes") or "").strip()
+                                 else word)
+            else:
+                deal["bulk_size"] = normalised
+        if qty not in (None, 0) and deal.get("price_kind") == "bulk_pack":
             errs.append("bulk_pack must not carry multibuy_qty")
     return errs
 
@@ -311,6 +330,7 @@ def _call_model(entry: dict, prompt: str, files: list[Path]) -> tuple:
                         "image_url": {"url":
                                       f"data:image/jpeg;base64,{b64}"}})
     body = {"model": entry["model"], "max_tokens": MAX_TOKENS,
+            "temperature": 0,
             "messages": [{"role": "user", "content": content}]}
     resp = requests.post(url, headers={
         "Authorization": f"Bearer {key}",
@@ -334,6 +354,14 @@ def parse_board_images(files: list[Path]) -> dict:
     call (secret-free). Zero deals is a VALID outcome (model
     variance) - returns {"valid_until": None, "deals": []}.
     Raises VisionUnavailable after the cap.
+
+    Since 2026-09-27 every payload goes through TWO post-model gates
+    (the Merjan pack-deal incidents): the deterministic pack-guard
+    (extractors.deal_text.normalise_pack_deals re-derives bundle
+    semantics from raw_text — the model flip-flops between runs on
+    the same image, so code owns the arithmetic) and verify_board_parse
+    (a second, independent look at the image auditing each parsed
+    deal; its corrections ride the deal as review_flag).
     """
     attempts = 0
     last_err = ""
@@ -350,6 +378,11 @@ def parse_board_images(files: list[Path]) -> dict:
             deals, errs = validate_payload(payload)
             for e in errs:
                 print(f"[vision] schema: {e}")
+            from extractors.deal_text import normalise_pack_deals
+            normalise_pack_deals(deals)
+            if deals:
+                verify_board_parse(files, deals)
+            _log_payload(payload, deals)
             return {"valid_until": payload.get("valid_until"),
                     "validity_text": payload.get("validity_text"),
                     "deals": deals}
@@ -361,3 +394,132 @@ def parse_board_images(files: list[Path]) -> dict:
             continue
     raise VisionUnavailable(
         f"vision failed after {attempts} attempt(s): {last_err}")
+
+
+def _log_payload(payload: object, deals: list) -> None:
+    """Persist the RAW model payload + the post-guard deals for every
+    board (data/diagnostics/vision_payloads/, newest 50 kept). The
+    2026-09-27 re-pollution was diagnosable only by guessing because
+    nothing recorded what the model actually returned; now every
+    incident has its evidence on disk."""
+    try:
+        import time
+        from pathlib import Path as _P
+        folder = (_P(__file__).resolve().parent.parent
+                  / "data" / "diagnostics" / "vision_payloads")
+        folder.mkdir(parents=True, exist_ok=True)
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        out = {"at": stamp,
+               "model_payload": payload,
+               "post_guard_deals": deals}
+        (folder / f"{stamp}_{id(deals) & 0xffff:x}.json").write_text(
+            json.dumps(out, ensure_ascii=False, indent=1,
+                       default=str), encoding="utf-8")
+        old = sorted(folder.glob("*.json"))
+        for stale in old[:-50]:
+            stale.unlink(missing_ok=True)
+    except Exception:   # noqa: BLE001 — logging must never break parse
+        pass
+
+
+TRANSCRIBE_PROMPT = """Transcribe EVERY price line printed on this
+price-board photo, in reading order (top-to-bottom, left-to-right),
+EXACTLY as printed — including every leading number, "KG", "MIN",
+"FOR", unit word and price. Do NOT interpret, convert, normalise or
+reorder anything; if a line starts with a number ("2 KG THIGH FILLET
+$21.99") copy that number too. Output JSON only:
+{"lines": ["2 KG THIGH FILLET $21.99", ...]}"""
+
+
+def _line_matches_deal(line: str, deal: dict) -> bool:
+    """A re-transcribed line belongs to a deal when the price digits
+    appear in it AND an item-name word overlaps (plural-folded)."""
+    if not isinstance(line, str) or not line.strip():
+        return False
+    price = deal.get("price")
+    if isinstance(price, (int, float)):
+        if (f"{price:.2f}" not in line
+                and f"{price:g}" not in line):
+            return False
+    name_tokens = {w.lower().rstrip("s") for w in
+                   str(deal.get("item") or "").split() if len(w) > 2}
+    line_tokens = {w.lower().rstrip("s")
+                   for w in line.split()}
+    return bool(name_tokens & line_tokens)
+
+
+def _qty_in(text: str) -> str | None:
+    """The quantity token a line carries ('2', '5', '1.9') or None."""
+    from extractors.deal_text import (
+        _QTY_KG_PREFIX_RE, _QTY_COUNT_PREFIX_RE, _MIN_WEIGHT_RE,
+        _KG_FOR_PRICE_RE, _COUNT_FOR_PRICE_RE,
+    )
+    for rx in (_QTY_KG_PREFIX_RE, _KG_FOR_PRICE_RE, _MIN_WEIGHT_RE,
+               _QTY_COUNT_PREFIX_RE, _COUNT_FOR_PRICE_RE):
+        m = rx.search(text or "")
+        if m:
+            return m.group(1)
+    return None
+
+
+def verify_board_parse(files: list[Path], deals: list[dict]) -> list:
+    """Second independent READ before anything posts (user directive
+    2026-09-27: 'let the model research this before posting — this is
+    so much false information').
+
+    The first pass sometimes DROPS the printed quantity from raw_text
+    entirely (observed live 2026-09-27: 'THIGH FILLET $21.99' for a
+    '2 KG THIGH FILLET $21.99' tile — and the classify step flips
+    single/multibuy between runs on the same image). So this pass
+    asks the model only what models are reliable at — COPYING: a pure
+    re-transcription of every price line. CODE then decides: for each
+    single deal whose re-read line carries a quantity, the pack-guard
+    conversion is applied from the re-read text; a multibuy deal
+    whose re-read quantity disagrees is flagged ⚠. Never raises and
+    never blocks: raw_text-anchored guard fixes have already applied.
+    """
+    try:
+        content, usage = _call_model(MODEL_CHAIN[0], TRANSCRIBE_PROMPT,
+                                     files)
+        print(f"[vision-verify] {MODEL_CHAIN[0]['label']} "
+              f"finish_reason={usage.get('finish_reason')} "
+              f"tokens={usage.get('total_tokens')}")
+        lines = (extract_json(content) or {}).get("lines") or []
+        from extractors.deal_text import normalise_pack_deal
+        used: set = set()
+        for d in deals:
+            match = None
+            for i, line in enumerate(lines):
+                if i in used:
+                    continue
+                if _line_matches_deal(line, d):
+                    match = (i, line)
+                    break
+            if match is None:
+                continue
+            used.add(match[0])
+            line = match[1]
+            kind = d.get("price_kind")
+            if kind == "single":
+                probe = dict(d)
+                probe["raw_text"] = line
+                normalise_pack_deal(probe)
+                if probe["price_kind"] != "single":
+                    # the re-read found a quantity the parse dropped —
+                    # bundle maths win, transparently
+                    for k in ("price_kind", "multibuy_qty",
+                              "bulk_size", "unit", "item", "notes"):
+                        if k in probe:
+                            d[k] = probe[k]
+                    d["raw_text"] = line
+                    d["review_flag"] = f"re-read: {line.strip()[:60]}"
+            elif kind == "multibuy":
+                rq = _qty_in(line)
+                dq = str(d.get("multibuy_qty") or "")
+                if rq is not None and rq != dq:
+                    d["review_flag"] = (
+                        f"check qty — board reads {line.strip()[:60]}")
+    except Exception as exc:   # noqa: BLE001 — verification is additive
+        print(f"[vision-verify] unavailable ({exc.__class__.__name__})"
+              f" — pack-guard values stand")
+    return deals

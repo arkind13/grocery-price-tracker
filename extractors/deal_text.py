@@ -217,6 +217,152 @@ def parse_fruitopia_deals(text: str) -> list[dict]:
     return deals
 
 
+# --- Pack-guard (open-fix #0, closed 2026-09-27) ---------------------
+# The Merjan weekend boards print the MINIMUM-PURCHASE quantity BEFORE
+# the item name ("2KG THIGH FILLET $21.99" = $21.99 buys the whole
+# 2kg, ~$11.00/kg). The vision model flip-flops BETWEEN RUNS on the
+# same image (2026-09-11: 14 of 23 tiles mistyped; 2026-09-27: all 20
+# mistyped; a same-day replay: all correct) — a prompt can never pin
+# behaviour the model varies on. These regexes re-derive the pack
+# semantics from raw_text (the verbatim tile line, which the model
+# transcribes reliably) so code, not model mood, owns the maths.
+_QTY_KG_PREFIX_RE = re.compile(       # "2KG THIGH FILLET" / "5 kg beef"
+    r"^\s*(\d+(?:[.,]\d+)?)\s*kg\b[\s.:\-–—]*",
+    re.IGNORECASE | re.MULTILINE)
+_QTY_COUNT_PREFIX_RE = re.compile(    # "2 STEAMER CHICKENS" (counted)
+    r"^\s*(\d{1,2})\s+(?=[a-z(])", re.IGNORECASE | re.MULTILINE)
+_MIN_WEIGHT_RE = re.compile(          # "min 2kg" / "MINIMUM 1.9 KG"
+    r"\bmin(?:imum)?\s*[.:]?\s*(\d+(?:[.,]\d+)?)\s*kg\b", re.IGNORECASE)
+_KG_FOR_PRICE_RE = re.compile(        # "3kg for $32.99"
+    r"\b(\d+(?:[.,]\d+)?)\s*kg\s+(?:for|@)\s*\$", re.IGNORECASE)
+_COUNT_FOR_PRICE_RE = re.compile(     # "5 for $34.99" (counted birds)
+    r"\b(\d{1,2})\s+for\s+\$", re.IGNORECASE)
+_PER_KG_MARKER_RE = re.compile(       # explicit rate marker on the line
+    r"per\s*kg|/\s*kg", re.IGNORECASE)
+_UNIT_WORDS_RE = re.compile(r"^(?:kg|kgs|g|gram|grams|ml|l|litre|ea|each"
+                            r"|pack|packs|box|bucket|tray)s?\b$",
+                            re.IGNORECASE)
+# Fractional-weight bundles ("1.9kg for $X") become bulk_pack (schema
+# demands an integer >= 2 for multibuy_qty); "min" weights on /ea items
+# are bird-size SPECS ("Whole Chicken min 1.9kg"), never bundles.
+
+
+def _as_number(txt: str) -> float | None:
+    try:
+        return float(txt.replace(",", "."))
+    except ValueError:
+        return None
+
+
+def _strip_qty_prefix(name: str) -> str:
+    """Remove a quantity prefix ("2KG THIGH FILLET" -> "THIGH FILLET";
+    "2 STEAMER CHICKENS" -> "STEAMER CHICKENS") so row reuse lands on
+    the plain /kg row (ID-1: the rate + terms belong THERE)."""
+    name = _QTY_KG_PREFIX_RE.sub("", name, count=1)
+    name = _QTY_COUNT_PREFIX_RE.sub("", name, count=1)
+    return name.strip()
+
+
+def normalise_pack_deal(deal: dict) -> dict:
+    """Re-derive pack semantics for ONE vision-schema deal (in place).
+
+    Only touches price_kind == "single" deals whose line carries a
+    quantity the classify step may have dropped. Precedence:
+      1. an explicit per-kg marker ("$24.99 per kg", "/kg") — the
+         price IS the rate; never touched.
+      2. a LEADING weight ("2KG THIGH FILLET $21.99") or "Nkg for $X"
+         anywhere — always a bundle: integer qty >= 2 -> multibuy
+         (qty, bundle total, unit kg); fractional -> bulk_pack
+         ("1.9kg") so the per-kg rate stays derivable.
+      3. unit kg + any other weight token ("min 2kg") — bundle too
+         (the vision prompt's own "min 2kg" rule).
+      4. unit ea: "min N.Nkg" ("Whole Chicken min 1.9kg") is a
+         bird-SIZE spec — stays single/ea, weight rides `notes`;
+         a leading COUNT ("2 STEAMER CHICKENS $11.99") is a counted
+         bundle -> multibuy (qty, bundle total, unit ea).
+
+    Returns the (possibly mutated) deal. Pure text maths — no network.
+    """
+    if deal.get("price_kind") != "single":
+        return deal
+    raw_text = str(deal.get("raw_text") or "").strip()
+    raw = f"{raw_text} {deal.get('item') or ''}"
+    if _PER_KG_MARKER_RE.search(raw):
+        return deal              # the line itself says the price is /kg
+    unit = (deal.get("unit") or "").lower()
+    price = deal.get("price")
+    min_m = _MIN_WEIGHT_RE.search(raw)
+    # Prefix quantities anchor to the VERBATIM tile text only — the
+    # model's item field may legitimately start with a number that is
+    # part of the product name ("4 Star Beef"), never a bundle count.
+    m = (_QTY_KG_PREFIX_RE.search(raw_text)
+         or _KG_FOR_PRICE_RE.search(raw))
+    if not m and min_m and unit != "ea":
+        # "min Nkg" on weighted meat — same bundle semantics
+        m = min_m
+    if m and isinstance(price, (int, float)) and price > 0:
+        qty = _as_number(m.group(1))
+        if qty and qty > 0:
+            deal["item"] = _strip_qty_prefix(
+                str(deal.get("item") or "")).strip() or deal["item"]
+            deal["unit"] = "kg"
+            if qty >= 2 and float(qty).is_integer():
+                deal["price_kind"] = "multibuy"
+                deal["multibuy_qty"] = int(qty)
+                deal["bulk_size"] = None
+            else:
+                deal["price_kind"] = "bulk_pack"
+                deal["bulk_size"] = f"{qty:g}kg"
+                deal["multibuy_qty"] = None
+            return deal
+    if min_m and unit == "ea":
+        # bird-size spec — keep per-ea, surface the weight
+        note = f"min {min_m.group(1)}kg"
+        deal["notes"] = (f"{deal['notes']} · {note}"
+                         if deal.get("notes") else note)
+        return deal
+    # counted-bundle prefix on an /ea deal ("2 STEAMER CHICKENS") —
+    # anchored to the verbatim tile text (see the note above) and the
+    # word after the count must be a PLURAL ("CHICKENS"); a bare
+    # number + word at line start can be part of the product name
+    # ("4 STAR BEEF" — a grade, never "4 for $30")
+    cm = _QTY_COUNT_PREFIX_RE.search(raw_text)
+    if cm and unit == "ea" and not _UNIT_WORDS_RE.match(
+            str(deal.get("item") or "").strip()):
+        # name words between the count and the price; a counted
+        # bundle names a PLURAL ("2 STEAMER CHICKENS"), a numbered
+        # product name does not ("4 STAR BEEF" — a grade)
+        name_part = re.split(r"[$–—-]", raw_text[cm.end():])[0]
+        name_words = [w for w in name_part.split()
+                      if not _UNIT_WORDS_RE.match(w)]
+        plural = any(len(w) > 2 and w.lower().endswith("s")
+                     for w in name_words)
+        qty = _as_number(cm.group(1))
+        if plural and qty and 2 <= qty <= 20 and float(qty).is_integer():
+            deal["item"] = _strip_qty_prefix(
+                str(deal.get("item") or "")).strip() or deal["item"]
+            if isinstance(price, (int, float)) and price > 0:
+                deal["price_kind"] = "multibuy"
+                deal["multibuy_qty"] = int(qty)
+        return deal
+    fm = _COUNT_FOR_PRICE_RE.search(raw_text)
+    if fm and unit == "ea":
+        qty = _as_number(fm.group(1))
+        if qty and 2 <= qty <= 20 and float(qty).is_integer():
+            deal["price_kind"] = "multibuy"
+            deal["multibuy_qty"] = int(qty)
+    return deal
+
+
+def normalise_pack_deals(deals: list) -> list:
+    """normalise_pack_deal over a deal list (the vision payload or the
+    text-parser conversion) — the ONE pack-guard entry both ingestion
+    paths share (image boards AND text posts)."""
+    for d in deals or []:
+        normalise_pack_deal(d)
+    return deals
+
+
 def filter_recent_posts(posts: list, *, today: date, keep: int = 3,
                         ) -> tuple[list, list, list]:
     """The user's standing rule (TODO Task 2): last N posts, and of
