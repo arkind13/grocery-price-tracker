@@ -258,30 +258,66 @@ class TestSchemaAdapterPassthrough(unittest.TestCase):
         self.assertEqual(r["unit"], "ea")
         self.assertIn("min 1.9kg", r["notes"])
 
-    def test_cell_for_through_adapter_writes_the_rate(self):
-        """The exact sheet defect: 21.99 (pack total) in the cell —
-        through the fixed adapter the cell is the per-kg rate."""
-        from core.local_deals import _to_vision_deal, _cell_for
+    def test_cell_for_through_adapter_writes_pack_row(self):
+        """The exact sheet defect (fixed 2026-09-27 twice over): the
+        adapter once destroyed the multibuy typing; now the deal also
+        lands on its own '(5kg)' pack row with the bundle total."""
+        from core.local_deals import (_to_vision_deal, _cell_for,
+                                      _display_name)
         r = _to_vision_deal(
             _tile("Beef Curry (Bone In)",
                   "5KG BEEF CURRY (BONE IN) $49.99", 49.99,
                   kind="multibuy", qty=5), "butchery")
         cell, comment = _cell_for(r)
-        self.assertEqual(cell, 10.0)
+        self.assertEqual(cell, 49.99)
         self.assertEqual(comment, "multi buy 5kg for $49.99")
+        self.assertEqual(_display_name(r),
+                         "Beef Curry (Bone In) – (5kg) /ea")
 
 
 class TestCellAndDigestIntegration(unittest.TestCase):
     """The corrected deal flows through the REAL cell writer and the
     REAL digest renderer (the exact posted line changes)."""
 
-    def test_cell_for_corrected_thigh_fillet(self):
-        from core.local_deals import _cell_for
+    def test_cell_for_corrected_thigh_fillet_is_a_pack_row(self):
+        """User directive 2026-09-27: min-buy kg bundles live on their
+        OWN pack row — bundle total in the cell, '(2kg)' in the row
+        name, terms in the comment. The /kg maths happens at lookup
+        time from the row name."""
+        from core.local_deals import _cell_for, _display_name
         r = normalise_pack_deal(dict(SEP27_BAD_TILES[0]))
         cell, comment = _cell_for(r)
-        self.assertEqual(cell, 10.99)    # 21.99 / 2 — NOT 21.99
+        self.assertEqual(cell, 21.99)     # the bundle total itself
         self.assertEqual(comment,
                          "multi buy 2kg for $21.99")
+        self.assertEqual(_display_name(r),
+                         "Thigh Fillet – (2kg) /ea")
+
+    def test_counted_ea_bundle_keeps_per_item_rate(self):
+        """Counted bundles ('2 STEAMER CHICKENS') stay on the /ea row
+        with the per-item rate + note (no pack-row shape exists for
+        counted birds)."""
+        from core.local_deals import _cell_for, _display_name
+        r = normalise_pack_deal(_tile(
+            "Steamer Chickens", "2 STEAMER CHICKENS $11.99",
+            11.99, unit="ea"))
+        cell, comment = _cell_for(r)
+        self.assertEqual(cell, 6.0)
+        self.assertEqual(comment, "multi buy 2 for $11.99 — $6.00/ea")
+        self.assertEqual(_display_name(r), "Steamer Chickens /ea")
+
+    def test_pack_row_never_reuses_the_kg_row(self):
+        """S9: the '(2kg)' pack row and the '/kg' row stay separate;
+        a repeat board reuses the SAME pack row."""
+        from core.local_deals import _reuse_match_index, _display_name
+        r = normalise_pack_deal(dict(SEP27_BAD_TILES[0]))
+        name = _display_name(r)
+        grid = [["Product"], ["Halal Thigh Fillet /kg"],
+                ["Halal Thigh Fillet – (2kg) /ea"],
+                ["Halal Chicken Wings /kg"]]
+        self.assertEqual(_reuse_match_index(grid, name), 2)
+        grid2 = [["Product"], ["Halal Thigh Fillet /kg"]]
+        self.assertIsNone(_reuse_match_index(grid2, name))
 
     def test_digest_line_shows_min_order_terms(self):
         from core.local_deals import _digest_items, _to_vision_deal

@@ -43,18 +43,22 @@ def _vision_deal(item="Lamb Necks", price=32.99, unit="kg",
 # ---------------------------------------------------------------------------
 class TestID1PackDealSemantics(unittest.TestCase):
 
-    def test_multibuy_kg_cell_is_per_kg_rate(self):
-        """"3kg for $32.99" -> the special cell holds $11.00 (the
-        per-kg rate), never the raw pack total (spec: 'the per-kg
-        rate in the shop's special cell')."""
+    def test_multibuy_kg_gets_own_pack_row(self):
+        """USER DIRECTIVE 2026-09-27 (supersedes the 2026-09-11 ID-1
+        per-kg-cell ruling): "3kg for $32.99" -> its OWN pack row
+        'Lamb Necks – (3kg) /ea' carrying the BUNDLE total in the
+        special cell (the $/kg maths happens at lookup time from the
+        row name, like the '(5kg)' pack rows); the plain /kg row is
+        untouched."""
         ws = FakeWorksheet()
         ld.merge_store_tab(ws, "merjan",
                            [_vision_deal(kind="multibuy",
                                          qty=3, price=32.99)])
         row = next(r for r in ws.rows
                    if str(r[0]).startswith("Lamb Necks"))
-        self.assertEqual(row[MER_SP], 11.0)
-        self.assertNotIn("32.99", str(row[MER_SP]))
+        self.assertTrue(str(row[0]).startswith(
+            "Lamb Necks – (3kg) /ea"), row[0])
+        self.assertEqual(row[MER_SP], 32.99)   # bundle total
 
     def test_multibuy_kg_comment_terms(self):
         """The shop-tagged Comments segment carries the pack terms in
@@ -69,19 +73,19 @@ class TestID1PackDealSemantics(unittest.TestCase):
         self.assertEqual(row[11], "[MER] multi buy 3kg for $32.99")
 
     def test_multibuy_divides_exactly_once(self):
-        """Single-divider rule: the cell is round(total/qty, 2) =
-        $11.00 — divided exactly once (never 32.99 raw, never the
-        twice-divided ~$5.50)."""
-        ws = FakeWorksheet()
-        ld.merge_store_tab(ws, "merjan",
-                           [_vision_deal(kind="multibuy",
-                                         qty=3, price=32.99)])
-        row = next(r for r in ws.rows
-                   if str(r[0]).startswith("Lamb Necks"))
-        self.assertEqual(float(row[MER_SP]), 11.0)
-        self.assertNotEqual(float(row[MER_SP]), 32.99)
-        self.assertNotEqual(float(row[MER_SP]),
-                            round(32.99 / 3 / 3, 2))
+        """Single-divider rule relocated to the READ side (2026-09-27
+        pack-row contract): the lookup normalises the '(3kg)' row
+        exactly once — 32.99 / 3 = $11.00/kg, never the twice-divided
+        ~$3.67, never presented as $32.99/kg."""
+        from core.v2_read import _ld_quotes
+        quotes = _ld_quotes({"name": "Lamb Necks – (3kg) /ea",
+                             "prices": {"merjan": (32.99, "special")},
+                             "comments": "", "perm_prices": {}})
+        q = next(q for q in quotes if q["shop"] == "merjan")
+        self.assertEqual(q["per_kg"], 11.0)
+        self.assertEqual(q["pack"], 3)
+        self.assertNotEqual(q["per_kg"], 32.99)
+        self.assertNotEqual(q["per_kg"], round(32.99 / 3 / 3, 2))
 
     def test_multibuy_ea_wording_unchanged(self):
         """/ea multi-buys keep the proven wording with the per-ea
@@ -224,19 +228,28 @@ class TestID3CommentIdempotence(unittest.TestCase):
 
     def test_other_shop_segment_survives(self):
         """Strip-then-append is PER SHOP: Dunya's segment survives a
-        Merjan re-merge."""
+        Merjan re-merge. Under the 2026-09-27 pack-row contract the
+        two shops share the row only when the pack SIZE matches
+        (different sizes are different rows by design, S9)."""
         ws = FakeWorksheet()
         ld.merge_store_tab(ws, "dunya_fb", [
             _vision_deal(item="Halal Lamb Necks", price=16.99,
-                         kind="multibuy", qty=2)])
+                         kind="multibuy", qty=3)])
         ld.merge_store_tab(ws, "merjan", [
             _vision_deal(item="Halal Lamb Necks", price=15.99,
                          kind="multibuy", qty=3)])
         row = next(r for r in ws.rows
-                   if "Lamb Necks" in str(r[0]))
+                   if "– (3kg)" in str(r[0]))
         self.assertIn("[DUN]", str(row[11]))
         self.assertIn("[MER]", str(row[11]))
         self.assertNotIn("[MER] [MER]", str(row[11]))
+        # a different pack size gets its OWN row (never the (3kg) row)
+        ld.merge_store_tab(ws, "merjan", [
+            _vision_deal(item="Halal Lamb Necks", price=12.99,
+                         kind="multibuy", qty=2)])
+        sizes = [str(r[0]) for r in ws.rows
+                 if "Lamb Necks" in str(r[0])]
+        self.assertEqual(len(sizes), 2, sizes)
 
 
 # ---------------------------------------------------------------------------

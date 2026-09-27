@@ -90,15 +90,19 @@ without you:
   Unreadable images write NOTHING and ask for a clearer version
   (never guesses); notice posts record as zero-item.
 - **Ingest hardening (the three 2026-09-11 defects)**: /kg pack deals
-  always write the per-kg rate in the special cell + the terms in the
-  shop's Comments segment (`[MER] multi buy 3kg for $32.99` — one
-  division, never the raw pack price, never per-ea); row reuse is
-  plural-folded token matching that ignores unit markers and the
-  source-based halal prefix (`Halal Sliced Lamb Neck /kg` reuses the
-  existing `Halal Lamb Necks /kg` row + Item_Code; a 5kg pack and a
-  /kg row stay separate BY DESIGN); comment merges are idempotent,
-  strip-then-append per shop (no `[MER] [MER]`, untagged segments
-  never crash).
+  carry their terms in the shop's Comments segment (`[MER] multi buy
+  3kg for $32.99`); row reuse is plural-folded token matching that
+  ignores unit markers and the source-based halal prefix (`Halal
+  Sliced Lamb Neck /kg` reuses the existing `Halal Lamb Necks /kg`
+  row + Item_Code; a 5kg pack and a /kg row stay separate BY
+  DESIGN); comment merges are idempotent, strip-then-append per shop
+  (no `[MER] [MER]`, untagged segments never crash). **Min-buy kg
+  bundles ("2kg for $21.99") live on their OWN pack rows (user
+  directive 2026-09-27, superseding the 2026-09-11 per-kg-cell
+  ruling): 'Halal Thigh Fillet – (2kg) /ea' carries the BUNDLE total
+  in the special cell, the /kg row stays clean, and lookups
+  normalise on the fly — 'Merjan $21.99 / 2kg pack = $10.99/kg
+  (special) · min order 2kg for $21.99'.**
 - **Pack-deal armour (2026-09-27, the recurring Merjan min-buy
   defect — open-fix #0 closed)**: the weekend boards print the
   minimum purchase BEFORE the item ("2KG THIGH FILLET $21.99" =

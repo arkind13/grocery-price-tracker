@@ -1887,12 +1887,23 @@ def _section_for(deal: dict) -> str:
 
 def _display_name(deal: dict) -> str:
     """Canonical Col A text: item + ' /kg' | ' /ea' suffix for unit
-    deals; bulk rows carry the size in the name ('Potatoes 5kg')."""
+    deals; bulk rows carry the size in the name ('Potatoes 5kg').
+
+    Min-buy kg bundles (user directive 2026-09-27, superseding the
+    2026-09-11 ID-1 per-kg-cell ruling) get their OWN pack row —
+    'Thigh Fillet – (2kg) /ea' — same convention as the sealed-pack
+    rows ('Halal Goat Curry – (5kg) /ea'); the bundle total rides the
+    special cell and lookups normalise it to $/kg."""
     item = str(deal.get("item") or "").strip()
     kind = deal.get("price_kind")
     if kind == "bulk_pack":
         size = str(deal.get("bulk_size") or "").strip()
         return f"{item} {size}".strip()
+    if kind == "multibuy" \
+            and (deal.get("unit") or "").lower() == "kg":
+        qty = int(deal.get("multibuy_qty") or 0)
+        if qty >= 2:
+            return f"{item} \u2013 ({qty}kg) /ea"
     unit = deal.get("unit")
     if unit == "kg":
         return f"{item} /kg"
@@ -1953,7 +1964,12 @@ def _cell_for(deal: dict) -> tuple:
         if kind == "multibuy":
             from core.multibuy import effective_unit_rate
             qty = int(deal.get("multibuy_qty") or 0)
-            if qty:
+            if qty and (deal.get("unit") or "").lower() != "kg":
+                # counted bundles keep the per-item rate on the /ea
+                # row; kg min-buy bundles LIVE ON THEIR OWN pack row
+                # (user directive 2026-09-27) and carry the BUNDLE
+                # TOTAL — the row name '(2kg)' drives the $/kg maths
+                # at lookup time, exactly like the '(5kg)' pack rows
                 cell = round(effective_unit_rate(qty, cell), 2)
     elif note:
         cell = note          # keep the offer text visible in-place
