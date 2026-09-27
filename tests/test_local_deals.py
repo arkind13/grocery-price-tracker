@@ -151,8 +151,11 @@ class TestSheetRebuild(unittest.TestCase):
         self.assertTrue(names[2].startswith("Oreo"))
 
     def test_bulk_note_cell_and_shared_row_unit_price(self):
-        """Bulk cell holds the note; a unit-price store keeps its
-        numeric cell on the SAME canonical row."""
+        """A 5kg bulk row and the plain unit-price row are SEPARATE
+        presentations (S9 — 2026-09-27: build_rows keys rows by the
+        DISPLAY name, aligning it with the live-grid reuse matcher
+        that always kept them apart); each store's cell lands on its
+        own row."""
         deals = {
             "abusalim": [_deal(item="Potatoes", store="abusalim",
                                category="fruits",
@@ -163,13 +166,16 @@ class TestSheetRebuild(unittest.TestCase):
         }
         rows = ld.build_rows(deals)
         fruit_rows = rows.get("FRUITS") or []
-        self.assertEqual(len(fruit_rows), 1)
-        row = fruit_rows[0]
-        self.assertIn("multi buy 5kg for $2.99", str(row))
-        # 13-col layout: abusalim special = idx 9 (bulk price),
-        # fruitopia special = idx 7 on the SAME canonical row.
-        self.assertEqual(row[9], 2.99)
-        self.assertEqual(row[7], 3.00)
+        self.assertEqual(len(fruit_rows), 2)
+        bulk_row = next(r for r in fruit_rows
+                        if str(r[0]) == "Potatoes 5kg")
+        plain_row = next(r for r in fruit_rows
+                         if str(r[0]) == "Potatoes /kg")
+        # 13-col layout: abusalim special = idx 9 (bulk bundle),
+        # fruitopia special = idx 7 on the plain row.
+        self.assertIn("multi buy 5kg for $2.99", str(bulk_row))
+        self.assertEqual(bulk_row[9], 2.99)
+        self.assertEqual(plain_row[7], 3.00)
 
     def test_out_of_domain_items_recorded_under_other(self):
         """Out-of-domain items are recorded (never dropped) under
@@ -455,9 +461,12 @@ class TestReport(unittest.TestCase):
         mb = _deal(item="Sausages", kind="multibuy", price=15.0,
                    unit="pack", multibuy_qty=2)
         rows2 = ld.build_rows({"dunya_fb": [mb]})
-        # Layout v2: dunya special (FB) = idx 2, Comments = idx 9.
-        self.assertEqual(rows2["BUTCHERY"][0][3], 7.5)
-        self.assertEqual(rows2["BUTCHERY"][0][11],
+        # 2026-09-27 pack-row contract: the bundle total on its own
+        # '(2 pack) /ea' row (dunya FB special = idx 3, Comments = 11).
+        row = rows2["BUTCHERY"][0]
+        self.assertEqual(row[0], "Sausages – (2 pack) /ea")
+        self.assertEqual(row[3], 15.0)
+        self.assertEqual(row[11],
                          "[DUN] multi buy 2 for $15.00 — $7.50/ea")
 
     def test_no_prices_warn_line(self):
@@ -1270,6 +1279,10 @@ class TestRebuildPreservation(unittest.TestCase):
         self.assertEqual(beef[5], 9.50)           # MERJAN special kept
 
     def test_comment_segments_merge_both_directions(self):
+        """Strip-then-append is PER SHOP on the row BOTH shops price.
+        (2026-09-27: a counted '(2 pack)' bundle gets its OWN row, so
+        the same-shape premise uses a plain price for the merge and
+        the pack-row separation is pinned in test_auto_ingest.)"""
         ws = _v2_ws([
             ["FRUITS", "", "", "", "", "", "", "", "", ""],
             ["Carrots /ea", "", "", "", "", "", 0.75, "", "", "",
@@ -1277,13 +1290,18 @@ class TestRebuildPreservation(unittest.TestCase):
         ])
         deals = {"fruitopia": [_deal(
             item="Carrots", store="fruitopia", category="fruits",
-            price=0.75, unit="ea", kind="multibuy", multibuy_qty=2)]}
+            price=0.75, unit="ea", kind="multibuy",
+            multibuy_qty=3)]}
         self._rebuild(ws, deals, ["fruitopia"])
         grid = ws.get_all_values()
+        # the plain /ea row keeps MERJAN's segment untouched; the
+        # counted bundle lands on its OWN row with FRU's segment
         carrot = next(r for r in grid if r[0] == "Carrots /ea")
-        self.assertIn("[MER] bulk 3 for $2", carrot[11])
-        self.assertIn("[FRU]", carrot[11])
-        self.assertIn("multi buy 2 for", carrot[11])
+        self.assertEqual(carrot[11], "[MER] bulk 3 for $2")
+        pack = next(r for r in grid
+                    if str(r[0]).startswith("Carrots – (3 pack)"))
+        self.assertIn("[FRU] multi buy 3 for $0.75", pack[11])
+        self.assertNotIn("[MER]", pack[11])
 
     def test_row_only_other_shop_data_reappended(self):
         ws = _v2_ws([
@@ -1531,22 +1549,27 @@ class TestMultibuySingleDivider(unittest.TestCase):
     )
 
     def test_real_frut_text_cell_and_note_correct(self):
+        """2026-09-27 pack-row contract: counted bundles carry the
+        BUNDLE TOTAL on their OWN '(2 pack) /ea' row — the per-item
+        maths happens at lookup time from the row name."""
         from extractors.deal_text import parse_fruitopia_deals
         deals = parse_fruitopia_deals(self.FRUT_TEXT)
         converted = [ld._to_vision_deal(d, "fruits") for d in deals]
         for deal in converted:
             cell, note = ld._cell_for(deal)
-            self.assertEqual(cell, 1.5)          # 2.99/2 — ONCE
+            self.assertEqual(cell, 2.99)         # bundle total — ONCE
             self.assertEqual(note,
                              "multi buy 2 for $2.99 — $1.50/ea")
+            self.assertEqual(ld._display_name(deal),
+                             f"{deal['item']} \u2013 (2 pack) /ea")
 
     def test_vision_any2_6_dollar_deal(self):
-        # Vision-schema "Any 2 | $6.00" (price = bundle total).
+        # Vision-schema "Any 2 | $6.00": bundle total on the pack row.
         cell, note = ld._cell_for({
             "item": "Soft Drink Cans", "price": 6.00, "unit": "ea",
             "price_kind": "multibuy", "multibuy_qty": 2,
         })
-        self.assertEqual(cell, 3.0)
+        self.assertEqual(cell, 6.0)
         self.assertEqual(note, "multi buy 2 for $6.00 — $3.00/ea")
 
     def test_vision_bulk_pack_cell(self):

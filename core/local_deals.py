@@ -150,6 +150,12 @@ def canonical_key(item_name: str) -> tuple:
     tokens = {_singular(t) for t in similarity_tokens(name)
               if t not in STOPWORDS
               and not re.fullmatch(r"\d+(\.\d+)?", t)}
+    # Counted-pack markers ('(2 pack)') become identity tokens like
+    # weight sizes ('2kg') — a counted bundle row never collapses
+    # onto the plain row's key (2026-09-27 separate-lines directive;
+    # both '2' and 'pack' are otherwise stripped above).
+    for m in re.finditer(r"(\d+(?:\.\d+)?)\s*packs?\b", name):
+        tokens.add(f"{m.group(1)}pack")
     variety: set[str] = set()
     for v in VARIETY_TOKENS:
         if any(vt in tokens for vt in v.split()):
@@ -1889,21 +1895,33 @@ def _display_name(deal: dict) -> str:
     """Canonical Col A text: item + ' /kg' | ' /ea' suffix for unit
     deals; bulk rows carry the size in the name ('Potatoes 5kg').
 
-    Min-buy kg bundles (user directive 2026-09-27, superseding the
-    2026-09-11 ID-1 per-kg-cell ruling) get their OWN pack row —
-    'Thigh Fillet – (2kg) /ea' — same convention as the sealed-pack
-    rows ('Halal Goat Curry – (5kg) /ea'); the bundle total rides the
-    special cell and lookups normalise it to $/kg."""
+    Min-buy bundles (user directive 2026-09-27, superseding the
+    2026-09-11 ID-1 per-kg-cell ruling) get their OWN pack rows — the
+    same convention as the sealed-pack rows ('Halal Goat Curry –
+    (5kg) /ea'): kg bundles ('Thigh Fillet – (2kg) /ea') and counted
+    bundles ('Steamer Chickens – (2 pack) /ea') alike. The BUNDLE
+    total rides the special cell; lookups normalise it to $/kg or
+    $/ea from the row name. Deals flagged '_plain_rate' (PERMANENT
+    site-catalogue columns) keep the divided rate on the plain row —
+    site syncs never create pack rows (§18/A1)."""
     item = str(deal.get("item") or "").strip()
     kind = deal.get("price_kind")
+    if deal.get("_plain_rate"):
+        unit = deal.get("unit")
+        if unit == "kg":
+            return f"{item} /kg"
+        if unit == "ea":
+            return f"{item} /ea"
+        return item
     if kind == "bulk_pack":
         size = str(deal.get("bulk_size") or "").strip()
         return f"{item} {size}".strip()
-    if kind == "multibuy" \
-            and (deal.get("unit") or "").lower() == "kg":
+    if kind == "multibuy":
         qty = int(deal.get("multibuy_qty") or 0)
         if qty >= 2:
-            return f"{item} \u2013 ({qty}kg) /ea"
+            if (deal.get("unit") or "").lower() == "kg":
+                return f"{item} \u2013 ({qty}kg) /ea"
+            return f"{item} \u2013 ({qty} pack) /ea"
     unit = deal.get("unit")
     if unit == "kg":
         return f"{item} /kg"
@@ -1961,15 +1979,18 @@ def _cell_for(deal: dict) -> tuple:
         note = _multibuy_note(deal)
     if isinstance(price, (int, float)) and price > 0:
         cell = float(price)
-        if kind == "multibuy":
+        # 2026-09-27 pack-row contract: min-buy bundles (kg AND
+        # counted) live on their OWN '(2kg)' / '(2 pack)' rows and
+        # carry the BUNDLE TOTAL — the row name drives the $/kg or
+        # $/ea maths at lookup time, exactly like the '(5kg)' pack
+        # rows. No division on the write path, ever — EXCEPT
+        # '_plain_rate' deals (PERMANENT site columns), which keep
+        # the divided rate on the plain row (§18/A1: site syncs
+        # never create pack rows).
+        if kind == "multibuy" and deal.get("_plain_rate"):
             from core.multibuy import effective_unit_rate
             qty = int(deal.get("multibuy_qty") or 0)
-            if qty and (deal.get("unit") or "").lower() != "kg":
-                # counted bundles keep the per-item rate on the /ea
-                # row; kg min-buy bundles LIVE ON THEIR OWN pack row
-                # (user directive 2026-09-27) and carry the BUNDLE
-                # TOTAL — the row name '(2kg)' drives the $/kg maths
-                # at lookup time, exactly like the '(5kg)' pack rows
+            if qty:
                 cell = round(effective_unit_rate(qty, cell), 2)
     elif note:
         cell = note          # keep the offer text visible in-place
@@ -2020,21 +2041,32 @@ def build_rows(all_store_deals: dict) -> dict:
         in_domain_kind = _store_kind(store_key)
         col, kind = _target_column(store_key)
         for deal in deals:
+            if kind == "perm" and \
+                    deal.get("price_kind") == "multibuy":
+                # §18/A1: PERMANENT site-catalogue columns never
+                # create pack rows — multibuy site offers keep the
+                # divided rate on the plain row (pre-2026-09-27
+                # behaviour preserved for the site syncs only)
+                deal = {**deal, "_plain_rate": True}
             in_domain = deal.get("category") == in_domain_kind
+            display = _display_name(deal)
             if not in_domain:
                 section = "OTHER"
                 key = ("od", store_key,
-                       canonical_key(deal.get("item") or ""))
+                       canonical_key(_base_name(display)))
             else:
-                # One row per canonical base: the numeric specials
-                # price sits in the store's special column and the
-                # multibuy/bulk note is shop-tagged in Comments.
+                # One row PER PRESENTATION: the row key is the
+                # canonical key of the DISPLAY name, so a '(2kg)'
+                # pack row and the plain /kg row of one item never
+                # collide inside a single build (2026-09-27 pack-row
+                # contract); the numeric specials price sits in the
+                # store's special column and the multibuy/bulk note
+                # is shop-tagged in Comments.
                 section = _section_for(deal)
-                key = canonical_key(deal.get("item") or "")
+                key = canonical_key(_base_name(display))
             cell, comment = _cell_for(deal)
             if kind == "special":
                 cell = _stamp_validity(cell, deal.get("valid_until"))
-            display = _display_name(deal)
             slot = row_index.get((section, key))
             if slot is None:
                 grid_row = [display] + [""] * (len(TAB_COLUMNS))
@@ -3329,8 +3361,14 @@ _REUSE_UNIT_WORDS = {"kg", "g", "mg", "ml", "l", "ea", "each", "pack"}
 def _reuse_tokens(text: str) -> set:
     """ID-2 matcher tokens: PLURAL-FOLDED, order-free word tokens,
     ignoring unit markers and the source-based 'halal' prefix; size
-    tokens ('5kg') are KEPT (pack presentations stay apart, S9)."""
+    tokens ('5kg') are KEPT (pack presentations stay apart, S9), and
+    counted-pack markers ('(2 pack)') become synthetic '2pack' tokens
+    so counted bundle rows stay apart from the plain /ea row the same
+    way (user directive 2026-09-27: bundles get their OWN rows)."""
     tokens: set[str] = set()
+    for m in re.finditer(r"(\d+(?:[.,]\d+)?)\s*packs?\b",
+                         str(text or ""), re.IGNORECASE):
+        tokens.add(f"{m.group(1).replace(',', '.')}pack")
     for t in similarity_tokens(str(text or "")):
         low = t.lower()
         if re.fullmatch(r"\d+(?:[.,]\d+)?", low):
@@ -3376,7 +3414,7 @@ def _reuse_match_index(grid: list, name: str) -> int | None:
     if redirected is not None:
         return redirected           # a recorded user merge wins
     incoming = _reuse_tokens(_base_name(name))
-    SIZE_RE = re.compile(r"\d+(?:[.,]\d+)?kg\b")
+    SIZE_RE = re.compile(r"\d+(?:[.,]\d+)?(?:kg|pack)\b")
     incoming_id = {t for t in incoming if not SIZE_RE.fullmatch(t)}
     best_pack: tuple[int, int] | None = None   # (-overlap, row)
     best_id: tuple[int, int] | None = None
@@ -4982,6 +5020,10 @@ def sync_dunya_site(dry_run: bool = False, send: bool = True,
     # §18/A1: site items NEVER auto-create rows — the site catalogue
     # was absorbed ONCE at migration; later unmatched items are
     # skipped + reported (add via an FB post or a manual entry).
+    # Site columns are PERMANENT: multibuy offers match and write as
+    # the divided rate on the PLAIN row (pre-2026-09-27 behaviour,
+    # §18/A1 — pack rows are the FB-special presentation only).
+    deals = [{**d, "_plain_rate": True} for d in deals]
     matched = [d for d in deals
                if _canonical_match_index(grid_before,
                                          _display_name(d)) is not None]

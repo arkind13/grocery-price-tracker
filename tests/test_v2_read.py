@@ -376,8 +376,12 @@ class TestUnitAwareQuotes(unittest.TestCase):
         out = render_lookup(result)
         self.assertIn("$15.99/kg", out)
         self.assertIn("$64.99 / 5kg pack = $13.00/kg", out)
-        # winner on the $/kg basis, not the raw numbers
-        self.assertIn("🏆 Best local: $13.00/kg — Dunya (site)", out)
+        # winner on the $/kg basis, not the raw numbers — and the
+        # bundle winner's label carries its minimum order (user
+        # directive 2026-09-27: a bare '$13.00/kg' on a 5kg-min deal
+        # is misleading)
+        self.assertIn("🏆 Best local: $13.00/kg (min 5kg order)"
+                      " — Dunya (site)", out)
         # cheapest per-kg quote lists first
         self.assertLess(out.index("$13.00/kg"), out.index("$15.99/kg"))
 

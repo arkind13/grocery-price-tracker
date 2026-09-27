@@ -128,6 +128,25 @@ without you:
   has evidence. Pinned in `tests/test_pack_guard.py` on the real
   boards; `tools/replay_boards.py` replays every surviving board
   through the pipeline (read-only).
+- **Bundle ROWS + honest comparisons (user directives 2026-09-27,
+  superseding the 2026-09-11 per-kg-cell ruling)**: min-buy bundles
+  get their OWN sheet rows — kg bundles as `Item – (2kg) /ea` with
+  the BUNDLE total in the special cell, counted bundles
+  ("2 steamer chickens for $11.99") as `Item – (2 pack) /ea` — the
+  plain /kg and /ea rows stay clean, and re-ingests reuse the same
+  row no matter the board wording ('2KG', '2 KG', 'qty mid-line',
+  'MIN 2kg', '2 PACK', 'N FOR $X'), shop, or week
+  (`tests/test_bulk_no_duplicates.py`; the canonical key and the
+  reuse matcher both carry '2kg'/'2pack' identity tokens). PERMANENT
+  site columns keep the divided rate on the plain row (§18/A1 — site
+  syncs never create pack rows). The compare reply tells the whole
+  story (`tests/test_compare_matrix.py`, 50-item battery): every
+  shop's quote INCLUDING sibling rows under variant names (family
+  pooling), bundle lines show their maths + '· bulk' + the shop's
+  'reg' anchor, identical lines collapse, and the 🏆 winner carries
+  its minimum order — 'Best local: $10.99/kg (min 2kg order) —
+  Merjan' — with rate ties preferring the smaller minimum; the
+  [CODE] footer cites the row that answered the price.
 
 ## How the FB extraction works (and why the manual phase existed)
 

@@ -256,10 +256,14 @@ def _as_number(txt: str) -> float | None:
 
 def _strip_qty_prefix(name: str) -> str:
     """Remove a quantity prefix ("2KG THIGH FILLET" -> "THIGH FILLET";
-    "2 STEAMER CHICKENS" -> "STEAMER CHICKENS") so row reuse lands on
-    the plain /kg row (ID-1: the rate + terms belong THERE)."""
+    "2 STEAMER CHICKENS" -> "STEAMER CHICKENS"; "2 PACK STEAMER
+    CHICKENS" -> "STEAMER CHICKENS") so row reuse lands on the plain
+    base name's presentation row (ID-1: bundles get their own rows
+    keyed by the size/count, not by a numbered item name)."""
     name = _QTY_KG_PREFIX_RE.sub("", name, count=1)
     name = _QTY_COUNT_PREFIX_RE.sub("", name, count=1)
+    name = re.sub(r"^\s*packs?\s+", "", name, count=1,
+                  flags=re.IGNORECASE)
     return name.strip()
 
 
@@ -335,8 +339,15 @@ def normalise_pack_deal(deal: dict) -> dict:
         name_part = re.split(r"[$–—-]", raw_text[cm.end():])[0]
         name_words = [w for w in name_part.split()
                       if not _UNIT_WORDS_RE.match(w)]
-        plural = any(len(w) > 2 and w.lower().endswith("s")
-                     for w in name_words)
+        rest_words = raw_text[cm.end():].split()
+        raw_first = rest_words[0].lower() if rest_words else ""
+        # 'N PACK(S) <item>' is itself the counted-bundle marker
+        # ("2 PACK STEAMER CHICKENS"); otherwise the name must carry a
+        # PLURAL ("2 STEAMER CHICKENS") — a numbered product name does
+        # not ("4 STAR BEEF" — a grade, never "4 for $30")
+        plural = raw_first in ("pack", "packs") or any(
+            len(w) > 2 and w.lower().endswith("s")
+            for w in name_words)
         qty = _as_number(cm.group(1))
         if plural and qty and 2 <= qty <= 20 and float(qty).is_integer():
             deal["item"] = _strip_qty_prefix(

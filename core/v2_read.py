@@ -371,8 +371,12 @@ def _ld_quotes(ld: dict) -> list:
 
     The unit marker is the LD NAME suffix (sheet convention): '/kg' =
     the price IS per kg; '/ea' = per pack (pack size parsed from the
-    name, e.g. '(5KG)'); no suffix = bare pack price. 'per_kg' makes a
-    /kg quote and a 5kg pack comparable (the sheet-wide unit rule)."""
+    name, e.g. '(5KG)' weight packs and '(2 pack)' counted bundles);
+    no suffix = bare pack price. 'per_kg' makes a /kg quote and a 5kg
+    pack comparable (the sheet-wide unit rule); 'per_ea' makes a
+    counted '(2 pack)' row comparable with plain /ea rows (user
+    directive 2026-09-27 — bundles live on their own rows, the maths
+    happens HERE)."""
     name = str(ld["name"] or "")
     low = name.strip().lower()
     if low.endswith("/kg"):
@@ -381,6 +385,10 @@ def _ld_quotes(ld: dict) -> list:
         unit, pack = "ea", _pack_kg(name)
     else:
         unit, pack = "", None
+    count_m = re.search(r"\((\d+(?:\.\d+)?)\s*pack\)", name,
+                        re.IGNORECASE)
+    count = (float(count_m.group(1))
+             if (count_m and unit == "ea" and not pack) else None)
     out: list = []
     for shop, (price, kind) in sorted(ld["prices"].items()):
         if unit == "kg":
@@ -389,9 +397,21 @@ def _ld_quotes(ld: dict) -> list:
             per_kg = round(price / pack, 2)
         else:
             per_kg = None
+        # the $/ea world: a counted '(2 pack)' row and a plain /ea
+        # row compare per article (2026-09-27 — the winner must be
+        # the genuinely cheapest way to buy ONE, after minimums are
+        # shown honestly)
+        if count:
+            per_ea = round(price / count, 2)
+        elif unit == "ea":
+            per_ea = price
+        else:
+            per_ea = None
         out.append({"shop": shop, "price": price, "kind": kind,
-                    "unit": unit, "pack": pack, "per_kg": per_kg,
+                    "unit": unit, "pack": pack, "count": count,
+                    "per_kg": per_kg, "per_ea": per_ea,
                     "note": _shop_note(ld.get("comments", ""), shop),
+                    "code": ld.get("code") or "",
                     "reg": (ld.get("perm_prices") or {}).get(shop)})
     return out
 
@@ -413,18 +433,36 @@ def _shop_note(comments: str, shop: str) -> str:
 def _quotes_and_best(rows: list) -> tuple:
     """Quote records for LD rows + the winner across them.
 
-    Winner rule: prefer quotes with a computable $/kg (units compare
-    fairly); fall back to the raw cheapest when none carries a unit."""
+    Winner rule (user fairness rule 2026-09-27): prefer quotes with a
+    computable $/kg (units compare fairly); then $/ea (counted-pack
+    rows vs plain /ea rows); fall back to the raw cheapest. A BUNDLE
+    winner's label carries its minimum order ('$/kg (min 2kg order)',
+    '$/ea (min 2)') — 'Best local: $10.99/kg' on a 2kg-minimum deal
+    is misleading (user directive 2026-09-27)."""
     quotes = [q for ld in rows for q in _ld_quotes(ld)]
     priced = [q for q in quotes if q["per_kg"] is not None]
+    by_ea = [q for q in quotes if q["per_ea"] is not None]
+    # ties on the comparable rate prefer the SMALLER minimum order
+    # (3kg-min beats 5kg-min at the same $/kg — less commitment for
+    # the same rate), then the cheaper bundle
+    tie = lambda q: (q.get("pack") or q.get("count") or 99,
+                     q["price"])   # noqa: E731
     if priced:
-        best_q = min(priced, key=lambda q: q["per_kg"])
+        best_q = min(priced, key=lambda q: (q["per_kg"], *tie(q)))
         label = f"${best_q['per_kg']:.2f}/kg"
+    elif by_ea:
+        best_q = min(by_ea, key=lambda q: (q["per_ea"], *tie(q)))
+        label = f"${best_q['per_ea']:.2f}/ea"
     elif quotes:
         best_q = min(quotes, key=lambda q: q["price"])
         label = None
     else:
         best_q, label = None, None
+    if best_q is not None and label:
+        if best_q.get("pack"):
+            label += f" (min {best_q['pack']:g}kg order)"
+        elif best_q.get("count"):
+            label += f" (min {best_q['count']:g})"
     return quotes, best_q, label
 
 
@@ -520,6 +558,52 @@ def _cousin_ld_rows(hit_code: str, q: str, ld_rows) -> list:
     return out
 
 
+def _family_ld_rows(hit_code: str, hit_name: str, q: str,
+                    ld_rows) -> list:
+    """SHORTER-NAME siblings of the hit row (2026-09-27, the '4-way
+    comparison' ask): the same meat often sits on differently-named
+    rows from different sources ('Chicken Thighs /kg', 'Thigh
+    Fillet /kg', 'Chicken Thigh Fillet – (2kg) /ea') — an exact-token
+    pool hides the shorter-named siblings from a specific query.
+
+    Pools rows whose BASE tokens (size/count/pack markers stripped,
+    unit words ignored, plural-folded) are a SUBSET of the hit's
+    base tokens AND carry >= 2 tokens — so 'chicken thighs' joins a
+    'chicken thigh fillet' answer, but a lone generic token never
+    drags an unrelated family in. Meat discipline as above."""
+    meat = is_meat_query(q)
+    hit_stems = _family_stems(hit_name)
+    if len(hit_stems) < 2:
+        return []
+    out: list = []
+    for ld in ld_rows:
+        if ld["code"] and (ld["code"] == hit_code):
+            continue
+        if not ld["prices"]:
+            continue
+        name = str(ld["name"] or "")
+        if meat and "halal" not in name.lower():
+            continue
+        stems = _family_stems(name)
+        if len(stems) >= 2 and stems.issubset(hit_stems) \
+                and stems != hit_stems:
+            out.append(ld)
+    return out
+
+
+_FAMILY_STRIP_RE = re.compile(
+    r"[\(\[][^)\]]*[\)\]]|\b\d+(?:\.\d+)?\s*(?:kg|g|pack|packs)\b"
+    r"|\b(?:kg|ea|each|pack|packs|for|halal)\b", re.IGNORECASE)
+
+
+def _family_stems(name: str) -> set:
+    """Identity stems for family pooling: pack markers, unit words,
+    numbers and the halal prefix stripped; plural-folded."""
+    return {_fold(t) for t in
+            _FAMILY_STRIP_RE.sub(" ", str(name or "")).split()
+            if len(t) > 2 and not t.isdigit()}
+
+
 def lookup_item_hit(hit: dict, master_rows, ld_rows, twins: list,
                     q: str) -> dict:
     """The §8 answer dict for a RESOLVED master row (status derived
@@ -531,6 +615,15 @@ def lookup_item_hit(hit: dict, master_rows, ld_rows, twins: list,
                if ld["code"] and ld["code"] == hit["code"]), None)
     rows = ([ld] if ld else []) + _cousin_ld_rows(
         hit["code"], q, ld_rows)
+    # family pooling is for the LOCAL (halal) cluster only — a
+    # brand-named plain Woolworths row keeps its own tracked-class
+    # answer (§8 row 1, user verdict 2026-09-12; never a locals dump)
+    if "halal" in str(hit.get("name") or "").lower():
+        for fam in _family_ld_rows(hit["code"],
+                                   str(hit.get("name") or ""), q,
+                                   ld_rows):
+            if fam not in rows:
+                rows.append(fam)
     prices: dict = {}
     for row in rows:
         for shop, (price, kind) in row["prices"].items():
@@ -538,10 +631,15 @@ def lookup_item_hit(hit: dict, master_rows, ld_rows, twins: list,
     quotes, best_q, best_label = _quotes_and_best(rows)
     best = ((best_q["shop"], best_q["price"], best_q["kind"])
             if best_q else None)
+    # Footer code = the row that actually answers the price: a bundle
+    # winner cites ITS pack row's code (audit rule 06aee02: '5kg
+    # deals must cite the 5kg row's code, not a /kg cousin'); the
+    # matched /kg row's code still leads the missing-Woolworths line.
+    answer_code = (best_q or {}).get("code") or hit["code"]
     base = {"master": hit, "local": prices, "best": best,
             "best_label": best_label, "local_quotes": quotes,
             "comments": (ld or {}).get("comments", ""),
-            "code": hit["code"], "non_halal_twins": twins,
+            "code": answer_code, "non_halal_twins": twins,
             "query": q}
     if hit["gone"]:
         base["status"] = "gone"
@@ -626,6 +724,21 @@ def lookup_item(query: str, master_rows, ld_rows) -> dict:
                        if "halal" in ld["name"].lower() and ld["prices"]]
         matched = [ld for ld in locals_with
                    if _name_has_all(str(ld["name"]).lower(), tokens)]
+        if matched:
+            # 2026-09-27 family pooling (the '4-way comparison' ask):
+            # a specific query ('chicken thigh fillet') must not hide
+            # shorter-named sibling rows of the same meat ('Thigh
+            # Fillet /kg', 'Chicken Thighs /kg') — subset stems, >= 2
+            # tokens, same meat discipline. The header code stays the
+            # BEST-TOKEN-MATCHED row's (never a quieter sibling's).
+            fams = []
+            for row in matched:
+                for fam in _family_ld_rows(row["code"],
+                                           str(row["name"] or ""), q,
+                                           ld_rows):
+                    if fam not in matched and fam not in fams:
+                        fams.append(fam)
+            matched = matched + fams
         pool_rows = matched or locals_with
         if pool_rows:
             prices: dict = {}
@@ -870,15 +983,30 @@ _SHOP_ICONS = {"dunya": "🔪", "dunya_fb": "🔪", "merjan": "🔪",
 
 def _quote_price_text(q: dict) -> str:
     """One quote's price text with its unit basis ('$15.99/kg',
-    '$64.99 / 5kg pack = $13.00/kg', '$8.99/ea' or a bare '$8.99')."""
+    '$64.99 / 5kg pack = $13.00/kg', '$11.99 / 2 pack = $6.00/ea',
+    '$8.99/ea' or a bare '$8.99')."""
     if q["unit"] == "kg":
         return f"${q['price']:.2f}/kg"
     if q["unit"] == "ea" and q["pack"]:
         return (f"${q['price']:.2f} / {_fmt_kg(q['pack'])} pack"
                 f" = ${q['per_kg']:.2f}/kg")
+    if q["unit"] == "ea" and q.get("count"):
+        return (f"${q['price']:.2f} / {q['count']:g} pack"
+                f" = ${q['per_ea']:.2f}/ea")
     if q["unit"] == "ea":
         return f"${q['price']:.2f}/ea"
     return f"${q['price']:.2f}"
+
+
+def _dedup_note(q: dict, note: str) -> str:
+    """Drop a 'min order/multi buy …' note that the line's own pack
+    math already shows — '$21.99 / 2kg pack = $10.99/kg · min order
+    2kg for $21.99' repeats itself (user directive 2026-09-27: the
+    format was not right). A note that adds information stays."""
+    if (q.get("pack") or q.get("count")) and \
+            re.match(r"^(?:min order|multi buy)\s+\d", note or ""):
+        return ""
+    return note or ""
 
 
 def _note_text(note: str) -> str:
@@ -932,16 +1060,50 @@ def _local_lines(result: dict) -> list:
     quotes = result.get("local_quotes") or []
     if quotes:
         ordered = sorted(quotes, key=lambda q: (
-            q["per_kg"] is None, q["per_kg"] or q["price"], q["price"]))
-        tagged = [(f"{_SHOP_ICONS.get(q['shop'], '·')} "
-                   f"{_shop_label(q['shop'])}",
-                   _quote_price_text(q)
-                   + {"special": " (special)", "permanent": ""}[
-                       q["kind"]]
-                   + (_note_text(q["note"]) if q.get("note") else "")
-                   + _reg_text(q))
-                  for q in ordered]
+            q["per_kg"] is None, q["per_kg"] or q["price"],
+            q["price"]))
+        # the shop's regular price from ANY pooled row (a bulk
+        # special and the shop's /kg regular live on different rows
+        # since 2026-09-27 — the reg anchor still rides the line)
+        shop_perm = {}
+        for q in ordered:
+            if q.get("reg") is not None:
+                shop_perm.setdefault(q["shop"], q)
+        tagged = []
+        for q in ordered:
+            label = (f"{_SHOP_ICONS.get(q['shop'], '·')} "
+                     f"{_shop_label(q['shop'])}")
+            if q.get("pack") or q.get("count"):
+                label += " · bulk"
+            note = _dedup_note(q, q["note"])
+            reg = _reg_text(q)
+            if not reg and q["kind"] == "special" \
+                    and (q.get("pack") or q.get("count")) \
+                    and shop_perm.get(q["shop"]) not in (None, q):
+                reg_q = shop_perm[q["shop"]]
+                reg_unit = ("/kg" if reg_q["unit"] == "kg"
+                            else "/ea" if reg_q["unit"] == "ea"
+                            else "")
+                reg = f" · reg ${reg_q['reg']:.2f}{reg_unit}"
+            tagged.append((label,
+                           _quote_price_text(q)
+                           + {"special": " (special)",
+                              "permanent": ""}[q["kind"]]
+                           + (_note_text(note) if note else "")
+                           + reg))
         priced_shops = {q["shop"] for q in ordered}
+        # collapse IDENTICAL price lines (family pooling can pull
+        # several rows of one shop priced the same — 'Dunya $13.99/kg'
+        # reads once, not three times; distinct lines stay)
+        seen_lines: set = set()
+        deduped: list = []
+        for label, price_text in tagged:
+            key = (label.split(" · bulk")[0], price_text)
+            if key in seen_lines:
+                continue
+            seen_lines.add(key)
+            deduped.append((label, price_text))
+        tagged = deduped
     else:
         entries = sorted(result["local"].items(),
                          key=lambda kv: kv[1][0])
@@ -1064,7 +1226,10 @@ def render_lookup(result: dict) -> str:
     # lines + winner, before the code/footer.
     lines.extend(_twin_lines(result))
     code = result.get("code")
-    if code and status in ("tracked", "gone", "na"):
+    if code and status in ("tracked", "gone", "na", "missing"):
+        # 'missing' too (2026-09-27): the [CODE] cites the row that
+        # ANSWERED the price — a bulk winner cites its pack row, the
+        # missing-list line above keeps the matched /kg row's code
         lines.append(f"  [{code}]")
     if status in ("tracked", "gone", "na", "missing",
                   "meat-local-only"):
@@ -1093,8 +1258,9 @@ def local_specials_report(ld_rows: list) -> str:
             if q["kind"] != "special":
                 continue
             price_text = _quote_price_text(q)
-            note = _note_text(q["note"])[2:].strip() if q.get("note") \
-                else ""
+            note = _note_text(
+                _dedup_note(q, q["note"]))[2:].strip() \
+                if q.get("note") else ""
             suffix = f" · {note}" if note else ""
             groups.setdefault(q["shop"], []).append(
                 f"  {display} — {price_text} (special){suffix}"

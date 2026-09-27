@@ -161,10 +161,13 @@ def _validate_deal(deal: object) -> list[str]:
                 deal["multibuy_qty"] = None
                 if deal.get("unit") not in VALID_UNITS:
                     deal["unit"] = "ea"
-                word = bulk.strip()
-                deal["notes"] = (f"{deal['notes']} · {word}"
-                                 if str(deal.get("notes") or "").strip()
-                                 else word)
+                word = bulk.strip().lower()
+                if word not in str(
+                        deal.get("notes") or "").lower():
+                    deal["notes"] = (
+                        f"{deal['notes']} · {bulk.strip()}"
+                        if str(deal.get("notes") or "").strip()
+                        else bulk.strip())
             else:
                 deal["bulk_size"] = normalised
         if qty not in (None, 0) and deal.get("price_kind") == "bulk_pack":

@@ -293,18 +293,20 @@ class TestCellAndDigestIntegration(unittest.TestCase):
         self.assertEqual(_display_name(r),
                          "Thigh Fillet – (2kg) /ea")
 
-    def test_counted_ea_bundle_keeps_per_item_rate(self):
-        """Counted bundles ('2 STEAMER CHICKENS') stay on the /ea row
-        with the per-item rate + note (no pack-row shape exists for
-        counted birds)."""
+    def test_counted_ea_bundle_gets_own_pack_row(self):
+        """User directive 2026-09-27 ('yes this has to be 2 lines
+        separate lines'): counted bundles live on their OWN
+        '(2 pack) /ea' row with the bundle total; the per-bird maths
+        happens at lookup time from the row name."""
         from core.local_deals import _cell_for, _display_name
         r = normalise_pack_deal(_tile(
             "Steamer Chickens", "2 STEAMER CHICKENS $11.99",
             11.99, unit="ea"))
         cell, comment = _cell_for(r)
-        self.assertEqual(cell, 6.0)
+        self.assertEqual(cell, 11.99)
         self.assertEqual(comment, "multi buy 2 for $11.99 — $6.00/ea")
-        self.assertEqual(_display_name(r), "Steamer Chickens /ea")
+        self.assertEqual(_display_name(r),
+                         "Steamer Chickens – (2 pack) /ea")
 
     def test_pack_row_never_reuses_the_kg_row(self):
         """S9: the '(2kg)' pack row and the '/kg' row stay separate;
