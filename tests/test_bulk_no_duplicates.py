@@ -214,6 +214,112 @@ class TestCountedBundleNoDuplicates(unittest.TestCase):
             len(_pack_rows(ws, "Steamer")), 2)
 
 
+class TestOcrQtyFlipGuard(unittest.TestCase):
+    """2026-09-27 drumettes incident: one run read the tile 5KG, the
+    next 2KG - both passes of the second run agreed on the wrong
+    number and minted a duplicate '(2kg)' row at the same price. The
+    merge now adopts the existing row's qty when the bundle TOTAL
+    matches this shop's ACTIVE special on a same-family pack row."""
+
+    def test_same_price_different_size_adopts_existing(self):
+        ws = FakeSheet([["Product"] + [c for _k, c in ld.TAB_COLUMNS],
+                        ["Halal Chicken Drumettes /kg"]
+                        + [""] * len(ld.TAB_COLUMNS),
+                        ["Halal Chicken Drumettes \u2013 (5kg) /ea"]
+                        + [""] * len(ld.TAB_COLUMNS)])
+        rows = ws.get_all_values()
+        rows[2][5] = "19.99 (till 27 Sep)"
+        ws.rows = rows
+        _merge(ws, "merjan", [{
+            "item": "Chicken Drumettes",
+            "raw_text": "2KG CHICKEN DRUMETTES $19.99",
+            "price": 19.99, "unit": "kg", "price_kind": "multibuy",
+            "multibuy_qty": 2, "bulk_size": None,
+            "category": "butchery", "notes": "",
+            "valid_until": None}])
+        names = _names(ws)
+        self.assertEqual(len(names), 2, names)   # NO (2kg) row
+        row = next(r for r in ws.get_all_values()
+                   if "(5kg)" in str(r[0]))
+        self.assertIn("multi buy 5kg", row[11])
+
+    def test_different_price_mints_the_new_size(self):
+        """A genuinely different deal (new price) still creates its
+        own row - the guard only fires on identical totals."""
+        ws = FakeSheet([["Product"] + [c for _k, c in ld.TAB_COLUMNS],
+                        ["Halal Chicken Drumettes \u2013 (5kg) /ea"]
+                        + [""] * len(ld.TAB_COLUMNS)])
+        rows = ws.get_all_values()
+        rows[1][5] = "19.99 (till 27 Sep)"
+        ws.rows = rows
+        _merge(ws, "merjan", [{
+            "item": "Chicken Drumettes",
+            "raw_text": "2KG CHICKEN DRUMETTES $15.99",
+            "price": 15.99, "unit": "kg", "price_kind": "multibuy",
+            "multibuy_qty": 2, "bulk_size": None,
+            "category": "butchery", "notes": "",
+            "valid_until": None}])
+        self.assertEqual(len(_names(ws)), 2)
+
+
+class TestWeekendBoardValidity(unittest.TestCase):
+    """User ask 2026-09-27: 'why does merjan always ask me to enter
+    the end date when it is clearly mentioned on their pic weekend
+    only' - the WEEKEND phrase is on the IMAGE; the sweep's vision
+    path now applies the same weekend rule as text posts (ends the
+    coming Sunday, user directive 2026-09-22)."""
+
+    def test_vision_weekend_board_ends_sunday(self):
+        from datetime import date  # noqa: F401
+        from unittest.mock import patch
+        from pathlib import Path
+        from core import local_deals as ld2
+
+        class _P:
+            text = ""
+            image_urls = ["x"]
+            post_ref = "p1"
+
+        payload = {"valid_until": None,
+                   "validity_text": "WEEKEND SPECIALS",
+                   "deals": [_board_deal("Thigh Fillet",
+                                         "2KG THIGH FILLET $21.99",
+                                         21.99)]}
+        with patch("core.flyer_vision.parse_board_images",
+                          return_value=payload), \
+             patch("extractors.fb_timeline_fetch."
+                   "download_post_images",
+                   return_value=[Path("x.jpg")]):
+            deals, source, until = ld2.extract_post_deals(
+                _P(), Path("."), "merjan")
+        self.assertEqual(source, "vision")
+        self.assertEqual(len(deals), 1)
+        self.assertIsNotNone(until)      # weekend rule fired
+        self.assertEqual(until.weekday(), 6)   # a Sunday
+
+    def test_dated_board_not_overridden(self):
+        from unittest.mock import patch
+        from pathlib import Path
+        from core import local_deals as ld2
+
+        class _P:
+            text = ""
+            image_urls = ["x"]
+            post_ref = "p1"
+
+        payload = {"valid_until": "2026-10-02",
+                   "validity_text": "valid until 02/10/2026",
+                   "deals": []}
+        with patch("core.flyer_vision.parse_board_images",
+                          return_value=payload), \
+             patch("extractors.fb_timeline_fetch."
+                   "download_post_images",
+                   return_value=[Path("x.jpg")]):
+            _deals, _src, until = ld2.extract_post_deals(
+                _P(), Path("."), "merjan")
+        self.assertEqual(str(until), "2026-10-02")
+
+
 class TestWholeChickensCountedBundle(unittest.TestCase):
     """'5 whole chickens for $34.99' — its own row, separate from the
     s9/s14 per-bird rows and from any '(min 1.9kg)' size-spec deal."""

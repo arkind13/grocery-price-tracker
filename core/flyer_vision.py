@@ -43,10 +43,13 @@ Extract EVERY price line into JSON ONLY (no prose, no markdown) matching:
 "bulk_size":str|null,"category":"fruits"|"butchery"|"other","notes":str,
 "valid_until":"YYYY-MM-DD"|null}]}
 Rules:
-- valid_until: the date the specials END as printed on the board, in
+- valid_until: the DATE the specials END as printed on the board, in
   Australian day/month/year order ("valid until 11/09/2026" ->
-  "2026-09-11"). null when no date is printed. validity_text = the raw
-  wording you read it from.
+  "2026-09-11"). null when no date is printed. validity_text = the
+  raw wording you read it from — quote ANY validity wording printed
+  on the board VERBATIM, including phrases with no date ("WEEKEND
+  SPECIALS", "This weekend only", "Saturday & Sunday") — downstream
+  code derives the end date from those phrases.
 - "single": a normal per-kg or per-item price.
 - "multibuy": a minimum-purchase deal on the SAME standard unit —
   "N for $X" counted items AND "Nkg for $X" weighted meat alike ->

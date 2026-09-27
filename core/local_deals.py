@@ -1299,6 +1299,21 @@ def ingest_code(code: str, dry_run: bool = False) -> int:
                                    if raw_until else None)
                 except ValueError:
                     valid_until = None
+                if valid_until is None:
+                    # WEEKEND boards (user ask 2026-09-27: 'why does
+                    # merjan always ask me to enter the end date when
+                    # it is clearly mentioned on their pic weekend
+                    # only which means it is valid till today'): the
+                    # phrase lives on the IMAGE — the same weekend
+                    # rule as text posts applies (coming Sunday,
+                    # user directive 2026-09-22), no question asked
+                    valid_until = parse_validity_end(
+                        str(payload.get("validity_text") or ""),
+                        today=today)
+                    if valid_until:
+                        print(f"[ingest] {path.name}: no printed date"
+                              f" but board says weekend -> valid "
+                              f"until {valid_until:%a %d %b}")
             else:
                 print(f"[ingest] {path.name}: unsupported type "
                       f"{path.suffix} — skipped")
@@ -3285,6 +3300,17 @@ def extract_post_deals(post, run_dir, store_key: str
                        if raw_until else None)
     except ValueError:
         valid_until = None
+    if valid_until is None:
+        # WEEKEND boards (user ask 2026-09-27): the phrase is on the
+        # image, not the post text — the text-parser weekend rule
+        # (coming Sunday, user directive 2026-09-22) applies to the
+        # board's own validity wording so the sweep never asks for a
+        # date the board already implies
+        from extractors.deal_text import parse_validity_end as _pve
+        from core.sydney_time import sydney_today
+        valid_until = _pve(
+            f"{payload.get('validity_text') or ''} {post.text or ''}",
+            today=sydney_today())
     return payload.get("deals") or [], "vision", valid_until
 
 
@@ -4380,6 +4406,78 @@ def set_category_verdicts(verdicts: list, master_ws,
     return 0, lines
 
 
+_PACK_KG_NAME_RE = re.compile(r"\((\d+(?:\.\d+)?)\s*kg\)", re.IGNORECASE)
+_PACK_CT_NAME_RE = re.compile(r"\((\d+(?:\.\d+)?)\s*pack\)",
+                              re.IGNORECASE)
+
+
+def _adopt_existing_pack_size(grid: list, store_key: str,
+                              deals: list) -> None:
+    """Cross-run OCR quantity-flip guard (2026-09-27 drumettes
+    incident): the SAME weekend tile was read '5KG' by one ingest and
+    '2KG' by the next — both passes of the second run agreed on the
+    wrong number and the merge minted a duplicate '(2kg)' row beside
+    the true '(5kg)' row at the identical price.
+
+    Rule: when an incoming min-buy bundle's TOTAL exactly equals THIS
+    shop's ACTIVE special on an existing pack row of the same item
+    family with a DIFFERENT size/count, the existing row's quantity
+    wins (a shop repricing a different size to the same dollar total
+    days apart is far less likely than a misread). The deal carries a
+    review_flag so the digest discloses the adoption. Mutates deals
+    in place; pure grid maths."""
+    from core.sydney_time import sydney_today
+    col = _special_column_for(store_key.replace("_fb", ""))
+    if col is None:
+        return
+    col0 = col          # _grid_col returns the row-list index
+    today = sydney_today()
+    size_tok = re.compile(r"\d+(?:[.,]\d+)?(?:kg|pack)")
+
+    def _base_stems(text: str) -> set:
+        return {t for t in _reuse_tokens(_base_name(str(text or "")))
+                if not size_tok.fullmatch(t)}
+
+    for deal in deals:
+        if deal.get("price_kind") != "multibuy":
+            continue
+        price = deal.get("price")
+        if not isinstance(price, (int, float)) or price <= 0:
+            continue
+        incoming = _base_stems(str(deal.get("item") or ""))
+        for row in grid[1:]:
+            name = str(row[0] or "").strip()
+            kg_m = _PACK_KG_NAME_RE.search(name)
+            ct_m = _PACK_CT_NAME_RE.search(name)
+            qty = None
+            if kg_m and (deal.get("unit") or "") == "kg":
+                qty = int(float(kg_m.group(1)))
+            elif ct_m and (deal.get("unit") or "") == "ea":
+                qty = int(float(ct_m.group(1)))
+            if qty is None or qty == deal.get("multibuy_qty"):
+                continue
+            row_stems = _base_stems(name)
+            if not row_stems or row_stems != incoming:
+                continue
+            if len(row) <= col0:
+                continue
+            cell = row[col0]
+            if _special_expired(cell, today):
+                continue
+            existing = _numeric_price(cell)
+            if existing is not None \
+                    and abs(existing - float(price)) < 0.005:
+                deal["multibuy_qty"] = qty
+                deal["review_flag"] = (
+                    f"qty {qty} taken from the existing row — "
+                    f"tile re-read gave a different size at the same "
+                    f"price, please glance at the board")
+                print(f"[merge] {deal.get('item')}: adopted qty {qty}"
+                      f" from existing row (same ${price:.2f} "
+                      f"special) — OCR size flip guard")
+                break
+
+
 def merge_store_tab(worksheet, store_key: str, deals: list[dict],
                     valid_until=None,
                     master_ws=None,
@@ -4427,7 +4525,6 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
         (int, list[str]): number of grid rows written (header
         included) + one report line per new (appended) row.
     """
-    rows_by_section = build_rows({store_key: deals})
     col, kind = _target_column(store_key)
     comments_col = _grid_col("comments")
     reuse_fn = reuse_fn or _reuse_match_index
@@ -4440,6 +4537,13 @@ def merge_store_tab(worksheet, store_key: str, deals: list[dict],
             for r in grid]
     if not grid or not str(grid[0][0]).strip():
         grid = [["Product"] + [name for _k, name in TAB_COLUMNS]]
+    # cross-run OCR quantity-flip guard BEFORE the rows are built —
+    # the incoming deal's qty may be replaced by an existing row's
+    # (2026-09-27 drumettes incident: one run read 5KG, the next 2KG,
+    # minting a duplicate '(2kg)' row at the same price)
+    if kind == "special":
+        _adopt_existing_pack_size(grid, store_key, deals)
+    rows_by_section = build_rows({store_key: deals})
     # Layout (user directive 2026-09-12): header + item rows ONLY —
     # no "Prices valid until" stamp row, no section-title rows. The
     # LD tab mirrors the master tab ROW-FOR-ROW; per-cell ' (till …)'
