@@ -2,7 +2,11 @@
 theme-grouped animated render, topic-206 delivery, idempotent state.
 
 Imports ONLY stdlib + aldi_extractor + telegram_format + sydney_time
-(spec §4.1). NEVER touches sheets (verdict V1 extends project-wide).
+(spec §4.1). NEVER touches the PRODUCTS/LOCAL tabs (verdict V1 extends
+project-wide) — the ONE sheet write is the derived ALDI_Specials_Feed
+tab for the deal board (2026-10-09, same pattern as Wednesday's
+WW_Specials_Feed; user report: the board's ALDI lens stayed on the
+3 Oct sample while real drops kept posting to Telegram).
 """
 from __future__ import annotations
 
@@ -233,6 +237,15 @@ def _hero_url(items: list) -> str:
     return ""
 
 
+# ---- Deal Board feed (ALDI_Specials_Feed tab) -------------------------------
+# 2026-10-09: same pattern as Wednesday's WW_Specials_Feed — the drop
+# that posts to Telegram is ALSO written to a derived sheet tab the
+# deal board reads live (the board's ALDI lens had been a frozen
+# 2026-10-03 sample). The writer lives in core.board_feed so THIS
+# module still contains zero sheet code (verdict V1 — enforced by
+# test_no_sheet_imports; the feed tab is the one sanctioned write).
+
+
 def run_scan(now: datetime | None = None, force: bool = False,
              date_iso: str | None = None, send: bool = True) -> int:
     """Cron entry (spec §4.2/§4.4/§4.5). Returns exit code.
@@ -285,6 +298,20 @@ def run_scan(now: datetime | None = None, force: bool = False,
     if not items:
         print(f"[aldi-specials] drop {today} has no priced items")
         return 0
+
+    # Deal Board feed (2026-10-09): the derived tab write happens at
+    # fetch time, independent of Telegram delivery — and because the
+    # hourly cron retries until posted, a failed write gets another
+    # shot on the retry hours.
+    try:
+        from core.board_feed import ALDI_FEED_TAB, write_aldi_feed
+        n_feed = write_aldi_feed(items, promo, today)
+        if n_feed >= 0:
+            _log(f"board feed: {ALDI_FEED_TAB} {n_feed} item(s) "
+                 f"for {today}")
+    except Exception as exc:
+        _log(f"board feed write FAILED: {exc}")
+
     blocks = render_specials_post(items,
                                   str(promo.get("title") or ""),
                                   today)

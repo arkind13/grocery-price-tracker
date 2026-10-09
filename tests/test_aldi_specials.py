@@ -209,6 +209,7 @@ class TestRunScan(unittest.TestCase):
                    return_value=self._promo()), \
              patch("extractors.aldi_extractor.fetch_aldi_specials",
                    return_value=items), \
+             patch("core.board_feed.write_aldi_feed", return_value=2), \
              patch.object(aj, "_send_message",
                           side_effect=lambda t, x, th:
                           msgs.append(x) or {"ok": True,
@@ -231,6 +232,7 @@ class TestRunScan(unittest.TestCase):
                    return_value=self._promo()), \
              patch("extractors.aldi_extractor.fetch_aldi_specials",
                    return_value=items), \
+             patch("core.board_feed.write_aldi_feed", return_value=2), \
              patch.object(aj, "_send_photo",
                           return_value={"ok": False}), \
              patch.object(aj, "_send_message",
@@ -255,6 +257,49 @@ class TestRunScan(unittest.TestCase):
         for banned in ("sheets_client", "connect_spreadsheet",
                        "get_all_values", "worksheet("):
             self.assertNotIn(banned, source)
+
+    def test_feed_write_fires_with_items_promo_today(self):
+        """2026-10-09: every fetched drop also writes the derived
+        ALDI_Specials_Feed tab (deal board live lens)."""
+        items = self._scan_items()
+        writes = []
+
+        def fake_feed(its, promo, today):
+            writes.append((len(its), promo.get("key"), today))
+            return len(its)
+
+        with patch("core.sydney_time.sydney_now",
+                   return_value=WED_5AM), \
+             patch("extractors.aldi_extractor.find_promotion",
+                   return_value=self._promo()), \
+             patch("extractors.aldi_extractor.fetch_aldi_specials",
+                   return_value=items), \
+             patch("core.board_feed.write_aldi_feed",
+                   side_effect=fake_feed), \
+             patch.object(aj, "_send_photo", return_value={"ok": True}), \
+             patch.object(aj, "_send_message",
+                          return_value={"ok": True, "message_id": 9}):
+            self.assertEqual(aj.run_scan(send=True), 0)
+        self.assertEqual(writes, [(2, "2026-09-09", "2026-09-09")])
+
+    def test_feed_write_failure_never_blocks_the_post(self):
+        items = self._scan_items()
+        posted = []
+        with patch("core.sydney_time.sydney_now",
+                   return_value=WED_5AM), \
+             patch("extractors.aldi_extractor.find_promotion",
+                   return_value=self._promo()), \
+             patch("extractors.aldi_extractor.fetch_aldi_specials",
+                   return_value=items), \
+             patch("core.board_feed.write_aldi_feed", return_value=-1), \
+             patch.object(aj, "_send_photo", return_value={"ok": True}), \
+             patch.object(aj, "_send_message",
+                          side_effect=lambda t, x, th:
+                          posted.append(x) or {"ok": True,
+                                               "message_id": 3}):
+            self.assertEqual(aj.run_scan(send=True), 0)
+        self.assertGreaterEqual(len(posted), 1)   # Telegram still got it
+        self.assertIn("2026-09-09", aj._load_state())
 
     @staticmethod
     def _scan_items(hero="https://img/{width}/{slug}"):
@@ -300,6 +345,7 @@ class TestRunScanDeliveryTruth(unittest.TestCase):
                                  "title": "Available from Wed"}), \
              patch("extractors.aldi_extractor.fetch_aldi_specials",
                    return_value=items), \
+             patch("core.board_feed.write_aldi_feed", return_value=2), \
              patch.object(aj, "STATE_PATH", self.state_path), \
              patch.object(aj, "_send_photo",
                           return_value=hero_receipt
