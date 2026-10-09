@@ -7,8 +7,10 @@ site reads live (2026-10-09 pattern).
 - WW_Specials_Feed: the Woolworths twin lives in core/v2_wednesday.py
   (the Wednesday run is already a sheet-writing job).
 
-Layout (A..J): Deal | Price | Size | Brand | UnitPrice | Terms |
-Theme | Drop_Date | Ends_Date | Promo_Title. Full rewrite per drop —
+Layout (A..L): Deal | Price | Size | Brand | UnitPrice | Terms |
+Theme | Drop_Date | Ends_Date | Promo_Title | Image_URL | Category
+(the GLM categorisation — core.board_llm — blank on any failure, the
+app then falls back to the raw Theme). Full rewrite per drop —
 derived data, safe to regenerate any time.
 """
 from __future__ import annotations
@@ -18,7 +20,7 @@ from datetime import date, timedelta
 ALDI_FEED_TAB = "ALDI_Specials_Feed"
 ALDI_FEED_HEADER = ["Deal", "Price", "Size", "Brand", "UnitPrice",
                     "Terms", "Theme", "Drop_Date", "Ends_Date",
-                    "Promo_Title", "Image_URL"]
+                    "Promo_Title", "Image_URL", "Category"]
 
 # ALDI product photos live on their public Scene7 CDN — the board
 # hotlinks them straight from the item's asset URL template ({width}
@@ -56,20 +58,24 @@ def drop_end_date(promos: list, drop_iso: str) -> str:
 
 
 def build_aldi_feed_rows(items: list, promo_title: str, drop_iso: str,
-                         ends_iso: str | None) -> list[list]:
+                         ends_iso: str | None,
+                         categories: list | None = None) -> list[list]:
     """Pure items -> feed rows (offline-testable). Theme = the item's
-    first promotion-tree category (the REAL theme — replaces the M0
-    mockup's keyword stand-in on the board)."""
+    first promotion-tree category (raw ALDI); Category (col L) = the
+    GLM categorisation when available (core.board_llm), blank on any
+    failure — the app prefers col L and falls back to the theme."""
     def _s(item, attr) -> str:
         return str(getattr(item, attr, "") or "").strip()
 
     rows: list[list] = []
-    for item in items:
+    cats = list(categories or [])
+    for i, item in enumerate(items):
         price = getattr(item, "price", None)
         # same default as the Telegram render's _theme_of (many search
         # items carry no categories — 47 of the real 84 on 2026-10-07)
         theme = (getattr(item, "_theme_categories", None) or [""])[0] \
             or "Special Buys"
+        llm_cat = cats[i] if i < len(cats) and cats[i] else ""
         rows.append([
             _s(item, "raw_name"),
             f"{price:.2f}" if price is not None else "",
@@ -82,6 +88,7 @@ def build_aldi_feed_rows(items: list, promo_title: str, drop_iso: str,
             ends_iso or "",
             promo_title,
             aldi_image_url(item),
+            llm_cat,
         ])
     return rows
 
@@ -94,8 +101,18 @@ def write_aldi_feed(items: list, promo: dict, today: str) -> int:
 
     promos = fetch_promotion_tree()
     ends_iso = drop_end_date(promos, today)
+    # one GLM call per drop (glm-5.3-flash, z.ai coding plan — free);
+    # silent fallback to raw themes on any failure, never blocks
+    try:
+        from core.board_llm import categorize
+        cats = categorize(items)
+        print(f"[board-feed] llm categories: "
+              f"{sum(1 for c in cats if c)}/{len(items)}")
+    except Exception as exc:          # noqa: BLE001
+        cats = []
+        print(f"[board-feed] llm categories skipped: {exc}")
     rows = build_aldi_feed_rows(
-        items, str(promo.get("title") or ""), today, ends_iso)
+        items, str(promo.get("title") or ""), today, ends_iso, cats)
     try:
         from core.sheets_client import connect_spreadsheet
         ss = connect_spreadsheet()
@@ -106,8 +123,8 @@ def write_aldi_feed(items: list, promo: dict, today: str) -> int:
         ws = ss.worksheet(ALDI_FEED_TAB)
     except Exception:
         ws = ss.add_worksheet(title=ALDI_FEED_TAB,
-                              rows=max(60, len(rows) + 1), cols=11)
+                              rows=max(60, len(rows) + 1), cols=12)
     values = [ALDI_FEED_HEADER] + rows
     ws.clear()
-    ws.update(values=values, range_name=f"A1:K{len(values)}")
+    ws.update(values=values, range_name=f"A1:L{len(values)}")
     return len(rows)

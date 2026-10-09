@@ -142,7 +142,7 @@ class TestWrite(unittest.TestCase):
         self.assertEqual(n, 2)
         ws = sheet.tabs[ALDI_FEED_TAB]
         self.assertEqual(ws.clears, 1)
-        self.assertEqual(ws.updates, ["A1:K3"])
+        self.assertEqual(ws.updates, ["A1:L3"])
         self.assertEqual(ws._values[0], ALDI_FEED_HEADER)
         self.assertEqual(ws._values[1][8], "2026-10-13")   # real end
         self.assertEqual(ws._values[1][9], "Available from Wed 7th October")
