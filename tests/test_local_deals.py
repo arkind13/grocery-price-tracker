@@ -405,6 +405,22 @@ class TestDetection(unittest.TestCase):
                      coarse="Fruit & Veg")])
         self.assertTrue(results[0].alert)
 
+    def test_butchery_umbrella_subcategory_passes_gate(self):
+        """The REAL sheet shape: every halal row carries K='butchery'
+        (B = the meat type). Without accepting the umbrella, NO
+        butchery deal could ever pass the domain gate (found
+        2026-10-10 while wiring halal /kg comparisons)."""
+        results = self._detect(
+            [_deal(item="Chicken Breast Diced", price=10.99,
+                   unit="kg")],
+            [_master(name="Halal chicken breast diced /kg",
+                     size="1kg", wool=15.00, sub="butchery",
+                     coarse="chicken")])
+        self.assertTrue(results[0].in_domain)
+        self.assertEqual(results[0].matched_master,
+                         "Halal chicken breast diced /kg")
+        self.assertTrue(results[0].alert)   # 10.99 vs 15.00 = 27%
+
 
 # ---------------------------------------------------------------------------
 # UOM display truth (user fix 2026-10-10: 'what is true /ea or /kg?')

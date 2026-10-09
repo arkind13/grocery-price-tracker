@@ -187,7 +187,13 @@ def is_in_domain(store_kind: str, deal_category: str,
     sub = normalize_subcategory(master_subcategory or "")
     coarse = normalize_subcategory(master_coarse_category or "")
     if store_kind == "butchery":
-        return deal_category == "butchery" and sub in BUTCHERY_DOMAIN
+        # 'butchery' is the umbrella Sub_Category every halal row
+        # actually carries on the sheet (K='butchery', B=meat type —
+        # found 2026-10-10: without accepting it, NO butchery deal
+        # could ever pass the gate). Mirrors the produce branch,
+        # which accepts its own umbrella 'fruit & veg'.
+        return (deal_category == "butchery"
+                and (sub in BUTCHERY_DOMAIN or sub == "butchery"))
     if store_kind == "fruits":
         return (deal_category == "fruits"
                 and (coarse == FRUITSHOP_COARSE
