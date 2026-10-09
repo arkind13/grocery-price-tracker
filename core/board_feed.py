@@ -18,7 +18,24 @@ from datetime import date, timedelta
 ALDI_FEED_TAB = "ALDI_Specials_Feed"
 ALDI_FEED_HEADER = ["Deal", "Price", "Size", "Brand", "UnitPrice",
                     "Terms", "Theme", "Drop_Date", "Ends_Date",
-                    "Promo_Title"]
+                    "Promo_Title", "Image_URL"]
+
+# ALDI product photos live on their public Scene7 CDN — the board
+# hotlinks them straight from the item's asset URL template ({width}
+# and {slug} placeholders). NOTHING is stored on the VPS, so there is
+# nothing to clean up when the drop ends (the feed row itself is
+# replaced by the next drop).
+ALDI_IMG_WIDTH = 640
+
+
+def aldi_image_url(item) -> str:
+    """Resolved CDN URL ('' when the item has no assets): {width}->640,
+    {slug}->'hero' (Scene7 ignores the slug segment)."""
+    raw = str(getattr(item, "_hero_asset", "") or "").strip()
+    if not raw:
+        return ""
+    return (raw.replace("{width}", str(ALDI_IMG_WIDTH))
+               .replace("{slug}", "hero"))
 
 
 def next_drop_after(promos: list, date_iso: str) -> str | None:
@@ -64,6 +81,7 @@ def build_aldi_feed_rows(items: list, promo_title: str, drop_iso: str,
             drop_iso,
             ends_iso or "",
             promo_title,
+            aldi_image_url(item),
         ])
     return rows
 
@@ -88,8 +106,8 @@ def write_aldi_feed(items: list, promo: dict, today: str) -> int:
         ws = ss.worksheet(ALDI_FEED_TAB)
     except Exception:
         ws = ss.add_worksheet(title=ALDI_FEED_TAB,
-                              rows=max(60, len(rows) + 1), cols=10)
+                              rows=max(60, len(rows) + 1), cols=11)
     values = [ALDI_FEED_HEADER] + rows
     ws.clear()
-    ws.update(values=values, range_name=f"A1:J{len(values)}")
+    ws.update(values=values, range_name=f"A1:K{len(values)}")
     return len(rows)

@@ -30,12 +30,13 @@ TREE = [
 
 
 def _item(name, price=9.99, size="500 g", brand="", unit_price="",
-          special_desc="", themes=None):
+          special_desc="", themes=None, hero=""):
     it = ProductItem(store="aldi", raw_name=name, price=price,
                      size=size, brand=brand, unit_price=unit_price,
                      special_desc=special_desc)
     it._theme_categories = themes if themes is not None \
         else ["Grocery Specials"]
+    it._hero_asset = hero
     return it
 
 
@@ -86,7 +87,11 @@ class TestPure(unittest.TestCase):
     def test_row_shape_carries_real_theme_and_fields(self):
         rows = build_aldi_feed_rows(
             [_item("Salmon Gravalax 250g", 10.99, size="250 g",
-                   unit_price="$44.00 per kg", themes=["Limited Time Only Meat"])],
+                   unit_price="$44.00 per kg",
+                   themes=["Limited Time Only Meat"],
+                   hero="https://dm.apac.cms.aldi.cx/is/image/"
+                        "aldiprodapac/product/jpg/scaleWidth/{width}/"
+                        "109957dd-9403-4e90-a286-3189a4f12005/{slug}")],
             "Available from Wed 7th October", "2026-10-07", "2026-10-13")
         self.assertEqual(len(rows), 1)
         r = rows[0]
@@ -98,6 +103,17 @@ class TestPure(unittest.TestCase):
         self.assertEqual(r[7], "2026-10-07")
         self.assertEqual(r[8], "2026-10-13")
         self.assertEqual(r[9], "Available from Wed 7th October")
+        # image URL resolved: placeholders gone (the board hotlinks the
+        # CDN — zero VPS storage, nothing to clean up on expiry)
+        self.assertEqual(r[10],
+                         "https://dm.apac.cms.aldi.cx/is/image/"
+                         "aldiprodapac/product/jpg/scaleWidth/640/"
+                         "109957dd-9403-4e90-a286-3189a4f12005/hero")
+
+    def test_no_asset_item_gets_blank_image_url(self):
+        rows = build_aldi_feed_rows(
+            [_item("Assetless Item", 5.00)], "t", "2026-10-07", None)
+        self.assertEqual(rows[0][10], "")
 
     def test_unpriced_item_keeps_blank_price(self):
         rows = build_aldi_feed_rows(
@@ -126,7 +142,7 @@ class TestWrite(unittest.TestCase):
         self.assertEqual(n, 2)
         ws = sheet.tabs[ALDI_FEED_TAB]
         self.assertEqual(ws.clears, 1)
-        self.assertEqual(ws.updates, ["A1:J3"])
+        self.assertEqual(ws.updates, ["A1:K3"])
         self.assertEqual(ws._values[0], ALDI_FEED_HEADER)
         self.assertEqual(ws._values[1][8], "2026-10-13")   # real end
         self.assertEqual(ws._values[1][9], "Available from Wed 7th October")
