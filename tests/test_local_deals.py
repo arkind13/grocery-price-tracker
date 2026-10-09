@@ -406,6 +406,128 @@ class TestDetection(unittest.TestCase):
         self.assertTrue(results[0].alert)
 
 
+# ---------------------------------------------------------------------------
+# UOM display truth (user fix 2026-10-10: 'what is true /ea or /kg?')
+# ---------------------------------------------------------------------------
+class TestBagUomDisplay(unittest.TestCase):
+    """A bag deal must read ONE way everywhere: $2.99 for the 5kg bag
+    ($0.60/kg) — never '$2.99/ea' in the digest and '$2.99/kg' in the
+    standout for the same bag."""
+
+    def _onion_bag(self):
+        deal = _deal(item="Brown Onions 5kg", store="fruitopia",
+                     category="fruits", price=2.99, unit="ea")
+        master = _master(name="Woolworths Brown Onions 1kg Bag",
+                         size="1kg", wool=2.50, sub="onions",
+                         coarse="Fruit & Veg")
+        return deal, master
+
+    def test_digest_bag_line_no_ea_suffix_with_per_kg(self):
+        """Digest shop line: 'Brown Onions 5kg — $2.99 ($0.60/kg)' —
+        no ' /ea' name suffix, no '$2.99/ea'."""
+        deal, _master_row = self._onion_bag()
+        items = ld._digest_items([deal])
+        self.assertEqual(items[0]["name"], "Brown Onions 5kg")
+        self.assertEqual(items[0]["price_text"], "$2.99 ($0.60/kg)")
+        self.assertEqual(items[0]["per_kg"], 0.6)
+
+    def test_digest_plain_ea_and_kg_lines_unchanged(self):
+        """Non-bag single deals keep their true labels."""
+        ea = _deal(item="Halal Charcoal", store="dunya",
+                   category="butchery", price=9.99, unit="ea")
+        kg = _deal(item="Halal Beef Diced", store="dunya",
+                   category="butchery", price=12.99, unit="kg")
+        items = ld._digest_items([ea, kg])
+        self.assertEqual(items[0]["price_text"], "$9.99/ea")
+        self.assertEqual(items[1]["price_text"], "$12.99/kg")
+
+    def test_digest_bulk_pack_carries_per_kg(self):
+        """bulk_pack price text gains the per-kg rate in parens."""
+        deal = _deal(item="Potatoes", store="abusalim",
+                     category="fruits", kind="bulk_pack", price=2.99,
+                     unit="pack", bulk_size="5kg")
+        items = ld._digest_items([deal])
+        self.assertEqual(items[0]["price_text"],
+                         "$2.99 5kg ($0.60/kg)")
+
+    def test_standout_bag_line_exact(self):
+        """Standout: '$2.99 ($0.60/kg)  (76% < Woolworths $2.50/kg)'
+        — the bag total AND the per-kg rate, never '$2.99/kg'."""
+        deal, master = self._onion_bag()
+        results = ld.match_and_detect([deal], [master], {})
+        self.assertTrue(results[0].alert)
+        post1 = ld.render_post1(results, "2026-10-10")
+        self.assertIn(
+            " • Brown Onions 5kg — $2.99 ($0.60/kg)"
+            "  (76% < Woolworths $2.50/kg)", post1)
+        self.assertNotIn("$2.99/kg", post1)
+        self.assertNotIn("$2.99/ea", post1)
+
+    def test_standout_baseline_shows_per_kg_rate_not_pack_cell(self):
+        """WW 2kg bag cell $5.00 prints as the $2.50/kg RATE — the
+        raw '$5.00/kg' must never wear a per-kg sticker."""
+        deal = _deal(item="Brown Onions 5kg", store="fruitopia",
+                     category="fruits", price=2.99, unit="ea")
+        master = _master(name="Woolworths Brown Onions 2kg Bag",
+                         size="2kg", wool=5.00, sub="onions",
+                         coarse="Fruit & Veg")
+        results = ld.match_and_detect([deal], [master], {})
+        self.assertTrue(results[0].alert)
+        post1 = ld.render_post1(results, "2026-10-10")
+        self.assertIn("(76% < Woolworths $2.50/kg)", post1)
+        self.assertNotIn("$5.00/kg", post1)
+
+    def test_kg_priced_deal_with_weight_in_name_never_bag_divided(self):
+        """A '$2.40/kg' board line with '5kg' in the name is ALREADY
+        per kilo — dividing again (0.48/kg, fake 81% alert) is the
+        UOM bug this fix kills."""
+        deal = _deal(item="Brown Onions 5kg", store="fruitopia",
+                     category="fruits", price=2.40, unit="kg")
+        master = _master(name="Woolworths Brown Onions 1kg Bag",
+                         size="1kg", wool=2.50, sub="onions",
+                         coarse="Fruit & Veg")
+        results = ld.match_and_detect([deal], [master], {})
+        self.assertEqual(results[0].pct, pytest.approx(4.0))
+        self.assertFalse(results[0].alert)
+        self.assertEqual(results[0].price_uom, "kg")
+        self.assertIsNone(results[0].bag_weight_g)
+        self.assertIn("2.40/kg",
+                      ld._deal_price_text(results[0]))
+
+    def test_post2_bag_line_carries_per_kg(self):
+        """Full-board line shows the honest bag maths too."""
+        deal, master = self._onion_bag()
+        results = ld.match_and_detect([deal], [master], {})
+        blocks = ld.render_post2_blocks(results, "2026-10-10")
+        body = [b for b in blocks if "Brown Onions" in b][0]
+        self.assertIn("1. Brown Onions 5kg — $2.99 ($0.60/kg)", body)
+
+    def test_extra_stop_savings_same_basis_unit_prices(self):
+        """Bag saving is per-kg on BOTH sides: onions (2.50-0.398)
+        $2.10 + potatoes (1.50-0.49) $1.01 -> $3.11 total — never a
+        bag total minus a per-kg cell ($2.50-$1.99 nonsense)."""
+        deals = [
+            _deal(item="Brown Onions 5kg", store="fruitopia",
+                  category="fruits", price=1.99, unit="ea"),
+            _deal(item="Potatoes 10kg", store="fruitopia",
+                  category="fruits", price=4.90, unit="ea"),
+        ]
+        masters = [
+            _master(name="Woolworths Brown Onions 1kg Bag",
+                    size="1kg", wool=2.50, sub="onions",
+                    coarse="Fruit & Veg"),
+            _master(name="Woolworths Potatoes 1kg Bag",
+                    size="1kg", wool=1.50, sub="potatoes",
+                    coarse="Fruit & Veg"),
+        ]
+        results = ld.match_and_detect(deals, masters, {})
+        self.assertTrue(all(r.alert for r in results))
+        post1 = ld.render_post1(results, "2026-10-10")
+        self.assertIn(
+            "Extra stop worth it: $3.11 total saving on 2 items",
+            post1)
+
+
 def _mk_alert(store_key, store_name, baseline, flyer,
               item="Beef Diced"):
     """Alerted unit-price MatchResult for render tests (pct derived

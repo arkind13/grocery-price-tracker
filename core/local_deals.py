@@ -1165,6 +1165,7 @@ def _digest_items(converted: list[dict]) -> list[dict]:
         unit = (c.get("unit") or "").lower()
         terms = None
         per_kg = None
+        bag_g = None
         if kind == "bulk_pack":
             size = str(c.get("bulk_size") or "")
             price_text = f"{_money(float(price or 0))} {size}".strip()
@@ -1175,6 +1176,7 @@ def _digest_items(converted: list[dict]) -> list[dict]:
                     and parsed.value > 0 and price:
                 per_kg = round(float(price)
                                / (parsed.value / 1000.0), 2)
+                price_text += f" ({_money(per_kg)}/kg)"
         elif kind == "multibuy":
             qty = int(c.get("multibuy_qty") or 0)
             total = float(price or 0)
@@ -1186,15 +1188,30 @@ def _digest_items(converted: list[dict]) -> list[dict]:
                      else f"{qty} for {_money(total)}")
             per_kg = rate if unit == "kg" else None
         else:
-            price_text = (f"{_money(float(price))}/{unit}"
-                          if price else "?")
-            per_kg = float(price) if unit == "kg" else None
+            # Bag deals (user fix 2026-10-10): an EACH-priced deal
+            # whose own name carries a weight ('Brown Onions 5kg')
+            # is priced per BAG — show the per-kg rate in parens and
+            # drop the ' /ea' name suffix, never '$2.99/ea' and
+            # '$2.99/kg' for the same bag.
+            if unit == "ea" and price:
+                bag_g = _deal_weight_g(c.get("item") or "",
+                                       str(c.get("bulk_size") or ""))
+            if bag_g:
+                per_kg = round(float(price) / (bag_g / 1000.0), 2)
+                price_text = (f"{_money(float(price))} "
+                              f"({_money(per_kg)}/kg)")
+            else:
+                price_text = (f"{_money(float(price))}/{unit}"
+                              if price else "?")
+                per_kg = float(price) if unit == "kg" else None
             # a pack-guard size spec or site note on a single price
             # ("min 1.9kg", "bucket") rides the line like terms
             note = str(c.get("notes") or "").strip()
             if note:
                 terms = note
         display = _display_name(c)
+        if bag_g and display.endswith(" /ea"):
+            display = display[:-len(" /ea")]
         items.append({
             "name": display, "price_text": price_text,
             "terms": terms,
@@ -2242,6 +2259,10 @@ class MatchResult:
     deal_kind: str = "single"
     note: str = ""                     # informational lines
     _basis: str = "ea"                 # comparison basis: "kg" | "ea"
+    price_uom: str = ""                # how the deal is CHARGED: "kg"|"ea"|"bag"
+    bag_weight_g: float | None = None  # bag deals: weight from the deal name
+    deal_unit_price: float | None = None      # same-basis unit prices the pct
+    baseline_unit_price: float | None = None  # comparison was computed from
 
 
 def _numeric_price(cell) -> float | None:
@@ -2469,6 +2490,7 @@ def match_and_detect(rows, master_rows, site_catalogues) -> list[MatchResult]:
         if isinstance(deal.get("price"), (int, float)) \
                 and not isinstance(deal.get("price"), bool):
             result.flyer_price = float(deal["price"])
+        result.price_uom = (deal.get("unit") or "").lower()
         if not deal_side:
             results.append(result)   # out-of-domain: plain, unannotated
             continue
@@ -2512,12 +2534,16 @@ def match_and_detect(rows, master_rows, site_catalogues) -> list[MatchResult]:
         # as a bag ("Onions 5kg Bag") compares PER KILO against the
         # LARGEST matching weight-size master bag — never against a
         # loose each-price (no weight size on the master side).
+        # UOM guard (user fix 2026-10-10): only EACH-priced deals are
+        # bags — a /kg price is already per kilo and must NEVER be
+        # divided by the weight in its own name again.
         from core.uom import FAMILY_WEIGHT, parse_size
         deal_weight_g = _deal_weight_g(
             deal.get("item") or "",
             str(deal.get("bulk_size") or ""))
         bag_override = False
-        if deal_weight_g is not None:
+        if deal_weight_g is not None \
+                and (deal.get("unit") or "").lower() != "kg":
             weighted = []
             for ratio, master in candidates:
                 parsed = parse_size(master.get("size") or "")
@@ -2533,6 +2559,8 @@ def match_and_detect(rows, master_rows, site_catalogues) -> list[MatchResult]:
             weighted.sort(key=lambda t: (-t[0], -t[1]))
             best_master = weighted[0][2]
             bag_override = True
+            result.price_uom = "bag"
+            result.bag_weight_g = deal_weight_g
         elif candidates:
             best_ratio, best_master = max(
                 candidates, key=lambda t: t[0])
@@ -2596,6 +2624,12 @@ def match_and_detect(rows, master_rows, site_catalogues) -> list[MatchResult]:
                / baseline_unit_price * 100.0)
         result.pct = pct
         result._basis = flyer_basis
+        # Same-basis unit prices (user fix 2026-10-10): rendering and
+        # the extra-stop savings must use THESE — never the raw flyer
+        # cell (a bag total) against a raw baseline cell (a pack
+        # total), which priced the same $2.99 two different ways.
+        result.deal_unit_price = flyer_unit_price
+        result.baseline_unit_price = baseline_unit_price
         if pct > ALERT_PCT and not result.variety_conflict:
             result.alert = True
         results.append(result)
@@ -2612,6 +2646,41 @@ def _master_unit_price_is_kg(master_row: dict) -> bool:
 def _unit_label(result: MatchResult) -> str:
     """'/kg' | '/ea' comparison label for a matched result."""
     return "/kg" if getattr(result, "_basis", "ea") == "kg" else "/ea"
+
+
+def _deal_price_text(result: MatchResult) -> str:
+    """Deal price labelled the way the shop actually charges it.
+
+    User fix 2026-10-10: a bag deal (weight in the name, priced per
+    bag) shows the per-kg rate in parens — '$2.99 ($0.60/kg)' — so
+    the same price can never again appear as '$2.99/ea' in one line
+    and '$2.99/kg' in the next. True /kg and /ea deals keep their
+    own label; results built before the fix (no price_uom) fall
+    back to the comparison-basis label.
+    """
+    if result.flyer_price is None:
+        return "?"
+    if result.bag_weight_g:
+        per_kg = float(result.flyer_price) / (result.bag_weight_g / 1000.0)
+        return f"{_money(result.flyer_price)} ({_money(per_kg)}/kg)"
+    uom = (result.price_uom or "").lower()
+    if uom in ("kg", "ea"):
+        return f"{_money(result.flyer_price)}/{uom}"
+    if result.pct is None and not result.alert:
+        # never compared (out-of-domain / unmatched): no basis to
+        # label — keep the plain line (04:56 full-board rule).
+        return _money(result.flyer_price)
+    return f"{_money(result.flyer_price)}{_unit_label(result)}"
+
+
+def _baseline_price_text(result: MatchResult) -> str:
+    """Baseline labelled on the comparison basis — the per-kg RATE
+    when the master row is a multi-kg pack, never the raw pack cell
+    wearing a '/kg' sticker."""
+    base = (result.baseline_unit_price
+            if result.baseline_unit_price is not None
+            else (result.baseline_price or 0))
+    return f"{_money(base)}{_unit_label(result)}"
 
 
 def render_post1(results: list[MatchResult], friday_date: str) -> str:
@@ -2650,20 +2719,26 @@ def render_post1(results: list[MatchResult], friday_date: str) -> str:
             if not r.alert:
                 # variety-suppressed standout: tag replaces the alert
                 lines.append(
-                    f" • {r.item_name} — {_money(r.flyer_price or 0)}"
-                    f"{_unit_label(r)}  (variety differs — verify)")
+                    f" • {r.item_name} — {_deal_price_text(r)}"
+                    f"  (variety differs — verify)")
                 continue
-            base = _money(r.baseline_price or 0)
             lines.append(
-                f" • {r.item_name} — {_money(r.flyer_price or 0)}"
-                f"{_unit_label(r)}  ({r.pct:.0f}% < "
-                f"{r.baseline_store} {base}{_unit_label(r)})")
+                f" • {r.item_name} — {_deal_price_text(r)}"
+                f"  ({r.pct:.0f}% < "
+                f"{r.baseline_store} {_baseline_price_text(r)})")
     # Extra-stop aggregation per store: strictly > $3.00, alerts only.
+    # Savings use the SAME-BASIS unit prices (per-kg or per-ea on both
+    # sides) — never a bag total against a per-kg cell (2026-10-10).
     for store in seen_stores:
         store_results = [r for r in standouts
                          if r.store_name.upper() == store]
         savings = sum(
-            (r.baseline_price or 0) - (r.flyer_price or 0)
+            ((r.baseline_unit_price
+              if r.baseline_unit_price is not None
+              else (r.baseline_price or 0))
+             - (r.deal_unit_price
+                if r.deal_unit_price is not None
+                else (r.flyer_price or 0)))
             for r in store_results)
         if savings > DEFAULT_SPLIT_THRESHOLD and store_results:
             lines.append("")
@@ -2758,7 +2833,7 @@ def render_post2_blocks(results, friday_date) -> list[str]:
                 lines.append(f" {n}. {r.item_name} — {price}"
                              f"  ({r.multibuy_note})")
             else:
-                line = f" {n}. {r.item_name} — {price}"
+                line = f" {n}. {r.item_name} — {_deal_price_text(r)}"
                 if r.pct is not None and r.pct > ALERT_PCT \
                         and r.baseline_store:
                     line += (f"  (also {r.pct:.0f}% < "
