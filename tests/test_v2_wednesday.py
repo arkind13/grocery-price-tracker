@@ -22,8 +22,9 @@ if str(_PROJECT) not in sys.path:
     sys.path.insert(0, str(_PROJECT))
 
 from core.v2_wednesday import (                   # noqa: E402
-    LISTS_TOPIC_ID, SPECIALS_TOPIC_ID, apply_writes, match_index,
-    parity_step, plan_sync, run,
+    FEED_TAB, LISTS_TOPIC_ID, SPECIALS_TOPIC_ID,
+    apply_writes, build_feed_rows, match_index,
+    next_wednesday, parity_step, plan_sync, run,
 )
 from extractors.models import ProductItem         # noqa: E402
 from tools.parity_audit import (                  # noqa: E402
@@ -70,15 +71,23 @@ class FakeWS:
 
 
 class FakeSheet:
-    """connect_spreadsheet double: 13-col master + 11-col LD tabs."""
+    """connect_spreadsheet double: 13-col master + 11-col LD tabs.
+    Unknown tabs (the WW_Specials_Feed board feed, 2026-10-09) are
+    lazily created as fresh FakeWS instead of aliasing the LD tab."""
 
     def __init__(self, master, ld):
         self.master_ws = master
         self.ld_ws = ld
+        self.extra: dict[str, FakeWS] = {}
 
     def worksheet(self, name):
-        return self.master_ws if name == "Products_Master" \
-            else self.ld_ws
+        if name == "Products_Master":
+            return self.master_ws
+        if name == "Local_Deals":
+            return self.ld_ws
+        if name not in self.extra:
+            self.extra[name] = FakeWS([])
+        return self.extra[name]
 
 
 def _item(name, price=None, special_desc="", is_special=False):
@@ -420,6 +429,113 @@ class TestParityStep(unittest.TestCase):
                          ["status"], "aligned")
 
 
+class TestNextWednesday(unittest.TestCase):
+    def test_wednesday_run_belongs_to_fresh_week_plus7(self):
+        self.assertEqual(next_wednesday(date(2026, 10, 7)),
+                         date(2026, 10, 14))
+
+    def test_friday_and_tuesday_roll_to_next_wednesday(self):
+        self.assertEqual(next_wednesday(date(2026, 10, 9)),
+                         date(2026, 10, 14))
+        self.assertEqual(next_wednesday(date(2026, 10, 13)),
+                         date(2026, 10, 14))
+
+
+class TestBuildFeedRows(unittest.TestCase):
+    """WW_Specials_Feed (2026-10-09): the deal board's live Wool lens.
+    Fixtures mirror the REAL 2026-10-09 run — 12 docx deals, zero
+    keyword matches (one-off catalogue items), so the feed is the only
+    place those deals exist beyond the Telegram post."""
+
+    def setUp(self):
+        self.master, _ld = _fixture()
+
+    def test_real_discount_deal_price_save_pct(self):
+        # verbatim from the 2026-10-09 report
+        rows = build_feed_rows(
+            self.master._values,
+            [_item("Farmers Union Greek Style High Protein Yoghurt "
+                   "Pouch Mango 150g", 2.20,
+                   special_desc="save $1.00 (31% off) + Buy 1 get a "
+                                "bonus Container credit^")],
+            date(2026, 10, 9))
+        self.assertEqual(len(rows), 1)
+        r = rows[0]
+        self.assertEqual(r[0], "Farmers Union Greek Style High Protein "
+                               "Yoghurt Pouch Mango 150g")
+        self.assertEqual(r[1], "2.20")
+        self.assertEqual(r[2], "1.00")
+        self.assertEqual(r[3], "31")
+        self.assertEqual(r[4], "discount")
+        self.assertEqual(r[6], "")            # not OOS
+        self.assertEqual(r[7], "")            # untracked (no keyword hit)
+        self.assertEqual(r[9], "2026-10-09")
+        self.assertEqual(r[10], "2026-10-14")  # Fri run -> next Wed
+
+    def test_out_of_stock_deal_marks_oos_and_keeps_save(self):
+        rows = build_feed_rows(
+            self.master._values,
+            [_item("Essano Hydration Toning Mist 120mL", None,
+                   special_desc="save $4.50")],
+            date(2026, 10, 9))
+        r = rows[0]
+        self.assertEqual(r[1], "")            # no price
+        self.assertEqual(r[2], "4.50")
+        self.assertEqual(r[6], "TRUE")
+
+    def test_multibuy_deal_price_is_unit_rate(self):
+        rows = build_feed_rows(
+            self.master._values,
+            [_item("Woolworths Chicken Breast 500g", 7.00,
+                   special_desc="Any 2 for $12.00")],
+            date(2026, 10, 9))
+        r = rows[0]
+        self.assertEqual(r[1], "6.00")        # effective unit rate
+        self.assertEqual(r[4], "multi-buy")
+
+    def test_keyword_match_marks_tracked_with_sheet_category(self):
+        rows = build_feed_rows(
+            self.master._values,
+            [_item("Woolworths Tomato", 0.44,
+                   special_desc="save $0.30 (40% off)")],
+            date(2026, 10, 9))
+        r = rows[0]
+        self.assertEqual(r[7], "TRUE")        # matched col G keyword
+        self.assertEqual(r[8], "vegetables")
+
+    def test_plain_item_is_never_a_deal(self):
+        rows = build_feed_rows(
+            self.master._values,
+            [_item("Plain Bread Loaf", 3.50, special_desc="")],
+            date(2026, 10, 9))
+        self.assertEqual(rows, [])
+
+    def test_col_h_straggler_row_included_and_deduped(self):
+        # a keyword row with H terms the docx ALSO matched -> docx entry
+        # wins, the sheet row must NOT appear twice
+        grid = self.master._values
+        grid[1][7] = "save $0.30 (40% off)"   # Tomato row keeps terms
+        rows = build_feed_rows(
+            grid,
+            [_item("Woolworths Tomato", 0.44,
+                   special_desc="save $0.30 (40% off)")],
+            date(2026, 10, 9))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0][0], "Woolworths Tomato")
+
+        # a col H row the docx did NOT match -> included as tracked
+        grid[1][7] = ""                       # Tomato terms cleared
+        grid[3][7] = "multi-buy 2/$6.00"      # Cheddar row, no docx line
+        grid[3][3] = "$3.00"
+        rows = build_feed_rows(grid, [], date(2026, 10, 9))
+        self.assertEqual(len(rows), 1)
+        r = rows[0]
+        self.assertEqual(r[0], "Woolworths Cheddar Block 1kg")
+        self.assertEqual(r[1], "3.00")
+        self.assertEqual(r[4], "multi-buy")
+        self.assertEqual(r[7], "TRUE")
+
+
 class TestRunPipeline(unittest.TestCase):
     """run() end-to-end on fakes: patched parse_inputs +
     connect_spreadsheet + sender. Zero network, zero real sheet."""
@@ -432,6 +548,7 @@ class TestRunPipeline(unittest.TestCase):
         reg.start()
         self.addCleanup(reg.stop)
         self.master, self.ld = _fixture()
+        self.sheet = FakeSheet(self.master, self.ld)
         self.sends: list = []
 
         def fake_send(bot_token, chat_id, text, thread_id=None):
@@ -444,7 +561,7 @@ class TestRunPipeline(unittest.TestCase):
                   return_value=([_item("Woolworths Tomato", 0.6)],
                                 [])),
             patch("core.sheets_client.connect_spreadsheet",
-                  return_value=FakeSheet(self.master, self.ld)),
+                  return_value=self.sheet),
             patch("core.local_deals._send_message", fake_send),
         ):
             p.start()
@@ -468,6 +585,11 @@ class TestRunPipeline(unittest.TestCase):
                          ["Halal Lamb Shoulder", "Halal Beef Mince 500g",
                           "Tomato", "Woolworths Cheddar Block 1kg"])
         self.assertEqual(self.master._values[3][3], "$0.60")
+        # the board feed tab is rewritten every run (header + 0 deals —
+        # no docx specials in this fixture; 2026-10-09 wiring)
+        feed = self.sheet.extra[FEED_TAB]
+        self.assertEqual(feed.updates, ["A1:K1"])
+        self.assertEqual(feed._values[0][0], "Deal")
 
     def test_11_middle_insert_aborts_run_no_writes_no_posts(self):
         self.ld._values[3][12] = "ZZQ"

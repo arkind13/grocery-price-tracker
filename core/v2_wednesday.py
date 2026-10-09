@@ -12,8 +12,9 @@ core.v2_read (the ONE list) + core.local_deals._send_message (posts).
 from __future__ import annotations
 
 import os
+import re
 import time
-from datetime import date
+from datetime import date, timedelta
 
 from core.local_deals import grid_range
 
@@ -573,6 +574,133 @@ def category_step(master_ws, ld_ws) -> list:
             + resort_lines)
 
 
+# ---- Deal Board feed (WW_Specials_Feed tab) --------------------------------
+# 2026-10-09: the /shopping/board Wool lens was showing a frozen 2026-10-03
+# sample because specials-docx lines usually match ZERO sheet keywords
+# (they are one-off catalogue items — yoghurt pouches, shaving cream…),
+# so the deals never reach cols D/H and the sheet looked empty. The
+# Wednesday run now ALSO writes a dedicated feed tab the site reads live
+# via the grocery service account: one row per deal, full rewrite each
+# run (derived data — safe to regenerate any time).
+
+FEED_TAB = "WW_Specials_Feed"
+FEED_HEADER = ["Deal", "Price", "Save", "Pct", "Kind", "Terms",
+               "OutOfStock", "Tracked", "Sheet_Category", "Run_Date",
+               "Ends_Date"]
+
+_SAVE_RE = re.compile(r"save\s*\$?\s*(\d+(?:\.\d+)?)", re.I)
+_PCT_RE = re.compile(r"\((\d+(?:\.\d+)?)\s*%\s*off\)", re.I)
+
+
+def next_wednesday(today: date) -> date:
+    """Catalogue week boundary: the Wednesday strictly AFTER today
+    (a Wednesday run belongs to that morning's fresh week -> +7)."""
+    days_ahead = (2 - today.weekday()) % 7      # Mon=0 .. Wed=2 .. Sun=6
+    if days_ahead == 0:
+        days_ahead = 7
+    return today + timedelta(days=days_ahead)
+
+
+def _feed_row(name, price, save, pct, kind, terms, oos, tracked,
+              cat, run, ends) -> list:
+    return [name,
+            f"{price:.2f}" if price is not None else "",
+            f"{save:.2f}" if save is not None else "",
+            (f"{pct:g}" if pct == int(pct) else f"{pct:.1f}")
+            if pct is not None else "",
+            kind, terms or "",
+            "TRUE" if oos else "",
+            "TRUE" if tracked else "",
+            cat or "", run.isoformat(), ends.isoformat()]
+
+
+def build_feed_rows(master_grid: list[list], specials_items: list,
+                    today: date) -> list[list]:
+    """Pure grid/items -> feed rows (offline-testable). Union of:
+
+    - every specials-docx DEAL (classify_special != "no" — the SAME
+      rule as the topic-206 post: plain items are never deals);
+      Tracked=TRUE when the line's keyword matches col G;
+    - post-run col H rows the docx never matched (legacy terms — the
+      deal-end sweep only clears KEYWORD rows, so these survive).
+
+    Dedup: a docx deal that matched a keyword IS that col H row — the
+    docx entry wins (richer price/save text); the sheet row is skipped.
+    """
+    from core.multibuy import (decode_multibuy_cell,
+                               effective_unit_rate, parse_multibuy)
+    from extractors.specials_parser import classify_special
+
+    kw_index = match_index(master_grid)
+    ends = next_wednesday(today)
+    rows: list[list] = []
+    matched_rows: set[int] = set()
+
+    for item in specials_items:
+        desc = (getattr(item, "special_desc", "") or "").strip()
+        cls = classify_special(bool(desc), desc)
+        if cls == "no":
+            continue                          # plain item — not a deal
+        name = (getattr(item, "raw_name", "") or "").strip()
+        price = getattr(item, "price", None)
+        idx = kw_index.get(_norm(name))
+        if idx is not None:
+            matched_rows.add(idx)
+        cat = _cell(master_grid[idx], 1) if idx is not None else ""
+        save_m = _SAVE_RE.search(desc)
+        pct_m = _PCT_RE.search(desc)
+        save = float(save_m.group(1)) if save_m else None
+        pct = float(pct_m.group(1)) if pct_m else None
+        if cls == "multi-buy":
+            terms = parse_multibuy(desc)
+            qty = total = None
+            if terms:
+                qty, total = terms
+                price = effective_unit_rate(qty, total)
+            rows.append(_feed_row(name, price, save, pct, "multi-buy",
+                                  desc, price is None, idx is not None,
+                                  cat, today, ends))
+        else:
+            rows.append(_feed_row(name, price, save, pct, "discount",
+                                  desc, not price, idx is not None,
+                                  cat, today, ends))
+
+    # col H rows the docx never covered (post-run state)
+    price_re = re.compile(r"\$\s*(\d+(?:\.\d+)?)")
+    for idx, row in enumerate(master_grid[1:], 1):
+        h = _cell(row, SPECIALS_IDX)
+        if not h or idx in matched_rows:
+            continue
+        pm = price_re.search(_cell(row, PRICE_IDX))
+        mb = decode_multibuy_cell(h)
+        save_m = _SAVE_RE.search(h)
+        pct_m = _PCT_RE.search(h)
+        rows.append(_feed_row(
+            _cell(row, 0),
+            float(pm.group(1)) if pm else None,
+            float(save_m.group(1)) if save_m else None,
+            float(pct_m.group(1)) if pct_m else None,
+            "multi-buy" if mb else "discount",
+            h, not pm, True, _cell(row, 1), today, ends))
+    return rows
+
+
+def write_board_feed(spreadsheet, master_grid: list[list],
+                     specials_items: list, today: date) -> int:
+    """(Re)write the WW_Specials_Feed tab: header + one row per deal.
+    Creates the tab on first call. Returns the deal-row count."""
+    rows = build_feed_rows(master_grid, specials_items, today)
+    try:
+        ws = spreadsheet.worksheet(FEED_TAB)
+    except Exception:                          # gspread WorksheetNotFound
+        ws = spreadsheet.add_worksheet(
+            title=FEED_TAB, rows=max(50, len(rows) + 1), cols=12)
+    values = [FEED_HEADER] + rows
+    ws.clear()
+    ws.update(values=values, range_name=f"A1:K{len(values)}")
+    return len(rows)
+
+
 def run(dry_run: bool = False, send: bool = True,
         specials_only: bool = False) -> int:
     """Full pipeline: parse -> read both tabs -> parity_step ->
@@ -623,6 +751,18 @@ def run(dry_run: bool = False, send: bool = True,
         # re-sorts BOTH tabs (user directive 2026-09-12)
         for line in category_step(master_ws, ld_ws):
             print(line)
+        # Deal Board feed: full rewrite from the post-sort grid +
+        # the specials docx (2026-10-09 — the /shopping/board Wool
+        # lens reads this tab live; runs in specials-only mode too)
+        fresh_grid = [list(r) for r in
+                      (master_ws.get_all_values() or [])]
+        try:
+            n_feed = write_board_feed(spreadsheet, fresh_grid,
+                                      specials_items, sydney_today())
+            print(f"[board-feed] {FEED_TAB}: {n_feed} deal(s) "
+                  f"(week ends {next_wednesday(sydney_today())})")
+        except Exception as exc:                 # never block the run
+            print(f"[board-feed] feed write FAILED: {exc}")
 
     if send and not dry_run:
         bot_token = os.getenv("TELEGRAM_CLAW_BOT", "")
