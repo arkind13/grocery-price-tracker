@@ -1176,7 +1176,6 @@ def _digest_items(converted: list[dict]) -> list[dict]:
                     and parsed.value > 0 and price:
                 per_kg = round(float(price)
                                / (parsed.value / 1000.0), 2)
-                price_text += f" ({_money(per_kg)}/kg)"
         elif kind == "multibuy":
             qty = int(c.get("multibuy_qty") or 0)
             total = float(price or 0)
@@ -1190,16 +1189,14 @@ def _digest_items(converted: list[dict]) -> list[dict]:
         else:
             # Bag deals (user fix 2026-10-10): an EACH-priced deal
             # whose own name carries a weight ('Brown Onions 5kg')
-            # is priced per BAG — show the per-kg rate in parens and
-            # drop the ' /ea' name suffix, never '$2.99/ea' and
-            # '$2.99/kg' for the same bag.
+            # is priced per BAG — plain '$2.99', the ' /ea' name
+            # suffix dropped, and NO per-kg conversion anywhere in
+            # the digest (the standout compares same-bag money).
             if unit == "ea" and price:
                 bag_g = _deal_weight_g(c.get("item") or "",
                                        str(c.get("bulk_size") or ""))
             if bag_g:
-                per_kg = round(float(price) / (bag_g / 1000.0), 2)
-                price_text = (f"{_money(float(price))} "
-                              f"({_money(per_kg)}/kg)")
+                price_text = _money(float(price))
             else:
                 price_text = (f"{_money(float(price))}/{unit}"
                               if price else "?")
@@ -2648,21 +2645,29 @@ def _unit_label(result: MatchResult) -> str:
     return "/kg" if getattr(result, "_basis", "ea") == "kg" else "/ea"
 
 
+def _fmt_weight(grams: float) -> str:
+    """Bag weight in its natural unit: 5000 -> '5kg', 2500 -> '2.5kg',
+    500 -> '500g'."""
+    if grams >= 1000:
+        return f"{grams / 1000.0:g}kg"
+    return f"{grams:g}g"
+
+
 def _deal_price_text(result: MatchResult) -> str:
     """Deal price labelled the way the shop actually charges it.
 
-    User fix 2026-10-10: a bag deal (weight in the name, priced per
-    bag) shows the per-kg rate in parens — '$2.99 ($0.60/kg)' — so
-    the same price can never again appear as '$2.99/ea' in one line
-    and '$2.99/kg' in the next. True /kg and /ea deals keep their
-    own label; results built before the fix (no price_uom) fall
-    back to the comparison-basis label.
+    User fix 2026-10-10 (same day, follow-up: 'directly show 5kg
+    pricing instead of re-converting into /kg — it is confusing'):
+    bag deals print the plain bag price ('$2.99') — the size already
+    rides the item name, and the standout speaks in same-bag money.
+    True /kg and /ea deals keep their own label; results built
+    before the fix (no price_uom) fall back to the comparison-basis
+    label.
     """
     if result.flyer_price is None:
         return "?"
     if result.bag_weight_g:
-        per_kg = float(result.flyer_price) / (result.bag_weight_g / 1000.0)
-        return f"{_money(result.flyer_price)} ({_money(per_kg)}/kg)"
+        return _money(result.flyer_price)
     uom = (result.price_uom or "").lower()
     if uom in ("kg", "ea"):
         return f"{_money(result.flyer_price)}/{uom}"
@@ -2722,10 +2727,21 @@ def render_post1(results: list[MatchResult], friday_date: str) -> str:
                     f" • {r.item_name} — {_deal_price_text(r)}"
                     f"  (variety differs — verify)")
                 continue
+            if r.bag_weight_g and r.baseline_unit_price is not None:
+                # Bag comparison speaks same-bag money (user fix
+                # 2026-10-10): the Woolworths per-kg rate scaled to
+                # the deal's own bag size — '$7.90 for the same 5kg'
+                # — never a re-converted '/kg' figure.
+                same_size = (r.baseline_unit_price
+                             * (r.bag_weight_g / 1000.0))
+                base_txt = (f"{_money(same_size)} for the same "
+                            f"{_fmt_weight(r.bag_weight_g)}")
+            else:
+                base_txt = _baseline_price_text(r)
             lines.append(
                 f" • {r.item_name} — {_deal_price_text(r)}"
                 f"  ({r.pct:.0f}% < "
-                f"{r.baseline_store} {_baseline_price_text(r)})")
+                f"{r.baseline_store} — {base_txt})")
     # Extra-stop aggregation per store: strictly > $3.00, alerts only.
     # Savings use the SAME-BASIS unit prices (per-kg or per-ea on both
     # sides) — never a bag total against a per-kg cell (2026-10-10).

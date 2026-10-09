@@ -422,14 +422,15 @@ class TestBagUomDisplay(unittest.TestCase):
                          coarse="Fruit & Veg")
         return deal, master
 
-    def test_digest_bag_line_no_ea_suffix_with_per_kg(self):
-        """Digest shop line: 'Brown Onions 5kg — $2.99 ($0.60/kg)' —
-        no ' /ea' name suffix, no '$2.99/ea'."""
+    def test_digest_bag_line_plain_price_no_conversion(self):
+        """Digest shop line (2026-10-10 follow-up): 'Brown Onions
+        5kg — $2.99' — no ' /ea' suffix, no ($0.60/kg) conversion,
+        and bag deals never feed the 'best $X/kg' header."""
         deal, _master_row = self._onion_bag()
         items = ld._digest_items([deal])
         self.assertEqual(items[0]["name"], "Brown Onions 5kg")
-        self.assertEqual(items[0]["price_text"], "$2.99 ($0.60/kg)")
-        self.assertEqual(items[0]["per_kg"], 0.6)
+        self.assertEqual(items[0]["price_text"], "$2.99")
+        self.assertIsNone(items[0]["per_kg"])
 
     def test_digest_plain_ea_and_kg_lines_unchanged(self):
         """Non-bag single deals keep their true labels."""
@@ -441,31 +442,49 @@ class TestBagUomDisplay(unittest.TestCase):
         self.assertEqual(items[0]["price_text"], "$9.99/ea")
         self.assertEqual(items[1]["price_text"], "$12.99/kg")
 
-    def test_digest_bulk_pack_carries_per_kg(self):
-        """bulk_pack price text gains the per-kg rate in parens."""
+    def test_digest_bulk_pack_plain_price(self):
+        """bulk_pack price text stays '$ total size' — no per-kg
+        conversion paren."""
         deal = _deal(item="Potatoes", store="abusalim",
                      category="fruits", kind="bulk_pack", price=2.99,
                      unit="pack", bulk_size="5kg")
         items = ld._digest_items([deal])
-        self.assertEqual(items[0]["price_text"],
-                         "$2.99 5kg ($0.60/kg)")
+        self.assertEqual(items[0]["price_text"], "$2.99 5kg")
 
     def test_standout_bag_line_exact(self):
-        """Standout: '$2.99 ($0.60/kg)  (76% < Woolworths $2.50/kg)'
-        — the bag total AND the per-kg rate, never '$2.99/kg'."""
+        """Standout (2026-10-10 follow-up): same-bag money — '$2.99
+        (76% < Woolworths — $12.50 for the same 5kg)'. The per-kg
+        rate ($2.50/kg from the 1kg WW row) is scaled to the deal's
+        own 5kg; no '/kg' figure ever prints for a bag."""
         deal, master = self._onion_bag()
         results = ld.match_and_detect([deal], [master], {})
         self.assertTrue(results[0].alert)
         post1 = ld.render_post1(results, "2026-10-10")
         self.assertIn(
-            " • Brown Onions 5kg — $2.99 ($0.60/kg)"
-            "  (76% < Woolworths $2.50/kg)", post1)
-        self.assertNotIn("$2.99/kg", post1)
-        self.assertNotIn("$2.99/ea", post1)
+            " • Brown Onions 5kg — $2.99"
+            "  (76% < Woolworths — $12.50 for the same 5kg)", post1)
+        self.assertNotIn("/kg", post1)
+        self.assertNotIn("$0.60", post1)
+
+    def test_standout_bag_vs_real_5kg_row_shows_its_own_price(self):
+        """When the WW row IS the same 5kg bag ($7.90 cell), the
+        same-size figure is that cell's own money — $7.90 for the
+        same 5kg (the user's actual sheet state)."""
+        deal = _deal(item="Brown Onions 5kg", store="fruitopia",
+                     category="fruits", price=2.99, unit="ea")
+        master = _master(name="Woolworths Brown Onions 5kg Bag",
+                         size="5kg", wool=7.90, sub="onions",
+                         coarse="Fruit & Veg")
+        results = ld.match_and_detect([deal], [master], {})
+        self.assertTrue(results[0].alert)
+        post1 = ld.render_post1(results, "2026-10-10")
+        self.assertIn(
+            "(62% < Woolworths — $7.90 for the same 5kg)", post1)
 
     def test_standout_baseline_shows_per_kg_rate_not_pack_cell(self):
-        """WW 2kg bag cell $5.00 prints as the $2.50/kg RATE — the
-        raw '$5.00/kg' must never wear a per-kg sticker."""
+        """WW 2kg bag cell $5.00 prints as the same-size money
+        ($2.50/kg x 5 = $12.50) — the raw '$5.00' never wears any
+        sticker."""
         deal = _deal(item="Brown Onions 5kg", store="fruitopia",
                      category="fruits", price=2.99, unit="ea")
         master = _master(name="Woolworths Brown Onions 2kg Bag",
@@ -474,8 +493,10 @@ class TestBagUomDisplay(unittest.TestCase):
         results = ld.match_and_detect([deal], [master], {})
         self.assertTrue(results[0].alert)
         post1 = ld.render_post1(results, "2026-10-10")
-        self.assertIn("(76% < Woolworths $2.50/kg)", post1)
-        self.assertNotIn("$5.00/kg", post1)
+        self.assertIn("(76% < Woolworths — $12.50 for the same 5kg)",
+                      post1)
+        self.assertNotIn("$5.00", post1)
+        self.assertNotIn("/kg", post1)
 
     def test_kg_priced_deal_with_weight_in_name_never_bag_divided(self):
         """A '$2.40/kg' board line with '5kg' in the name is ALREADY
@@ -494,13 +515,14 @@ class TestBagUomDisplay(unittest.TestCase):
         self.assertIn("2.40/kg",
                       ld._deal_price_text(results[0]))
 
-    def test_post2_bag_line_carries_per_kg(self):
-        """Full-board line shows the honest bag maths too."""
+    def test_post2_bag_line_plain_price(self):
+        """Full-board line: plain bag price, no conversion paren."""
         deal, master = self._onion_bag()
         results = ld.match_and_detect([deal], [master], {})
         blocks = ld.render_post2_blocks(results, "2026-10-10")
         body = [b for b in blocks if "Brown Onions" in b][0]
-        self.assertIn("1. Brown Onions 5kg — $2.99 ($0.60/kg)", body)
+        self.assertIn("1. Brown Onions 5kg — $2.99", body)
+        self.assertNotIn("$0.60", body)
 
     def test_extra_stop_savings_same_basis_unit_prices(self):
         """Bag saving is per-kg on BOTH sides: onions (2.50-0.398)
@@ -557,7 +579,7 @@ class TestReport(unittest.TestCase):
                       post1)
         self.assertIn("DUNYA BUTCHERY", post1)
         self.assertIn("FRUITOPIA MT DRUITT", post1)
-        self.assertIn("$12.99/kg  (26% < Woolworths $17.50/kg)",
+        self.assertIn("$12.99/kg  (26% < Woolworths — $17.50/kg)",
                       post1)
 
     def test_post1_empty_message(self):
