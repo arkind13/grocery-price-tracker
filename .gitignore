@@ -285,3 +285,4 @@ backups/
 # WW catalogue walks (laptop agent) — data + the upload token
 data/ww-catalogue/
 laptop/ww-upload.env
+data/coles-catalogue/

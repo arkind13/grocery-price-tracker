@@ -1,0 +1,291 @@
+#!/usr/bin/env python3
+"""COLES CATALOGUE WALKER (Phase C of the catalogue-first plan, 2026-10-24).
+
+The user's call: "why cant we do coles the same way we did wool from my
+local computer rather than going through vps and scrape" — PROVEN RIGHT by
+live probing: the home IP gets Coles' full __NEXT_DATA__ pages directly
+(no proxy, no render, $0). Coles' bot shield (an Imperva-style challenge)
+fires on BURSTS, so this walker is slower and gentler than the WW one:
+  * warm-up visit before each aisle batch
+  * ~4.5 s between pages (Coles etiquette; WW uses 2.2)
+  * challenge detection ("Pardon Our Interruption" / no __NEXT_DATA__) ->
+    75 s cool-down, retry x3, then park the aisle and move on
+  * per-aisle flush + state.json resume (a challenged run loses nothing)
+
+How (proven live from this PC, 2026-10-24):
+  * category tree: searchResults.catalogGroupView on any browse page
+    (nodes carry productCount — walk LEAF categories, the WW lesson)
+  * aisle listing: GET /browse/<slug>?page=N — __NEXT_DATA__ carries
+    searchResults.results[] = the products (name, brand, size, id,
+    pricing{now, was, comparable, promotionType, offerDescription?...})
+
+Usage:
+  python core/coles_catalogue_walk.py               # full walk + upload
+  python core/coles_catalogue_walk.py --no-upload
+  python core/coles_catalogue_walk.py --aisles fresh-meat,bacon-ham
+Output: data/coles-catalogue/walk-YYYY-MM-DD.jsonl.gz + .summary.json
+"""
+from __future__ import annotations
+
+import argparse
+import gzip
+import json
+import os
+import re
+import sys
+import time
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+TRACKER = HERE.parent
+DATA_DIR = TRACKER / "data" / "coles-catalogue"
+BASE = "https://www.coles.com.au"
+CHALLENGE_MARK = "Pardon Our Interruption"
+SYDNEY = timezone(timedelta(hours=11))
+
+UPLOAD_URL = os.getenv("COLES_UPLOAD_URL", "https://169-58-107-0.sslip.io/api/shopping/catalogue/coles-upload")
+UPLOAD_TOKEN = os.getenv("WW_UPLOAD_TOKEN", os.getenv("CATALOGUE_UPLOAD_TOKEN", ""))
+
+
+def log(msg: str) -> None:
+    print(f"[coles-walk {datetime.now(SYDNEY).strftime('%H:%M:%S')}] {msg}", flush=True)
+
+
+class ColesSession:
+    def __init__(self):
+        from curl_cffi import requests as crx
+
+        self.sess = crx.Session(impersonate="chrome131")
+
+    def browse(self, path: str) -> dict | None:
+        """One browse page -> pageProps dict, or None when challenged."""
+        for attempt in range(3):
+            try:
+                r = self.sess.get(f"{BASE}{path}", timeout=45,
+                                  headers={"Accept": "text/html,application/xhtml+xml"})
+                m = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', r.text, re.S)
+                if m:
+                    return json.loads(m.group(1))["props"]["pageProps"]
+                log(f"    challenge/no-data on {path} (HTTP {r.status_code}, {len(r.text)}b) — cooling 75s (attempt {attempt+1}/3)")
+            except Exception as exc:
+                log(f"    ERR {type(exc).__name__} on {path} — cooling 75s (attempt {attempt+1}/3)")
+            time.sleep(75)
+        return None
+
+
+def flatten_tree(cgv: list[dict]) -> list[dict]:
+    """catalogGroupView -> LEAF aisles (walk leaves, not supers — the WW
+    lesson: supers drag cross-listed duplicates)."""
+    out: list[dict] = []
+
+    def walk(nodes, parents):
+        kids = None
+        for n in nodes or []:
+            name = str(n.get("name") or "").strip()
+            if not name or name.lower() in ("specials",):
+                continue
+            kids = n.get("catalogGroupView") or []
+            path = parents + [name]
+            if kids:
+                walk(kids, path)
+            else:
+                slug = (n.get("seoToken") or n.get("urlFriendlyName") or
+                        re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-"))
+                out.append({"id": str(n.get("id") or ""), "name": name,
+                            "slug": slug, "productCount": n.get("productCount"),
+                            "path": " > ".join(path)})
+
+    walk(cgv, [])
+    return out
+
+
+def normalise(p: dict, aisle: dict) -> dict | None:
+    if p.get("_type") not in (None, "PRODUCT"):
+        return None
+    code = p.get("id") or p.get("articleNumber")
+    name = str(p.get("name") or "").strip()
+    pricing = p.get("pricing") or {}
+    price = pricing.get("now")
+    if price is None or not code or not name:
+        return None
+    promo = str(pricing.get("promotionType") or "")
+    offer = pricing.get("offerDescription") or ""
+    mb = pricing.get("multiBuyPromotion") or {}
+    deal_text = None
+    deal_type = None
+    if offer:
+        deal_text, deal_type = str(offer), "other"
+    if mb and mb.get("minQuantity") and pricing.get("multiBuyValue"):
+        deal_text, deal_type = f"{mb.get('minQuantity')} for ${pricing.get('multiBuyValue')}", "multibuy"
+    elif pricing.get("was") and float(pricing.get("was") or 0) > float(price):
+        save = float(pricing["was"]) - float(price)
+        deal_text, deal_type = f"Was ${float(pricing['was']):.2f} (Save ${save:.2f})", "was-price"
+    elif promo == "SPECIAL":
+        deal_text, deal_type = "Special", "other"
+    return {
+        "store": "coles",
+        "storeProductId": str(code),
+        "name": (f"{name} {p.get('size') or ''}".strip() if p.get("size") else name),
+        "nameBare": name,
+        "brand": str(p.get("brand") or ""),
+        "barcode": str(p.get("gtin") or "") or None,
+        "size": str(p.get("size") or ""),
+        "price": float(price),
+        "unitPrice": str(pricing.get("comparable") or ""),
+        "isSpecial": promo in ("SPECIAL", "MULTI_BUY", "EDR_SPECIAL") or bool(offer),
+        "wasPrice": (float(pricing["was"]) if pricing.get("was") and float(pricing["was"]) > float(price) else None),
+        "promotionType": promo or None,
+        "dealText": deal_text, "dealType": deal_type,
+        "superAisle": aisle["path"],
+        "urlSlug": str(p.get("seoToken") or ""),
+        "image": str((p.get("imageUris") or [""])[0] or ""),
+    }
+
+
+def walk(polite_ms: int, aisles_filter: set[str] | None, max_pages: int) -> dict:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    state_path = DATA_DIR / "state.json"
+    state = json.loads(state_path.read_text()) if state_path.exists() else {"done": []}
+    today = datetime.now(SYDNEY).date().isoformat()
+    out_path = DATA_DIR / f"walk-{today}.jsonl.gz"
+    summary_path = DATA_DIR / f"walk-{today}.summary.json"
+
+    s = ColesSession()
+    log("warm-up: homepage")
+    s.browse("/")
+    home = s.browse("/browse/meat-seafood")  # tree source (any browse page)
+    if not home:
+        log("FATAL: challenged even on warm-up — try again later (resume keeps progress)")
+        return {"ok": False, "error": "challenged on warm-up"}
+    aisles = flatten_tree((home.get("searchResults") or {}).get("catalogGroupView") or [])
+    log(f"tree: {len(aisles)} leaf aisles")
+    if aisles_filter:
+        aisles = [a for a in aisles if a["slug"] in aisles_filter or a["name"].lower() in aisles_filter]
+
+    resume = today == state.get("date")
+    done = set(state.get("done", [])) if resume else set()
+    products: dict[str, dict] = {}
+    per_aisle, failures = [], []
+    pages = 0
+    t0 = time.time()
+    for aisle in aisles:
+        slug = aisle["slug"]
+        if slug in done:
+            per_aisle.append({"slug": slug, "note": "resumed-done"})
+            continue
+        aisle_new = 0
+        listed_total = None
+        ok = True
+        try:
+            page_no = 1
+            first_names: list[str] = []
+            while True:
+                props = s.browse(f"/browse/{slug}" + (f"?page={page_no}" if page_no > 1 else ""))
+                if props is None:
+                    ok = False
+                    break
+                sr = props.get("searchResults") or {}
+                rows = sr.get("results") or []
+                listed_total = sr.get("noOfResults")
+                if not rows:
+                    break
+                names = [str(r.get("name") or "") for r in rows[:3]]
+                if page_no > 1 and names == first_names:
+                    break  # same page served — no real pagination beyond here
+                if page_no == 1:
+                    first_names = names
+                for r in rows:
+                    row = normalise(r, aisle)
+                    if row and row["storeProductId"] not in products:
+                        products[row["storeProductId"]] = row
+                        aisle_new += 1
+                pages += 1
+                if listed_total and len(products) and page_no * 36 >= int(listed_total):
+                    break
+                if pages >= max_pages:
+                    break
+                page_no += 1
+                time.sleep(polite_ms / 1000.0)
+        except Exception as exc:  # never lose the walk
+            ok = False
+            failures.append({"slug": slug, "error": str(exc)[:200]})
+        per_aisle.append({"slug": slug, "name": aisle["name"], "apiTotal": listed_total,
+                          "walked": aisle_new, "ok": ok})
+        log(f"  {aisle['path']}: {aisle_new} new ({listed_total} listed) {'OK' if ok else 'PARKED'}")
+        if ok:
+            with gzip.open(out_path, "at", encoding="utf-8") as fz:
+                for code, row in products.items():
+                    fz.write(json.dumps(row, default=str) + "\n")
+            products = {}  # flushed
+            done.add(slug)
+            state["date"], state["done"] = today, sorted(done)
+            state_path.write_text(json.dumps(state))
+        time.sleep(polite_ms / 1000.0)
+
+    elapsed = round(time.time() - t0, 1)
+    summary = {"ok": not failures, "date": today, "aislesWalked": len(aisles),
+               "uniqueProducts": "?see gz", "pagesFetched": pages,
+               "failures": failures, "elapsedS": elapsed, "perAisle": per_aisle,
+               "output": str(out_path)}
+    summary_path.write_text(json.dumps(summary, indent=1))
+    log(f"WALK DONE: {pages} pages, {elapsed}s, {len(failures)} parked aisles -> {out_path.name}")
+    return summary
+
+
+def telegram(msg: str) -> None:
+    try:
+        import urllib.request
+
+        bot, chat = os.getenv("TELEGRAM_CLAW_BOT", ""), os.getenv("TELEGRAM_CHAT_ID", "")
+        if not bot or not chat:
+            return
+        urllib.request.urlopen(urllib.request.Request(
+            f"https://api.telegram.org/bot{bot}/sendMessage",
+            data=json.dumps({"chat_id": chat, "text": msg}).encode(),
+            headers={"Content-Type": "application/json"}), timeout=15)
+    except Exception:
+        pass
+
+
+def upload(summary: dict) -> bool:
+    import urllib.request
+
+    if not UPLOAD_TOKEN:
+        log("upload skipped: no token")
+        return False
+    body = Path(summary["output"]).read_bytes()
+    req = urllib.request.Request(UPLOAD_URL, data=body, method="POST", headers={
+        "Content-Type": "application/gzip", "Authorization": f"Bearer {UPLOAD_TOKEN}",
+        "X-Walk-Summary": json.dumps({k: summary.get(k) for k in ("date", "pagesFetched", "elapsedS", "failures")})})
+    try:
+        with urllib.request.urlopen(req, timeout=300) as r:
+            resp = json.loads(r.read().decode())
+            log(f"upload OK: {json.dumps(resp)[:300]}")
+            return bool(resp.get("ok"))
+    except Exception as exc:
+        log(f"upload FAILED: {exc}")
+        return False
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--no-upload", action="store_true")
+    ap.add_argument("--aisles", default="")
+    ap.add_argument("--polite-ms", type=int, default=4500)
+    ap.add_argument("--max-pages", type=int, default=2000)
+    args = ap.parse_args()
+    af = {a.strip() for a in args.aisles.split(",") if a.strip()} or None
+    summary = walk(args.polite_ms, af, args.max_pages)
+    lines = ["🛒 COLES CATALOGUE WALK (laptop agent)",
+             f"pages: {summary.get('pagesFetched')} / {summary.get('elapsedS')}s / parked: {len(summary.get('failures', []))}"]
+    if not args.no_upload and summary.get("output"):
+        ok = upload(summary)
+        lines.append("upload: " + ("✅ published" if ok else "❌ FAILED — re-run later, resume keeps progress"))
+    telegram("\n".join(lines))
+    print("\n".join(lines))
+    return 0 if summary.get("ok") else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
