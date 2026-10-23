@@ -53,7 +53,11 @@ PAGE_SIZE = 36
 # "Back to School" 3.3k items — their members live in true departments;
 # attribution + pages wasted — live-caught 2026-10-23)
 EXCLUDE_NODES = {"specialsgroup", "1_A363395", "1_F89E4BB", "1_1D9FEE2",
-                 "1_90E697B", "1_8AD6702", "1_9E92C35", "1_BC1E589"}
+                 "1_90E697B", "1_8AD6702", "1_9E92C35", "1_BC1E589",
+                 # Front of Store (gift cards & co): user 2026-10-24 "gift
+                 # cards - i dont need this aisle you can ignore this in all
+                 # our future runs"
+                 "1_B63CF9E"}
 SYDNEY = timezone(timedelta(hours=11))
 
 UPLOAD_URL = os.getenv("WW_UPLOAD_URL", "https://169-58-107-0.sslip.io/api/shopping/catalogue/ww-upload")
