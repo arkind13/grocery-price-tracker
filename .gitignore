@@ -281,3 +281,7 @@ data/price_unavailable.json
 
 # Full-sheet backup artifacts (tools/sheet_backup.py local fallback)
 backups/
+
+# WW catalogue walks (laptop agent) — data + the upload token
+data/ww-catalogue/
+laptop/ww-upload.env
