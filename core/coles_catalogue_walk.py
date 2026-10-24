@@ -53,50 +53,89 @@ def log(msg: str) -> None:
 
 
 class ColesSession:
-    def __init__(self):
-        from curl_cffi import requests as crx
+    """Fetches browse pages through a REAL headless Chromium (Playwright).
+    Coles' Imperva shield binds its clearance to the browser fingerprint —
+    cookie-borrowing into curl_cffi worked for ~1,000 pages then got
+    re-flagged (live 2026-10-24). A genuine engine solves challenges
+    invisibly and needs no borrowed cookies — fully Wednesday-automatable."""
 
-        self.sess = crx.Session(impersonate="chrome131")
+    def __init__(self, headless: bool = False):
+        from playwright.sync_api import sync_playwright
+
+        self._pw = sync_playwright().start()
+        # HEADED by default (a visible window): Imperva detects headless
+        # Chromium (live-proven 2026-10-24 — headless got the challenge on
+        # every page; the ZCode in-app browser engine passed). For the 5am
+        # Wednesday task the window appears on the locked session — harmless.
+        args = ["--disable-blink-features=AutomationControlled"]
+        self.browser = self._pw.chromium.launch(headless=headless, args=args)
+        self.page = self.browser.new_page(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            viewport={"width": 1380, "height": 900})
+        self.page.add_init_script(
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
 
     def browse(self, path: str) -> dict | None:
-        """One browse page -> pageProps dict, or None when challenged."""
+        """One browse page -> pageProps dict (None after retries). The
+        challenge (when it appears) auto-solves and redirects in a genuine
+        engine — so WAIT for __NEXT_DATA__ up to 20s instead of reloading
+        (a reload resets the challenge — live-caught 2026-10-24)."""
+        import json as _json
         for attempt in range(3):
             try:
-                r = self.sess.get(f"{BASE}{path}", timeout=45,
-                                  headers={"Accept": "text/html,application/xhtml+xml"})
-                m = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', r.text, re.S)
-                if m:
-                    return json.loads(m.group(1))["props"]["pageProps"]
-                log(f"    challenge/no-data on {path} (HTTP {r.status_code}, {len(r.text)}b) — cooling 75s (attempt {attempt+1}/3)")
+                self.page.goto(f"{BASE}{path}", timeout=60000, wait_until="domcontentloaded")
+                try:
+                    self.page.wait_for_selector("#__NEXT_DATA__", timeout=20000)
+                except Exception:
+                    pass  # fall through to the manual read below
+                data = self.page.evaluate(
+                    "() => { const el = document.getElementById('__NEXT_DATA__'); return el ? el.textContent : null; }")
+                if data:
+                    return _json.loads(data)["props"]["pageProps"]
+                log(f"    no-data on {path} (attempt {attempt+1}/3) — waiting 20s before retry")
+                self.page.wait_for_timeout(20000)
             except Exception as exc:
-                log(f"    ERR {type(exc).__name__} on {path} — cooling 75s (attempt {attempt+1}/3)")
-            time.sleep(75)
+                log(f"    ERR {type(exc).__name__} on {path} (attempt {attempt+1}/3)")
         return None
 
+    def set_cookie_header(self, _):  # pass-keeper compatibility (unused now)
+        pass
 
+    def close(self):
+        try:
+            self.browser.close()
+            self._pw.stop()
+        except Exception:
+            pass
+
+
+# pseudo-shop nodes that are not real grocery aisles
+EXCLUDE_NAMES = {"bonus credit products", "specials", "christmas"}
 def flatten_tree(cgv: list[dict]) -> list[dict]:
-    """catalogGroupView -> LEAF aisles (walk leaves, not supers — the WW
-    lesson: supers drag cross-listed duplicates)."""
+    """catalogGroupView -> LEAF aisles with their REAL seoToken slugs (the
+    site's own URLs — live-caught 2026-10-24: regex-guessed slugs serve
+    empty pages). Leaves, not supers — the WW cross-listing lesson."""
     out: list[dict] = []
 
-    def walk(nodes, parents):
-        kids = None
+    def walk(nodes, parents, parent_slugs):
         for n in nodes or []:
             name = str(n.get("name") or "").strip()
-            if not name or name.lower() in ("specials",):
+            if not name or name.lower() in EXCLUDE_NAMES:
                 continue
             kids = n.get("catalogGroupView") or []
+            token = str(n.get("seoToken") or "").strip()
             path = parents + [name]
             if kids:
-                walk(kids, path)
+                walk(kids, path, parent_slugs + ([token] if token else []))
             else:
-                slug = (n.get("seoToken") or n.get("urlFriendlyName") or
-                        re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-"))
+                if not token or not parent_slugs:
+                    continue  # a leaf needs its department path to serve products
                 out.append({"id": str(n.get("id") or ""), "name": name,
-                            "slug": slug, "productCount": n.get("productCount"),
+                            "slug": "/".join(parent_slugs + [token]),
+                            "productCount": n.get("productCount"),
                             "path": " > ".join(path)})
 
-    walk(cgv, [])
+    walk(cgv, [], [])
     return out
 
 
@@ -152,14 +191,18 @@ def walk(polite_ms: int, aisles_filter: set[str] | None, max_pages: int) -> dict
     summary_path = DATA_DIR / f"walk-{today}.summary.json"
 
     s = ColesSession()
-    log("warm-up: homepage")
-    s.browse("/")
-    home = s.browse("/browse/meat-seafood")  # tree source (any browse page)
-    if not home:
+    log("real-engine session started (headless Chromium)")
+    log("warm-up + tree: /browse (all categories)")
+    allcats = s.browse("/browse")
+    if not allcats:
         log("FATAL: challenged even on warm-up — try again later (resume keeps progress)")
         return {"ok": False, "error": "challenged on warm-up"}
-    aisles = flatten_tree((home.get("searchResults") or {}).get("catalogGroupView") or [])
-    log(f"tree: {len(aisles)} leaf aisles")
+    apc = allcats.get("allProductCategories") or {}
+    aisles = flatten_tree(apc.get("catalogGroupView") or [])
+    leaf_total = sum(int(a["productCount"] or 0) for a in aisles if a["productCount"])
+    log(f"tree: {len(aisles)} leaf aisles, ~{leaf_total} listed products")
+    seasonal = ("back to school", "halloween", "christmas", "summer", "mother's day", "father's day", "easter")
+    aisles.sort(key=lambda a: any(s in a["path"].lower() for s in seasonal))
     if aisles_filter:
         aisles = [a for a in aisles if a["slug"] in aisles_filter or a["name"].lower() in aisles_filter]
 
@@ -169,11 +212,14 @@ def walk(polite_ms: int, aisles_filter: set[str] | None, max_pages: int) -> dict
     per_aisle, failures = [], []
     pages = 0
     t0 = time.time()
+    ck_path = DATA_DIR / "cookies.txt"  # pass-keeper file (unused with the real engine)
+    ck_mtime = 0
     for aisle in aisles:
         slug = aisle["slug"]
         if slug in done:
             per_aisle.append({"slug": slug, "note": "resumed-done"})
             continue
+
         aisle_new = 0
         listed_total = None
         ok = True
@@ -187,7 +233,9 @@ def walk(polite_ms: int, aisles_filter: set[str] | None, max_pages: int) -> dict
                     break
                 sr = props.get("searchResults") or {}
                 rows = sr.get("results") or []
-                listed_total = sr.get("noOfResults")
+                listed_total = sr.get("noOfResults") or 0
+                if not listed_total and rows:
+                    listed_total = len(rows)  # some aisles report 0 but list a full page
                 if not rows:
                     break
                 names = [str(r.get("name") or "") for r in rows[:3]]
@@ -229,6 +277,7 @@ def walk(polite_ms: int, aisles_filter: set[str] | None, max_pages: int) -> dict
                "failures": failures, "elapsedS": elapsed, "perAisle": per_aisle,
                "output": str(out_path)}
     summary_path.write_text(json.dumps(summary, indent=1))
+    s.close()
     log(f"WALK DONE: {pages} pages, {elapsed}s, {len(failures)} parked aisles -> {out_path.name}")
     return summary
 

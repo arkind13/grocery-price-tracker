@@ -11,7 +11,7 @@
 
 $ErrorActionPreference = "Stop"
 $tracker = Split-Path -Parent $PSScriptRoot
-$bat = Join-Path $tracker "laptop\run-ww-walk.bat"
+$bat = Join-Path $tracker "laptop\run-wednesday-walks.bat"
 
 # allow wake timers on the active power plan (best-effort; needs no admin
 # for the current scheme in most configs)
@@ -26,7 +26,7 @@ $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Wednesday -At 5:00am
 $settings = New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable `
   -ExecutionTimeLimit (New-TimeSpan -Hours 3) -DontStopIfGoingOnBatteries `
   -AllowStartIfOnBatteries -RestartCount 2 -RestartInterval (New-TimeSpan -Minutes 5)
-Register-ScheduledTask -TaskName "WW Catalogue Walk (Wednesday 5am)" `
+Register-ScheduledTask -TaskName "Wednesday Walks - ALDI + Woolworths (5am)" `
   -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
-Write-Host "Task registered: 'WW Catalogue Walk (Wednesday 5am)' -> $bat"
-Write-Host "Wake-to-run enabled; lid closed is fine. Manual run: double-click run-ww-walk.bat"
+Write-Host "Task registered: 'Wednesday Walks - ALDI + Woolworths (5am)' -> $bat"
+Write-Host "Wake-to-run enabled; lid closed is fine. Manual run: double-click run-wednesday-walks.bat"
