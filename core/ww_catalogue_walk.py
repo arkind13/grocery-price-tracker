@@ -274,7 +274,7 @@ def main() -> int:
     ]
     if not args.no_upload:
         ok = upload(summary)
-        lines.append("upload: " + ("✅ published receipt from server" if ok else "❌ FAILED — run 'Run WW walk now.bat' when online"))
+        lines.append("upload: " + ("✅ published on the server (its own Telegram receipt follows with scanned/specials/removed)" if ok else "❌ FAILED — run 'Run WW walk now.bat' when online"))
     telegram("\n".join(lines))
     print("\n".join(lines))
     return 0 if summary["ok"] else 1
