@@ -68,7 +68,14 @@ class ColesSession:
         # every page; the ZCode in-app browser engine passed). For the 5am
         # Wednesday task the window appears on the locked session — harmless.
         args = ["--disable-blink-features=AutomationControlled"]
-        self.browser = self._pw.chromium.launch(headless=headless, args=args)
+        # REAL Chrome, not the bundled Chromium (live-proven 2026-10-29:
+        # Coles' upgraded fingerprinting challenges the bundled build on every
+        # page while the installed Chrome passes — channel="chrome" uses the
+        # user's own browser binary; fallback keeps old environments working)
+        try:
+            self.browser = self._pw.chromium.launch(headless=headless, channel="chrome", args=args)
+        except Exception:
+            self.browser = self._pw.chromium.launch(headless=headless, args=args)
         self.page = self.browser.new_page(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
             viewport={"width": 1380, "height": 900})
@@ -380,10 +387,15 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-upload", action="store_true")
     ap.add_argument("--aisles", default="")
+    ap.add_argument("--aisles-file", default="", help="one aisle NAME per line (names can contain commas)")
     ap.add_argument("--polite-ms", type=int, default=4500)
     ap.add_argument("--max-pages", type=int, default=2000)
     args = ap.parse_args()
-    af = {a.strip() for a in args.aisles.split(",") if a.strip()} or None
+    af = {a.strip() for a in args.aisles.split(",") if a.strip()}
+    if args.aisles_file:
+        from pathlib import Path as _P
+        af |= {l.strip() for l in _P(args.aisles_file).read_text(encoding="utf8").splitlines() if l.strip() and not l.startswith("#")}
+    af = af or None
     summary = walk(args.polite_ms, af, args.max_pages)
     lines = ["🛒 COLES CATALOGUE WALK (laptop agent)",
              f"pages: {summary.get('pagesFetched')} / {summary.get('elapsedS')}s / parked: {len(summary.get('failures', []))}"]
