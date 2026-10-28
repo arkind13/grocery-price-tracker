@@ -182,6 +182,22 @@ def normalise(p: dict, aisle: dict) -> dict | None:
     }
 
 
+INCREMENTAL_EVERY = 150  # aisles between partial uploads (~75-90 min at walk pace)
+
+
+def _partial_upload(tag: str, out_path, pages: int, t0: float, failures: list) -> bool:
+    """Upload EVERYTHING flushed so far as a PARTIAL publish (user ask
+    2026-10-28: 'dont wait for the whole run to complete... keep uploading
+    and marking them off'). The server skips the delist ladder for partials;
+    the final full upload at walk end completes the week."""
+    summary = {"output": str(out_path), "date": datetime.now(SYDNEY).date().isoformat(),
+               "pagesFetched": pages, "elapsedS": round(time.time() - t0, 1),
+               "failures": failures, "partial": tag}
+    ok = upload(summary)
+    log(f"  [incremental upload {tag}] {'OK' if ok else 'FAILED'}")
+    return ok
+
+
 def walk(polite_ms: int, aisles_filter: set[str] | None, max_pages: int) -> dict:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     state_path = DATA_DIR / "state.json"
@@ -209,11 +225,47 @@ def walk(polite_ms: int, aisles_filter: set[str] | None, max_pages: int) -> dict
     resume = today == state.get("date")
     done = set(state.get("done", [])) if resume else set()
     products: dict[str, dict] = {}
+
+    # SPECIALS FIRST (user ask 2026-10-28: 'As soon as specials are done
+    # upload that first so all the special items are first to be seen'):
+    # on a FRESH day, sweep the /on-special shelf (~40 pages, ~10 min) and
+    # publish it immediately — every live special is on the site within
+    # minutes of the walk starting. Skipped on same-day resumes.
+    if not resume and not aisles_filter:
+        t_sp = time.time()
+        sp_rows: dict[str, dict] = {}
+        for page in range(1, 46):
+            props = s.browse(f"/on-special?page={page}" if page > 1 else "/on-special")
+            if props is None:
+                break
+            sr = props.get("searchResults") or {}
+            rows = sr.get("results") or []
+            if not rows:
+                break
+            for r in rows:
+                row = normalise(r, {"path": "Specials", "name": "Specials", "slug": "on-special"})
+                if row and row["storeProductId"] not in sp_rows:
+                    sp_rows[row["storeProductId"]] = row
+            total = int(sr.get("noOfResults") or 0)
+            if (total and len(sp_rows) >= total) or len(rows) < 36:
+                break
+            time.sleep(polite_ms / 1000.0)
+        if sp_rows:
+            with gzip.open(out_path, "at", encoding="utf8") as fz:
+                for code, row in sp_rows.items():
+                    fz.write(json.dumps(row, default=str) + "\n")
+            log(f"specials pre-pass: {len(sp_rows)} special items in {round(time.time() - t_sp)}s — uploading FIRST")
+            _partial_upload("specials-first", out_path, pages, t0, failures=[])
     per_aisle, failures = [], []
     pages = 0
     t0 = time.time()
     ck_path = DATA_DIR / "cookies.txt"  # pass-keeper file (unused with the real engine)
     ck_mtime = 0
+    since_upload = 0
+    if done:
+        # a restart with banked aisles publishes the bank immediately
+        # (tonight's reality: hundreds of aisles sat un-uploaded after restarts)
+        _partial_upload(f"resume-{len(done)}", out_path, pages, t0, failures)
     for aisle in aisles:
         slug = aisle["slug"]
         if slug in done:
@@ -269,6 +321,10 @@ def walk(polite_ms: int, aisles_filter: set[str] | None, max_pages: int) -> dict
             done.add(slug)
             state["date"], state["done"] = today, sorted(done)
             state_path.write_text(json.dumps(state))
+            since_upload += 1
+            if since_upload >= INCREMENTAL_EVERY:
+                since_upload = 0
+                _partial_upload(f"aisle-{len(done)}", out_path, pages, t0, failures)
         time.sleep(polite_ms / 1000.0)
 
     elapsed = round(time.time() - t0, 1)
@@ -304,9 +360,12 @@ def upload(summary: dict) -> bool:
         log("upload skipped: no token")
         return False
     body = Path(summary["output"]).read_bytes()
-    req = urllib.request.Request(UPLOAD_URL, data=body, method="POST", headers={
+    headers = {
         "Content-Type": "application/gzip", "Authorization": f"Bearer {UPLOAD_TOKEN}",
-        "X-Walk-Summary": json.dumps({k: summary.get(k) for k in ("date", "pagesFetched", "elapsedS", "failures")})})
+        "X-Walk-Summary": json.dumps({k: summary.get(k) for k in ("date", "pagesFetched", "elapsedS", "failures")})}
+    if summary.get("partial"):
+        headers["X-Walk-Partial"] = "1"
+    req = urllib.request.Request(UPLOAD_URL, data=body, method="POST", headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=300) as r:
             resp = json.loads(r.read().decode())
