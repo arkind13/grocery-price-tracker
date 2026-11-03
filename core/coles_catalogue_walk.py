@@ -52,14 +52,46 @@ def log(msg: str) -> None:
     print(f"[coles-walk {datetime.now(SYDNEY).strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
+DEFAULT_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+              "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+COOKIE_PATH = DATA_DIR / "cookies.json"
+COOKIE_MAX_AGE_H = 24  # older borrow = probably-expired clearance, skip it
+
+
+def load_borrowed_cookies() -> dict | None:
+    """Fresh cookie borrow from the user's Chrome (written by
+    core/coles_refresh_cookie.py — the 2026-11-04 'reply coles' protocol).
+    Returns {userAgent, cookies} or None when absent/stale."""
+    try:
+        blob = json.loads(COOKIE_PATH.read_text())
+        fetched = datetime.fromisoformat(blob["fetchedAt"])
+        age_h = (datetime.now(SYDNEY) - fetched).total_seconds() / 3600
+        if age_h > COOKIE_MAX_AGE_H or not blob.get("cookies"):
+            log(f"borrowed cookies stale ({age_h:.0f}h old) — walking bare")
+            return None
+        log(f"borrowed {len(blob['cookies'])} fresh cookies "
+            f"(fetched {blob['fetchedAt']}, profile {blob.get('profile', '?')})")
+        return {"userAgent": blob.get("userAgent") or DEFAULT_UA,
+                "cookies": blob["cookies"]}
+    except FileNotFoundError:
+        return None
+    except Exception as exc:
+        log(f"cookie borrow unreadable ({type(exc).__name__}) — walking bare")
+        return None
+
+
 class ColesSession:
     """Fetches browse pages through a REAL headless Chromium (Playwright).
     Coles' Imperva shield binds its clearance to the browser fingerprint —
     cookie-borrowing into curl_cffi worked for ~1,000 pages then got
     re-flagged (live 2026-10-24). A genuine engine solves challenges
-    invisibly and needs no borrowed cookies — fully Wednesday-automatable."""
+    invisibly and needs no borrowed cookies — fully Wednesday-automatable.
+    2026-11-04: Coles started challenging even the real engine on warm-up,
+    so a fresh borrow from the user's own Chrome (cookies + THEIR Chrome
+    UA — the clearance is fingerprint-bound, so the pair must travel
+    together) is injected when available."""
 
-    def __init__(self, headless: bool = False):
+    def __init__(self, headless: bool = False, borrowed: dict | None = None):
         from playwright.sync_api import sync_playwright
 
         self._pw = sync_playwright().start()
@@ -76,9 +108,12 @@ class ColesSession:
             self.browser = self._pw.chromium.launch(headless=headless, channel="chrome", args=args)
         except Exception:
             self.browser = self._pw.chromium.launch(headless=headless, args=args)
-        self.page = self.browser.new_page(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        context = self.browser.new_context(
+            user_agent=(borrowed or {}).get("userAgent") or DEFAULT_UA,
             viewport={"width": 1380, "height": 900})
+        if borrowed and borrowed.get("cookies"):
+            context.add_cookies(borrowed["cookies"])
+        self.page = context.new_page()
         self.page.add_init_script(
             "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
 
@@ -213,7 +248,7 @@ def walk(polite_ms: int, aisles_filter: set[str] | None, max_pages: int) -> dict
     out_path = DATA_DIR / f"walk-{today}.jsonl.gz"
     summary_path = DATA_DIR / f"walk-{today}.summary.json"
 
-    s = ColesSession()
+    s = ColesSession(borrowed=load_borrowed_cookies())
     log("real-engine session started (headless Chromium)")
     log("warm-up + tree: /browse (all categories)")
     allcats = s.browse("/browse")
@@ -384,6 +419,12 @@ def upload(summary: dict) -> bool:
 
 
 def main() -> int:
+    # the cp1252 console choked on the emoji summary (2026-11-04 logs)
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf8", errors="replace")
+        except Exception:
+            pass
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-upload", action="store_true")
     ap.add_argument("--aisles", default="")
@@ -404,6 +445,10 @@ def main() -> int:
         lines.append("upload: " + ("✅ published" if ok else "❌ FAILED — re-run later, resume keeps progress"))
     telegram("\n".join(lines))
     print("\n".join(lines))
+    # exit 3 = challenged on warm-up: a DISTINCT code so the supervisor can
+    # count strikes and run the 2026-11-04 two-fail cookie protocol
+    if summary.get("error") == "challenged on warm-up":
+        return 3
     return 0 if summary.get("ok") else 1
 
 

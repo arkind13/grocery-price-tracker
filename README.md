@@ -342,6 +342,44 @@ Paste your Woolworths list + specials into the two .docx files, run
 ONE coded list (topic 208), a parity line. 14s measured. No pause, no
 reminders, no ceremony.
 
+The 5am laptop task (`laptop/run-ww-then-coles.bat`) then walks BOTH
+catalogues: Woolworths (~1h, no browser) and the whole Coles site via a
+supervised real-Chrome walker
+(`core/coles_catalogue_walk.py` + `core/coles_walk_supervised.py`,
+resume state in `data/coles-catalogue/state.json`, incremental uploads
+as it goes).
+
+### Coles robot-check → the "reply coles" cookie protocol (2026-11-04)
+
+Coles' bot shield sometimes challenges even the real engine on warm-up.
+The walker exits with code 3 for that exact case, and the supervisor
+counts strikes (user rule 2026-11-04: "if it fails 2 times send me a
+message on telegram saying coles failed fresh cookie from my browser
+required to run"):
+
+1. **2 challenge fails** → the supervisor STOPS retrying (never the
+   2026-11-04 morning loop again) and sends that Telegram message.
+2. The user opens **coles.com.au in their Chrome**, replies **coles**,
+   then **fully quits Chrome** — while Chrome runs, Windows keeps its
+   cookie file locked (plain reads, sqlite, esentutl all fail; the quit
+   also flushes the freshest clearance cookie to disk).
+3. The supervisor polls `core/coles_refresh_cookie.py --auto` every
+   60s; the moment Chrome unlocks, it copies the cookie DB (+ Local
+   State) into a scratch profile, opens REAL Chrome on the copy,
+   visits Coles — Chrome decrypts its own cookies, and the visit
+   VERIFIES the borrow (no `__NEXT_DATA__` = failed borrow).
+   Verified cookies land in `data/coles-catalogue/cookies.json`
+   (gitignored — never committed, values never logged).
+4. The walk restarts automatically, injecting the borrowed cookies +
+   the user's Chrome user-agent (the clearance is fingerprint-bound,
+   so the pair travels together). Stale borrows (>24h) are ignored.
+
+An agent session can run `python core/coles_refresh_cookie.py` directly
+when the user replies "coles" in chat — same script, same verification.
+Telegram sends use the claw bot (sendMessage only, NEVER getUpdates —
+the claw gateway owns polling); the token lives in
+`laptop/ww-upload.env` (untracked).
+
 ## Backups — and the canary
 
 `tools/sheet_backup.py` writes a full JSON snapshot (every tab,
