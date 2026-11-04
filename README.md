@@ -347,7 +347,10 @@ catalogues: Woolworths (~1h, no browser) and the whole Coles site via a
 supervised real-Chrome walker
 (`core/coles_catalogue_walk.py` + `core/coles_walk_supervised.py`,
 resume state in `data/coles-catalogue/state.json`, incremental uploads
-as it goes).
+as it goes). **Liquorland is EXCLUDED completely** (user ruling
+2026-11-04): the whole department subtree never walks, never uploads,
+and its absence from the full-walk feed makes the server's delist
+ladder drop existing liquor rows from the catalogue.
 
 ### Coles robot-check → the "reply coles" cookie protocol (2026-11-04)
 

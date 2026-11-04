@@ -152,7 +152,11 @@ class ColesSession:
 
 
 # pseudo-shop nodes that are not real grocery aisles
-EXCLUDE_NAMES = {"bonus credit products", "specials", "christmas"}
+# liquorland: user ruling 2026-11-04 "make sure Liquorland is excluded
+# completely" — the whole department subtree (63 aisles) never walks, and
+# its absence from the full-walk upload lets the server's delist ladder
+# drop existing liquor rows from the catalogue
+EXCLUDE_NAMES = {"bonus credit products", "specials", "christmas", "liquorland"}
 def flatten_tree(cgv: list[dict]) -> list[dict]:
     """catalogGroupView -> LEAF aisles with their REAL seoToken slugs (the
     site's own URLs — live-caught 2026-10-24: regex-guessed slugs serve
