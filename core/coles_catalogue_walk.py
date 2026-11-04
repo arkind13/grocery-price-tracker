@@ -127,7 +127,12 @@ class ColesSession:
             try:
                 self.page.goto(f"{BASE}{path}", timeout=60000, wait_until="domcontentloaded")
                 try:
-                    self.page.wait_for_selector("#__NEXT_DATA__", timeout=20000)
+                    # FIRST attempt: wait LONG (45s) for the challenge to
+                    # auto-solve in this genuine engine — a reload RESETS it
+                    # (live-caught 2026-11-05: on a hot IP the solve takes
+                    # 20-45s and the old 20s wait reloaded forever)
+                    self.page.wait_for_selector("#__NEXT_DATA__",
+                                                timeout=45000 if attempt == 0 else 20000)
                 except Exception:
                     pass  # fall through to the manual read below
                 data = self.page.evaluate(
@@ -244,7 +249,8 @@ def _partial_upload(tag: str, out_path, pages: int, t0: float, failures: list) -
     return ok
 
 
-def walk(polite_ms: int, aisles_filter: set[str] | None, max_pages: int) -> dict:
+def walk(polite_ms: int, aisles_filter: set[str] | None, max_pages: int,
+         specials_only: bool = False) -> dict:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     state_path = DATA_DIR / "state.json"
     state = json.loads(state_path.read_text()) if state_path.exists() else {"done": []}
@@ -293,7 +299,7 @@ def walk(polite_ms: int, aisles_filter: set[str] | None, max_pages: int) -> dict
     # 2026-11-04 16:28 death loop was exactly this: the pre-pass upload
     # referenced pages/t0 before this line existed on fresh-day runs
     # (resume days skip the pre-pass and never hit it)
-    if not resume and not aisles_filter:
+    if (not resume or specials_only) and not aisles_filter:
         t_sp = time.time()
         sp_rows: dict[str, dict] = {}
         for page in range(1, 46):
@@ -322,6 +328,20 @@ def walk(polite_ms: int, aisles_filter: set[str] | None, max_pages: int) -> dict
                     fz.write(json.dumps(row, default=str) + "\n")
             log(f"specials pre-pass: {len(sp_rows)} special items in {round(time.time() - t_sp)}s — uploading FIRST")
             _partial_upload("specials-first", out_path, pages, t0, failures=[])
+    if specials_only:
+        # 2026-11-05 user ruling: the full-catalogue walk is RETIRED (two
+        # days of Coles blocking per week is not worth it) — Wednesday runs
+        # the specials sweep only; the catalogue rides on what's banked +
+        # whatever live searches save into it (ai-studio side)
+        elapsed = round(time.time() - t0, 1)
+        s.close()
+        log(f"SPECIALS-ONLY DONE: {len(sp_rows)} special items, {elapsed}s -> {out_path.name}")
+        return {"ok": bool(sp_rows), "date": today, "specialsOnly": True,
+                "uniqueProducts": len(sp_rows), "pagesFetched": pages,
+                "elapsedS": elapsed, "failures": [],
+                # output only when the gz was actually written (a fully
+                # blocked sweep has nothing to upload — say so, don't crash)
+                **({"output": str(out_path)} if sp_rows else {})}
     per_aisle, failures = [], []
     ck_path = DATA_DIR / "cookies.txt"  # pass-keeper file (unused with the real engine)
     ck_mtime = 0
@@ -453,13 +473,17 @@ def main() -> int:
     ap.add_argument("--aisles-file", default="", help="one aisle NAME per line (names can contain commas)")
     ap.add_argument("--polite-ms", type=int, default=4500)
     ap.add_argument("--max-pages", type=int, default=2000)
+    ap.add_argument("--specials-only", action="store_true",
+                    help="weekly mode (2026-11-05): sweep + upload the specials "
+                         "shelf only, skip the aisle walk entirely")
     args = ap.parse_args()
     af = {a.strip() for a in args.aisles.split(",") if a.strip()}
     if args.aisles_file:
         from pathlib import Path as _P
         af |= {l.strip() for l in _P(args.aisles_file).read_text(encoding="utf8").splitlines() if l.strip() and not l.startswith("#")}
     af = af or None
-    summary = walk(args.polite_ms, af, args.max_pages)
+    summary = walk(args.polite_ms, af, args.max_pages,
+                   specials_only=args.specials_only)
     lines = ["🛒 COLES CATALOGUE WALK (laptop agent)",
              f"pages: {summary.get('pagesFetched')} / {summary.get('elapsedS')}s / parked: {len(summary.get('failures', []))}"]
     if not args.no_upload and summary.get("output"):

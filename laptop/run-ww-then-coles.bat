@@ -1,12 +1,11 @@
 @echo off
-rem WEDNESDAY FULL RUN — the 5am scheduled task's action (user 2026-10-28:
-rem "do the entire coles run on the local... the same way you did by keeping
-rem a browser open and using that to keep updating it"). Woolworths first
-rem (~1h, no browser), then the ENTIRE Coles walk (~8-11h, opens a REAL
-rem Chromium window — leave it be; it re-checks prices against the existing
-rem database, records only changes, and resumes the same day if paused).
-rem Each walk uploads + publishes on the server, which sends its own
-rem Telegram receipt (scanned / on special / removed).
+rem WEDNESDAY RUN — the 5am scheduled task's action. Woolworths first
+rem (~1h, no browser). Coles: SPECIALS SWEEP ONLY since 2026-11-05 (user
+rem ruling: "not worth 2 days of trying every week to get the whole
+rem catalogue") — the full-catalogue walk is RETIRED; the Coles catalogue
+rem rides on what is banked + whatever live searches save into it, and
+rem only the specials shelf (~30-45 min) is swept weekly. If the sweep
+rem gets robot-blocked it reports and gives up — nobody is pestered.
 
 cd /d "%~dp0.."
 setlocal
@@ -19,9 +18,9 @@ echo === Woolworths walk ===
 "C:\Users\User.DESKTOP-R2G441H\anaconda3\python.exe" core\ww_catalogue_walk.py --polite-ms 2200
 echo.
 
-echo === Coles walk (SUPERVISED - auto-restarts if the browser freezes) ===
-"C:\Users\User.DESKTOP-R2G441H\anaconda3\python.exe" -u core\coles_walk_supervised.py --polite-ms 4500
+echo === Coles specials sweep (full walk retired 2026-11-05) ===
+"C:\Users\User.DESKTOP-R2G441H\anaconda3\python.exe" -u core\coles_catalogue_walk.py --specials-only --polite-ms 4500
 echo.
 
-echo Both walks done. Server receipts sent to Telegram.
+echo Wednesday runs done. Server receipts sent to Telegram.
 timeout /t 30
