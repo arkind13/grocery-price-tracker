@@ -273,6 +273,11 @@ def walk(polite_ms: int, aisles_filter: set[str] | None, max_pages: int) -> dict
     # on a FRESH day, sweep the /on-special shelf (~40 pages, ~10 min) and
     # publish it immediately — every live special is on the site within
     # minutes of the walk starting. Skipped on same-day resumes.
+    pages = 0
+    t0 = time.time()  # initialised BEFORE the specials pre-pass — the
+    # 2026-11-04 16:28 death loop was exactly this: the pre-pass upload
+    # referenced pages/t0 before this line existed on fresh-day runs
+    # (resume days skip the pre-pass and never hit it)
     if not resume and not aisles_filter:
         t_sp = time.time()
         sp_rows: dict[str, dict] = {}
@@ -303,8 +308,6 @@ def walk(polite_ms: int, aisles_filter: set[str] | None, max_pages: int) -> dict
             log(f"specials pre-pass: {len(sp_rows)} special items in {round(time.time() - t_sp)}s — uploading FIRST")
             _partial_upload("specials-first", out_path, pages, t0, failures=[])
     per_aisle, failures = [], []
-    pages = 0
-    t0 = time.time()
     ck_path = DATA_DIR / "cookies.txt"  # pass-keeper file (unused with the real engine)
     ck_mtime = 0
     since_upload = 0
