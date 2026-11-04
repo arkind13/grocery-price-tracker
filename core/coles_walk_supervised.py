@@ -68,6 +68,17 @@ FAIL_MSG = ("Coles failed - fresh cookie from my browser required to run.\n\n"
             "3. fully QUIT Chrome (all windows) so I can borrow the fresh "
             "cookie — you can reopen it right after")
 
+PARK_MSG = ("Coles is blocking most aisles mid-walk - fresh cookie from my "
+            "browser required to run.\n\n"
+            "The walk is PAUSED with all progress saved (it will not keep "
+            "limping). Please:\n"
+            "1. open coles.com.au in your Chrome\n"
+            "2. reply: coles\n"
+            "3. fully QUIT Chrome (all windows)\n"
+            "It restarts by itself the moment the cookie is grabbed.")
+PARK_STORM_MIN = 10   # parked aisles among the last PARK_STORM_WIN results
+PARK_STORM_WIN = 12
+
 
 def log(msg: str) -> None:
     line = f"[supervisor {datetime.now(SYDNEY).strftime('%H:%M:%S')}] {msg}"
@@ -208,6 +219,7 @@ def main() -> int:
         last_beat = time.time()
         frozen_at = None
         restart_reason = None
+        storm = False
         while True:
             time.sleep(30)
             if proc.poll() is not None:
@@ -222,6 +234,28 @@ def main() -> int:
                     early_exits += 1
                     restart_reason = f"early exit {code} ({early_exits}/{MAX_EARLY_EXITS})"
                 log(f"walker exited early (exit {code}) — {restart_reason}")
+                break
+            # park-storm watch (user ask 2026-11-05: "why didnt it send me a
+            # message" — the 2-strike rule only covers warm-up deaths; an
+            # overnight clearance decay parks aisle after aisle silently).
+            # 10+ of the last 12 aisles blocked = the borrow is stale: stop
+            # limping, ask for a cookie, wait, resume with the fresh one.
+            try:
+                with open(WALK_LOG, "rb") as f:
+                    f.seek(start_size)
+                    tail = f.read().decode("utf8", "replace").splitlines()
+            except OSError:
+                tail = []
+            results = [l for l in tail if l.endswith(" OK") or l.endswith("PARKED")]
+            if sum(1 for l in results[-PARK_STORM_WIN:] if l.endswith("PARKED")) >= PARK_STORM_MIN:
+                log(f"PARK STORM — {PARK_STORM_MIN}+ of the last {PARK_STORM_WIN} "
+                    "aisles blocked (stale cookie borrow) — pausing the walk")
+                kill_tree(proc)
+                telegram(PARK_MSG)
+                await_fresh_cookie()
+                challenge_strikes = 0
+                early_exits = 0
+                storm = True
                 break
             # freshness: the walker appends a line per aisle (and per wait)
             try:
@@ -247,6 +281,8 @@ def main() -> int:
                     last_beat = time.time()
                     log(f"ok — walker alive, aisles {aisles_done()}")
         # -- post-exit bookkeeping ------------------------------------------
+        if storm:
+            continue  # fresh cookie already awaited — restart the walk
         if challenge_strikes >= CHALLENGE_STRIKES:
             await_fresh_cookie()          # blocks until a verified cookie lands
             challenge_strikes = 0         # fresh borrow — clean slate

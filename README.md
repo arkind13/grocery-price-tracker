@@ -362,6 +362,11 @@ required to run"):
 
 1. **2 challenge fails** → the supervisor STOPS retrying (never the
    2026-11-04 morning loop again) and sends that Telegram message.
+   **Park-storm alarm (2026-11-05):** the 2-strike rule only catches
+   warm-up deaths — an overnight clearance decay instead parks aisle
+   after aisle silently. The supervisor now also watches the aisle
+   results and when 10+ of the last 12 aisles are blocked it PAUSES the
+   walk (progress saved) and sends the same style of cookie ask.
 2. The user opens **coles.com.au in their Chrome**, replies **coles**,
    then **fully quits Chrome** — while Chrome runs, Windows keeps its
    cookie file locked (plain reads, sqlite, esentutl all fail; the quit

@@ -269,6 +269,17 @@ def walk(polite_ms: int, aisles_filter: set[str] | None, max_pages: int) -> dict
         aisles = [a for a in aisles if a["slug"] in aisles_filter or a["name"].lower() in aisles_filter]
 
     resume = today == state.get("date")
+    if not resume and state.get("done"):
+        # overnight carry-over: a walk that crosses midnight must not lose
+        # its bank to the date rollover (resume=False would re-walk every
+        # banked aisle into a fresh file). If the bank is from YESTERDAY,
+        # carry the day's output file over and keep resuming (2026-11-05).
+        yest = (datetime.now(SYDNEY) - timedelta(days=1)).date().isoformat()
+        if state.get("date") == yest and (DATA_DIR / f"walk-{yest}.jsonl.gz").exists():
+            import shutil
+            shutil.copy2(DATA_DIR / f"walk-{yest}.jsonl.gz", out_path)
+            resume = True
+            log(f"midnight carry-over: {len(state['done'])} aisles banked on {yest} kept")
     done = set(state.get("done", [])) if resume else set()
     products: dict[str, dict] = {}
 
