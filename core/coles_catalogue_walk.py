@@ -291,6 +291,10 @@ def walk(polite_ms: int, aisles_filter: set[str] | None, max_pages: int) -> dict
             total = int(sr.get("noOfResults") or 0)
             if (total and len(sp_rows) >= total) or len(rows) < 36:
                 break
+            # progress line every page: the pre-pass otherwise runs ~8-10 min
+            # SILENT at 9s politeness — long enough to trip the supervisor's
+            # 10-min freeze detector on a perfectly healthy walker (2026-11-04)
+            log(f"  specials pre-pass page {page}: {len(sp_rows)} items so far")
             time.sleep(polite_ms / 1000.0)
         if sp_rows:
             with gzip.open(out_path, "at", encoding="utf8") as fz:
