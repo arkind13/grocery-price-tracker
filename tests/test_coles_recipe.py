@@ -69,6 +69,7 @@ class ColesRecipeTestCase(unittest.TestCase):
             patch.object(ce, "SCRAPEDO_HEALTH_PATH", self.health_path),
             patch.object(ce, "SCRAPEDO_API_KEY", "testtoken"),
             patch.object(ce, "_calls_this_run", 0),
+            patch.object(ce, "_window_start", None),
             patch.object(ce, "_session_seq", 0),
         ]
         for p in self._patchers:
@@ -259,6 +260,30 @@ class TestBreakerAndCap(ColesRecipeTestCase):
         self.assertIn(
             "Scrape.do per-run cap (2) reached — stopping Coles calls.",
             err.getvalue())
+
+    def test_c17_window_expiry_resets_cap(self):
+        """C-17 (ledger #27): expired window -> counter resets, calls flow.
+
+        The skills-api server is a long-lived process; the cap must not
+        be a lifetime sentence (2026-11-04: 40 lifetime attempts left
+        every Coles search answering 0 for days). Backdating the window
+        start past SCRAPEDO_CAP_WINDOW_S must let the next chain run.
+        """
+        ok = FakeResponse(200, next_data_html([make_product()]))
+        with patch.object(ce, "SCRAPEDO_MAX_CALLS_PER_RUN", 2):
+            mock = self.http_mock(side_effect=lambda *a, **k: ok)
+            self.assertEqual(ce.fetch_coles_search_status("milk")[1], "ok")
+            self.assertEqual(ce.fetch_coles_search_status("milk")[1], "ok")
+            err = io.StringIO()
+            with redirect_stderr(err):
+                s_capped = ce.fetch_coles_search_status("milk")[1]
+            self.assertEqual(s_capped, "cap_exceeded")
+            # Backdate the window: an hour has passed since the first call.
+            ce._window_start = ce._now() - (ce.SCRAPEDO_CAP_WINDOW_S + 1)
+            s_after = ce.fetch_coles_search_status("milk")[1]
+        self.assertEqual(s_after, "ok")
+        self.assertEqual(mock.call_count, 3)  # the window reset allowed HTTP
+        self.assertEqual(ce._calls_this_run, 1)  # counter restarted at 0
 
     def test_c16_corrupt_health_file_treated_healthy(self):
         """C-16: corrupt breaker file -> closed/streak 0, no raise."""

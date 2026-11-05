@@ -260,8 +260,11 @@ regression-tested places:
    green (v2 rule).
 
 Cost note: each store adds Scrape.do renders to every sweep window;
-the 40-credit per-run cap is shared across all stores + the Dunya
-catalogue.
+the Coles extractor's Scrape.do cap is a ROLLING-WINDOW cap since
+2026-11-05 (ledger #27, 120 HTTP attempts per rolling hour — was 40 per
+process run, which permanently darkened Coles in the long-running
+skills-api server after 2 days). The Dunya flyer fetcher keeps its own
+separate cap counter.
 
 ## The sheet
 
@@ -352,41 +355,27 @@ rulings 2026-11-04): those department subtrees never walk, never upload,
 and their absence from the full-walk feed makes the server's delist
 ladder drop existing liquor/tobacco rows from the catalogue.
 
-### Coles robot-check → the "reply coles" cookie protocol (2026-11-04)
+### Coles since 2026-11-05 — SPECIALS-ONLY weekly; full walk RETIRED
 
-Coles' bot shield sometimes challenges even the real engine on warm-up.
-The walker exits with code 3 for that exact case, and the supervisor
-counts strikes (user rule 2026-11-04: "if it fails 2 times send me a
-message on telegram saying coles failed fresh cookie from my browser
-required to run"):
+User ruling 2026-11-05: "not worth 2 days of trying every week to get
+the whole catalogue." The Wednesday 5am task runs the WW walk + a
+Coles **specials-only sweep** (`coles_catalogue_walk.py
+--specials-only`, ~30-45 min: the /on-special shelf, uploaded
+immediately). If the sweep is robot-blocked it reports and gives up —
+nobody is pestered.
 
-1. **2 challenge fails** → the supervisor STOPS retrying (never the
-   2026-11-04 morning loop again) and sends that Telegram message.
-   **Park-storm alarm (2026-11-05):** the 2-strike rule only catches
-   warm-up deaths — an overnight clearance decay instead parks aisle
-   after aisle silently. The supervisor now also watches the aisle
-   results and when 10+ of the last 12 aisles are blocked it PAUSES the
-   walk (progress saved) and sends the same style of cookie ask.
-2. The user opens **coles.com.au in their Chrome**, replies **coles**,
-   then **fully quits Chrome** — while Chrome runs, Windows keeps its
-   cookie file locked (plain reads, sqlite, esentutl all fail; the quit
-   also flushes the freshest clearance cookie to disk).
-3. The supervisor polls `core/coles_refresh_cookie.py --auto` every
-   60s; the moment Chrome unlocks, it copies the cookie DB (+ Local
-   State) into a scratch profile, opens REAL Chrome on the copy,
-   visits Coles — Chrome decrypts its own cookies, and the visit
-   VERIFIES the borrow (no `__NEXT_DATA__` = failed borrow).
-   Verified cookies land in `data/coles-catalogue/cookies.json`
-   (gitignored — never committed, values never logged).
-4. The walk restarts automatically, injecting the borrowed cookies +
-   the user's Chrome user-agent (the clearance is fingerprint-bound,
-   so the pair travels together). Stale borrows (>24h) are ignored.
-
-An agent session can run `python core/coles_refresh_cookie.py` directly
-when the user replies "coles" in chat — same script, same verification.
-Telegram sends use the claw bot (sendMessage only, NEVER getUpdates —
-the claw gateway owns polling); the token lives in
-`laptop/ww-upload.env` (untracked).
+- The Coles **catalogue** (all banked aisles incl. 2026-11-04/05's 669)
+  stays live on the site; prices for items the user actually searches
+  are fetched fresh on the first live search of each catalogue week
+  (the results cache hard-expires every Wednesday by design).
+- **Liquorland and Tobacco are excluded** (user rulings 2026-11-04).
+- The full-walk machinery (supervisor, cookie protocol, park-storm
+  alarm, midnight carry-over) is RETIRED-but-working code — kept for a
+  rare manual full refresh (`core/coles_walk_supervised.py`), not part
+  of any weekly schedule. The 2026-11-04 "reply coles" cookie protocol
+  (2 fails → Telegram ask → open Coles → reply coles → quit Chrome →
+  `core/coles_refresh_cookie.py` borrows + verifies → auto-resume) only
+  fires if a supervised full walk is ever run again.
 
 ## Backups — and the canary
 

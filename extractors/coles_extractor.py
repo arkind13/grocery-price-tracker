@@ -66,7 +66,8 @@ DEFAULT_TIMEOUT = 60  # Scrape.do can be slow with JS render
 # ---------------------------------------------------------------------------
 # Scrape.do credit-guard constants (spec B4 / §5.1) — all patchable
 # ---------------------------------------------------------------------------
-SCRAPEDO_MAX_CALLS_PER_RUN = 40     # HTTP attempts per process run
+SCRAPEDO_MAX_CALLS_PER_RUN = 120    # HTTP attempts per rolling window
+SCRAPEDO_CAP_WINDOW_S = 3600        # the window: 1 hour (2026-11-05, ledger #27)
 SCRAPEDO_MAX_ATTEMPTS = 3           # attempts per search chain (§5.1)
 SCRAPEDO_BREAKER_THRESHOLD = 3      # consecutive failed chains -> open
 SCRAPEDO_BREAKER_WINDOW_S = 600     # 10 min window for "consecutive"
@@ -76,7 +77,17 @@ _DATA_DIR = Path(_TRACKER_DIR) / "data"
 SCRAPEDO_HEALTH_PATH = _DATA_DIR / "scrapedo_health.json"
 
 # Per-process counters: one CLI invocation == one run == one process.
+# 2026-11-05 (ledger #27): the counter is now WINDOWED — it counts HTTP
+# attempts per rolling SCRAPEDO_CAP_WINDOW_S (1 hour), not per process
+# lifetime. The old forever-climbing counter was built for one-shot CLI
+# runs, but the FastAPI skills-api server imports this module once and
+# lives for days: after 40 lifetime attempts Coles went permanently dark
+# (live 2026-11-04 21:54 UTC — every Coles search answered 0, silently,
+# for as long as the process lived). 120/hour fits the live-scan battery
+# (~26-40 attempts) + shopper traffic; worst case 1200 Scrape.do credits
+# per hour vs the 130k/month plan.
 _calls_this_run = 0
+_window_start: Optional[float] = None
 _session_seq = 0
 
 
@@ -184,7 +195,18 @@ def _breaker_record_failure() -> None:
 
 
 def _cap_reached() -> bool:
-    """Whether the per-run Scrape.do call cap has been reached."""
+    """Whether the rolling-window Scrape.do call cap has been reached.
+
+    The counter resets whenever the window expires (2026-11-05, ledger
+    #27): a long-lived server process (skills-api) recovers every hour
+    instead of going dark after SCRAPEDO_MAX_CALLS_PER_RUN lifetime
+    attempts.
+    """
+    global _calls_this_run, _window_start
+    now = _now()
+    if _window_start is None or (now - _window_start) >= SCRAPEDO_CAP_WINDOW_S:
+        _calls_this_run = 0
+        _window_start = now
     return _calls_this_run >= SCRAPEDO_MAX_CALLS_PER_RUN
 
 
@@ -268,7 +290,7 @@ def _search_via_scrapedo_status(
         is one of "ok" | "empty" | "unavailable" | "breaker_open" |
         "cap_exceeded".
     """
-    global _calls_this_run
+    global _calls_this_run, _window_start
 
     if _breaker_is_open():
         print(
@@ -299,6 +321,8 @@ def _search_via_scrapedo_status(
             return [], "cap_exceeded"
 
         params = _build_scrapedo_params(search_term, _fresh_session())
+        if _window_start is None:  # cap check above always runs first
+            _window_start = _now()
         _calls_this_run += 1
         try:
             resp = requests.get(
