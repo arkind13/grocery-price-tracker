@@ -266,8 +266,13 @@ def main() -> int:
     args = ap.parse_args()
     sf = {s.strip() for s in args.supers.split(",") if s.strip()} or None
     summary = walk(args.polite_ms, sf, args.max_pages)
+    # receipt carries its DATE (user ask 2026-11-14: a "successful" message
+    # with no date can't be told apart from last week's)
+    from core.sydney_time import sydney_now
+    when = sydney_now().strftime("%a %d %b %Y, %I:%M%p")
     lines = [
         "🛒 WW CATALOGUE WALK (laptop agent)",
+        f"when: {when} Sydney",
         f"products: {summary['uniqueProducts']} unique / {summary['pagesFetched']} pages / {summary['elapsedS']}s",
         f"aisles ok: {sum(1 for s in summary['perSuper'] if s.get('ok'))}/{summary['supersWalked']}"
         + (f" — FAILED: {', '.join(f['slug'] for f in summary['failures'])}" if summary["failures"] else ""),
