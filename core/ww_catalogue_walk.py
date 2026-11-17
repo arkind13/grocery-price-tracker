@@ -43,6 +43,13 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 TRACKER = HERE.parent
+# script-mode runs (`python core\ww_catalogue_walk.py` — the bat path) put
+# only core\ on sys.path, so `from core.x import ...` below would die with
+# ModuleNotFoundError; the tracker root must be visible (same bootstrap as
+# aldi_catalogue_walk.py). Proven broken live 2026-11-18: the 5am run
+# walked 20/20 aisles then crashed at the sydney_time import — no upload,
+# watcher cried "missed".
+sys.path.insert(0, str(TRACKER))
 DATA_DIR = TRACKER / "data" / "ww-catalogue"
 BASE = "https://www.woolworths.com.au"
 PIES = f"{BASE}/apis/ui/PiesCategoriesWithSpecials"
@@ -153,7 +160,8 @@ def walk(polite_ms: int, supers_filter: set[str] | None, max_pages: int) -> dict
         slug = sup.get("UrlFriendlyName") or ""
         desc = sup.get("Description") or slug
         if sid in done:
-            per_super.append({"id": sid, "slug": slug, "note": "resumed-done"})
+            # ok:True so a resumed-complete rerun's receipt reads 20/20, not 0/20
+            per_super.append({"id": sid, "slug": slug, "ok": True, "note": "resumed-done"})
             continue
         aisle_products = 0
         try:
@@ -248,7 +256,10 @@ def upload(summary: dict) -> bool:
         "X-Walk-Summary": json.dumps({k: summary[k] for k in ("date", "uniqueProducts", "pagesFetched", "elapsedS", "failures")}),
     })
     try:
-        with urllib.request.urlopen(req, timeout=300) as r:
+        # the server publishes 18k products INLINE before answering (~5-6 min);
+        # a 300s wait read-times-out seconds before the finish (live 2026-11-18:
+        # laptop said FAILED at 10:48:29, server published 10:48:58) — 900s it is
+        with urllib.request.urlopen(req, timeout=900) as r:
             resp = json.loads(r.read().decode())
             log(f"upload OK: {json.dumps(resp)[:300]}")
             return bool(resp.get("ok"))
@@ -270,16 +281,23 @@ def main() -> int:
     # with no date can't be told apart from last week's)
     from core.sydney_time import sydney_now
     when = sydney_now().strftime("%a %d %b %Y, %I:%M%p")
+    if summary["uniqueProducts"]:
+        prod_line = f"products: {summary['uniqueProducts']} unique / {summary['pagesFetched']} pages / {summary['elapsedS']}s"
+    else:  # resumed-complete rerun: walked nothing new, but today's gz is full —
+           # count it so the receipt never says "0 products" over a healthy publish
+        with gzip.open(summary["output"], "rt", encoding="utf-8") as fz:
+            banked = sum(1 for _ in fz)
+        prod_line = f"products: {banked} unique already banked today — nothing to re-walk"
     lines = [
         "🛒 WW CATALOGUE WALK (laptop agent)",
         f"when: {when} Sydney",
-        f"products: {summary['uniqueProducts']} unique / {summary['pagesFetched']} pages / {summary['elapsedS']}s",
+        prod_line,
         f"aisles ok: {sum(1 for s in summary['perSuper'] if s.get('ok'))}/{summary['supersWalked']}"
         + (f" — FAILED: {', '.join(f['slug'] for f in summary['failures'])}" if summary["failures"] else ""),
     ]
     if not args.no_upload:
         ok = upload(summary)
-        lines.append("upload: " + ("✅ published on the server (its own Telegram receipt follows with scanned/specials/removed)" if ok else "❌ FAILED — run 'Run WW walk now.bat' when online"))
+        lines.append("upload: " + ("✅ published on the server (its own Telegram receipt follows with scanned/specials/removed)" if ok else "❌ FAILED — if the internet is fine, re-run laptop\\run-ww-walk.bat; the walk is banked, only the send is retried"))
     telegram("\n".join(lines))
     print("\n".join(lines))
     return 0 if summary["ok"] else 1
