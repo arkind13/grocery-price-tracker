@@ -81,7 +81,7 @@ def upload(token, folder_id, name, keep_days):
     import requests
 
     r = requests.post(
-        f"{API}/upload/files?uploadType=resumable&fields=id,size",
+        "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,size",
         headers={**_hdr(token), "Content-Type": "application/json; charset=UTF-8"},
         json={"name": name, "parents": [folder_id]},
         timeout=120,
